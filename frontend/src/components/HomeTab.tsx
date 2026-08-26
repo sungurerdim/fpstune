@@ -426,7 +426,7 @@ export function HomeTab() {
       <div
         className={cn(
           "grid gap-4 items-start",
-          suboptimal.length > 0 && cleanups.length > 0 && "lg:grid-cols-2",
+          suboptimal.length > 0 && cleanups.length > 0 && "lg:grid-cols-2 2xl:grid-cols-[2fr,1fr]",
         )}
       >
         {/* LEFT: what still needs applying, split by where it lives.

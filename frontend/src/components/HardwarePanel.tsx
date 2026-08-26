@@ -1,3 +1,4 @@
+import { Card } from "./ui/Card";
 import { useState, useEffect, useSyncExternalStore, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -103,7 +104,7 @@ export function HardwarePanel() {
   });
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4">
+    <Card className="p-4">
       <h3 className="font-medium mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2">
           <Monitor className="w-4 h-4" />
@@ -308,7 +309,7 @@ export function HardwarePanel() {
           />
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

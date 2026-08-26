@@ -66,21 +66,10 @@ const PRIMITIVE_RECIPES = [
   "bg-primary text-primary-foreground hover:bg-primary/90",
 ] as const;
 
-// Frozen at the E2 landing. Shrink-only: each entry is a file still spelling
-// a recipe by hand instead of rendering <Card>/<Button>.
-const _FROZEN_RECIPES = new Map<string, number>([
-  ["components/BenchmarksTab.tsx", 1],
-  ["components/CleanupListRow.tsx", 1],
-  ["components/CleanupPanel.tsx", 1],
-  ["components/DiskCleanupTab.tsx", 1],
-  ["components/HardwarePanel.tsx", 1],
-  ["components/HeadroomPanel.tsx", 1],
-  ["components/HomeTab.tsx", 8],
-  ["components/MaintenancePanel.tsx", 2],
-  ["components/SelectionToolbar.tsx", 1],
-  ["components/SuitePanel.tsx", 4],
-  ["components/TweakListRow.tsx", 1],
-]);
+// Emptied by the E2 migration: every recipe use outside ui/ now renders the
+// primitive. Shrink-only — an entry would only ever be re-added by reverting
+// the migration, which the test above already fails.
+const _FROZEN_RECIPES = new Map<string, number>([]);
 
 function violationsByFile(): Map<string, number> {
   const found = new Map<string, number>();

@@ -34,6 +34,8 @@ import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import { SettingValueState } from "./SettingStateDisplay";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
@@ -260,43 +262,40 @@ export function HomeTab() {
 
       {/* The two buttons: each applies exactly its category, and says so. */}
       {suboptimal.length > 0 && (
-        <section className="bg-card rounded-lg border border-border p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button
+        <Card className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button
+            size="md"
+            className="font-semibold"
+            icon={<Zap className="w-4 h-4" aria-hidden="true" />}
             onClick={() => setPendingButton("competitive")}
             disabled={isApplying || competitiveTargets.length === 0}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
-              "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-            )}
           >
-            <Zap className="w-4 h-4" aria-hidden="true" />
             Competitive Max
             <span className="font-normal opacity-80">
               · {competitiveTargets.length}
             </span>
-          </button>
+          </Button>
           <span className="text-xs text-muted-foreground">
             The most frames without touching what you can see or hear.
           </span>
-          <button
+          <Button
+            size="md"
+            variant="outline"
+            className="font-semibold border-warning/60 text-warning hover:bg-warning/10 hover:text-warning"
+            icon={<Flame className="w-4 h-4" aria-hidden="true" />}
             onClick={() => setPendingButton("absolute")}
             disabled={isApplying || absoluteTargets.length === 0}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
-              "border border-warning/60 text-warning hover:bg-warning/10 disabled:opacity-50",
-            )}
           >
-            <Flame className="w-4 h-4" aria-hidden="true" />
             Absolute Max
             <span className="font-normal opacity-80">
               · {absoluteTargets.length}
             </span>
-          </button>
+          </Button>
           <span className="text-xs text-muted-foreground">
             Every setting to its frame-rate extreme — quality is spent, and the
             cost is listed before anything runs.
           </span>
-        </section>
+        </Card>
       )}
       {/* The headline, and what it deliberately does not say.
           This block used to open with "Gained +28-45% FPS", produced by summing
@@ -468,7 +467,7 @@ export function HomeTab() {
         </div>
 
         {/* RIGHT: cleanup opportunities */}
-        <section className="bg-card rounded-lg border border-border flex flex-col">
+        <Card className="flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-border">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />
@@ -482,23 +481,14 @@ export function HomeTab() {
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
               )}
             </div>
-            <button
+            <Button
               onClick={runAllCleanups}
-              disabled={cleanupRunner.isRunning || cleanups.length === 0}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-                cleanups.length === 0
-                  ? "bg-muted text-muted-foreground/50 cursor-not-allowed"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90",
-              )}
+              disabled={cleanups.length === 0}
+              busy={cleanupRunner.isRunning}
+              icon={<Trash2 className="w-3.5 h-3.5" />}
             >
-              {cleanupRunner.isRunning ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5" />
-              )}
               Run All
-            </button>
+            </Button>
           </div>
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}
@@ -536,13 +526,13 @@ export function HomeTab() {
               </>
             )}
           </div>
-        </section>
+        </Card>
       </div>
 
       {/* Advisories: findings only the user can act on — a BIOS toggle, a
           physical fact. No Apply button, because fpstune cannot press it. */}
       {advisories.length > 0 && (
-        <section className="bg-card rounded-lg border border-border">
+        <Card>
           <div className="flex items-center gap-2 p-3 border-b border-border">
             <Info className="w-4 h-4 text-warning" />
             <h2 className="font-semibold text-sm">Advisories</h2>
@@ -572,13 +562,13 @@ export function HomeTab() {
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* The already-optimal settings, behind a fold Home owns: the headline
           counts them, and a count whose members cannot be listed is a claim. */}
       {optimized.length > 0 && (
-        <section className="bg-card rounded-lg border border-border">
+        <Card>
           <button
             onClick={() => setShowOptimized((open) => !open)}
             aria-expanded={showOptimized}
@@ -606,7 +596,7 @@ export function HomeTab() {
               ))}
             </div>
           )}
-        </section>
+        </Card>
       )}
 
       {/* Repair actions (SFC, DISM) — the panel renders nothing when the
@@ -696,7 +686,7 @@ function TweakGroup({
   categoryLabel: (id: string) => string;
 }) {
   return (
-    <section className="bg-card rounded-lg border border-border flex flex-col">
+    <Card className="flex flex-col">
       <div className="flex items-center justify-between p-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           {icon}
@@ -710,21 +700,14 @@ function TweakGroup({
           </span>
         </div>
         {settings.length > 0 && (
-          <button
+          <Button
+            className="shrink-0"
+            busy={isApplying}
+            icon={<Zap className="w-3.5 h-3.5" />}
             onClick={onApplyAll}
-            disabled={isApplying}
-            className={cn(
-              "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-              "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-            )}
           >
-            {isApplying ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Zap className="w-3.5 h-3.5" />
-            )}
             Apply all {settings.length}
-          </button>
+          </Button>
         )}
       </div>
       {settings.length === 0 ? (
@@ -747,7 +730,7 @@ function TweakGroup({
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 

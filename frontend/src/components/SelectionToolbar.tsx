@@ -3,6 +3,7 @@
  * Appears when ≥1 setting is selected; tracks per-setting operation status in store.
  */
 
+import { Button } from "./ui/Button";
 import { useState } from "react";
 import { X, Zap, RotateCcw, Loader2, AlertTriangle } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -160,21 +161,16 @@ export function SelectionToolbar() {
                 <RotateCcw className="w-3.5 h-3.5" />
                 Reset Selected
               </button>
-              <button
+              <Button
+                variant={hasAdvanced ? "confirm" : "primary"}
+                icon={<Zap className="w-3.5 h-3.5" />}
                 onClick={() => handleAction("apply")}
-                className={cn(
-                  "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded font-medium transition-colors",
-                  hasAdvanced
-                    ? "bg-warning text-warning-foreground hover:bg-warning/80"
-                    : "bg-primary text-primary-foreground hover:bg-primary/90",
-                )}
               >
-                <Zap className="w-3.5 h-3.5" />
                 Apply Selected
                 {hasAdvanced && (
                   <AlertTriangle className="w-3 h-3 ml-0.5" />
                 )}
-              </button>
+              </Button>
             </>
           )}
         </div>

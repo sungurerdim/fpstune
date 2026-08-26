@@ -1,4 +1,5 @@
-import { Zap, Loader2, Undo2 } from "lucide-react";
+import { Button } from "./ui/Button";
+import { Zap, Undo2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { formatBenefit } from "../lib/impact";
 import { useApplySingle } from "../hooks/useApplySingle";
@@ -87,27 +88,19 @@ export function TweakListRow({
           Undo
         </button>
       )}
-      <button
-        onClick={() => applySingle(setting, setting.recommendedValue)}
-        disabled={pending}
-        // Home renders one of these per setting that needs changing — thirty on
-        // a fresh machine. Without the setting's name in here, a screen reader
-        // announces "Apply, Apply, Apply" and there is no way to tell which one
-        // is about to change the CPU's minimum clock.
+      {/* Home renders one of these per setting that needs changing — thirty on
+          a fresh machine. Without the setting's name in here, a screen reader
+          announces "Apply, Apply, Apply" and there is no way to tell which one
+          is about to change the CPU's minimum clock. */}
+      <Button
+        className="shrink-0"
+        busy={pending}
+        icon={<Zap className="w-3.5 h-3.5" />}
         aria-label={`Apply ${setting.displayName}`}
-        aria-busy={pending}
-        className={cn(
-          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-          "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-        )}
+        onClick={() => applySingle(setting, setting.recommendedValue)}
       >
-        {pending ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Zap className="w-3.5 h-3.5" />
-        )}
         Apply
-      </button>
+      </Button>
     </div>
   );
 }

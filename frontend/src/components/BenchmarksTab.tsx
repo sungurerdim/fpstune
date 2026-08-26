@@ -1,3 +1,4 @@
+import { Card } from "./ui/Card";
 import { useState } from "react";
 import { Scale, Activity } from "lucide-react";
 import { HeadroomPanel } from "./HeadroomPanel";
@@ -61,9 +62,9 @@ export function BenchmarksTab() {
 
       {activeTab === "suite" && <SuitePanel />}
       {activeTab === "verify" && (
-        <div className="bg-card rounded-lg border border-border p-4">
+        <Card className="p-4">
           <VerifyPanel />
-        </div>
+        </Card>
       )}
 
       {/* Below the instrument, because it is the result rather than the tool:

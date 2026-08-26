@@ -1,5 +1,5 @@
-import { Gamepad2, Trash2, Loader2 } from "lucide-react";
-import { cn } from "../lib/utils";
+import { Button } from "./ui/Button";
+import { Gamepad2, Trash2 } from "lucide-react";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { CleanupPanel } from "./CleanupPanel";
 import { CleanupResults } from "./CleanupResults";
@@ -25,29 +25,18 @@ export function DiskCleanupTab() {
         <div className="w-72 max-w-full min-w-0">
           <CleanupResults compact />
         </div>
-        <button
+        <Button
+          size="md"
+          className="shrink-0"
+          busy={runner.isRunning}
+          disabled={!runner.hasSelection}
+          icon={<Trash2 className="w-4 h-4" />}
           onClick={() => runner.run()}
-          disabled={!runner.hasSelection || runner.isRunning}
-          className={cn(
-            "shrink-0 flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-colors",
-            runner.hasSelection
-              ? "bg-primary text-primary-foreground hover:bg-primary/90"
-              : "bg-muted text-muted-foreground cursor-not-allowed",
-          )}
         >
-          {runner.isRunning ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              Running...
-            </>
-          ) : (
-            <>
-              <Trash2 className="w-4 h-4" />
-              Run Cleanup
-              {runner.hasSelection && ` (${runner.selectedCount})`}
-            </>
-          )}
-        </button>
+          {runner.isRunning
+            ? "Running..."
+            : `Run Cleanup${runner.hasSelection ? ` (${runner.selectedCount})` : ""}`}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

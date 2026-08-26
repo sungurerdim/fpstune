@@ -1,3 +1,4 @@
+import { Card } from "./ui/Card";
 import { useState, useMemo } from "react";
 import {
   Trash2,
@@ -122,7 +123,7 @@ export function CleanupPanel({
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border">
+    <Card>
       {/* Collapsible Header */}
       <button
         onClick={() => setIsCollapsed(!isCollapsed)}
@@ -269,7 +270,7 @@ export function CleanupPanel({
           </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 }
 

@@ -1,3 +1,4 @@
+import { Card } from "./ui/Card";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Loader2, RefreshCw } from "lucide-react";
 import { headroomApi } from "../lib/api";
@@ -153,8 +154,8 @@ export function HeadroomPanel() {
   const anyMeasured = games.some((game) => game.is_measured);
 
   return (
-    <section
-      className="bg-card rounded-lg border border-border p-4 space-y-3"
+    <Card
+      className="p-4 space-y-3"
       aria-labelledby="headroom-heading"
     >
       <div className="flex items-start justify-between gap-3 flex-wrap">
@@ -218,6 +219,6 @@ export function HeadroomPanel() {
           is open.
         </p>
       )}
-    </section>
+    </Card>
   );
 }

@@ -1,3 +1,5 @@
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -5,7 +7,6 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -159,9 +160,9 @@ export function SuitePanel() {
 
   if (!catalogue) {
     return (
-      <div className="bg-card rounded-lg border border-border p-4 text-sm text-muted-foreground">
+      <Card className="p-4 text-sm text-muted-foreground">
         Loading the instrument list…
-      </div>
+      </Card>
     );
   }
 
@@ -171,7 +172,7 @@ export function SuitePanel() {
 
   return (
     <div className="space-y-4">
-      <div className="bg-card rounded-lg border border-border p-4 space-y-4">
+      <Card className="p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4" />
@@ -185,18 +186,15 @@ export function SuitePanel() {
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
-          <button
+          <Button
+            size="md"
+            busy={running}
+            disabled={selected.size === 0}
+            icon={<Play className="w-4 h-4" />}
             onClick={() => start(hasBaseline ? "after" : "before")}
-            disabled={running || selected.size === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
-            {running ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
             {running ? `Measuring the ${target} run…` : primaryLabel}
-          </button>
+          </Button>
 
           {(hasBaseline || running) && (
             <button
@@ -283,7 +281,7 @@ export function SuitePanel() {
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
       {comparison && <ComparisonTable comparison={comparison} />}
     </div>
@@ -429,7 +427,7 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
   const groups = groupByCategory(comparison.measurements);
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4 space-y-4">
+    <Card className="p-4 space-y-4">
       <h3 className="text-sm font-semibold">{comparison.summary}</h3>
 
       {/* Grouped by what kind of gain it is, so a reader can see where the
@@ -504,6 +502,6 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

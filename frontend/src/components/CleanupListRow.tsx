@@ -1,3 +1,4 @@
+import { Button } from "./ui/Button";
 import {
   Trash2,
   Loader2,
@@ -6,7 +7,6 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { cn } from "../lib/utils";
 import { useStore } from "../store";
 import { parseCleanupSize, fmtMB } from "../lib/cleanupSize";
 import { isDockerCleanup, type CleanupRunner } from "../hooks/useCleanupRunner";
@@ -106,21 +106,14 @@ export function CleanupListRow({
         )}
         <div className="mt-1.5">{status()}</div>
       </div>
-      <button
+      <Button
+        className="shrink-0"
+        busy={runner.isRunning}
+        icon={<Trash2 className="w-3.5 h-3.5" />}
         onClick={() => runner.run([setting.id])}
-        disabled={runner.isRunning}
-        className={cn(
-          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-          "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-        )}
       >
-        {runner.isRunning ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Trash2 className="w-3.5 h-3.5" />
-        )}
         Run
-      </button>
+      </Button>
     </div>
   );
 }

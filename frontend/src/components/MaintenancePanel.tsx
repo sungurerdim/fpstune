@@ -1,5 +1,7 @@
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
 import { useMemo } from "react";
-import { Wrench, AlertTriangle, RefreshCw } from "lucide-react";
+import { Wrench, AlertTriangle } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
@@ -46,7 +48,7 @@ export function MaintenancePanel() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border">
+    <Card>
       <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
         <Wrench className="w-5 h-5 text-warning shrink-0" />
         <div className="min-w-0">
@@ -59,28 +61,18 @@ export function MaintenancePanel() {
           <div className="w-48 max-w-full min-w-0">
             <CleanupResults compact />
           </div>
-          <button
-            className={cn(
-              "shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              runner.hasSelection
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-muted text-muted-foreground cursor-not-allowed",
-            )}
-            disabled={!runner.hasSelection || runner.isRunning}
+          <Button
+            size="md"
+            className="shrink-0"
+            busy={runner.isRunning}
+            disabled={!runner.hasSelection}
+            icon={<Wrench className="w-4 h-4" />}
             onClick={() => runner.run()}
           >
-            {runner.isRunning ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Running...
-              </>
-            ) : (
-              <>
-                <Wrench className="w-4 h-4" />
-                Run{runner.hasSelection && ` (${runner.selectedCount})`}
-              </>
-            )}
-          </button>
+            {runner.isRunning
+              ? "Running..."
+              : `Run${runner.hasSelection ? ` (${runner.selectedCount})` : ""}`}
+          </Button>
         </div>
       </div>
 
@@ -128,6 +120,6 @@ export function MaintenancePanel() {
           </label>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

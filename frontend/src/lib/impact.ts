@@ -33,7 +33,13 @@ import type { Setting } from "../types/setting";
 import { parseSizeToMB } from "./cleanupSize";
 
 export interface ImpactSummary {
-  score: { optimized: number; total: number; percentage: number };
+  score: {
+    optimized: number;
+    total: number;
+    percentage: number;
+    /** Drift guards found at stock — checks passed, not changes pending. */
+    guardsStanding: number;
+  };
   potential: {
     /**
      * How many tweaks carry a latency effect — deliberately a count, not a sum.
@@ -84,13 +90,10 @@ function isScorable(s: Setting): boolean {
  * total: a number that no measurement could ever confirm.
  */
 function isFactoryDefault(s: Setting): boolean {
-  return (
-    s.recommendedValue !== null &&
-    s.recommendedValue !== undefined &&
-    s.defaultValue !== null &&
-    s.defaultValue !== undefined &&
-    String(s.recommendedValue) === String(s.defaultValue)
-  );
+  // The backend computes this with values_equal — the one comparison truth
+  // (C6). The String() heuristic that lived here was a second spelling of
+  // that comparison, and it disagreed on cross-type values ("0.0" vs 0).
+  return s.isDriftGuard === true;
 }
 
 /**
@@ -100,6 +103,7 @@ function isFactoryDefault(s: Setting): boolean {
 export function summarizeImpact(settings: Iterable<Setting>): ImpactSummary {
   let optimized = 0;
   let total = 0;
+  let guardsStanding = 0;
 
   let potLatency = 0;
   let potRam = 0;
@@ -118,6 +122,7 @@ export function summarizeImpact(settings: Iterable<Setting>): ImpactSummary {
 
     if (s.isOptimized) {
       optimized++;
+      if (isFactoryDefault(s)) guardsStanding++;
       // The score still counts it — "this setting is at its ideal value" is
       // true and worth showing. Only the *gain* is withheld, and only for
       // settings that were never anywhere else. See isFactoryDefault.
@@ -137,6 +142,7 @@ export function summarizeImpact(settings: Iterable<Setting>): ImpactSummary {
       optimized,
       total,
       percentage: total > 0 ? Math.round((optimized / total) * 100) : 0,
+      guardsStanding,
     },
     potential: { latencyTweaks: potLatency, ramTweaks: potRam },
     gained: {

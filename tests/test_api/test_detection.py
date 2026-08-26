@@ -25,15 +25,6 @@ class TestSettingsDefinitions:
         data = response.json()
         assert isinstance(data, list)
 
-    def test_get_categories(self, client):
-        """Test getting available categories."""
-        response = client.get("/api/settings/categories")
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        # Should have common categories
-        assert "core" in data or "timer" in data or "power" in data
-
 
 class TestSettingsDetection:
     """Tests for settings detection endpoints."""
@@ -70,32 +61,6 @@ class TestSettingsApply:
         """Test reverting unknown setting returns 404."""
         response = client.post("/api/settings/unknown_setting_xyz/revert")
         assert response.status_code == 404
-
-
-class TestBulkOperations:
-    """Tests for bulk settings operations."""
-
-    def test_bulk_reset_empty(self, client):
-        """Test bulk reset with empty list."""
-        response = client.post(
-            "/api/settings/bulk/reset",
-            json={"setting_ids": []},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success_count"] == 0
-        assert data["error_count"] == 0
-
-    def test_bulk_optimize_empty(self, client):
-        """Test bulk optimize with empty list."""
-        response = client.post(
-            "/api/settings/bulk/optimize",
-            json={"setting_ids": []},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success_count"] == 0
-        assert data["error_count"] == 0
 
 
 class TestDetectionModule:

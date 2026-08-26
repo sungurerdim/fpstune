@@ -7,44 +7,9 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from fpstune.utils.admin import elevate_if_needed, is_admin
 from fpstune.utils.logger import activity_log
 
 router = APIRouter()
-
-
-@router.post("/elevate")
-async def request_elevation() -> dict[str, bool | str]:
-    """Request elevation to administrator privileges.
-
-    On Windows, this will trigger a UAC prompt and restart the server
-    with elevated privileges. The current process will exit.
-
-    Returns:
-        Dict with success status and message.
-    """
-    if is_admin():
-        return {
-            "success": True,
-            "already_admin": True,
-            "message": "Already running with administrator privileges",
-        }
-
-    # Attempt elevation (will restart process if successful)
-    elevated = elevate_if_needed()
-
-    if elevated:
-        # Process will exit, this won't be returned
-        return {
-            "success": True,
-            "already_admin": False,
-            "message": "Elevation requested, server will restart",
-        }
-    else:
-        raise HTTPException(
-            status_code=403,
-            detail="Failed to elevate. Please restart the application as Administrator.",
-        )
 
 
 @router.get("/power-profile/status")

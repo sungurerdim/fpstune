@@ -260,7 +260,6 @@ export function useCleanupRunner({
         );
       }
 
-      queryClient.invalidateQueries({ queryKey: ["status"] });
       queryClient.invalidateQueries({ queryKey: ["cleanup-sizes"] });
       queryClient.invalidateQueries({ queryKey: ["activity"] });
     },

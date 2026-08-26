@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+import { Card } from "./ui/Card";
 import { useState } from "react";
 import { Scale, Activity } from "lucide-react";
 import { HeadroomPanel } from "./HeadroomPanel";
@@ -33,11 +35,12 @@ type BenchTab = "suite" | "verify";
  * measured anything.
  */
 export function BenchmarksTab() {
+  const { t } = useT();
   const [activeTab, setActiveTab] = useState<BenchTab>("suite");
 
   const tabs: { id: BenchTab; label: string; icon: typeof Activity }[] = [
-    { id: "suite", label: "Measure", icon: Activity },
-    { id: "verify", label: "Verify claims", icon: Scale },
+    { id: "suite", label: t("bench.measure"), icon: Activity },
+    { id: "verify", label: t("bench.verifyClaims"), icon: Scale },
   ];
 
   return (
@@ -61,9 +64,9 @@ export function BenchmarksTab() {
 
       {activeTab === "suite" && <SuitePanel />}
       {activeTab === "verify" && (
-        <div className="bg-card rounded-lg border border-border p-4">
+        <Card className="p-4">
           <VerifyPanel />
-        </div>
+        </Card>
       )}
 
       {/* Below the instrument, because it is the result rather than the tool:

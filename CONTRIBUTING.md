@@ -136,6 +136,7 @@ What `scripts/` holds, so nobody has to reverse-engineer it:
 | `sync_version.py` | Copies the `pyproject.toml` version into `__init__.py` and `package.json`; `tests/test_release_contract.py` fails when a copy drifts |
 | `update_winget_manifest.py` | Points the `winget/` manifests at a built exe: rewrites version, download URL, `ReleaseDate` and checksum from that binary's own bytes. The release workflow runs it against the exe it just built, checks the manifest parses as YAML and carries that exe's checksum, and uploads the result as a `winget-manifest` artifact; `task winget` runs the same script locally |
 | `measure_scan.py` | Before/after cost measurement for detection-pipeline changes; internal tooling |
+| `MW3-Crash-Recovery.bat` | Standalone MW3 (2023) crash triage for a friend's machine: backs up and regenerates the game's config, clears shader caches, checks the usual crash culprits. Self-contained on purpose — it runs where fpstune is not installed. Supersedes the old `MW3-FPS-Fix.bat`, which bundled the same recovery steps with FPS tweaks fpstune itself now owns; the FPS half lived on as fpstune settings and the bat was deleted rather than kept as a second, driftable copy |
 
 `winget/` holds the manifest template that script fills in. Until a release is
 published and the script has run, the checked-in manifest is a template with a

@@ -31,7 +31,6 @@ async def test_lifespan_starts_and_stops_the_hotplug_poller() -> None:
         patch("fpstune.api.main.threading.Thread"),
         patch("fpstune.benchmark.headroom_watch.start_headroom_watch"),
         patch("fpstune.benchmark.headroom_watch.stop_headroom_watch"),
-        patch("fpstune.api.main.stop_background_refresh"),
         patch("fpstune.utils.detect.is_gpu_detecting", return_value=False),
     ):
         async with lifespan(MagicMock()):

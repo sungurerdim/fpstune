@@ -48,6 +48,7 @@ TCP_AUTO_TUNING = SettingExecutor(
     id="network:tcp_auto_tuning",
     category=SettingCategory.NETWORK,
     display_name="TCP Auto-Tuning",
+    short_name="Network window auto-tuning",
     description="Dynamically adjusts TCP receive window size. Normal mode provides optimal throughput for most connections.",
     value_type=SettingValueType.CHOICE,
     choices=("normal", "disabled", "highlyrestricted", "restricted", "experimental"),
@@ -89,6 +90,7 @@ SCALING_HEURISTICS = SettingExecutor(
     id="network:scaling_heuristics",
     category=SettingCategory.NETWORK,
     display_name="Scaling Heuristics",
+    short_name="Windows override of auto-tuning",
     description="Legacy setting (no effect on Windows 8.1+). Heuristics disabled by default.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -129,6 +131,7 @@ CONGESTION_PROVIDER = SettingExecutor(
     id="network:congestion_provider",
     category=SettingCategory.NETWORK,
     display_name="Congestion Provider",
+    short_name="Congestion control algorithm",
     description="Controls how TCP responds to network congestion. CUBIC is the most optimized algorithm for modern networks.",
     value_type=SettingValueType.CHOICE,
     choices=("CUBIC", "NewReno", "CTCP", "DCTCP", "Default"),
@@ -178,6 +181,7 @@ RECEIVE_SIDE_SCALING = SettingExecutor(
     id="network:receive_side_scaling",
     category=SettingCategory.NETWORK,
     display_name="Receive Side Scaling (RSS)",
+    short_name="Spread network load over cores",
     description="Distributes network packet processing across multiple CPU cores instead of a single core. Enables higher throughput and prevents one core from becoming the network bottleneck.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -207,6 +211,7 @@ RECEIVE_SEGMENT_COALESCING = SettingExecutor(
     id="network:receive_segment_coalescing",
     category=SettingCategory.NETWORK,
     display_name="Receive Segment Coalescing (RSC)",
+    short_name="Batch incoming packets",
     description="Coalesces multiple incoming TCP segments into larger units before delivering them to the host. Disabling prevents the artificial latency this batching introduces.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -256,6 +261,7 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         id=f"network:{interface_index}:interrupt_moderation",
         category=SettingCategory.NETWORK,
         display_name=f"Interrupt Moderation ({display_name})",
+        short_name=f"Interrupt batching ({display_name})",
         description="Controls whether the network adapter batches CPU interrupt requests for multiple packets. Disabling processes each packet immediately, trading slightly higher CPU usage for lower per-packet latency.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -293,13 +299,20 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         },
         # Apply - use InterfaceIndex with explicit int cast and error handling
         apply_type=DetectType.POWERSHELL,
+        # The '*' prefix marks a standardised NDIS keyword; vendor keywords
+        # are bare, and drivers disagree about which spelling they expose for
+        # the same feature (the advanced_eee lesson). The spelling is picked
+        # out of the adapter's own property list before writing.
         apply_command=(
             "try { "
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration' -ErrorAction Stop; "
+            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-AllProperties -ErrorAction SilentlyContinue; "
+            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
+            "@('*InterruptModeration','InterruptModeration') } | Select-Object -First 1; "
+            "if (-not $prop) { 'not_supported' } else { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration' -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' "
+            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -323,6 +336,7 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         id=f"network:{interface_index}:flow_control",
         category=SettingCategory.NETWORK,
         display_name=f"Flow Control ({display_name})",
+        short_name=f"Flow control ({display_name})",
         description="Hardware-level flow control uses pause frames to stop packet transmission when receive buffers fill. Disabling eliminates the latency spikes caused by these pause frames.",
         value_type=SettingValueType.CHOICE,
         choices=("Rx & Tx Enabled", "Tx Enabled", "Rx Enabled", "Disabled"),
@@ -365,13 +379,26 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         },
         # Apply - use InterfaceIndex with explicit int cast and error handling
         apply_type=DetectType.POWERSHELL,
+        # Spelling picked from the adapter's own list (the advanced_eee
+        # lesson), and the 0..3 map cross-checked against the driver's own
+        # ValidRegistryValues before writing — a driver whose enum differs
+        # from Microsoft's map refuses loudly with its own list quoted, the
+        # same escape hatch speed_duplex's Forced_Other path uses, instead of
+        # writing a value the hardware will reject or misread.
         apply_command=(
             "try { "
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl' -ErrorAction Stop; "
+            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-AllProperties -ErrorAction SilentlyContinue; "
+            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
+            "@('*FlowControl','FlowControl') } | Select-Object -First 1; "
+            "if (-not $prop) { 'not_supported' } else { "
+            "$valid = @($prop.ValidRegistryValues); "
+            "if ($valid.Count -gt 0 -and -not ($valid -contains ([string][int]%value%))) { "
+            "'error: this driver does not accept flow-control value %value%; "
+            "its own list is ' + ($valid -join ',') } else { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl' -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' "
+            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
+            "'ok' } } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -404,6 +431,7 @@ def create_eee_setting(interface_index: int, display_name: str) -> SettingExecut
         id=f"network:{interface_index}:eee",
         category=SettingCategory.NETWORK,
         display_name=f"Energy Efficient Ethernet ({display_name})",
+        short_name=f"Energy-saving Ethernet ({display_name})",
         description="IEEE 802.3az power saving. Disabling prevents latency spikes on idle-to-active transition.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -493,6 +521,7 @@ def create_power_management_setting(interface_index: int, display_name: str) -> 
         id=f"network:{interface_index}:power_management",
         category=SettingCategory.NETWORK,
         display_name=f"Power Management ({display_name})",
+        short_name=f"Adapter power saving ({display_name})",
         description="Allows Windows to turn off adapter to save power. Disabling prevents disconnects.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -558,6 +587,7 @@ NETWORK_THROTTLING = SettingExecutor(
     id="network:throttling_index",
     category=SettingCategory.NETWORK,
     display_name="Network Throttling Index",
+    short_name="Network throttling for media",
     description="Windows limits network bandwidth for multimedia. Disable for full speed.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -575,7 +605,7 @@ NETWORK_THROTTLING = SettingExecutor(
     "from an era of much slower links.",
     current_impact="Enabled: Windows limits network to 10 packets/ms for multimedia",
     recommended_impact="Disabled: No throttling → full network bandwidth available",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for bandwidth
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=6,  # Bandwidth throttling
     effect="Removes Windows multimedia network throttling limit",
     impact_scores={"throughput": "high", "latency_ms": -1, "stability": "medium"},
@@ -1346,7 +1376,7 @@ QOS_BANDWIDTH = SettingExecutor(
     "desktop, while removing the headroom that VoIP and conferencing apps rely on to stay smooth.",
     current_impact="Enabled: Reserve available to apps that request QoS — unused otherwise",
     recommended_impact="Disabled (0): No reservation possible → recovers little on a normal desktop",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=9,
     effect="Sets NonBestEffortLimit=0 to remove Windows QoS bandwidth reservation",
     impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},
@@ -1390,7 +1420,7 @@ QOS_NLA = SettingExecutor(
     "rules from following you onto untrusted networks.",
     current_impact="Enabled: QoS may throttle on non-home network profiles",
     recommended_impact="Disabled (NLA bypassed): QoS behaves consistently on all networks",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=9,
     effect="Sets QoS 'Do not use NLA'=1 to prevent network-profile-based throttling",
     impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},
@@ -1558,6 +1588,7 @@ def create_roaming_aggressiveness_setting(
         id=f"network:{interface_index}:roaming_aggressiveness",
         category=SettingCategory.NETWORK,
         display_name=f"Roaming Aggressiveness ({display_name})",
+        short_name=f"Wi-Fi roaming eagerness ({display_name})",
         description="WiFi AP scanning frequency. Lower = less ping spikes during gaming.",
         value_type=SettingValueType.CHOICE,
         choices=("Lowest", "Medium-Low", "Medium", "Medium-High", "Highest"),
@@ -1649,6 +1680,7 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
         id=f"network:{interface_index}:lso",
         category=SettingCategory.NETWORK,
         display_name=f"Large Send Offload ({display_name})",
+        short_name=f"Large-packet offload ({display_name})",
         description="Network card segments large packets. Disabling reduces latency for small packets.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -1712,6 +1744,7 @@ def create_checksum_offload_setting(interface_index: int, display_name: str) -> 
         id=f"network:{interface_index}:checksum_offload",
         category=SettingCategory.NETWORK,
         display_name=f"Checksum Offload ({display_name})",
+        short_name=f"Checksum offload ({display_name})",
         description="NIC calculates packet checksums. Safe optimization, no latency impact.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -1766,6 +1799,7 @@ TCP_TIMESTAMPS = SettingExecutor(
     id="network:tcp_timestamps",
     category=SettingCategory.NETWORK,
     display_name="TCP Timestamps",
+    short_name="TCP timestamps",
     description="Adds timestamp to each TCP packet. Disabling reduces header overhead for gaming.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -1813,6 +1847,7 @@ TCP_ECN = SettingExecutor(
     id="network:tcp_ecn",
     category=SettingCategory.NETWORK,
     display_name="Explicit Congestion Notification (ECN)",
+    short_name="Congestion early-warning (ECN)",
     description="Network congestion signaling. Can cause latency spikes with some routers.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -2101,6 +2136,7 @@ def create_wake_on_lan_setting(interface_index: int, display_name: str) -> Setti
         id=f"network:{interface_index}:wake_on_lan",
         category=SettingCategory.NETWORK,
         display_name=f"Wake on LAN ({display_name})",
+        short_name=f"Wake on LAN ({display_name})",
         description="Wakes PC via network packets. Disabling prevents unexpected wakeups.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2172,6 +2208,7 @@ def create_speed_duplex_setting(interface_index: int, display_name: str) -> Sett
         id=f"network:{interface_index}:speed_duplex",
         category=SettingCategory.NETWORK,
         display_name=f"Speed & Duplex ({display_name})",
+        short_name=f"Link speed and duplex ({display_name})",
         description="How the adapter agrees a link speed with the switch. Auto-negotiation is the "
         "standard and the only safe choice; a forced speed breaks it.",
         value_type=SettingValueType.CHOICE,
@@ -2296,6 +2333,7 @@ def _make_vendor_power_setting(
         id=f"network:{interface_index}:{slug}",
         category=SettingCategory.NETWORK,
         display_name=f"{label} ({display_name})",
+        short_name=f"{label} ({display_name})",
         description=description,
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2415,6 +2453,7 @@ def create_advanced_eee_setting(interface_index: int, display_name: str) -> Sett
         id=f"network:{interface_index}:advanced_eee",
         category=SettingCategory.NETWORK,
         display_name=f"Advanced EEE ({display_name})",
+        short_name=f"Deep Ethernet power saving ({display_name})",
         description="Intel extended power saving (deeper EEE). Disabling prevents latency spikes.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2496,6 +2535,7 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
         id=f"network:{interface_index}:receive_buffers",
         category=SettingCategory.NETWORK,
         display_name=f"Receive Buffers ({display_name})",
+        short_name=f"Receive buffers ({display_name})",
         description="NIC packet receive buffer size. Higher = fewer dropped packets during bursts.",
         value_type=SettingValueType.CHOICE,
         choices=("default", "maximum"),
@@ -2511,7 +2551,7 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
         current_impact="Default: Small receive buffer → packet drops during burst traffic",
-        recommended_impact="Maximum (1024): Large buffer → absorbs burst traffic, less packet loss",
+        recommended_impact="Maximum: buffer at this adapter's own ceiling → absorbs burst traffic, less packet loss.",
         scope=SettingScope.RECOMMENDED,
         category_order=20,
         effect="Maximizing receive buffers reduces packet loss during network bursts",
@@ -2539,16 +2579,22 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*ReceiveBuffers' -ErrorAction Stop; "
             "$max = [int]$prop.NumericParameterMaxValue; "
+            # The stock value is the driver's own DefaultRegistryValue, never a
+            # constant: 256 was a third thing — neither this driver's default nor
+            # its maximum — so reset wrote a value the machine never held (C6).
+            # A driver that publishes no default fails loudly rather than letting
+            # an invented stock value pass as a reset.
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
-            "[Math]::Max([int]$prop.NumericParameterMinValue, 256) }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "[int]$prop.DefaultRegistryValue }; "
+            "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*ReceiveBuffers' -RegistryValue $val -ErrorAction Stop; "
-            "'ok' "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
         apply_value_map={},
-        value_hints={"default": "256", "maximum": "1024"},
+        value_hints={"default": "Driver default", "maximum": "This adapter's own maximum"},
     )
 
 
@@ -2571,6 +2617,7 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
         id=f"network:{interface_index}:transmit_buffers",
         category=SettingCategory.NETWORK,
         display_name=f"Transmit Buffers ({display_name})",
+        short_name=f"Transmit buffers ({display_name})",
         description="NIC packet transmit buffer size. Higher = fewer send stalls during burst uploads.",
         value_type=SettingValueType.CHOICE,
         choices=("default", "maximum"),
@@ -2586,7 +2633,7 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
         current_impact="Default: Small transmit buffer → send stalls during burst traffic",
-        recommended_impact="Maximum (1024): Large buffer → absorbs send bursts, stable upload",
+        recommended_impact="Maximum: buffer at this adapter's own ceiling → absorbs send bursts, stable upload.",
         scope=SettingScope.RECOMMENDED,
         category_order=21,
         effect="Maximizing transmit buffers reduces upload stalls during gaming",
@@ -2612,11 +2659,17 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
             "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*TransmitBuffers' -ErrorAction Stop; "
             "$max = [int]$prop.NumericParameterMaxValue; "
+            # The stock value is the driver's own DefaultRegistryValue, never a
+            # constant: 256 was a third thing — neither this driver's default nor
+            # its maximum — so reset wrote a value the machine never held (C6).
+            # A driver that publishes no default fails loudly rather than letting
+            # an invented stock value pass as a reset.
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
-            "[Math]::Max([int]$prop.NumericParameterMinValue, 256) }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "[int]$prop.DefaultRegistryValue }; "
+            "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*TransmitBuffers' -RegistryValue $val -ErrorAction Stop; "
-            "'ok' "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -2681,6 +2734,7 @@ def create_rss_queues_setting(
         id=f"network:{interface_index}:rss_queues",
         category=SettingCategory.NETWORK,
         display_name=f"RSS Queue Count ({display_name})",
+        short_name=f"Network queue count ({display_name})",
         description="Number of CPU cores handling network interrupts. 2 queues optimal for gaming.",
         value_type=SettingValueType.CHOICE,
         choices=queue_counts,
@@ -2752,6 +2806,7 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
         id=f"network:{interface_index}:uapsd",
         category=SettingCategory.NETWORK,
         display_name=f"WiFi U-APSD Power Save ({display_name})",
+        short_name=f"Wi-Fi power-save polling ({display_name})",
         description="WiFi power-save packet delivery scheduling (U-APSD/WMM-PS). Disabling delivers downlink packets immediately for lower latency and jitter.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2821,6 +2876,7 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
         id=f"network:{interface_index}:throughput_booster",
         category=SettingCategory.NETWORK,
         display_name=f"WiFi Throughput Booster ({display_name})",
+        short_name=f"Wi-Fi throughput booster ({display_name})",
         description="WiFi packet-bursting feature that raises throughput at the cost of jitter. Disabling favors consistent low-jitter delivery for gaming.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2889,6 +2945,7 @@ def create_packet_coalescing_setting(interface_index: int, display_name: str) ->
         id=f"network:{interface_index}:packet_coalescing",
         category=SettingCategory.NETWORK,
         display_name=f"D0 Packet Coalescing ({display_name})",
+        short_name=f"Packet batching while awake ({display_name})",
         description="Batches incoming packets in the active power state to cut CPU notifications. Disabling forces per-packet processing to remove DPC latency spikes.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
@@ -2939,7 +2996,33 @@ def create_packet_coalescing_setting(interface_index: int, display_name: str) ->
     )
 
 
-def create_rss_base_processor_setting(interface_index: int, display_name: str) -> SettingExecutor:
+def rss_target_core(cpu: object | None) -> int | None:
+    """The core RSS receive processing should start at, or None when no safe
+    placement exists.
+
+    Core 0 (and its SMT sibling) is contended by Windows default affinity, so
+    the move is always to logical processor 2 — *when* 2 is a performance
+    core. On Intel hybrids the P-cores enumerate first and only they carry
+    SMT, so the P-core logical span is ``logical_cores - e_cores``; a machine
+    whose topology could not be read gets no placement at all, because moving
+    NIC receive DPCs onto an E-core is a regression, not a tweak (B2). Too few
+    logical processors means there is nowhere better to go, which is also None.
+    """
+    if cpu is None:
+        return None
+    is_hybrid = getattr(cpu, "is_hybrid", None)
+    if is_hybrid is None:
+        return None
+    logical = int(getattr(cpu, "logical_cores", 0) or 0)
+    if is_hybrid:
+        p_logical_span = logical - int(getattr(cpu, "e_cores", 0) or 0)
+        return 2 if p_logical_span > 2 else None
+    return 2 if logical > 2 else None
+
+
+def create_rss_base_processor_setting(
+    interface_index: int, display_name: str, target_core: int
+) -> SettingExecutor:
     """Create an RSS Base Processor setting for a specific adapter.
 
     BEST PRACTICE: Use InterfaceIndex (numeric) for PowerShell commands.
@@ -2951,6 +3034,8 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
     Args:
         interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
         display_name: Human-readable adapter name (for UI display only).
+        target_core: The derived safe core from ``rss_target_core`` — the caller
+            does not register this setting when no safe core exists.
 
     Returns:
         SettingExecutor for RSS base processor control.
@@ -2959,6 +3044,7 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
         id=f"network:{interface_index}:rss_base_processor",
         category=SettingCategory.NETWORK,
         display_name=f"RSS Base Processor ({display_name})",
+        short_name=f"Network CPU core choice ({display_name})",
         description="The first CPU core that handles NIC interrupts via RSS. Moving the base off contended Core 0 lowers DPC latency.",
         value_type=SettingValueType.CHOICE,
         choices=("default", "optimized"),
@@ -2974,7 +3060,9 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
             "https://learn.microsoft.com/en-us/powershell/module/netadapter/set-netadapterrss"
         ],
         current_impact="Default: RSS base on Core 0 → contends with Windows default affinity",
-        recommended_impact="Optimized: RSS base on Core 2 → fewer DPC stalls, lower jitter",
+        recommended_impact=(
+            f"Optimized: RSS base on Core {target_core} → fewer DPC stalls, lower jitter"
+        ),
         scope=SettingScope.COMPLETE,
         category_order=26,
         effect="Moves the RSS base processor off Core 0 to reduce DPC latency",
@@ -2992,15 +3080,29 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
         value_map={},
         apply_type=DetectType.POWERSHELL,
         apply_command=(
+            # The optimized core is derived (rss_target_core), never a literal;
+            # "default" writes the driver's own published default, falling back
+            # to 0 only because 0 is the documented Windows stock for
+            # BaseProcessorNumber, not an invention. The write is refused when
+            # the target sits outside this adapter's own RSS processor range.
             "try { "
             "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            "$base = if ('%value%' -eq 'optimized') { 2 } else { 0 }; "
-            "Set-NetAdapterRSS -Name $a.Name -BaseProcessorNumber $base -ErrorAction Stop; 'ok' "
+            "$base = 0; "
+            "if ('%value%' -eq 'optimized') { $base = %target% } else { "
+            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*RssBaseProcNumber' -ErrorAction SilentlyContinue; "
+            "if ($prop) { $base = [int]$prop.DefaultRegistryValue } }; "
+            "$rss = Get-NetAdapterRSS -Name $a.Name -ErrorAction Stop; "
+            "$maxProc = $rss.MaxProcessorNumber -as [int]; "
+            "if ($null -ne $maxProc -and $base -gt $maxProc) { "
+            "'error: the target core is outside this adapters RSS processor range' "
+            "} else { "
+            "Set-NetAdapterRSS -Name $a.Name -BaseProcessorNumber $base -ErrorAction Stop; 'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "target": target_core},
         apply_value_map={},
-        value_hints={"default": "Core 0", "optimized": "Core 2"},
+        value_hints={"default": "Driver default", "optimized": f"Core {target_core}"},
     )
 
 
@@ -3025,6 +3127,7 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
         id=f"network:{interface_index}:msi_mode",
         category=SettingCategory.NETWORK,
         display_name=f"Message-Signaled Interrupts ({display_name})",
+        short_name=f"Interrupt mode (MSI) ({display_name})",
         description="Delivers NIC interrupts per-device via MSI/MSI-X instead of shared legacy IRQ lines. Enabling removes shared-interrupt latency for lower DPC times.",
         value_type=SettingValueType.CHOICE,
         choices=("default", "enabled"),
@@ -3148,6 +3251,7 @@ NETWORK_WIFI_RADIO_WHEN_WIRED = SettingExecutor(
     id="network:wifi_radio_when_wired",
     category=SettingCategory.NETWORK,
     display_name="Wi-Fi Radio While Wired",
+    short_name="Wi-Fi off while on cable",
     description="An enabled Wi-Fi adapter keeps scanning for networks even with nothing "
     "connected, and every scan is kernel work competing with the game.",
     value_type=SettingValueType.CHOICE,
@@ -3225,6 +3329,7 @@ def create_mtu_setting(interface_index: int, display_name: str, path_mtu: int) -
         id=f"network:{interface_index}:mtu",
         category=SettingCategory.NETWORK,
         display_name=f"MTU ({display_name})",
+        short_name=f"Packet size (MTU) ({display_name})",
         description="The largest frame this adapter sends without fragmenting. It should match "
         "what the line actually carries, which fpstune measures rather than assumes.",
         value_type=SettingValueType.INT,
@@ -3293,6 +3398,7 @@ def create_link_capability_setting(interface_index: int, display_name: str) -> S
         id=f"network:{interface_index}:link_capability",
         category=SettingCategory.NETWORK,
         display_name=f"Link Speed vs Adapter Capability ({display_name})",
+        short_name=f"Line speed check ({display_name})",
         description="Compares the speed this link negotiated with the fastest speed the adapter "
         "itself supports. A gap is a cable, switch port or far-end limit, not a Windows setting.",
         value_type=SettingValueType.CHOICE,

@@ -18,6 +18,12 @@ Nothing got faster; the cost moved off the request path. A request that still
 arrives first blocks on the lock and receives the answer the warm-up was already
 computing — which is the point of the lock, and why it had to be added in the
 same change.
+
+The singleton lives in ``fpstune.settings.registry_cache`` (H1): a route module
+was the only place anything could ask for the registry, and the benchmark and
+debug routes were reaching into a sibling route's privates to get it. These
+tests exercise the owning module; the route module keeps a one-line delegate as
+the seam its own tests patch.
 """
 
 from __future__ import annotations
@@ -29,7 +35,7 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-from fpstune.api.routes import settings as settings_routes
+import fpstune.settings.registry_cache as registry_cache
 
 
 @pytest.fixture(autouse=True)
@@ -39,10 +45,10 @@ def cold_registry():
     The cache is a module global, so a test that forgot this would measure
     whatever an earlier test built and pass without exercising anything.
     """
-    original = settings_routes._registry
-    settings_routes._registry = None
+    original = registry_cache._registry
+    registry_cache._registry = None
     yield
-    settings_routes._registry = original
+    registry_cache._registry = original
 
 
 class TestTheRegistryIsBuiltOnce:
@@ -62,9 +68,9 @@ class TestTheRegistryIsBuiltOnce:
 
         def ask() -> None:
             start.wait(timeout=10)
-            settings_routes._get_registry()
+            registry_cache.get_registry()
 
-        with patch.object(settings_routes, "SettingsRegistry", _Slow):
+        with patch.object(registry_cache, "SettingsRegistry", _Slow):
             threads = [threading.Thread(target=ask) for _ in range(8)]
             for t in threads:
                 t.start()
@@ -77,10 +83,17 @@ class TestTheRegistryIsBuiltOnce:
         )
 
     def test_everyone_gets_the_same_instance(self) -> None:
-        with patch.object(settings_routes, "SettingsRegistry", lambda *_a, **_k: object()):
-            first = settings_routes._get_registry()
-            second = settings_routes._get_registry()
+        with patch.object(registry_cache, "SettingsRegistry", lambda *_a, **_k: object()):
+            first = registry_cache.get_registry()
+            second = registry_cache.get_registry()
         assert first is second
+
+    def test_the_route_delegate_serves_the_same_singleton(self) -> None:
+        """The route module's `_get_registry` is a seam, not a second cache."""
+        from fpstune.api.routes import settings as settings_routes
+
+        with patch.object(registry_cache, "SettingsRegistry", lambda *_a, **_k: object()):
+            assert settings_routes._get_registry() is registry_cache.get_registry()
 
 
 class TestTheWarmUpIsNotLoadBearing:
@@ -90,21 +103,21 @@ class TestTheWarmUpIsNotLoadBearing:
         Raising here would take the API down at startup over a hardware probe
         that the request path already knows how to retry.
         """
-        with patch.object(settings_routes, "SettingsRegistry", side_effect=OSError("no hardware")):
-            settings_routes.warm_registry()  # must not raise
+        with patch.object(registry_cache, "SettingsRegistry", side_effect=OSError("no hardware")):
+            registry_cache.warm_registry()  # must not raise
 
     def test_it_leaves_nothing_half_built_behind(self) -> None:
         """A failed build must not cache a broken registry for every later call."""
-        with patch.object(settings_routes, "SettingsRegistry", side_effect=OSError("no hardware")):
-            settings_routes.warm_registry()
+        with patch.object(registry_cache, "SettingsRegistry", side_effect=OSError("no hardware")):
+            registry_cache.warm_registry()
 
-        assert settings_routes._registry is None
+        assert registry_cache._registry is None
 
     def test_a_successful_warm_up_is_what_the_next_request_gets(self) -> None:
         sentinel = object()
-        with patch.object(settings_routes, "SettingsRegistry", lambda *_a, **_k: sentinel):
-            settings_routes.warm_registry()
-            assert settings_routes._get_registry() is sentinel
+        with patch.object(registry_cache, "SettingsRegistry", lambda *_a, **_k: sentinel):
+            registry_cache.warm_registry()
+            assert registry_cache.get_registry() is sentinel
 
 
 class TestStartupSchedulesIt:
@@ -115,8 +128,8 @@ class TestStartupSchedulesIt:
         warmed = threading.Event()
 
         with (
-            patch.object(settings_routes, "SettingsRegistry", lambda *_a, **_k: object()),
-            patch.object(settings_routes, "warm_registry", side_effect=lambda: warmed.set()),
+            patch.object(registry_cache, "SettingsRegistry", lambda *_a, **_k: object()),
+            patch.object(registry_cache, "warm_registry", side_effect=lambda: warmed.set()),
             TestClient(create_app()),
         ):
             assert warmed.wait(timeout=10), "startup never scheduled the registry warm-up"

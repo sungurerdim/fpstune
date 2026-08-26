@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { HardDrive, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useStore } from "../store";
 import { fmtMB } from "../lib/cleanupSize";
@@ -11,6 +12,7 @@ import { fmtMB } from "../lib/cleanupSize";
  * the component always renders the compact band layout.
  */
 export function CleanupResults({ compact: _compact = true }: { compact?: boolean }) {
+  const { t } = useT();
   const cleanupResults = useStore((s) => s.cleanupResults);
 
   const results = Object.values(cleanupResults);
@@ -27,14 +29,14 @@ export function CleanupResults({ compact: _compact = true }: { compact?: boolean
     <div className="flex flex-col gap-1.5 min-w-0">
       <div className="flex items-center gap-2 pr-1">
         <HardDrive className="w-4 h-4 text-primary shrink-0" />
-        <span className="text-sm font-semibold">Cleanup Results</span>
+        <span className="text-sm font-semibold">{t("cleanup.results")}</span>
         {results.length > 0 && (
           <span className="ml-auto flex items-center gap-2 shrink-0 whitespace-nowrap">
             {failedCount > 0 && (
-              <span className="text-xs text-destructive">{failedCount} failed</span>
+              <span className="text-xs text-destructive">{t("cleanup.failedCount", { count: failedCount })}</span>
             )}
             <span className="text-xs text-primary font-medium">
-              {anyCalculating ? "Calculating…" : `Freed ${fmtMB(totalFreed)}`}
+              {anyCalculating ? t("cleanup.calculating") : t("cleanup.freed", { amount: fmtMB(totalFreed) })}
             </span>
           </span>
         )}
@@ -42,7 +44,7 @@ export function CleanupResults({ compact: _compact = true }: { compact?: boolean
 
       {results.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          Select items below and run a cleanup to see freed space here.
+          {t("cleanup.resultsEmpty")}
         </p>
       ) : (
         <div className="flex flex-col gap-0.5 max-h-20 overflow-y-auto pr-1">
@@ -60,9 +62,9 @@ export function CleanupResults({ compact: _compact = true }: { compact?: boolean
               <span className="truncate text-muted-foreground">{r.name}</span>
               <span className="ml-auto shrink-0 whitespace-nowrap">
                 {!r.success ? (
-                  <span className="text-destructive">Failed</span>
+                  <span className="text-destructive">{t("cleanup.failed")}</span>
                 ) : !r.sized ? (
-                  <span className="text-success">Done</span>
+                  <span className="text-success">{t("cleanup.done")}</span>
                 ) : r.freedMB === null ? (
                   <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />
                 ) : (

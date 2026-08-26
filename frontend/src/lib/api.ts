@@ -54,6 +54,43 @@ export interface AudioDeviceInfo {
   loudness_eq_enabled: boolean; // Current state of volume normalization
 }
 
+export interface VrrOptimizationInfo {
+  monitor_name: string;
+  monitor_refresh_hz: number;
+  // Tri-state on purpose: null means the EDID could not be read, and "could
+  // not read" must never render as "does not support".
+  supports_vrr: boolean | null;
+  recommended_fps_limit: number;
+  recommended_vrr_mode: string;
+  recommended_vsync: string;
+  current_fps_limit: number;
+  current_vrr_mode: string;
+  current_vsync: string;
+  is_optimized: boolean;
+  explanation: string;
+  warning?: string | null;
+}
+
+export interface PowerProfileStatus {
+  active_plan: string;
+  active_guid: string;
+  fps_balanced_exists: boolean;
+  fps_balanced_active: boolean;
+  optimizations: string[];
+}
+
+export interface SelfCheckFinding {
+  area: string;
+  name: string;
+  agrees: boolean;
+  detail: string;
+}
+
+export interface SelfCheckReport {
+  ok: boolean;
+  findings: SelfCheckFinding[];
+}
+
 export interface GpuDeviceInfo {
   vendor: string;
   name?: string;
@@ -65,8 +102,13 @@ export interface CpuInfo {
   name: string;
   physical_cores: number;
   logical_cores: number;
+  // The rated clock WMI reports; no boost field exists (nothing measures one)
   base_clock_mhz?: number;
-  max_clock_mhz?: number;
+  sockets?: number;
+  // P/E topology; is_hybrid null = could not be read (unknown, not "no")
+  p_cores?: number;
+  e_cores?: number;
+  is_hybrid?: boolean | null;
   architecture: string;
   cache_l3_mb?: number;
 }
@@ -91,8 +133,8 @@ export interface MonitorInfo {
   // Optimal status (only trust if corresponding _known is true)
   is_resolution_optimal?: boolean;
   is_refresh_optimal?: boolean;
-  // VRR (G-Sync/FreeSync) support
-  supports_vrr?: boolean;
+  // VRR (G-Sync/FreeSync) support — the EDID's declaration; null = unknown
+  supports_vrr?: boolean | null;
   // Is display active (attached to desktop) or disconnected via Windows settings
   is_active?: boolean;
   // Hardware ID for matching (e.g., "DEL4265", "SAM0F75")
@@ -272,7 +314,74 @@ export const api = {
       resolution: string;
       refresh_rate: number;
       message: string;
+      // A real write awaits confirmation: unless confirmDisplayChange arrives
+      // within revert_timeout_s the backend restores the prior mode.
+      requires_confirmation: boolean;
+      revert_timeout_s: number | null;
     }>(`/display/${displayIndex}/auto`, { method: "POST" }),
+
+  createRestorePoint: () =>
+    fetchJson<{ success: boolean; message: string }>("/restore-point", {
+      method: "POST",
+    }),
+
+  // G-Sync/VRR driver tuning (NVIDIA today; other vendors report the gap).
+  getVrrOptimization: (displayIndex: number) =>
+    fetchJson<VrrOptimizationInfo>(
+      `/display/vrr-optimization?display_index=${displayIndex}`,
+    ),
+
+  applyVrrOptimization: (request: {
+    fps_limit: number;
+    vrr_mode: string;
+    vsync: string;
+  }) =>
+    fetchJson<{ success: boolean; message: string }>(
+      "/display/vrr-optimization/apply",
+      { method: "POST", body: JSON.stringify(request) },
+    ),
+
+  resetVrrOptimization: () =>
+    fetchJson<{ success: boolean; message: string }>(
+      "/display/vrr-optimization/reset",
+      { method: "POST" },
+    ),
+
+  // FPS Balanced power plan: full power when a game wants it, none wasted idle.
+  getPowerProfileStatus: () =>
+    fetchJson<PowerProfileStatus>("/power-profile/status"),
+
+  activatePowerProfile: () =>
+    fetchJson<{ success: boolean; message: string }>("/power-profile/activate", {
+      method: "POST",
+    }),
+
+  revertPowerProfile: () =>
+    fetchJson<{ success: boolean; message: string }>("/power-profile/revert", {
+      method: "POST",
+    }),
+
+  // Every detector cross-checked against an independent source (A12).
+  getSelfCheck: (refresh = false) =>
+    fetchJson<SelfCheckReport>(`/self-check${refresh ? "?refresh=true" : ""}`),
+
+  // The drive's own media type picks the pass: retrim on SSD, defrag on HDD.
+  optimizeDrive: (driveLetter: string) =>
+    fetchJson<{
+      success: boolean;
+      drive_letter: string;
+      media_type: string;
+      action: string;
+      message: string;
+    }>(`/storage/${encodeURIComponent(driveLetter)}/optimize`, {
+      method: "POST",
+    }),
+
+  confirmDisplayChange: (displayIndex: number) =>
+    fetchJson<{ success: boolean; message: string }>(
+      `/display/${displayIndex}/confirm`,
+      { method: "POST" },
+    ),
 
   refreshDisplays: () =>
     fetchJson<{ success: boolean; monitors: MonitorInfo[] }>(
@@ -372,6 +481,17 @@ export interface BulkApplyResponse {
   requires_reboot: boolean;
 }
 
+export interface VerifyResponse {
+  setting_id: string;
+  matches: boolean;
+  current_value: unknown;
+  expected_value: unknown;
+  // Which question was answered — echoed so a caller that assumed a different
+  // target cannot read a correct machine as a failed operation.
+  target: "recommended" | "default" | "original";
+  error?: string | null;
+}
+
 // =============================================================================
 // Settings API Methods (new SettingExecutor architecture)
 // =============================================================================
@@ -413,6 +533,29 @@ export const settingsApi = {
    */
   undoSetting: (settingId: string) =>
     fetchJson<ApplyResponse>(`/settings/${settingId}/undo`, {
+      method: "POST",
+    }),
+
+  /**
+   * Write the curated Windows-stock value (C6's other promise).
+   *
+   * A different endpoint from undo on purpose: reset writes what stock
+   * Windows holds, undo writes what this machine held. The row used to fake
+   * this by posting `/apply` with `defaultValue` — same write, but the
+   * backend never knew it was a reset, so the activity log called it an
+   * apply and the dedicated route sat uncalled.
+   */
+  resetSetting: (settingId: string) =>
+    fetchJson<ApplyResponse>(`/settings/${settingId}/reset`, {
+      method: "POST",
+    }),
+
+  /**
+   * Detect only — which question is being asked is named by `target`
+   * and echoed back in the response.
+   */
+  verifySetting: (settingId: string) =>
+    fetchJson<VerifyResponse>(`/settings/${settingId}/verify`, {
       method: "POST",
     }),
 

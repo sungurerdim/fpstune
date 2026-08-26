@@ -55,6 +55,7 @@ class DetectionManager {
         is_optimized: result.is_optimized,
         is_applicable: result.is_applicable,
         applicable_reason: result.applicable_reason,
+        error: result.error,
         recommended_value: result.recommended_value,
         original_value: result.original_value,
       };

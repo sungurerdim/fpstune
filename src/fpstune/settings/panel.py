@@ -30,13 +30,16 @@ def primary_monitor(monitors: Sequence[MonitorInfo]) -> MonitorInfo | None:
     """Return the panel Windows calls primary, or the only one there is.
 
     Identified by the ``is_primary`` flag EnumDisplayDevices reports, never by
-    model name or by position in the list (C5). The fallback to the first entry
-    is for the case where no panel claims the flag at all — it is not an
-    index-based identity, it is "there is only this".
+    model name or by position in the list (C5). Present-but-inactive panels are
+    facts about the machine, not rendering targets — nothing derives from them.
+    The fallback to the first active entry is for the case where no panel claims
+    the flag at all — it is not an index-based identity, it is "there is only
+    this".
     """
-    if not monitors:
+    active = [m for m in monitors if m.is_active]
+    if not active:
         return None
-    return next((m for m in monitors if m.is_primary), monitors[0])
+    return next((m for m in active if m.is_primary), active[0])
 
 
 def refresh_ceiling_hz(monitor: MonitorInfo) -> int:

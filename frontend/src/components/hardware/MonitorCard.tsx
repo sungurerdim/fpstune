@@ -1,10 +1,13 @@
-import { useMutation } from "@tanstack/react-query";
-import { ScreenShare, CheckCircle2, RefreshCw, Zap } from "lucide-react";
+import { useT } from "../../i18n";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ScreenShare, CheckCircle2, RefreshCw, Zap, Gauge } from "lucide-react";
+import { useState } from "react";
 import { api, type MonitorInfo } from "../../lib/api";
 import { hardwareManager } from "../../lib/hardware-manager";
 import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { isDisplaySuboptimal } from "../../lib/displayStatus";
+import { ConfirmDialog } from "../ui/ConfirmDialog";
 
 const log = createLogger("MonitorCard");
 
@@ -29,19 +32,33 @@ function formatMonitorDeviceName(name: string): string {
  * layout nobody asked for.
  */
 export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] }) {
+  const { t } = useT();
   const targets = monitors
     .map((monitor, index) => ({ monitor, index }))
     .filter(({ monitor }) => isDisplaySuboptimal(monitor));
 
+  // Every real mode write starts a backend revert timer: unless the change is
+  // kept, the prior mode comes back — so an unreadable panel can never be
+  // stranded in a mode nobody can see to undo.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [revertS, setRevertS] = useState(15);
+
   const mutation = useMutation({
     mutationFn: async () => {
+      let revert: number | null = null;
       for (const { index } of targets) {
-        await api.setDisplayToAuto(index);
+        const res = await api.setDisplayToAuto(index);
+        if (res.requires_confirmation) revert = res.revert_timeout_s ?? 15;
       }
+      return revert;
     },
-    onSuccess: async () => {
+    onSuccess: async (revert) => {
       await new Promise((resolve) => setTimeout(resolve, 1200));
       await hardwareManager.refreshMonitors();
+      if (revert !== null) {
+        setRevertS(revert);
+        setConfirmOpen(true);
+      }
     },
     onError: (error: Error) => {
       log.error("Failed to set all displays to native mode:", error.message);
@@ -49,29 +66,180 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
     },
   });
 
+  const keepAll = async () => {
+    setConfirmOpen(false);
+    for (const { index } of targets) {
+      try {
+        await api.confirmDisplayChange(index);
+      } catch (error) {
+        // A 404 means that display's timer already fired and it reverted.
+        log.error(`Could not keep display ${index}:`, (error as Error).message);
+      }
+    }
+  };
+
+  const letRevert = () => {
+    setConfirmOpen(false);
+    setTimeout(
+      () => {
+        void hardwareManager.refreshMonitors();
+      },
+      (revertS + 2) * 1000,
+    );
+  };
+
   // Pointless when there is one display — its own card already carries the button.
   if (targets.length < 2) return null;
 
   return (
-    <button
-      onClick={() => mutation.mutate()}
-      disabled={mutation.isPending}
-      className={cn(
-        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
-        mutation.isPending
-          ? "bg-muted text-muted-foreground cursor-wait"
-          : "bg-warning/15 text-warning hover:bg-warning/25",
+    <>
+      <button
+        onClick={() => mutation.mutate()}
+        disabled={mutation.isPending}
+        className={cn(
+          "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
+          mutation.isPending
+            ? "bg-muted text-muted-foreground cursor-wait"
+            : "bg-warning/15 text-warning hover:bg-warning/25",
+        )}
+      >
+        {mutation.isPending ? (
+          <RefreshCw className="w-3 h-3 animate-spin" />
+        ) : (
+          <Zap className="w-3 h-3" />
+        )}
+        {mutation.isPending
+          ? t("monitor.applying")
+          : t("monitor.useNativeAll", { count: targets.length })}
+      </button>
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t("monitor.keepAllTitle")}
+        confirmLabel={t("action.keep")}
+        onConfirm={() => void keepAll()}
+        onCancel={letRevert}
+      >
+        {t("monitor.revertAllBody", { seconds: revertS })}
+      </ConfirmDialog>
+    </>
+  );
+}
+
+/**
+ * Driver-side G-Sync/VRR tuning for the primary panel.
+ *
+ * The three routes this calls existed before any surface did — the whole
+ * VRR capability was endpoints with no caller (D3). Rendered only on the
+ * primary monitor's card because the NVIDIA profile the apply writes is
+ * global: one driver profile, so one control, on the panel it is derived from.
+ */
+function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
+  const { t } = useT();
+  const queryClient = useQueryClient();
+  const { data: vrr } = useQuery({
+    queryKey: ["vrr-optimization", displayIndex],
+    queryFn: () => api.getVrrOptimization(displayIndex),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const refetch = () =>
+    queryClient.invalidateQueries({ queryKey: ["vrr-optimization"] });
+
+  const applyMutation = useMutation({
+    mutationFn: () =>
+      api.applyVrrOptimization({
+        fps_limit: vrr?.recommended_fps_limit ?? 0,
+        vrr_mode: vrr?.recommended_vrr_mode ?? "off",
+        vsync: vrr?.recommended_vsync ?? "off",
+      }),
+    onSuccess: refetch,
+    onError: (error: Error) => {
+      log.error("Failed to apply VRR optimization:", error.message);
+      alert(`Could not apply G-Sync settings: ${error.message}`);
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: () => api.resetVrrOptimization(),
+    onSuccess: refetch,
+    onError: (error: Error) => {
+      log.error("Failed to reset VRR optimization:", error.message);
+      alert(`Could not reset G-Sync settings: ${error.message}`);
+    },
+  });
+
+  if (!vrr) return null;
+
+  const pending = applyMutation.isPending || resetMutation.isPending;
+  // A recommendation of "everything off" is the vendor-gap answer — there is
+  // nothing to apply, only the explanation to show.
+  const hasRecommendation =
+    vrr.supports_vrr === true && vrr.recommended_vrr_mode !== "off";
+
+  return (
+    <div className="pl-4 pt-1 space-y-1">
+      <div className="flex items-center gap-1.5 text-xs">
+        <Gauge className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground">G-Sync / VRR:</span>
+        {vrr.is_optimized ? (
+          <span className="text-success font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            {vrr.current_vrr_mode} · VSync {vrr.current_vsync} ·{" "}
+            {vrr.current_fps_limit > 0
+              ? t("monitor.fpsCap", { count: vrr.current_fps_limit })
+              : t("monitor.noCap")}
+          </span>
+        ) : hasRecommendation ? (
+          <span className="text-warning font-medium">
+            {t("monitor.recommendedPrefix")} {vrr.recommended_vrr_mode} · VSync{" "}
+            {vrr.recommended_vsync} ·{" "}
+            {t("monitor.fpsCap", { count: vrr.recommended_fps_limit })}
+          </span>
+        ) : (
+          <span className="text-muted-foreground italic">
+            {vrr.supports_vrr === null
+              ? t("monitor.unknown")
+              : t("monitor.notApplicable")}
+          </span>
+        )}
+      </div>
+      {vrr.warning && (
+        <p className="text-xs text-muted-foreground">{vrr.warning}</p>
       )}
-    >
-      {mutation.isPending ? (
-        <RefreshCw className="w-3 h-3 animate-spin" />
-      ) : (
-        <Zap className="w-3 h-3" />
-      )}
-      {mutation.isPending
-        ? "Applying…"
-        : `Use native mode on all ${targets.length} displays`}
-    </button>
+      <div className="flex items-center gap-2">
+        {hasRecommendation && !vrr.is_optimized && (
+          <button
+            onClick={() => applyMutation.mutate()}
+            disabled={pending}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
+              pending
+                ? "bg-muted text-muted-foreground cursor-wait"
+                : "bg-warning/15 text-warning hover:bg-warning/25",
+            )}
+          >
+            {applyMutation.isPending ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <Zap className="w-3 h-3" />
+            )}
+            {t("monitor.optimizeGsync")}
+          </button>
+        )}
+        {vrr.is_optimized && (
+          <button
+            onClick={() => resetMutation.mutate()}
+            disabled={pending}
+            className="px-2 py-1 rounded text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:cursor-wait"
+          >
+            {resetMutation.isPending
+              ? t("monitor.resetting")
+              : t("monitor.resetDriver")}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -82,6 +250,7 @@ export function MonitorCard({
   monitor: MonitorInfo;
   displayIndex: number;
 }) {
+  const { t } = useT();
   // Handle disconnected displays (width/height might be 0)
   const isActive = monitor.is_active ?? true;
   const currentRes =
@@ -99,9 +268,10 @@ export function MonitorCard({
     isResolutionKnown && monitor.native_width && monitor.native_height
       ? `${monitor.native_width}x${monitor.native_height}`
       : null;
-  // Prefer native refresh rate from EDID, fallback to max from EnumDisplaySettings
+  // The panel's ceiling: mode-list max first, EDID preferred rate as fallback —
+  // a high-refresh panel's EDID often prefers 60 Hz while its modes reach 300.
   const nativeHz = isRefreshKnown
-    ? monitor.native_refresh_rate_hz || monitor.max_refresh_rate_hz || 0
+    ? monitor.max_refresh_rate_hz || monitor.native_refresh_rate_hz || 0
     : null;
 
   // Optimal status - only trust if detection succeeded (disconnected displays can't be optimal)
@@ -120,20 +290,50 @@ export function MonitorCard({
   // POST /display/{index}/auto and `api.setDisplayToAuto` both existed and had no
   // caller. Telling the user something is wrong with no way to fix it is worse
   // than staying quiet.
+  // The backend reverts the change unless it is kept (A10's second guard), so
+  // a mode this panel cannot show fixes itself even if the user sees nothing.
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [revertS, setRevertS] = useState(15);
+
   const autoMutation = useMutation({
     mutationFn: () => api.setDisplayToAuto(displayIndex),
-    onSuccess: async () => {
+    onSuccess: async (data) => {
       // Windows needs a moment to settle a mode change before it reports the new
       // values, and the monitor cache has to be invalidated or the card would
       // keep showing the old rate and look like the click did nothing.
       await new Promise((resolve) => setTimeout(resolve, 1200));
       await hardwareManager.refreshMonitors();
+      if (data.requires_confirmation) {
+        setRevertS(data.revert_timeout_s ?? 15);
+        setConfirmOpen(true);
+      }
     },
     onError: (error: Error) => {
       log.error(`Failed to set display ${displayIndex} to native mode:`, error.message);
       alert(`Could not change the display mode: ${error.message}`);
     },
   });
+
+  const keepMode = async () => {
+    setConfirmOpen(false);
+    try {
+      await api.confirmDisplayChange(displayIndex);
+    } catch (error) {
+      // A 404 means the timer already fired and the display reverted.
+      log.error(`Could not keep display ${displayIndex}:`, (error as Error).message);
+      void hardwareManager.refreshMonitors();
+    }
+  };
+
+  const letModeRevert = () => {
+    setConfirmOpen(false);
+    setTimeout(
+      () => {
+        void hardwareManager.refreshMonitors();
+      },
+      (revertS + 2) * 1000,
+    );
+  };
 
   // Same predicate the all-displays action uses, so the two controls cannot
   // disagree about whether this display needs anything.
@@ -176,12 +376,12 @@ export function MonitorCard({
         </span>
         {!isActive && (
           <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium flex-shrink-0">
-            Disconnected
+            {t("monitor.disconnected")}
           </span>
         )}
         {monitor.is_primary && (
           <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium flex-shrink-0">
-            Primary
+            {t("monitor.primary")}
           </span>
         )}
         {monitor.supports_vrr && (
@@ -205,7 +405,7 @@ export function MonitorCard({
 
       {/* Resolution row */}
       <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">Resolution:</span>
+        <span className="text-muted-foreground w-14">{t("monitor.resolution")}</span>
         <span
           className={cn(
             "font-medium",
@@ -236,7 +436,7 @@ export function MonitorCard({
 
       {/* Refresh rate row */}
       <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">Refresh:</span>
+        <span className="text-muted-foreground w-14">{t("monitor.refresh")}</span>
         <span
           className={cn(
             "font-medium",
@@ -282,10 +482,24 @@ export function MonitorCard({
             ) : (
               <Zap className="w-3 h-3" />
             )}
-            {autoMutation.isPending ? "Applying…" : "Use native mode"}
+            {autoMutation.isPending ? t("monitor.applying") : t("monitor.useNative")}
           </button>
         </div>
       )}
+      {/* One driver profile, so one control — on the primary panel it is
+          derived from, and only while the display is actually on the desktop. */}
+      {monitor.is_primary && isActive && (
+        <VrrOptimizationPanel displayIndex={displayIndex} />
+      )}
+      <ConfirmDialog
+        open={confirmOpen}
+        title={t("monitor.keepTitle")}
+        confirmLabel={t("action.keep")}
+        onConfirm={() => void keepMode()}
+        onCancel={letModeRevert}
+      >
+        {t("monitor.revertBody", { seconds: revertS })}
+      </ConfirmDialog>
     </div>
   );
 }

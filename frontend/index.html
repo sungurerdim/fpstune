@@ -2,6 +2,24 @@
 <html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
+    <!-- Theme before first paint: an explicit choice (localStorage) wins,
+         otherwise the OS preference decides. The class="dark" above is only
+         the pre-script default, so a light-mode user never sees a dark
+         flash inverted — the script runs before any CSS applies to content. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("fpstune-theme");
+          var dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          document.documentElement.classList.toggle("dark", dark);
+        } catch (e) {
+          /* storage blocked: keep the dark default */
+        }
+      })();
+    </script>
     <!-- No favicon link: there is no `public/` directory, so `/vite.svg` was a
          404 on every single page load. An inline data-URI keeps the browser
          from asking at all. -->

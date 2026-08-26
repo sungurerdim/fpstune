@@ -2,7 +2,81 @@
 @tailwind components;
 @tailwind utilities;
 
+/*
+ * The design tokens (E1). Every colour the app uses is a CSS custom property
+ * declared twice — light in :root, dark in .dark — and Tailwind reads them
+ * through hsl(var(--x)), so no component ever holds a literal colour. The two
+ * blocks must declare the same set of variables: a name missing from one
+ * theme silently inherits the other theme's value, which is how half-themed
+ * screens happen (theme.test.ts pins this).
+ */
 @layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-elevated: 210 40% 98%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 217.2 91.2% 52%;
+    --primary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 221.2 83.2% 53.3%;
+    --success: 142 76% 30%;
+    /* 33% lightness, not 40: the axe run measured 40% orange at 3.6:1 on
+       white — under WCAG AA's 4.5. */
+    --warning: 35 92% 33%;
+    --warning-foreground: 38 92% 96%;
+    --score-low: 0 62.8% 45%;
+    --score-mid: 35 92% 33%;
+    --score-high: 142 76% 30%;
+    --scrollbar-track: 210 40% 94%;
+    --scrollbar-thumb: 215 20% 75%;
+    --scrollbar-thumb-hover: 215 20% 60%;
+  }
+
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+    --card: 222.2 84% 6.5%;
+    --card-elevated: 222.2 84% 8%;
+    --card-foreground: 210 40% 98%;
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+    --success: 142 76% 36%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 92% 10%;
+    --score-low: 0 62.8% 50%;
+    --score-mid: 38 92% 50%;
+    --score-high: 142 76% 36%;
+    --scrollbar-track: 217.2 32.6% 10%;
+    --scrollbar-thumb: 217.2 32.6% 25%;
+    --scrollbar-thumb-hover: 217.2 32.6% 35%;
+  }
+
   * {
     @apply border-border;
   }
@@ -10,44 +84,46 @@
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
   }
+
+  /* The one focus convention (E7). Three ring recipes existed, on 8 of 48
+     buttons; everything else showed the browser default or nothing. One
+     rule, keyboard-only (:focus-visible), token-fed. Components must not
+     carry their own focus: classes — the E7 test forbids it. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
 }
 
-/* Custom scrollbar */
+/* Motion is a preference (E7). The app's 40+ animate-spin/pulse/transition
+   uses all collapse to effectively-instant for users who asked for reduced
+   motion; spinners become static icons, which still read as "working". */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Custom scrollbar — token-fed, so it follows the theme. */
 ::-webkit-scrollbar {
   width: 8px;
   height: 8px;
 }
 
 ::-webkit-scrollbar-track {
-  background: hsl(217.2 32.6% 10%);
+  background: hsl(var(--scrollbar-track));
 }
 
 ::-webkit-scrollbar-thumb {
-  background: hsl(217.2 32.6% 25%);
+  background: hsl(var(--scrollbar-thumb));
   border-radius: 4px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: hsl(217.2 32.6% 35%);
-}
-
-/* Score ring animation */
-@keyframes score-fill {
-  from { stroke-dashoffset: var(--circumference); }
-  to { stroke-dashoffset: var(--target-offset); }
-}
-
-.score-ring-progress {
-  animation: score-fill 1s ease-out forwards;
-}
-
-/* Tab content transition */
-.tab-content-enter {
-  opacity: 0;
-  transform: translateY(4px);
-}
-.tab-content-active {
-  opacity: 1;
-  transform: translateY(0);
-  transition: opacity 150ms ease, transform 150ms ease;
+  background: hsl(var(--scrollbar-thumb-hover));
 }

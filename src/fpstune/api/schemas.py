@@ -17,10 +17,16 @@ class CpuInfo(BaseModel):
     name: str
     physical_cores: int
     logical_cores: int
+    # The rated clock WMI reports. There is no boost field: WMI has no boost
+    # figure, and a duplicate under another name is a claim nothing measured.
     base_clock_mhz: int | None = None
-    max_clock_mhz: int | None = None
     architecture: str = ""  # x64, ARM64
     cache_l3_mb: int | None = None
+    sockets: int = 1
+    # P/E topology; is_hybrid None = could not be read (unknown, not "no")
+    p_cores: int = 0
+    e_cores: int = 0
+    is_hybrid: bool | None = None
 
 
 class MonitorInfo(BaseModel):
@@ -45,8 +51,9 @@ class MonitorInfo(BaseModel):
     # Optimal status (computed from current vs native)
     is_resolution_optimal: bool = False
     is_refresh_optimal: bool = False
-    # VRR (G-Sync/FreeSync) support
-    supports_vrr: bool = False
+    # VRR (G-Sync/FreeSync) support — the EDID's declaration, tri-state.
+    # None means the EDID could not be read: unknown, not "no".
+    supports_vrr: bool | None = None
     # Is display active (attached to desktop) or disconnected. The UI renders a
     # "Disconnected" badge from this, so dropping it made a detached monitor
     # look live until the next refresh.
@@ -224,59 +231,6 @@ class SystemInfo(BaseModel):
     gpu_detecting: bool = False
 
 
-class ModuleSettingResponse(BaseModel):
-    """Individual module setting response."""
-
-    name: str
-    display_name: str
-    description: str
-    current_value: Any
-    recommended_value: Any
-    value_type: str  # 'bool', 'int', 'string', 'choice'
-    choices: list[str] = []
-    requires_reboot: bool = False
-    # Tooltip content explaining impact
-    current_impact: str = ""  # What the current value causes
-    recommended_impact: str = ""  # What the recommended value improves
-    default_value: Any = None  # Default value for this setting
-    is_action: bool = False  # True for one-time operations (TRIM, cleanup)
-    # Whether the current value already matches the recommendation. The status
-    # cache has produced this since it was added and pydantic dropped it on
-    # every request, because a key with no field on the model is discarded
-    # without a word — so /api/status reported per-module counts derived from a
-    # flag the client never received.
-    is_optimized: bool = False
-
-
-# Unified Tweak/Action Types (for per-category detection)
-class ModuleStatusResponse(BaseModel):
-    """Module status response."""
-
-    name: str
-    display_name: str
-    description: str
-    status: str  # 'loading', 'not_applied', 'applied', 'partially_applied', 'error'
-    message: str
-    details: list[str] = []
-    changes: dict[str, Any] = {}
-    is_available: bool = True
-    requires_reboot: bool = False
-    settings: list[ModuleSettingResponse] = []
-    loading: bool = False  # True if this module is still loading
-
-
-class OverallStatus(BaseModel):
-    """Overall optimization status."""
-
-    modules: list[ModuleStatusResponse]
-    applied_count: int
-    total_count: int
-    loading: bool = False
-    is_admin: bool = False
-
-
-# Module apply schemas
-# GPU schemas
 class GpuDetectResponse(BaseModel):
     """GPU detection response."""
 
@@ -423,6 +377,16 @@ class SettingDefinitionResponse(BaseModel):
     # Risk taxonomy (added Phase 1)
     risk_level: str = "low"
     risk_warning: str | None = None
+    # Non-None = this setting changes what the player can see or hear, and the
+    # string says what is lost — the copy the two-button UI shows before
+    # Absolute Max spends it (consequence 5; scope/impact coherence gate).
+    perceptible_cost: str | None = None
+    # True when recommended == default under values_equal — a drift guard
+    # (consequence 2): it changes nothing on a stock machine and exists to put
+    # back what another optimizer moved. Counted apart from real changes so no
+    # surface promises work that will not happen. Computed here so the frontend
+    # never re-implements the one comparison truth (C6).
+    is_drift_guard: bool = False
     # MaintenanceExecutor fields
     duration_estimate: str = ""
     supports_streaming: bool = False
@@ -527,12 +491,6 @@ class BulkResetRequest(BaseModel):
     """Request to reset multiple settings to default."""
 
     setting_ids: list[str] = Field(..., description="Settings to reset to default")
-
-
-class BulkOptimizeRequest(BaseModel):
-    """Request to optimize multiple settings to their recommended values."""
-
-    setting_ids: list[str] = Field(..., description="Settings to optimize")
 
 
 class BulkStreamRequest(BaseModel):

@@ -1,6 +1,7 @@
 import { memo, useState, useCallback } from "react";
 import { useStore, type OperationStatus } from "../store";
 import { useApplySingle } from "../hooks/useApplySingle";
+import { settingsApi } from "../lib/api";
 import { detectionManager } from "../lib/detection-manager";
 import type { Setting } from "../types/setting";
 import { TweakSetting } from "./TweakSetting";
@@ -18,6 +19,7 @@ interface TweakRowItemProps extends TweakRow {
   isSelected: boolean;
   operationStatus?: OperationStatus;
   applySingle: (setting: Setting, value: unknown) => void;
+  resetSingle: (setting: Setting) => void;
   undoSingle: (setting: Setting) => void;
   verify: (setting: Setting) => void;
   toggleSelectedSetting: (id: Setting["id"]) => void;
@@ -42,6 +44,7 @@ const TweakRowItem = memo(
     isSelected,
     operationStatus,
     applySingle,
+    resetSingle,
     undoSingle,
     verify,
     toggleSelectedSetting,
@@ -52,7 +55,9 @@ const TweakRowItem = memo(
         isPending={isPending}
         isModuleLoading={false}
         onApplyValue={(value) => applySingle(setting, value)}
-        onReset={() => applySingle(setting, setting.defaultValue)}
+        // The dedicated endpoint, not apply-with-defaultValue: reset is its
+        // own promise (C6), and the backend logs and verifies it as one.
+        onReset={() => resetSingle(setting)}
         onUndo={() => undoSingle(setting)}
         onVerify={() => verify(setting)}
         isSelected={isSelected}
@@ -70,6 +75,7 @@ const TweakRowItem = memo(
     previous.isSelected === next.isSelected &&
     previous.operationStatus === next.operationStatus &&
     previous.applySingle === next.applySingle &&
+    previous.resetSingle === next.resetSingle &&
     previous.undoSingle === next.undoSingle &&
     previous.verify === next.verify &&
     previous.toggleSelectedSetting === next.toggleSelectedSetting,
@@ -93,13 +99,31 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
     (state) => state.toggleSelectedSetting,
   );
   const operationStatus = useStore((state) => state.operationStatus);
-  const { applySingle, undoSingle, isPending } = useApplySingle();
+  const { applySingle, resetSingle, undoSingle, isPending } = useApplySingle();
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
 
   const verify = useCallback(async (setting: Setting) => {
     setVerifyingIds((prev) => new Set(prev).add(setting.id));
     try {
-      await detectionManager.redetectSettings([setting.id]);
+      // The dedicated detect-only endpoint: it answers "does the machine
+      // match the recommended value?" and names the question in its reply.
+      // A bulk re-detect answered the same question by side effect, and left
+      // POST /settings/{id}/verify a route nobody called.
+      const result = await settingsApi.verifySetting(setting.id);
+      if (result.error) {
+        // A verify that could not read falls back to the full re-detect
+        // path, which also carries applicability and the error text.
+        await detectionManager.redetectSettings([setting.id]);
+      } else {
+        useStore
+          .getState()
+          .setSettingDetectionResult(
+            setting.id,
+            result.current_value,
+            result.matches,
+            true,
+          );
+      }
     } finally {
       setVerifyingIds((prev) => {
         const next = new Set(prev);
@@ -121,6 +145,7 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
           isSelected={selectedSettingIds.has(setting.id)}
           operationStatus={operationStatus[setting.id]}
           applySingle={applySingle}
+          resetSingle={resetSingle}
           undoSingle={undoSingle}
           verify={verify}
           toggleSelectedSetting={toggleSelectedSetting}

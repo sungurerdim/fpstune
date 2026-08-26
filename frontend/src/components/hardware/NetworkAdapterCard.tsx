@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMutation } from "@tanstack/react-query";
 import {
   Wifi, Signal, Network, RefreshCw, Unplug, Plug,
@@ -18,6 +19,7 @@ const log = createLogger("hardware");
  * Network adapter card with full details
  */
 export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo }) {
+  const { t } = useT();
   const isWiFi = adapter.adapter_type === "WiFi";
   // Phantom device = physically not connected (can't be enabled/disabled)
   const isPhantom = adapter.status === "NotConnected";
@@ -163,11 +165,11 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
                 : "text-success hover:bg-success/10",
               connectionMutation.isPending && "opacity-50 cursor-not-allowed",
             )}
-            aria-label={adapter.is_connected ? "Disconnect" : "Connect"}
+            aria-label={adapter.is_connected ? t("adapter.disconnect") : t("adapter.connect")}
             title={
               adapter.is_connected
-                ? "Disconnect from network"
-                : "Connect to network"
+                ? t("adapter.disconnectTitle")
+                : t("adapter.connectTitle")
             }
           >
             {connectionMutation.isPending ? (
@@ -175,12 +177,12 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
             ) : adapter.is_connected ? (
               <>
                 <Unplug className="w-3 h-3" />
-                <span className="text-xs ml-0.5">Off</span>
+                <span className="text-xs ml-0.5">{t("adapter.off")}</span>
               </>
             ) : (
               <>
                 <Plug className="w-3 h-3" />
-                <span className="text-xs ml-0.5">On</span>
+                <span className="text-xs ml-0.5">{t("adapter.on")}</span>
               </>
             )}
           </button>
@@ -202,10 +204,10 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
           )}
         >
           {isPhantom
-            ? "Not Connected"
+            ? t("adapter.notConnected")
             : adapter.is_connected
-              ? "Connected"
-              : "Disconnected"}
+              ? t("adapter.connected")
+              : t("adapter.disconnected")}
         </span>
 
         {/* Why the switch is inert, in the same badge shape as "Not Connected".

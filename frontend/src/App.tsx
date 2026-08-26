@@ -114,7 +114,7 @@ function App() {
       {/* Tab Content — one panel at a time, named by the tab that selected it.
           Not focusable itself: every panel here contains focusable controls, so
           a tabindex on the wrapper would only add a stop that reads as nothing. */}
-      <main className="flex-1 max-w-7xl mx-auto w-full px-6 py-4 pb-8">
+      <main className="flex-1 max-w-7xl 2xl:max-w-[120rem] mx-auto w-full px-6 py-4 pb-8">
         <div
           role="tabpanel"
           id={tabPanelId(activeTab)}

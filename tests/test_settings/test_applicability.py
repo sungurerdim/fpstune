@@ -163,7 +163,8 @@ class TestHardwareContext:
         assert ctx.windows_build == 0
         assert ctx.is_admin is False
         assert ctx.features == set()
-        assert ctx.has_vrr_monitor is False
+        # None, not False: an unprobed machine has not answered "no VRR panel".
+        assert ctx.has_vrr_monitor is None
 
     def test_to_dict_preserves_all_fields(self) -> None:
         """to_dict() should include all fields."""
@@ -239,6 +240,31 @@ class TestApplicabilityChecker:
         is_applicable, reason = checker.is_applicable(setting)
         assert is_applicable is True
         assert reason == ""
+
+    def test_vrr_unknown_and_vrr_absent_give_different_reasons(self) -> None:
+        """ "Could not read the panels" is a fact about detection, not hardware.
+
+        The two states used to collapse: a failed monitor probe set
+        has_vrr_monitor=False, so every VRR-dependent setting reported
+        "Requires G-Sync/FreeSync/VRR compatible monitor" as if the panels had
+        answered — the exact confusion A11 exists to remove.
+        """
+        setting = self._make_setting({"requires_vrr": True})
+
+        unknown = ApplicabilityChecker(HardwareContext(has_vrr_monitor=None))
+        applicable, reason = unknown.is_applicable(setting)
+        assert applicable is False
+        assert "unknown" in reason
+        assert "Requires" not in reason
+
+        absent = ApplicabilityChecker(HardwareContext(has_vrr_monitor=False))
+        applicable, reason = absent.is_applicable(setting)
+        assert applicable is False
+        assert reason == "Requires G-Sync/FreeSync/VRR compatible monitor"
+
+        present = ApplicabilityChecker(HardwareContext(has_vrr_monitor=True))
+        applicable, reason = present.is_applicable(setting)
+        assert applicable is True
 
     def test_cpu_vendor_match(self, nvidia_intel_context: HardwareContext) -> None:
         """Setting requiring Intel CPU should match Intel context."""

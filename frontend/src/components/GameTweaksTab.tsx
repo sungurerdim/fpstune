@@ -13,6 +13,7 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { TweakRows, type TweakRow } from "./TweakRows";
 import { useBulkApply } from "../hooks/useBulkApply";
 import { useStore } from "../store";
+import { DetectionNotice } from "./DetectionNotice";
 import { isGameTweak } from "../lib/tweakDomain";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
@@ -116,6 +117,7 @@ export function GameTweaksTab() {
 
   return (
     <div className="space-y-4 pb-16">
+      <DetectionNotice owns={isGameTweak} />
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />

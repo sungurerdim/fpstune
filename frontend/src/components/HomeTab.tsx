@@ -24,6 +24,7 @@ import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
+import { DetectionNotice } from "./DetectionNotice";
 import type { Setting } from "../types/setting";
 
 /**
@@ -139,6 +140,8 @@ export function HomeTab() {
 
   return (
     <div className="space-y-4 pb-8">
+      {/* Home owns the whole product, so its notice owns every setting. */}
+      <DetectionNotice />
       {/* The headline, and what it deliberately does not say.
           This block used to open with "Gained +28-45% FPS", produced by summing
           every setting's claimed fps midpoint under an invented decay curve. No

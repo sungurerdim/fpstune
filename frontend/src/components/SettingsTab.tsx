@@ -13,7 +13,8 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { ResetAllAction } from "./ResetAllAction";
 import { TweakRows, type TweakRow } from "./TweakRows";
 import { useBulkApply } from "../hooks/useBulkApply";
-import { isGameTweak } from "../lib/tweakDomain";
+import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
+import { DetectionNotice } from "./DetectionNotice";
 import { cn } from "../lib/utils";
 import { IMPACT_CATEGORY_META } from "../types/setting";
 import type {
@@ -153,6 +154,9 @@ export function SettingsTab({
 
   return (
     <div className="space-y-4 pb-16">
+      <DetectionNotice
+        owns={(s) => !isGameTweak(s) && !isHardwareTweak(s)}
+      />
       {/* Filter bar: the only navigation this screen needs now that the rows are flat. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">

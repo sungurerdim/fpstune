@@ -262,6 +262,10 @@ export interface Setting {
   isOptimized: boolean; // True if current == recommended (computed once on detection)
   isApplicable: boolean; // False if setting doesn't apply to this hardware
   applicableReason?: string; // Human-readable reason when not applicable
+  // Detection FAILED for this setting — a different fact from "not applicable".
+  // A machine where half the detection failed must not look identical to one
+  // that is already optimal, so this is surfaced above every list.
+  detectionError?: string;
 }
 
 /**

@@ -111,8 +111,10 @@ class HardwareContext:
     features: set[str] = field(default_factory=set)
     # Examples: "hyper_v", "wsl", "docker", "xbox_game_bar", "game_mode"
 
-    # Monitor capabilities
-    has_vrr_monitor: bool = False  # True if any monitor supports G-Sync/FreeSync/VRR
+    # Monitor capabilities. None = the panels could not be read (or declared
+    # nothing), which must never collapse into "no VRR panel" — the two produce
+    # different applicability reasons.
+    has_vrr_monitor: bool | None = None
 
     # Anti-cheat game detection (populated during runtime)
     has_anticheat_games: bool = False  # True if BattlEye/EAC games detected
@@ -223,13 +225,15 @@ class ApplicabilityChecker:
         ):
             return False, "Requires administrator privileges"
 
-        # VRR/G-Sync monitor check
-        if (
-            "requires_vrr" in conditions
-            and conditions["requires_vrr"]
-            and not self.context.has_vrr_monitor
-        ):
-            return False, "Requires G-Sync/FreeSync/VRR compatible monitor"
+        # VRR/G-Sync monitor check. Unknown and absent are different answers:
+        # "could not read the panels" is a fact about detection, not hardware.
+        if "requires_vrr" in conditions and conditions["requires_vrr"]:
+            if self.context.has_vrr_monitor is None:
+                return False, (
+                    "The panels could not be read, so G-Sync/FreeSync support is unknown"
+                )
+            if not self.context.has_vrr_monitor:
+                return False, "Requires G-Sync/FreeSync/VRR compatible monitor"
 
         # Single feature check
         if "feature" in conditions:

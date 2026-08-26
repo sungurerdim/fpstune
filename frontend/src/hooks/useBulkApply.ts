@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { settingsApi, BulkApplyResponse } from "../lib/api";
+import { useStore } from "../store";
 import { hardwareManager } from "../lib/hardware-manager";
 import { isDisplaySetting } from "../types/setting";
 import { detectionManager } from "../lib/detection-manager";
@@ -34,6 +35,7 @@ export function useBulkApply(
   options: UseBulkApplyOptions = {},
 ): UseBulkApplyResult {
   const queryClient = useQueryClient();
+  const addNotification = useStore((s) => s.addNotification);
   const [lastResult, setLastResult] = useState<{
     success: number;
     error: number;
@@ -72,7 +74,17 @@ export function useBulkApply(
       }
 
       setLastResult({ success: response.success_count, error: realErrorCount });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
+      // The visible confirmation (E8): a bulk write must never finish silently.
+      if (response.success_count > 0) {
+        addNotification(
+          `Applied ${response.success_count} setting${
+            response.success_count === 1 ? "" : "s"
+          }${realErrorCount > 0 ? ` — ${realErrorCount} failed` : ""}`,
+          realErrorCount > 0 ? "warning" : "success",
+        );
+      } else if (realErrorCount > 0) {
+        addNotification(`Apply failed for ${realErrorCount} settings`, "error");
+      }
       // Surface successes AND failures in the Activity drawer promptly.
       queryClient.invalidateQueries({ queryKey: ["activity"] });
 

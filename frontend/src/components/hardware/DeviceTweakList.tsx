@@ -1,3 +1,5 @@
+import { useT } from "../../i18n";
+import { localizedDescription, localizedName } from "../../i18n/settings";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Zap, CircleCheck, Wrench } from "lucide-react";
 import { useStore } from "../../store";
@@ -43,6 +45,7 @@ export function DeviceTweakList({
   /** Shown when the device has tweaks and all of them are already ideal. */
   emptyLabel?: string;
 }) {
+  const { t } = useT();
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
   const detecting = useStore((s) => s.isAnyCategoryLoading());
@@ -67,7 +70,7 @@ export function DeviceTweakList({
   // Nothing detected for this device yet: say so rather than implying it is clean.
   if (listable.length === 0 && advisories.length === 0) {
     if (!detecting) return null;
-    return <p className="pl-4 pt-1 text-xs text-muted-foreground">Reading tweaks…</p>;
+    return <p className="pl-4 pt-1 text-xs text-muted-foreground">{t("devices.reading")}</p>;
   }
 
   const rows = showAll ? listable : suboptimal;
@@ -85,9 +88,9 @@ export function DeviceTweakList({
           onClick={() => setShowAll(!showAll)}
           aria-expanded={showAll}
           aria-label={
-            showAll ? "Hide tweaks already ideal" : "Show tweaks already ideal"
+            showAll ? t("devices.hideIdeal") : t("devices.showIdeal")
           }
-          className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground"
           disabled={listable.length === 0}
         >
           {showAll ? (
@@ -109,7 +112,7 @@ export function DeviceTweakList({
         {advisories.length > 0 && (
           <StatusChip
             tone="advisory"
-            title="fpstune cannot change these — each row says where to."
+            title={t("devices.advisoryHint")}
           >
             {advisories.length} need you
           </StatusChip>
@@ -120,7 +123,7 @@ export function DeviceTweakList({
             onClick={applyAll}
             disabled={isApplying}
             className={cn(
-              "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               isApplying
                 ? "cursor-wait bg-muted text-muted-foreground"
                 : "bg-warning/20 text-warning hover:bg-warning/30",
@@ -162,11 +165,17 @@ function TweakRow({
   pending: boolean;
   onApply: () => void;
 }) {
+  const { t } = useT();
   const off = isTweakSuboptimal(setting);
 
   return (
-    <div className="flex items-center gap-2 text-xs" title={setting.description}>
-      <span className="truncate text-muted-foreground">{setting.displayName}</span>
+    <div
+      className="flex items-center gap-2 text-xs"
+      title={localizedDescription(setting)}
+    >
+      <span className="truncate text-muted-foreground">
+        {localizedName(setting)}
+      </span>
       <span className={cn("font-medium", off ? "text-warning" : "text-success")}>
         {String(setting.currentValue)}
       </span>
@@ -181,18 +190,22 @@ function TweakRow({
           {setting.riskLevel === "advanced" && (
             <span
               title={setting.riskWarning}
-              className="cursor-default rounded border border-amber-500/30 bg-amber-500/20 px-1 text-xs font-medium text-amber-400"
+              className="cursor-default rounded border border-warning/30 bg-warning/20 px-1 text-xs font-medium text-warning"
             >
-              ADV
+              {t("devices.advancedBadge")}
             </span>
           )}
           <button
             onClick={onApply}
             disabled={pending}
-            aria-label={`Apply ${setting.displayName}`}
-            className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("row.applyNamed", { name: localizedName(setting) })}
+            className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
           >
-            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fix"}
+            {pending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              t("devices.fix")
+            )}
           </button>
         </>
       )}
@@ -211,7 +224,9 @@ function TweakRow({
 function AdvisoryRow({ setting }: { setting: Setting }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="truncate text-muted-foreground">{setting.displayName}</span>
+      <span className="truncate text-muted-foreground">
+        {localizedName(setting)}
+      </span>
       <span className="font-medium text-amber-400">{String(setting.currentValue)}</span>
       <span
         className="ml-auto max-w-[60%] shrink text-right leading-snug text-muted-foreground"

@@ -1,4 +1,7 @@
-import { Zap, Loader2, Undo2 } from "lucide-react";
+import { Button } from "./ui/Button";
+import { Zap, Undo2 } from "lucide-react";
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { cn } from "../lib/utils";
 import { formatBenefit } from "../lib/impact";
 import { useApplySingle } from "../hooks/useApplySingle";
@@ -23,6 +26,7 @@ export function TweakListRow({
   setting: Setting;
   categoryLabel?: string;
 }) {
+  const { t } = useT();
   const { applySingle, undoSingle, isPending } = useApplySingle();
   const pending = isPending(setting.id);
   const benefit = formatBenefit(setting);
@@ -50,33 +54,33 @@ export function TweakListRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           {categoryLabel && (
-            <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded shrink-0">
+            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded shrink-0">
               {categoryLabel}
             </span>
           )}
           <span className="font-medium text-sm break-words min-w-0">
-            {setting.displayName}
+            {localizedName(setting)}
           </span>
           <RiskWarningBadge setting={setting} />
           <SettingInfoTooltip setting={setting} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {setting.description}
+          {localizedDescription(setting)}
         </p>
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <SettingValueState setting={setting} />
           <ImpactCategoryTags setting={setting} />
         </div>
         {benefit && (
-          <p className="text-[11px] text-primary mt-1 font-medium">{benefit}</p>
+          <p className="text-xs text-primary mt-1 font-medium">{benefit}</p>
         )}
       </div>
       {canUndo && (
         <button
           onClick={() => undoSingle(setting)}
           disabled={pending}
-          aria-label={`Undo fpstune's change to ${setting.displayName}, back to ${String(setting.originalValue)}`}
-          title={`Back to ${String(setting.originalValue)} — what this machine had before fpstune`}
+          aria-label={t("row.undoNamed", { name: setting.displayName, value: String(setting.originalValue) })}
+          title={t("row.undoTooltip", { value: String(setting.originalValue) })}
           className={cn(
             "shrink-0 flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-md font-medium transition-colors",
             "border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -84,30 +88,22 @@ export function TweakListRow({
           )}
         >
           <Undo2 className="w-3.5 h-3.5" aria-hidden />
-          Undo
+          {t("action.undo")}
         </button>
       )}
-      <button
+      {/* Home renders one of these per setting that needs changing — thirty on
+          a fresh machine. Without the setting's name in here, a screen reader
+          announces "Apply, Apply, Apply" and there is no way to tell which one
+          is about to change the CPU's minimum clock. */}
+      <Button
+        className="shrink-0"
+        busy={pending}
+        icon={<Zap className="w-3.5 h-3.5" />}
+        aria-label={t("row.applyNamed", { name: setting.displayName })}
         onClick={() => applySingle(setting, setting.recommendedValue)}
-        disabled={pending}
-        // Home renders one of these per setting that needs changing — thirty on
-        // a fresh machine. Without the setting's name in here, a screen reader
-        // announces "Apply, Apply, Apply" and there is no way to tell which one
-        // is about to change the CPU's minimum clock.
-        aria-label={`Apply ${setting.displayName}`}
-        aria-busy={pending}
-        className={cn(
-          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-          "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-        )}
       >
-        {pending ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Zap className="w-3.5 h-3.5" />
-        )}
-        Apply
-      </button>
+        {t("action.apply")}
+      </Button>
     </div>
   );
 }

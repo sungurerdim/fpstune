@@ -19,6 +19,18 @@ import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
+// Home mounts the whole product now (D1); the device/maintenance surfaces
+// have their own tests, and their live fetches only add teardown noise here.
+vi.mock("../HardwarePanel", () => ({
+  HardwarePanel: () => null,
+}));
+vi.mock("../MaintenancePanel", () => ({
+  MaintenancePanel: () => null,
+}));
+vi.mock("../SelfCheckNotice", () => ({
+  SelfCheckNotice: () => null,
+}));
+
 vi.mock("../../hooks/useBulkApply", () => ({
   useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
 }));
@@ -96,6 +108,18 @@ describe("HomeTab empty states", () => {
 
     expect(screen.queryByText(/already optimized/i)).not.toBeInTheDocument();
     expect(screen.getAllByText(/Reading your current settings/i)).toHaveLength(3);
+  });
+
+  it("the scan shows real progress, not just a spinner (E5)", () => {
+    setStore([], true);
+    render(<HomeTab />);
+
+    const bar = screen.getByRole("progressbar", {
+      name: /Detection progress across setting categories/,
+    });
+    // One category, still loading: 0 of 1 done.
+    expect(bar).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText(/0\/1 categories read/)).toBeInTheDocument();
   });
 
   it("says everything is optimized only once detection has finished", () => {

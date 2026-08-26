@@ -1,3 +1,6 @@
+import { setLocale, useT } from "../i18n";
+import { en } from "../i18n/en";
+import { tr } from "../i18n/tr";
 import { useMemo, useRef, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -27,13 +30,15 @@ import { tabButtonId, tabPanelId } from "./ui/tabIds";
 // Game Tweaks is its own tab because it is its own domain, not a category of
 // software: those settings are written into a game's file rather than into
 // Windows, and there are more of them than of everything on the Software tab.
-const tabs: Array<{ id: TabId; label: string; icon: typeof Settings }> = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "settings", label: "Software Tweaks", icon: Settings },
-  { id: "hardware", label: "Hardware Tweaks", icon: Monitor },
-  { id: "games", label: "Game Tweaks", icon: Gamepad2 },
-  { id: "cleanup", label: "Cleanup & Repair", icon: HardDrive },
-  { id: "benchmarks", label: "Benchmarks", icon: Gauge },
+import type { MessageKey } from "../i18n/en";
+
+const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = [
+  { id: "home", labelKey: "tab.home", icon: Home },
+  { id: "settings", labelKey: "tab.software", icon: Settings },
+  { id: "hardware", labelKey: "tab.hardware", icon: Monitor },
+  { id: "games", labelKey: "tab.games", icon: Gamepad2 },
+  { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
+  { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
 ];
 
 export function TabNavigation() {
@@ -42,6 +47,7 @@ export function TabNavigation() {
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
 
+  const { t, locale } = useT();
   const { data: systemInfo } = useQuery({
     queryKey: ["system"],
     queryFn: api.getSystemInfo,
@@ -105,7 +111,7 @@ export function TabNavigation() {
 
   return (
     <div className="sticky top-0 z-10 bg-background border-b border-border">
-      <div className="max-w-7xl mx-auto px-6 flex items-center justify-between gap-3">
+      <div className="max-w-7xl 2xl:max-w-[120rem] mx-auto px-6 flex items-center justify-between gap-3">
         {/* Brand + tabs */}
         <div className="flex items-center gap-2 min-w-0">
           <div className="flex items-center gap-1.5 pr-2 shrink-0">
@@ -150,10 +156,10 @@ export function TabNavigation() {
                       accessible name away on a narrow window and left six
                       unnamed buttons. */}
                   <span className="sr-only md:not-sr-only md:inline">
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </span>
                   {badge !== null && (
-                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-xs font-bold flex items-center justify-center">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   )}
@@ -192,6 +198,16 @@ export function TabNavigation() {
             {systemInfo?.os_display_version &&
               ` ${systemInfo.os_display_version}`}
           </span>
+          {/* The locale switch (F1). Two locales, one button: it names the
+              language it would switch TO, in that language, so a user who
+              cannot read the current one can still find their way home. */}
+          <button
+            onClick={() => setLocale(locale === "en" ? "tr" : "en")}
+            className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+            aria-label={locale === "en" ? tr["locale.switch"] : en["locale.switch"]}
+          >
+            {locale === "en" ? "TR" : "EN"}
+          </button>
         </div>
       </div>
     </div>

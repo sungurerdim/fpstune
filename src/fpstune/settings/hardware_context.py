@@ -124,12 +124,20 @@ def build_hardware_context() -> HardwareContext:
     if has_battery():
         features.add("mobile")
 
-    has_vrr = False
+    # None means the panels could not be probed, or none declared either way —
+    # unknown, which is a different fact from "no VRR panel": a failed monitor
+    # probe must not silently disable every VRR-dependent setting as if the
+    # hardware itself had answered no.
+    has_vrr: bool | None = None
     try:
         monitors = hardware_manager.detect_monitors()
-        has_vrr = any(m.supports_vrr for m in monitors)
+        active = [m for m in monitors if m.is_active]
+        if any(m.supports_vrr for m in active):
+            has_vrr = True
+        elif active and all(m.supports_vrr is False for m in active):
+            has_vrr = False
     except Exception as exc:
-        logger.debug("VRR detection failed; falling back to no-VRR: %s", exc)
+        logger.warning("Monitor probe failed; VRR support is unknown: %s", exc)
 
     return HardwareContext(
         cpu_vendor=cpu_vendor,

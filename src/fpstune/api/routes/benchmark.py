@@ -8,14 +8,11 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from fpstune.api.schemas import BenchmarkCompareResponse, BenchmarkRunResponse
-from fpstune.benchmark.compare import BenchmarkComparison
 from fpstune.benchmark.headroom_watch import (
     POLL_INTERVAL_SECONDS,
     last_results,
     measure_now,
 )
-from fpstune.benchmark.runner import BenchmarkRunner
 from fpstune.benchmark.sources import NO_INSTRUMENT, SOURCES, coverage
 from fpstune.benchmark.verify_round import measure_pair, run_round
 from fpstune.settings.executors.game_processes import GAME_LABELS, game_is_running
@@ -76,9 +73,9 @@ def _resolve(setting_ids: list[str]) -> list[Any]:
     settings while the user believes it reports on five — the same
     narrower-observation-than-action defect the apply path had to learn.
     """
-    from fpstune.api.routes.settings import _get_registry
+    import fpstune.settings.registry_cache as registry_cache
 
-    registry = _get_registry()
+    registry = registry_cache.get_registry()
     resolved = []
     missing = []
     for setting_id in setting_ids:
@@ -316,128 +313,3 @@ async def verify_sample(request: SampleRequest) -> dict[str, Any]:
             if raw.get(field) is not None
         },
     }
-
-
-@router.post("/start", response_model=BenchmarkRunResponse)
-async def start_benchmark(name: str = "benchmark") -> BenchmarkRunResponse:
-    """Start a benchmark run."""
-    runner = BenchmarkRunner()
-
-    result = runner.run_all(name=name)
-    runner.save_result(result)
-
-    log_activity(f"Benchmark completed: {name}", "success")
-
-    return BenchmarkRunResponse(
-        timestamp=result.timestamp,
-        name=result.name,
-        metrics=result.metrics,
-        system_info=result.system_info,
-    )
-
-
-@router.post("/baseline", response_model=BenchmarkRunResponse)
-async def run_baseline() -> BenchmarkRunResponse:
-    """Run baseline benchmark."""
-    return await start_benchmark(name="baseline")
-
-
-@router.get("/status")
-async def benchmark_status() -> dict[str, Any]:
-    """Get benchmark status and list of saved results."""
-    runner = BenchmarkRunner()
-    results = runner.list_results()
-
-    return {
-        "saved_results": len(results),
-        "latest": str(results[0]) if results else None,
-        "has_baseline": any("baseline" in str(r) for r in results),
-    }
-
-
-@router.get("/results")
-async def list_results() -> list[dict[str, Any]]:
-    """List all benchmark results."""
-    runner = BenchmarkRunner()
-    results = []
-
-    for path in runner.list_results()[:20]:  # Limit to 20
-        loaded = runner.load_result(path)
-        if loaded:
-            results.append(
-                {
-                    "path": str(path),
-                    "name": loaded.name,
-                    "timestamp": loaded.timestamp,
-                }
-            )
-
-    return results
-
-
-@router.get("/results/{result_name}", response_model=BenchmarkRunResponse)
-async def get_result(result_name: str) -> BenchmarkRunResponse:
-    """Get a specific benchmark result."""
-    runner = BenchmarkRunner()
-
-    for path in runner.list_results():
-        loaded = runner.load_result(path)
-        if loaded and loaded.name == result_name:
-            return BenchmarkRunResponse(
-                timestamp=loaded.timestamp,
-                name=loaded.name,
-                metrics=loaded.metrics,
-                system_info=loaded.system_info,
-            )
-
-    raise HTTPException(status_code=404, detail="Benchmark result not found")
-
-
-@router.get("/compare", response_model=BenchmarkCompareResponse)
-async def compare_benchmarks(
-    before: str = "baseline",
-    after: str = "latest",
-) -> BenchmarkCompareResponse:
-    """Compare two benchmark results."""
-    runner = BenchmarkRunner()
-    results = runner.list_results()
-
-    before_result = None
-    after_result = None
-
-    for path in results:
-        loaded = runner.load_result(path)
-        if loaded:
-            if before == "baseline" and loaded.name == "baseline":
-                before_result = loaded
-            elif after == "latest" and loaded.name != "baseline" and not after_result:
-                after_result = loaded
-            elif loaded.name == before:
-                before_result = loaded
-            elif loaded.name == after:
-                after_result = loaded
-
-    if not before_result or not after_result:
-        raise HTTPException(
-            status_code=404,
-            detail="Could not find both benchmark results for comparison",
-        )
-
-    comparison = BenchmarkComparison.compare(before_result, after_result)
-
-    return BenchmarkCompareResponse(
-        before=BenchmarkRunResponse(
-            timestamp=comparison.before.timestamp,
-            name=comparison.before.name,
-            metrics=comparison.before.metrics,
-            system_info=comparison.before.system_info,
-        ),
-        after=BenchmarkRunResponse(
-            timestamp=comparison.after.timestamp,
-            name=comparison.after.name,
-            metrics=comparison.after.metrics,
-            system_info=comparison.after.system_info,
-        ),
-        metrics=[m.to_dict() for m in comparison.metrics],
-        summary=comparison.summary,
-    )

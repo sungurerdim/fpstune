@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
+import { useT } from "../../i18n";
+import { Button } from "./Button";
 
 /**
  * The parts of a confirmation that a `position: fixed` div does not supply.
@@ -32,7 +34,7 @@ export interface ConfirmDialogProps {
   title: string;
   /** The explanation, pointed at by `aria-describedby`. */
   children: ReactNode;
-  /** The affirmative button's words. Cancel is always "Cancel". */
+  /** The affirmative button's words. Cancel is always the catalogue's cancel. */
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -46,6 +48,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useT();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -124,30 +127,25 @@ export function ConfirmDialog({
         aria-describedby={descriptionId}
         className="bg-card border border-border rounded-lg p-5 max-w-sm mx-4 space-y-3"
       >
-        <div className="flex items-center gap-2 text-amber-400">
+        <div className="flex items-center gap-2 text-warning">
           <AlertTriangle className="w-5 h-5 shrink-0" aria-hidden="true" />
           <h2 id={titleId} className="font-semibold text-sm">
             {title}
           </h2>
         </div>
-        <p id={descriptionId} className="text-xs text-muted-foreground">
+        {/* A div, not a <p>: callers legitimately pass block content (lists
+            of what a change costs), and block elements inside a <p> are
+            invalid DOM that React unwinds the whole tree over. */}
+        <div id={descriptionId} className="text-xs text-muted-foreground">
           {children}
-        </p>
+        </div>
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-muted transition-colors"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-3 py-1.5 text-xs rounded bg-amber-500 text-black font-medium hover:bg-amber-400 transition-colors"
-          >
+          <Button variant="outline" onClick={onCancel}>
+            {t("action.cancel")}
+          </Button>
+          <Button variant="confirm" onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

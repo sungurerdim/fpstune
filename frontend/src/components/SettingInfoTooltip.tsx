@@ -5,6 +5,8 @@
  * Shows description, current/recommended impact, and applicability status.
  */
 
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { Info, Eye } from "lucide-react";
 import { cn } from "../lib/utils";
 import {
@@ -32,6 +34,7 @@ export function SettingInfoTooltip({
   className = "",
   variant = "info",
 }: SettingInfoTooltipProps) {
+  const { t } = useT();
   return (
     <TooltipProvider>
       <Tooltip delayDuration={200}>
@@ -39,7 +42,7 @@ export function SettingInfoTooltip({
           <button
             type="button"
             className={`p-0.5 rounded hover:bg-muted/50 transition-colors ${className}`}
-            aria-label={`Information about ${setting.displayName}`}
+            aria-label={t("tooltip.ariaInfo", { name: localizedName(setting) })}
           >
             <Info className={`h-4 w-4 ${VARIANT_COLORS[variant]}`} />
           </button>
@@ -51,7 +54,7 @@ export function SettingInfoTooltip({
         >
           {/* Title and badges */}
           <div className="flex items-start justify-between gap-2">
-            <p className="font-medium text-sm">{setting.displayName}</p>
+            <p className="font-medium text-sm">{localizedName(setting)}</p>
             <div className="flex gap-1">
               <span
                 className={cn(
@@ -62,17 +65,17 @@ export function SettingInfoTooltip({
                 )}
               >
                 {setting.evidenceLevel === "proven"
-                  ? "Proven"
+                  ? t("tooltip.proven")
                   : setting.evidenceLevel === "experimental"
-                    ? "Experimental"
-                    : "Likely"}
+                    ? t("tooltip.experimental")
+                    : t("tooltip.likely")}
               </span>
             </div>
           </div>
 
           {/* Description */}
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {setting.description}
+            {localizedDescription(setting)}
           </p>
 
           {/* What the machine is actually at, and what the other state means.
@@ -87,7 +90,9 @@ export function SettingInfoTooltip({
             // while there is still a decision to make.
             setting.recommendedImpact && (
               <div className="text-xs space-y-0.5">
-                <span className="font-medium text-success">Current:</span>
+                <span className="font-medium text-success">
+                  {t("tooltip.current")}
+                </span>
                 <p className="text-success/80">{setting.recommendedImpact}</p>
               </div>
             )
@@ -96,7 +101,7 @@ export function SettingInfoTooltip({
               {setting.currentImpact && (
                 <div className="text-xs space-y-0.5">
                   <span className="font-medium text-muted-foreground">
-                    Current:
+                    {t("tooltip.current")}
                   </span>
                   <p className="text-muted-foreground/80">
                     {setting.currentImpact}
@@ -105,7 +110,9 @@ export function SettingInfoTooltip({
               )}
               {setting.recommendedImpact && (
                 <div className="text-xs space-y-0.5">
-                  <span className="font-medium text-success">Recommended:</span>
+                  <span className="font-medium text-success">
+                    {t("tooltip.recommended")}
+                  </span>
                   <p className="text-success/80">{setting.recommendedImpact}</p>
                 </div>
               )}
@@ -116,9 +123,7 @@ export function SettingInfoTooltip({
           {setting.isReadonly && (
             <div className="flex items-start gap-1.5 text-xs pt-1.5 mt-1.5 border-t border-border/30 text-warning">
               <Eye className="w-3 h-3 mt-0.5 shrink-0" />
-              <span>
-                FPSTune cannot apply this automatically — monitor only.
-              </span>
+              <span>{t("tooltip.monitorOnly")}</span>
             </div>
           )}
 
@@ -134,7 +139,7 @@ export function SettingInfoTooltip({
                   setting.isReadonly ? "text-warning" : "text-primary",
                 )}
               >
-                {setting.isReadonly ? "How to change:" : "Effect:"}
+                {setting.isReadonly ? t("tooltip.howToChange") : t("tooltip.effect")}
               </span>
               <p className="text-muted-foreground">{setting.effect}</p>
               {setting.impactScores &&
@@ -144,7 +149,7 @@ export function SettingInfoTooltip({
                       ([key, value]) => (
                         <span
                           key={key}
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted"
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-muted"
                         >
                           <span className="capitalize">
                             {key.replace(/_/g, " ")}:
@@ -165,9 +170,9 @@ export function SettingInfoTooltip({
           {setting.sources &&
             setting.sources.length > 0 &&
             (!setting.isOptimized || setting.isReadonly) && (
-            <div className="text-[10px] pt-1 mt-1 border-t border-border/30 space-y-0.5">
+            <div className="text-xs pt-1 mt-1 border-t border-border/30 space-y-0.5">
               <span className="text-muted-foreground font-medium">
-                Sources:
+                {t("tooltip.sources")}
               </span>
               {setting.sources.map((url, i) => {
                 const domain = new URL(url).hostname.replace("www.", "");
@@ -191,7 +196,7 @@ export function SettingInfoTooltip({
           {setting.requiresReboot && (
             <div className="text-xs text-warning flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning" />
-              Requires system restart
+              {t("tooltip.requiresRestart")}
             </div>
           )}
 
@@ -199,7 +204,7 @@ export function SettingInfoTooltip({
           {!setting.isApplicable && (
             <div className="text-xs text-destructive flex items-center gap-1 pt-1 border-t border-destructive/20">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive" />
-              {setting.applicableReason || "Not applicable to this system"}
+              {setting.applicableReason || t("detection.absentFallback")}
             </div>
           )}
         </TooltipContent>

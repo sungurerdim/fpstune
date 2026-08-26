@@ -64,30 +64,6 @@ class TestRestorePointOffload:
         assert record["on_event_loop"] is False
 
 
-class TestStatusRefreshOffload:
-    """PERF-16: force_refresh(_wait=True) held the loop for a full detection run."""
-
-    def test_refresh_true_runs_force_refresh_off_the_event_loop(self, client: TestClient) -> None:
-        from fpstune.api.status_cache import CachedStatus
-
-        record: dict[str, bool] = {}
-        with (
-            patch("fpstune.api.routes.system.start_background_update"),
-            patch(
-                "fpstune.api.routes.system.force_refresh",
-                side_effect=_loop_recorder(record, None),
-            ),
-            patch(
-                "fpstune.api.routes.system.get_cached_status",
-                return_value=(CachedStatus(), False),
-            ),
-        ):
-            response = client.get("/api/status?refresh=true")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-
 class TestSystemInfoCpuOffload:
     """PERF-17 (route side): /api/system reached the CPU detector on the loop."""
 
@@ -136,9 +112,12 @@ class TestHardwareRouteUsesCachedCpuPath:
         cpu.physical_cores = 8
         cpu.logical_cores = 16
         cpu.base_clock_mhz = 3800
-        cpu.max_clock_mhz = 4700
         cpu.architecture = "AMD64"
         cpu.cache_l3_mb = 32
+        cpu.sockets = 1
+        cpu.p_cores = 8
+        cpu.e_cores = 0
+        cpu.is_hybrid = False
 
         with (
             patch("fpstune.api.routes.system.hardware_manager") as mock_hw,
@@ -184,15 +163,6 @@ class TestDisplayDetectionOffload:
         # a cold multi-second detection — the worst case of the finding.
         assert record["on_event_loop"] is False
 
-    def test_get_all_monitors_detects_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.detect_monitors = MagicMock(side_effect=_loop_recorder(record, []))
-            response = client.get("/api/display/monitors")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
     def test_set_display_to_auto_detects_off_the_event_loop(self, client: TestClient) -> None:
         record: dict[str, bool] = {}
         monitor = MagicMock()
@@ -236,65 +206,6 @@ class TestVrrGpuWaitOffload:
             )
 
         # No GPU → 400, but the wait still must have happened off the loop.
-        assert response.status_code == 400
-        assert record["on_event_loop"] is False
-
-
-class TestGpuRouteDetectionOffload:
-    """The /api/gpu/* routes called get_gpu_info / get_gpu_vendor inline.
-
-    Neither is free on a cold or in-flight cache: both wait on the background
-    detection thread, and detection itself is PowerShell. The wait is an event
-    rather than a sleep-poll now, but a blocking wait on the loop is still a
-    blocking wait on the loop.
-    """
-
-    def test_detect_runs_gpu_detection_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        with patch("fpstune.api.routes.gpu.get_gpu_info", side_effect=_loop_recorder(record, None)):
-            response = client.get("/api/gpu/detect")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-    def test_settings_runs_vendor_detection_off_the_event_loop(self, client: TestClient) -> None:
-        from fpstune.utils.detect import GpuVendor
-
-        record: dict[str, bool] = {}
-        with patch(
-            "fpstune.api.routes.gpu.get_gpu_vendor",
-            side_effect=_loop_recorder(record, GpuVendor.UNKNOWN),
-        ):
-            response = client.get("/api/gpu/settings")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-    def test_nvidia_apply_runs_vendor_detection_off_the_event_loop(
-        self, client: TestClient
-    ) -> None:
-        from fpstune.utils.detect import GpuVendor
-
-        record: dict[str, bool] = {}
-        with patch(
-            "fpstune.api.routes.gpu.get_gpu_vendor",
-            side_effect=_loop_recorder(record, GpuVendor.AMD),
-        ):
-            response = client.post("/api/gpu/nvidia/apply", json={})
-
-        assert response.status_code == 400
-        assert record["on_event_loop"] is False
-
-    def test_auto_apply_runs_vendor_detection_off_the_event_loop(self, client: TestClient) -> None:
-        from fpstune.utils.detect import GpuVendor
-
-        record: dict[str, bool] = {}
-        with patch(
-            "fpstune.api.routes.gpu.get_gpu_vendor",
-            side_effect=_loop_recorder(record, GpuVendor.UNKNOWN),
-        ):
-            response = client.post("/api/gpu/apply")
-
         assert response.status_code == 400
         assert record["on_event_loop"] is False
 

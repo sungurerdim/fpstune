@@ -50,6 +50,9 @@ export interface DetectionResultUpdate {
   is_optimized: boolean;
   is_applicable: boolean;
   applicable_reason?: string;
+  // Detection failure for this setting; absent = the caller has no news about
+  // it (a post-apply single update), null = detection ran clean.
+  error?: string | null;
   recommended_value?: unknown;
   original_value?: unknown;
 }
@@ -203,6 +206,9 @@ export const createSettingsSlice: StateCreator<
           isOptimized: result.is_optimized,
           isApplicable: result.is_applicable,
           applicableReason: result.applicable_reason,
+          ...(result.error !== undefined && {
+            detectionError: result.error ?? undefined,
+          }),
           ...(result.recommended_value !== undefined && {
             recommendedValue: result.recommended_value,
           }),

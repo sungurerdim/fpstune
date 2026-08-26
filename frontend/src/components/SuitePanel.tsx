@@ -1,3 +1,8 @@
+import { useT } from "../i18n";
+import type { MessageKey } from "../i18n/en";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
+import { Meter } from "./ui/Feedback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -5,7 +10,6 @@ import {
   ArrowRight,
   ChevronDown,
   ChevronRight,
-  Loader2,
   Play,
   RotateCcw,
 } from "lucide-react";
@@ -56,6 +60,7 @@ interface RunState {
 const EMPTY: RunState = { run: null, active: "", progress: 0 };
 
 export function SuitePanel() {
+  const { t } = useT();
   const [catalogue, setCatalogue] = useState<SuiteCatalogue | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [repeats, setRepeats] = useState(3);
@@ -159,44 +164,41 @@ export function SuitePanel() {
 
   if (!catalogue) {
     return (
-      <div className="bg-card rounded-lg border border-border p-4 text-sm text-muted-foreground">
-        Loading the instrument list…
-      </div>
+      <Card className="p-4 text-sm text-muted-foreground">
+        {t("suite.loading")}
+      </Card>
     );
   }
 
   const running = phase === "running";
   const hasBaseline = before.run !== null;
-  const primaryLabel = hasBaseline ? "Measure again and compare" : "Measure this machine";
+  const primaryLabel = hasBaseline
+    ? t("suite.measureAgain")
+    : t("suite.measureThis");
 
   return (
     <div className="space-y-4">
-      <div className="bg-card rounded-lg border border-border p-4 space-y-4">
+      <Card className="p-4 space-y-4">
         <div>
           <h3 className="text-sm font-semibold flex items-center gap-2">
             <Activity className="w-4 h-4" />
-            Measure what changed
+            {t("suite.title")}
           </h3>
           <p className="text-xs text-muted-foreground mt-1">
-            {hasBaseline
-              ? "Baseline taken. Apply the tweaks you want, then press again — the two runs are compared for you."
-              : "Takes a baseline of this machine. Nothing is changed and nothing is written."}
+            {hasBaseline ? t("suite.baselineTaken") : t("suite.takesBaseline")}
           </p>
         </div>
 
         <div className="flex gap-2 flex-wrap items-center">
-          <button
+          <Button
+            size="md"
+            busy={running}
+            disabled={selected.size === 0}
+            icon={<Play className="w-4 h-4" />}
             onClick={() => start(hasBaseline ? "after" : "before")}
-            disabled={running || selected.size === 0}
-            className="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-40"
           >
-            {running ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Play className="w-4 h-4" />
-            )}
             {running ? `Measuring the ${target} run…` : primaryLabel}
-          </button>
+          </Button>
 
           {(hasBaseline || running) && (
             <button
@@ -204,14 +206,18 @@ export function SuitePanel() {
               className="flex items-center gap-2 px-3 py-2 rounded-md text-sm bg-muted hover:bg-muted/80"
             >
               <RotateCcw className="w-3.5 h-3.5" />
-              Start over
+              {t("suite.startOver")}
             </button>
           )}
 
           {/* A count rather than a list: the list is one fold away, and the
               number is what tells you the button will do something. */}
           <span className="text-xs text-muted-foreground">
-            {selected.size} of {catalogue.benches.length} instruments · {repeats} repeats
+            {t("suite.selectionSummary", {
+              selected: selected.size,
+              total: catalogue.benches.length,
+              repeats,
+            })}
           </span>
         </div>
 
@@ -228,8 +234,8 @@ export function SuitePanel() {
 
         {(before.run || after.run) && (
           <div className="grid sm:grid-cols-2 gap-3">
-            <RunSummary title="Before" state={before} />
-            <RunSummary title="After" state={after} />
+            <RunSummary title={t("suite.before")} state={before} />
+            <RunSummary title={t("suite.after")} state={after} />
           </div>
         )}
 
@@ -244,7 +250,7 @@ export function SuitePanel() {
             ) : (
               <ChevronRight className="w-3.5 h-3.5" />
             )}
-            Which instruments, and how many repeats
+            {t("suite.whichInstruments")}
           </button>
 
           {showAdvanced && (
@@ -277,13 +283,13 @@ export function SuitePanel() {
                 {/* Stated rather than left to be discovered: below two there is no
                     spread to compare against, so nothing can be called a change. */}
                 <span className="text-xs text-muted-foreground">
-                  {catalogue.min_repeats} or more — a single reading has no noise floor
+                  {t("suite.minRepeats", { min: catalogue.min_repeats })}
                 </span>
               </div>
             </div>
           )}
         </div>
-      </div>
+      </Card>
 
       {comparison && <ComparisonTable comparison={comparison} />}
     </div>
@@ -301,6 +307,7 @@ function BenchRow({
   disabled: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useT();
   return (
     <label
       className={`flex items-start gap-3 text-sm rounded-md px-2 py-1.5 ${
@@ -323,7 +330,7 @@ function BenchRow({
           <span className="ml-2 text-xs text-amber-500">{bench.costs}</span>
         )}
         {!bench.in_default_run && (
-          <span className="ml-2 text-xs text-muted-foreground">(not in “run all”)</span>
+          <span className="ml-2 text-xs text-muted-foreground">{t("suite.notInRunAll")}</span>
         )}
         <span className="block text-xs text-muted-foreground">
           {/* "Cannot run, and here is what to arrange" — never a silent absence. */}
@@ -335,11 +342,14 @@ function BenchRow({
 }
 
 function Progress({ state, label }: { state: RunState; label: string }) {
+  const { t } = useT();
   return (
     <div className="space-y-1">
       <div className="flex justify-between text-xs text-muted-foreground">
         <span>
-          {state.active ? `Measuring ${state.active}…` : `Starting the ${label} run…`}
+          {state.active
+            ? t("suite.measuringBench", { bench: state.active })
+            : t("suite.startingRun", { label })}
         </span>
         <span>{state.progress}%</span>
       </div>
@@ -354,6 +364,7 @@ function Progress({ state, label }: { state: RunState; label: string }) {
 }
 
 function RunSummary({ title, state }: { title: string; state: RunState }) {
+  const { t } = useT();
   return (
     <div className="rounded-md border border-border p-3">
       <div className="text-xs font-semibold text-muted-foreground">{title}</div>
@@ -372,7 +383,9 @@ function RunSummary({ title, state }: { title: string; state: RunState }) {
             ))}
         </>
       ) : (
-        <div className="text-sm mt-1 text-muted-foreground">Not measured yet</div>
+        <div className="text-sm mt-1 text-muted-foreground">
+          {t("suite.notMeasuredYet")}
+        </div>
       )}
     </div>
   );
@@ -385,13 +398,13 @@ function RunSummary({ title, state }: { title: string; state: RunState }) {
  * UI's. `thermal` reads as "Heat & wear" because that is what it buys — a GPU
  * arriving at the match with headroom rather than at its limit.
  */
-const CATEGORY_LABEL: Record<string, string> = {
-  latency: "Latency",
-  fps: "Frame rate",
-  thermal: "Heat & wear",
-  network: "Network",
-  resources: "Memory & CPU",
-  storage: "Storage",
+const CATEGORY_KEY: Record<string, MessageKey> = {
+  latency: "suiteCat.latency",
+  fps: "suiteCat.fps",
+  thermal: "suiteCat.thermal",
+  network: "suiteCat.network",
+  resources: "suiteCat.resources",
+  storage: "suiteCat.storage",
 };
 
 const CATEGORY_ORDER = [
@@ -420,16 +433,17 @@ function groupByCategory(measurements: SuiteMeasurement[]) {
 
   return ordered.map((key) => ({
     key,
-    label: CATEGORY_LABEL[key] ?? "Other measurements",
+    labelKey: CATEGORY_KEY[key] ?? null,
     rows: groups.get(key) ?? [],
   }));
 }
 
 function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
+  const { t } = useT();
   const groups = groupByCategory(comparison.measurements);
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4 space-y-4">
+    <Card className="p-4 space-y-4">
       <h3 className="text-sm font-semibold">{comparison.summary}</h3>
 
       {/* Grouped by what kind of gain it is, so a reader can see where the
@@ -439,21 +453,29 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
       {groups.map((group) => (
         <div key={group.key} className="space-y-1">
           <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-            {group.label}
+            {group.labelKey ? t(group.labelKey) : t("suite.otherMeasurements")}
           </h4>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-xs text-muted-foreground text-left">
-                  <th className="py-1 pr-3">Metric</th>
-                  <th className="py-1 pr-3 text-right">Before</th>
-                  <th className="py-1 pr-3 text-right">After</th>
-                  <th className="py-1 pr-3 text-right">Change</th>
-                  <th className="py-1">Verdict</th>
+                  <th className="py-1 pr-3">{t("suite.metric")}</th>
+                  <th className="py-1 pr-3 text-right">{t("suite.before")}</th>
+                  <th className="py-1 pr-3 text-right">{t("suite.after")}</th>
+                  <th className="py-1 pr-3 text-right">{t("suite.change")}</th>
+                  <th className="py-1">{t("suite.verdict")}</th>
                 </tr>
               </thead>
               <tbody>
-                {group.rows.map((m) => (
+                {group.rows.map((m) => {
+                  // Bars scale within the group, so a 40% improvement and a
+                  // 0.3% one stop looking identical (E5). The number stays;
+                  // the bar only restates it.
+                  const groupMax = Math.max(
+                    ...group.rows.map((row) => Math.abs(row.percent_change)),
+                    1,
+                  );
+                  return (
                   <tr key={m.metric} className="border-t border-border/50">
                     <td className="py-1.5 pr-3 font-mono text-xs">{m.metric}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">
@@ -468,6 +490,17 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
                       {m.delta > 0 ? "+" : ""}
                       {m.delta.toFixed(2)}
                       {m.unit}
+                      <Meter
+                        className="mt-0.5 w-20 ml-auto"
+                        value={Math.abs(m.percent_change)}
+                        max={groupMax}
+                        // No green/red: which direction is an improvement
+                        // depends on the metric, and that judgement lives
+                        // server-side with the verdicts (C11). The bar only
+                        // sizes the change; "within noise" stays a sentence.
+                        tone="primary"
+                        label={t("suite.deltaBarLabel", { metric: m.metric, pct: Math.abs(m.percent_change).toFixed(1) })}
+                      />
                     </td>
                     <td className="py-1.5 text-xs">
                       {m.exceeds_noise ? (
@@ -480,14 +513,16 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
                         /* Not "no change": the machine varies by this much on
                            its own, so nothing can be concluded either way. */
                         <span className="text-muted-foreground">
-                          within noise (±
-                          {m.noise === null ? "?" : m.noise.toFixed(2)}
-                          {m.unit})
+                          {t("suite.withinNoise", {
+                            noise: m.noise === null ? "?" : m.noise.toFixed(2),
+                            unit: m.unit,
+                          })}
                         </span>
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -496,7 +531,7 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
 
       {comparison.unpaired.length > 0 && (
         <div className="text-xs text-muted-foreground space-y-1">
-          <div className="font-semibold">Not compared</div>
+          <div className="font-semibold">{t("suite.notCompared")}</div>
           {comparison.unpaired.map((entry) => (
             <div key={entry.metric}>
               <span className="font-mono">{entry.metric}</span> — {entry.reason}
@@ -504,6 +539,6 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
           ))}
         </div>
       )}
-    </div>
+    </Card>
   );
 }

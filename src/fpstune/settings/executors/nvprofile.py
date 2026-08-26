@@ -122,83 +122,71 @@ class NvProfileExecutor(BaseExecutor):
     # Class-level cache - shared across all instances
     _cache_file_path = get_config_dir() / "nvidia" / "settings_cache.json"
     _cache: dict[str, Any] | None = None
-    _primary_monitor_info: tuple[int, bool] | None = None  # (refresh_rate, supports_vrr)
+    _primary_monitor_info: tuple[int, bool | None] | None = None  # (refresh_rate, supports_vrr)
 
     def __init__(self) -> None:
         """Initialize NvProfile executor."""
         # Ensure directory exists
         NvProfileExecutor._cache_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _get_primary_monitor_info(self) -> tuple[int, bool]:
-        """Get primary monitor's native refresh rate and VRR support.
+    def _get_primary_monitor_info(self) -> tuple[int, bool | None]:
+        """The primary panel's ceiling and VRR answer, from the one derivation.
 
-        Uses native refresh rate (not current) to avoid issues with
-        misconfigured displays running at lower refresh rates.
-
-        Returns:
-            Tuple of (refresh_rate_hz, supports_vrr). Defaults to (60, False).
+        ``settings/panel.py`` owns which panel counts and what its rate is —
+        this module carried its own sixth copy for as long as it existed, with
+        a hardcoded 60 Hz / no-VRR fallback that panel.py's own rule forbids:
+        an unknown rate stays 0 and never becomes 60, because a 240 Hz display
+        told it is 60 loses three quarters of the frames it can show. Unknown
+        here means (0, None): the caller recommends nothing VRR-shaped from it.
         """
         if NvProfileExecutor._primary_monitor_info is not None:
             return NvProfileExecutor._primary_monitor_info
 
+        from fpstune.settings.panel import primary_monitor, refresh_ceiling_hz
+        from fpstune.utils.hardware_manager import hardware_manager
+
+        refresh = 0
+        supports_vrr: bool | None = None
         try:
-            from fpstune.utils.hardware_manager import hardware_manager
-
-            monitors = hardware_manager.detect_monitors()
-            for monitor in monitors:
-                if monitor.is_primary:
-                    # Use native refresh rate (preferred), then max, then current as last resort
-                    refresh = (
-                        monitor.native_refresh_rate_hz
-                        or monitor.max_refresh_rate_hz
-                        or monitor.refresh_rate_hz
-                    )
-                    if refresh > 0:
-                        NvProfileExecutor._primary_monitor_info = (refresh, monitor.supports_vrr)
-                        logger.debug(
-                            "Primary monitor: %dHz, VRR=%s (native=%d, max=%d, current=%d) - %s",
-                            refresh,
-                            "Yes" if monitor.supports_vrr else "No",
-                            monitor.native_refresh_rate_hz,
-                            monitor.max_refresh_rate_hz,
-                            monitor.refresh_rate_hz,
-                            monitor.friendly_name or monitor.name,
-                        )
-                        return NvProfileExecutor._primary_monitor_info
-
-            # No primary found, use first monitor
-            if monitors:
-                monitor = monitors[0]
-                refresh = (
-                    monitor.native_refresh_rate_hz
-                    or monitor.max_refresh_rate_hz
-                    or monitor.refresh_rate_hz
+            monitor = primary_monitor(hardware_manager.detect_monitors())
+            if monitor is not None:
+                refresh = refresh_ceiling_hz(monitor) or monitor.refresh_rate_hz or 0
+                supports_vrr = monitor.supports_vrr
+                logger.debug(
+                    "Primary monitor: %dHz, VRR=%s - %s",
+                    refresh,
+                    supports_vrr,
+                    monitor.friendly_name or monitor.name,
                 )
-                if refresh > 0:
-                    NvProfileExecutor._primary_monitor_info = (refresh, monitor.supports_vrr)
-                    return NvProfileExecutor._primary_monitor_info
-
         except Exception as e:
             logger.warning("Failed to detect monitor info: %s", e)
 
-        # Fallback: 60Hz, no VRR
-        NvProfileExecutor._primary_monitor_info = (60, False)
-        return NvProfileExecutor._primary_monitor_info
+        # Only a real answer is cached; an unknown stays uncached so the next
+        # caller retries rather than inheriting a blank.
+        if refresh or supports_vrr is not None:
+            NvProfileExecutor._primary_monitor_info = (refresh, supports_vrr)
+        return (refresh, supports_vrr)
 
     def get_vrr_optimization_info_for_monitor(
-        self, refresh_rate: int, supports_vrr: bool
+        self, refresh_rate: int, supports_vrr: bool | None
     ) -> dict[str, Any]:
         """Get VRR optimization info for a specific monitor.
 
         Args:
             refresh_rate: Monitor's native/max refresh rate in Hz.
-            supports_vrr: Whether the monitor supports G-Sync/FreeSync.
+            supports_vrr: The EDID's declaration — None when it could not be
+                read. Unknown recommends nothing VRR-shaped, same as False;
+                the caller owns saying "unknown" rather than "unsupported".
 
         Returns:
             Dict with recommended VRR settings for the monitor.
         """
         # Calculate recommended FPS limit (refresh - 3 for G-Sync optimal)
-        recommended_fps_limit = frame_cap_for_refresh(refresh_rate) if supports_vrr else 0
+        # A VRR panel whose rate is unknown gets no cap: frame_cap_for_refresh(0)
+        # would floor at 30 — a fabricated ceiling on an unread panel.
+        recommended_fps_limit = (
+            frame_cap_for_refresh(refresh_rate) if supports_vrr and refresh_rate > 0 else 0
+        )
 
         # The three values below are one configuration, not three preferences, and
         # this panel used to hand back a version of it that undid itself:

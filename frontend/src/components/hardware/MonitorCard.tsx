@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
-import { ScreenShare, CheckCircle2, RefreshCw, Zap } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { ScreenShare, CheckCircle2, RefreshCw, Zap, Gauge } from "lucide-react";
 import { useState } from "react";
 import { api, type MonitorInfo } from "../../lib/api";
 import { hardwareManager } from "../../lib/hardware-manager";
@@ -121,6 +121,118 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
         unless you keep it — so a mode your screen cannot show fixes itself.
       </ConfirmDialog>
     </>
+  );
+}
+
+/**
+ * Driver-side G-Sync/VRR tuning for the primary panel.
+ *
+ * The three routes this calls existed before any surface did — the whole
+ * VRR capability was endpoints with no caller (D3). Rendered only on the
+ * primary monitor's card because the NVIDIA profile the apply writes is
+ * global: one driver profile, so one control, on the panel it is derived from.
+ */
+function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
+  const queryClient = useQueryClient();
+  const { data: vrr } = useQuery({
+    queryKey: ["vrr-optimization", displayIndex],
+    queryFn: () => api.getVrrOptimization(displayIndex),
+    staleTime: 30_000,
+    retry: false,
+  });
+
+  const refetch = () =>
+    queryClient.invalidateQueries({ queryKey: ["vrr-optimization"] });
+
+  const applyMutation = useMutation({
+    mutationFn: () =>
+      api.applyVrrOptimization({
+        fps_limit: vrr?.recommended_fps_limit ?? 0,
+        vrr_mode: vrr?.recommended_vrr_mode ?? "off",
+        vsync: vrr?.recommended_vsync ?? "off",
+      }),
+    onSuccess: refetch,
+    onError: (error: Error) => {
+      log.error("Failed to apply VRR optimization:", error.message);
+      alert(`Could not apply G-Sync settings: ${error.message}`);
+    },
+  });
+
+  const resetMutation = useMutation({
+    mutationFn: () => api.resetVrrOptimization(),
+    onSuccess: refetch,
+    onError: (error: Error) => {
+      log.error("Failed to reset VRR optimization:", error.message);
+      alert(`Could not reset G-Sync settings: ${error.message}`);
+    },
+  });
+
+  if (!vrr) return null;
+
+  const pending = applyMutation.isPending || resetMutation.isPending;
+  // A recommendation of "everything off" is the vendor-gap answer — there is
+  // nothing to apply, only the explanation to show.
+  const hasRecommendation =
+    vrr.supports_vrr === true && vrr.recommended_vrr_mode !== "off";
+
+  return (
+    <div className="pl-4 pt-1 space-y-1">
+      <div className="flex items-center gap-1.5 text-xs">
+        <Gauge className="w-3 h-3 text-muted-foreground" />
+        <span className="text-muted-foreground">G-Sync / VRR:</span>
+        {vrr.is_optimized ? (
+          <span className="text-success font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            {vrr.current_vrr_mode} · VSync {vrr.current_vsync} ·{" "}
+            {vrr.current_fps_limit > 0
+              ? `${vrr.current_fps_limit} fps cap`
+              : "no cap"}
+          </span>
+        ) : hasRecommendation ? (
+          <span className="text-warning font-medium">
+            recommended: {vrr.recommended_vrr_mode} · VSync{" "}
+            {vrr.recommended_vsync} · {vrr.recommended_fps_limit} fps cap
+          </span>
+        ) : (
+          <span className="text-muted-foreground italic">
+            {vrr.supports_vrr === null ? "unknown" : "not applicable"}
+          </span>
+        )}
+      </div>
+      {vrr.warning && (
+        <p className="text-xs text-muted-foreground">{vrr.warning}</p>
+      )}
+      <div className="flex items-center gap-2">
+        {hasRecommendation && !vrr.is_optimized && (
+          <button
+            onClick={() => applyMutation.mutate()}
+            disabled={pending}
+            className={cn(
+              "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
+              pending
+                ? "bg-muted text-muted-foreground cursor-wait"
+                : "bg-warning/15 text-warning hover:bg-warning/25",
+            )}
+          >
+            {applyMutation.isPending ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <Zap className="w-3 h-3" />
+            )}
+            Optimize G-Sync
+          </button>
+        )}
+        {vrr.is_optimized && (
+          <button
+            onClick={() => resetMutation.mutate()}
+            disabled={pending}
+            className="px-2 py-1 rounded text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:cursor-wait"
+          >
+            {resetMutation.isPending ? "Resetting…" : "Reset to driver defaults"}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }
 
@@ -365,6 +477,11 @@ export function MonitorCard({
             {autoMutation.isPending ? "Applying…" : "Use native mode"}
           </button>
         </div>
+      )}
+      {/* One driver profile, so one control — on the primary panel it is
+          derived from, and only while the display is actually on the desktop. */}
+      {monitor.is_primary && isActive && (
+        <VrrOptimizationPanel displayIndex={displayIndex} />
       )}
       <ConfirmDialog
         open={confirmOpen}

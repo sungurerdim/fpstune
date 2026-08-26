@@ -54,6 +54,43 @@ export interface AudioDeviceInfo {
   loudness_eq_enabled: boolean; // Current state of volume normalization
 }
 
+export interface VrrOptimizationInfo {
+  monitor_name: string;
+  monitor_refresh_hz: number;
+  // Tri-state on purpose: null means the EDID could not be read, and "could
+  // not read" must never render as "does not support".
+  supports_vrr: boolean | null;
+  recommended_fps_limit: number;
+  recommended_vrr_mode: string;
+  recommended_vsync: string;
+  current_fps_limit: number;
+  current_vrr_mode: string;
+  current_vsync: string;
+  is_optimized: boolean;
+  explanation: string;
+  warning?: string | null;
+}
+
+export interface PowerProfileStatus {
+  active_plan: string;
+  active_guid: string;
+  fps_balanced_exists: boolean;
+  fps_balanced_active: boolean;
+  optimizations: string[];
+}
+
+export interface SelfCheckFinding {
+  area: string;
+  name: string;
+  agrees: boolean;
+  detail: string;
+}
+
+export interface SelfCheckReport {
+  ok: boolean;
+  findings: SelfCheckFinding[];
+}
+
 export interface GpuDeviceInfo {
   vendor: string;
   name?: string;
@@ -285,6 +322,58 @@ export const api = {
 
   createRestorePoint: () =>
     fetchJson<{ success: boolean; message: string }>("/restore-point", {
+      method: "POST",
+    }),
+
+  // G-Sync/VRR driver tuning (NVIDIA today; other vendors report the gap).
+  getVrrOptimization: (displayIndex: number) =>
+    fetchJson<VrrOptimizationInfo>(
+      `/display/vrr-optimization?display_index=${displayIndex}`,
+    ),
+
+  applyVrrOptimization: (request: {
+    fps_limit: number;
+    vrr_mode: string;
+    vsync: string;
+  }) =>
+    fetchJson<{ success: boolean; message: string }>(
+      "/display/vrr-optimization/apply",
+      { method: "POST", body: JSON.stringify(request) },
+    ),
+
+  resetVrrOptimization: () =>
+    fetchJson<{ success: boolean; message: string }>(
+      "/display/vrr-optimization/reset",
+      { method: "POST" },
+    ),
+
+  // FPS Balanced power plan: full power when a game wants it, none wasted idle.
+  getPowerProfileStatus: () =>
+    fetchJson<PowerProfileStatus>("/power-profile/status"),
+
+  activatePowerProfile: () =>
+    fetchJson<{ success: boolean; message: string }>("/power-profile/activate", {
+      method: "POST",
+    }),
+
+  revertPowerProfile: () =>
+    fetchJson<{ success: boolean; message: string }>("/power-profile/revert", {
+      method: "POST",
+    }),
+
+  // Every detector cross-checked against an independent source (A12).
+  getSelfCheck: (refresh = false) =>
+    fetchJson<SelfCheckReport>(`/self-check${refresh ? "?refresh=true" : ""}`),
+
+  // The drive's own media type picks the pass: retrim on SSD, defrag on HDD.
+  optimizeDrive: (driveLetter: string) =>
+    fetchJson<{
+      success: boolean;
+      drive_letter: string;
+      media_type: string;
+      action: string;
+      message: string;
+    }>(`/storage/${encodeURIComponent(driveLetter)}/optimize`, {
       method: "POST",
     }),
 

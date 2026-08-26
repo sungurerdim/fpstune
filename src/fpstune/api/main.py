@@ -31,6 +31,7 @@ from fpstune.api.routes import (
     system_network_router,
     system_power_router,
     system_router,
+    system_storage_router,
 )
 from fpstune.api.routes.debug import router as debug_router
 from fpstune.api.status_cache import stop_background_refresh
@@ -250,6 +251,7 @@ def create_app() -> FastAPI:
     app.include_router(system_network_router, prefix="/api", tags=["System"])
     app.include_router(system_audio_router, prefix="/api", tags=["System"])
     app.include_router(system_power_router, prefix="/api", tags=["System"])
+    app.include_router(system_storage_router, prefix="/api", tags=["System"])
     app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(settings_stream_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(display_router, prefix="/api", tags=["Display"])

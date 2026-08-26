@@ -12,12 +12,12 @@ import logging
 import re
 import sys
 import threading
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from starlette.responses import Response
+    pass
 
 from fastapi import APIRouter, HTTPException
 
@@ -891,13 +891,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
 # =============================================================================
 
 
-@router.get("/categories", response_model=list[str])
-async def get_categories() -> list[str]:
-    """Get all available category IDs."""
-    registry = await _get_registry_async()
-    return registry.get_categories()
-
-
 def categories_missing_metadata(active_categories: set[str]) -> list[str]:
     """Active categories that ``CATEGORY_METADATA`` never declared."""
     return sorted(active_categories - set(CATEGORY_METADATA))
@@ -1302,46 +1295,3 @@ async def verify_setting(setting_id: str, request: VerifyRequest | None = None) 
         expected_value=expected,
         target=target,
     )
-
-
-# =============================================================================
-# SSE Action Streaming Endpoint
-# =============================================================================
-
-
-@router.get("/actions/{setting_id}/execute")
-async def execute_action_stream(setting_id: str) -> Response:
-    """Execute a maintenance action with SSE streaming output.
-
-    Returns a Server-Sent Events stream with live console output.
-    Use this for long-running operations like DISM cleanup, SFC scan, etc.
-
-    Event format:
-    - type: "output" | "progress" | "complete" | "error"
-    - line: Output text line
-    - progress: Progress percentage (0-100)
-    - success: True if action completed successfully
-    - error: Error message if any
-    """
-    # Runtime imports for optional SSE dependency
-    from sse_starlette.sse import EventSourceResponse
-
-    from fpstune.settings.action_executor import execute_action
-
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    if not setting.is_action:
-        raise HTTPException(400, f"Setting {setting_id} is not an action")
-
-    log_activity(f"Starting action: {setting.display_name}", "info")
-
-    async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
-        """Generate SSE events from action execution."""
-        async for event_data in execute_action(setting):
-            yield {"data": event_data}
-
-    return EventSourceResponse(event_generator())

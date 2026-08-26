@@ -1,12 +1,20 @@
-import {
-  CheckCircle2, XCircle, } from "lucide-react";
-import {
-  type StorageDriveInfo, } from "../../lib/api";
+import { useMutation } from "@tanstack/react-query";
+import { CheckCircle2, RefreshCw, Sparkles, XCircle } from "lucide-react";
+import { useState } from "react";
+import { api, type StorageDriveInfo } from "../../lib/api";
+import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 
+const log = createLogger("StorageDriveCard");
 
 /**
- * Storage drive card
+ * Storage drive card — readout plus the UI's first per-drive action (D3).
+ *
+ * The button runs whatever pass this drive's own media type calls for
+ * (retrim on an SSD, defrag on an HDD — the backend decides from
+ * `MediaType`, never from this card). Unknown media gets no button: the
+ * backend would refuse with 409, so offering the click would be offering
+ * an error.
  */
 export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
   const usedPercent =
@@ -14,6 +22,23 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
       ? Math.round(((drive.size_gb - drive.free_gb) / drive.size_gb) * 100)
       : null;
   const isLowSpace = usedPercent !== null && usedPercent > 90;
+
+  const [lastResult, setLastResult] = useState<string | null>(null);
+  const optimizeMutation = useMutation({
+    mutationFn: () => api.optimizeDrive(drive.drive_letter),
+    onSuccess: (result) => setLastResult(result.message),
+    onError: (error: Error) => {
+      log.error(
+        `Failed to optimize drive ${drive.drive_letter}:`,
+        error.message,
+      );
+      setLastResult(`Failed: ${error.message}`);
+    },
+  });
+
+  const actionLabel = drive.media_type === "SSD" ? "Retrim" : "Defrag";
+  const canOptimize =
+    drive.media_type === "SSD" || drive.media_type === "HDD";
 
   return (
     <div className="pl-3 border-l-2 border-border">
@@ -54,6 +79,39 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
             )}
             style={{ width: `${usedPercent}%` }}
           />
+        </div>
+      )}
+      {canOptimize && (
+        <div className="mt-1 flex items-center gap-2">
+          <button
+            onClick={() => optimizeMutation.mutate()}
+            disabled={optimizeMutation.isPending}
+            className={cn(
+              "flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium transition-colors",
+              optimizeMutation.isPending
+                ? "bg-muted text-muted-foreground cursor-wait"
+                : "border border-border text-muted-foreground hover:bg-muted",
+            )}
+          >
+            {optimizeMutation.isPending ? (
+              <RefreshCw className="w-3 h-3 animate-spin" />
+            ) : (
+              <Sparkles className="w-3 h-3" />
+            )}
+            {optimizeMutation.isPending ? `${actionLabel} running…` : actionLabel}
+          </button>
+          {lastResult && (
+            <span
+              className={cn(
+                "text-xs",
+                lastResult.startsWith("Failed")
+                  ? "text-warning"
+                  : "text-success",
+              )}
+            >
+              {lastResult}
+            </span>
+          )}
         </div>
       )}
     </div>

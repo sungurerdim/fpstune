@@ -24,6 +24,7 @@ import { useRefreshOnFocus } from "./hardware/useRefreshOnFocus";
 import { DeviceTweakList } from "./hardware/DeviceTweakList";
 import { NetworkAdapterCard } from "./hardware/NetworkAdapterCard";
 import { AudioSection } from "./hardware/AudioSection";
+import { PowerProfileCard } from "./hardware/PowerProfileCard";
 import { StorageDriveCard } from "./hardware/StorageDriveCard";
 
 // Loading indicator component (uses shared LoadingSpinner)
@@ -185,7 +186,8 @@ export function HardwarePanel() {
             </>
           )}
 
-          {/* Power Profile managed in Software Tweaks tab */}
+          {/* Power plan — the FPS Balanced profile's status and switch. */}
+          <PowerProfileCard />
 
           {/* GPU */}
           <HardwareSection

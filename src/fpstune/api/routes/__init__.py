@@ -10,6 +10,7 @@ from fpstune.api.routes.system import router as system_router
 from fpstune.api.routes.system_audio import router as system_audio_router
 from fpstune.api.routes.system_network import router as system_network_router
 from fpstune.api.routes.system_power import router as system_power_router
+from fpstune.api.routes.system_storage import router as system_storage_router
 
 __all__ = [
     "system_router",
@@ -21,5 +22,6 @@ __all__ = [
     "system_audio_router",
     "system_network_router",
     "system_power_router",
+    "system_storage_router",
     "display_router",
 ]

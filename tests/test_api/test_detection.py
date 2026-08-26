@@ -25,15 +25,6 @@ class TestSettingsDefinitions:
         data = response.json()
         assert isinstance(data, list)
 
-    def test_get_categories(self, client):
-        """Test getting available categories."""
-        response = client.get("/api/settings/categories")
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        # Should have common categories
-        assert "core" in data or "timer" in data or "power" in data
-
 
 class TestSettingsDetection:
     """Tests for settings detection endpoints."""

@@ -26,6 +26,7 @@ import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
+import { SelfCheckNotice } from "./SelfCheckNotice";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
@@ -199,6 +200,9 @@ export function HomeTab() {
     <div className="space-y-4 pb-8">
       {/* Home owns the whole product, so its notice owns every setting. */}
       <DetectionNotice />
+      {/* And its self-check owns every detector (A12): a disagreement between
+          independent sources is a Home-page fact, not a buried report. */}
+      <SelfCheckNotice />
 
       {/* The two buttons: each applies exactly its category, and says so. */}
       {suboptimal.length > 0 && (

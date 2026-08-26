@@ -26,18 +26,9 @@ ROOT = Path(__file__).resolve().parents[2]
 # Frozen at the D7 audit. Entries leave this set by gaining a caller or by
 # being deleted — never by growing the set.
 _UNCALLED_BASELINE = {
-    # Awaiting D3's device-surface wiring (MonitorCard G-Sync panel, power plan card):
-    "GET /api/display/vrr-optimization",
-    "POST /api/display/vrr-optimization/apply",
-    "POST /api/display/vrr-optimization/reset",
-    "GET /api/power-profile/status",
-    "POST /api/power-profile/activate",
-    "POST /api/power-profile/revert",
     # Awaiting the C6-true row wiring (reset endpoint instead of apply+default):
     "POST /api/settings/{setting_id}/reset",
     "POST /api/settings/{setting_id}/verify",
-    # Awaiting a Home surface for the detection self-check (A12):
-    "GET /api/self-check",
     # Fate decided by H1's status_cache verdict:
     "GET /api/status",
     # Documented non-UI consumer: supervisors and uptime checks (api/main.py).
@@ -68,7 +59,12 @@ def _uncalled_routes() -> set[str]:
             continue
         # The frontend's fetch helper supplies the /api prefix.
         short = route.path.removeprefix("/api")
-        pattern = re.escape(re.sub(r"\{[^}]+\}", "@@", short)).replace("@@", r"[^\"`]*?")
+        # Anchored to string delimiters: the path must open a "..." or `...`
+        # literal and run to its close (or a query string / interpolation).
+        # Unanchored, "/power-profile/status" counted as a caller of
+        # GET /api/status — a substring is not a fetch.
+        core = re.escape(re.sub(r"\{[^}]+\}", "@@", short)).replace("@@", r"[^\"`]*?")
+        pattern = '["`]' + core + '["`?$]'
         if re.search(pattern, frontend) is None:
             for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
                 uncalled.add(f"{method} {route.path}")

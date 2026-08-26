@@ -114,6 +114,16 @@ describe("HeadroomPanel with a measurement", () => {
     expect(screen.getByText(/19%/)).toBeInTheDocument();
   });
 
+  it("draws the ratio as a gauge, so 19% and 97% cannot look alike (E5)", async () => {
+    render(<HeadroomPanel />);
+
+    const gauge = await screen.findByRole("meter", {
+      name: /measured frame rate against the display's 297 fps target/,
+    });
+    expect(gauge).toHaveAttribute("aria-valuenow", "57.4");
+    expect(gauge).toHaveAttribute("aria-valuemax", "297");
+  });
+
   it("never prints the number without what it permits", async () => {
     render(<HeadroomPanel />);
 

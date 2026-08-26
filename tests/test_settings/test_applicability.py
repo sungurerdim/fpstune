@@ -5,8 +5,6 @@ from __future__ import annotations
 import pytest
 
 from fpstune.settings.applicability import (
-    ANTICHEAT_RISKY_SETTINGS,
-    ANTICHEAT_WARNINGS,
     ApplicabilityChecker,
     HardwareContext,
     values_equal,
@@ -179,7 +177,6 @@ class TestHardwareContext:
             is_admin=True,
             features={"docker", "hyper_v"},
             has_vrr_monitor=True,
-            has_anticheat_games=False,
         )
         d = ctx.to_dict()
         assert d["cpu_vendor"] == "intel"
@@ -369,53 +366,22 @@ class TestApplicabilityChecker:
         assert amd_setting not in result
 
 
-class TestAnticheatTableIsNotStale:
-    """The anti-cheat table names setting ids, and nothing used to check them.
+class TestAnticheatFactReachesTheUser:
+    """H8: the one anti-cheat fact rides in the setting's own risk_warning.
 
-    Three of the four ids it shipped with named settings this product no longer
-    has (``system:kernel_debugging``, ``system:test_signing``,
-    ``system:driver_verifier``). Each was removed without its warning, and
-    nothing anywhere went red — ``check_anticheat_compatibility`` simply stopped
-    matching and returned "safe". A dropped anti-cheat warning is not a cosmetic
-    regression: the user it fails is the one who applies the risky value, is
-    never told, and gets banned.
-
-    ``applicability.py`` cannot make this an import-time check the way
-    ``powershell_actions._wire_mutex_groups`` does — executors import it while
-    the registry is still being built, so reaching for the registry there is a
-    cycle. This is where the check lives instead.
+    `check_anticheat_compatibility` had no caller and `has_anticheat_games`
+    was never True, so the warning could never render. Decided: delete the
+    dead checker and carry the fact where the row already shows warnings.
     """
 
-    @staticmethod
-    def _registry_ids() -> set[str]:
-        from fpstune.settings.registry import SettingsRegistry
+    def test_low_latency_names_the_ultra_risk_in_its_own_copy(self) -> None:
+        from fpstune.settings.definitions.gpu import NVIDIA_LOW_LATENCY
 
-        return {s.id for s in SettingsRegistry().get_all()}
+        warning = NVIDIA_LOW_LATENCY.risk_warning or ""
+        assert "anti-cheat" in warning and "ultra" in warning.lower()
 
-    def test_every_warned_id_is_a_setting_that_exists(self) -> None:
-        unknown = sorted(set(ANTICHEAT_WARNINGS) - self._registry_ids())
-        assert not unknown, (
-            f"ANTICHEAT_WARNINGS names settings that are not registered: {unknown}. "
-            "Rename the entry together with the setting, or its anti-cheat warning "
-            "silently stops firing."
-        )
+    def test_the_dead_checker_stayed_dead(self) -> None:
+        import fpstune.settings.applicability as module
 
-    def test_the_risky_set_cannot_drift_from_the_warnings(self) -> None:
-        # These were two hand-written lists of the same ids. An id in one and not
-        # the other produced either a warning that never fired or a generic
-        # "May conflict with anti-cheat software" with none of the specifics.
-        assert frozenset(ANTICHEAT_WARNINGS) == ANTICHEAT_RISKY_SETTINGS
-
-    def test_a_risky_setting_still_warns(self) -> None:
-        from fpstune.settings.registry import SettingsRegistry
-
-        setting = SettingsRegistry().get("gpu-nvidia:low_latency")
-        assert setting is not None
-        checker = ApplicabilityChecker(HardwareContext(has_anticheat_games=True))
-
-        is_safe, warning = checker.check_anticheat_compatibility(setting, "ultra")
-        assert is_safe is False
-        assert "anti-cheat" in warning.lower()
-
-        # Only "ultra" is the risky value; fpstune's own recommendation is "on".
-        assert checker.check_anticheat_compatibility(setting, "on") == (True, "")
+        assert not hasattr(module, "ANTICHEAT_WARNINGS")
+        assert not hasattr(module.ApplicabilityChecker, "check_anticheat_compatibility")

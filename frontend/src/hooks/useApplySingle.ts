@@ -17,6 +17,9 @@ export function useApplySingle() {
   const setSettingDetectionResult = useStore(
     (s) => s.setSettingDetectionResult,
   );
+  // Every outcome gets a visible confirmation (E8): applying a tweak from
+  // Home used to change the machine with no on-screen acknowledgement at all.
+  const addNotification = useStore((s) => s.addNotification);
   const [pendingIds, setPendingIds] = useState<Set<string>>(new Set());
 
   const applySingle = useCallback(
@@ -25,6 +28,7 @@ export function useApplySingle() {
       try {
         const response = await settingsApi.applySetting(setting.id, value);
         if (response.success) {
+          addNotification(`Applied ${setting.displayName}`, "success");
           if (
             response.new_value !== null &&
             response.new_value !== undefined
@@ -43,6 +47,11 @@ export function useApplySingle() {
             await detectionManager.redetectSettings([setting.id]);
           }
           if (isDisplaySetting(setting.id)) hardwareManager.refreshMonitors();
+        } else {
+          addNotification(
+            `Could not apply ${setting.displayName}: ${response.error ?? "unknown error"}`,
+            "error",
+          );
         }
         return response;
       } finally {
@@ -54,7 +63,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [queryClient, setSettingDetectionResult],
+    [addNotification, queryClient, setSettingDetectionResult],
   );
 
   /**
@@ -72,6 +81,9 @@ export function useApplySingle() {
       setPendingIds((prev) => new Set(prev).add(setting.id));
       try {
         const response = await settingsApi.undoSetting(setting.id);
+        if (response.success) {
+          addNotification(`Undid ${setting.displayName}`, "success");
+        }
         // Always re-detect: the value changed and the original is now gone, and
         // both of those live in the detection result the row renders from.
         await detectionManager.redetectSettings([setting.id]);
@@ -80,6 +92,7 @@ export function useApplySingle() {
         }
         return response;
       } catch {
+        addNotification(`Could not undo ${setting.displayName}`, "error");
         await detectionManager.redetectSettings([setting.id]);
         return null;
       } finally {
@@ -91,7 +104,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [queryClient],
+    [addNotification, queryClient],
   );
 
   /**
@@ -108,6 +121,10 @@ export function useApplySingle() {
       try {
         const response = await settingsApi.resetSetting(setting.id);
         if (response.success) {
+          addNotification(
+            `Reset ${setting.displayName} to the Windows default`,
+            "success",
+          );
           if (response.new_value !== null && response.new_value !== undefined) {
             const isOptimized = valuesEqual(
               response.new_value,
@@ -123,6 +140,11 @@ export function useApplySingle() {
             await detectionManager.redetectSettings([setting.id]);
           }
           if (isDisplaySetting(setting.id)) hardwareManager.refreshMonitors();
+        } else {
+          addNotification(
+            `Could not reset ${setting.displayName}: ${response.error ?? "unknown error"}`,
+            "error",
+          );
         }
         return response;
       } finally {
@@ -134,7 +156,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [queryClient, setSettingDetectionResult],
+    [addNotification, queryClient, setSettingDetectionResult],
   );
 
   return {

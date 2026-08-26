@@ -1,5 +1,9 @@
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
 import { useMemo } from "react";
-import { Wrench, AlertTriangle, RefreshCw } from "lucide-react";
+import { Wrench, AlertTriangle } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
@@ -20,6 +24,7 @@ import type { Setting } from "../types/setting";
  * the same sentence.
  */
 export function MaintenancePanel() {
+  const { t } = useT();
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const selection = useStore((state) => state.maintenanceSelection);
@@ -46,41 +51,33 @@ export function MaintenancePanel() {
   }
 
   return (
-    <div className="bg-card rounded-lg border border-border">
+    <Card>
       <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
         <Wrench className="w-5 h-5 text-warning shrink-0" />
         <div className="min-w-0">
-          <h3 className="font-semibold">System Maintenance</h3>
+          <h3 className="font-semibold">{t("maintenance.title")}</h3>
           <p className="text-xs text-muted-foreground">
-            Repair and troubleshoot Windows system issues.
+            {t("maintenance.description")}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3 min-w-0">
           <div className="w-48 max-w-full min-w-0">
             <CleanupResults compact />
           </div>
-          <button
-            className={cn(
-              "shrink-0 flex items-center justify-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors",
-              runner.hasSelection
-                ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                : "bg-muted text-muted-foreground cursor-not-allowed",
-            )}
-            disabled={!runner.hasSelection || runner.isRunning}
+          <Button
+            size="md"
+            className="shrink-0"
+            busy={runner.isRunning}
+            disabled={!runner.hasSelection}
+            icon={<Wrench className="w-4 h-4" />}
             onClick={() => runner.run()}
           >
-            {runner.isRunning ? (
-              <>
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Running...
-              </>
-            ) : (
-              <>
-                <Wrench className="w-4 h-4" />
-                Run{runner.hasSelection && ` (${runner.selectedCount})`}
-              </>
-            )}
-          </button>
+            {runner.isRunning
+              ? t("maintenance.running")
+              : runner.hasSelection
+                ? t("maintenance.runCount", { count: runner.selectedCount })
+                : t("maintenance.run")}
+          </Button>
         </div>
       </div>
 
@@ -99,12 +96,12 @@ export function MaintenancePanel() {
               type="checkbox"
               checked={selection[setting.id] ?? false}
               onChange={() => toggleSelection(setting.id)}
-              className="mt-1 h-4 w-4 rounded border-border text-warning focus:ring-warning"
+              className="mt-1 h-4 w-4 rounded border-border text-warning"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-sm">
-                  {setting.displayName}
+                  {localizedName(setting)}
                 </span>
                 {setting.durationEstimate && (
                   <span className="text-xs text-muted-foreground">
@@ -113,21 +110,19 @@ export function MaintenancePanel() {
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                {setting.description}
+                {localizedDescription(setting)}
               </p>
               {/* Kept: this one is a precondition, not a restatement. */}
               {setting.name === "dism_health" && (
                 <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
                   <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                  <span>
-                    May require internet connection to download repair files.
-                  </span>
+                  <span>{t("maintenance.dismHealthWarning")}</span>
                 </div>
               )}
             </div>
           </label>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }

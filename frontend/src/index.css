@@ -33,10 +33,12 @@
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
     --success: 142 76% 30%;
-    --warning: 35 92% 40%;
-    --warning-foreground: 38 92% 10%;
+    /* 33% lightness, not 40: the axe run measured 40% orange at 3.6:1 on
+       white — under WCAG AA's 4.5. */
+    --warning: 35 92% 33%;
+    --warning-foreground: 38 92% 96%;
     --score-low: 0 62.8% 45%;
-    --score-mid: 35 92% 40%;
+    --score-mid: 35 92% 33%;
     --score-high: 142 76% 30%;
     --scrollbar-track: 210 40% 94%;
     --scrollbar-thumb: 215 20% 75%;
@@ -81,6 +83,29 @@
   body {
     @apply bg-background text-foreground;
     font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* The one focus convention (E7). Three ring recipes existed, on 8 of 48
+     buttons; everything else showed the browser default or nothing. One
+     rule, keyboard-only (:focus-visible), token-fed. Components must not
+     carry their own focus: classes — the E7 test forbids it. */
+  :focus-visible {
+    outline: 2px solid hsl(var(--ring));
+    outline-offset: 2px;
+  }
+}
+
+/* Motion is a preference (E7). The app's 40+ animate-spin/pulse/transition
+   uses all collapse to effectively-instant for users who asked for reduced
+   motion; spinners become static icons, which still read as "working". */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
   }
 }
 

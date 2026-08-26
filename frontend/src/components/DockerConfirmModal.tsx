@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 /**
@@ -14,17 +15,16 @@ export function DockerConfirmModal({
   onConfirm: () => void;
   onCancel: () => void;
 }) {
+  const { t } = useT();
   return (
     <ConfirmDialog
       open={open}
-      title="Restart Docker & WSL?"
-      confirmLabel="Prune & compact"
+      title={t("docker.title")}
+      confirmLabel={t("docker.confirm")}
       onConfirm={onConfirm}
       onCancel={onCancel}
     >
-      Docker Desktop and all WSL distributions will be shut down and restarted so
-      their virtual disk can be compacted and the space truly returned. This can
-      take several minutes. Save your work first.
+      {t("docker.body")}
     </ConfirmDialog>
   );
 }

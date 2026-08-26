@@ -28,6 +28,7 @@ WINDOWED_FLIP_MODEL = SettingExecutor(
     id="display:windowed_flip_model",
     category=SettingCategory.GPU,
     display_name="Windowed Games Optimization",
+    short_name="Windowed game fast-path",
     description="Enables flip-model presentation for DX10-DX11 windowed/borderless games. Provides lower latency + enables Auto HDR + VRR.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -113,6 +114,7 @@ def create_mpo_setting(build: int) -> SettingExecutor:
         id="display:mpo_disable",
         category=SettingCategory.GPU,
         display_name="Multi-Plane Overlay (MPO)",
+        short_name="Multi-plane overlay",
         description="Whether the GPU's display engine composites windows in hardware. It can "
         f"cause flicker and frame-pacing problems, most often on multi-monitor setups with mixed "
         f"refresh rates. Written to {where}.",

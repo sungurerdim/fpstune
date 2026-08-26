@@ -35,27 +35,35 @@ const SUB_FLOOR = /text-\[(\d+)px\]/g;
 const RAW_COLOUR =
   /(?:bg|text|border|ring|fill|stroke|from|to|via)-(?:red|green|blue|emerald|amber|purple|rose|slate|zinc|gray|neutral|stone|orange|yellow|lime|teal|cyan|sky|indigo|violet|fuchsia|pink)-\d+/g;
 
-// Frozen at the E9 audit (90 violations, 18 files). Shrink-only.
+// Frozen at the E9 audit (90 violations, 18 files); shrunk to 73/15 by the
+// amber→warning conversion, then to 44/8 by E3's typography floor (every
+// sub-12px size deleted — what remains is raw colour only). Shrink-only.
+// types/setting.ts is the impact-category octet — eight semantic hues that
+// want their own tokens, not a mapping onto warning.
 const _FROZEN = new Map<string, number>([
-  ["components/CleanupListRow.tsx", 1],
-  ["components/CleanupPanel.tsx", 1],
-  ["components/HeadroomPanel.tsx", 7],
-  ["components/HomeTab.tsx", 9],
-  ["components/SelectionToolbar.tsx", 2],
-  ["components/SettingInfoTooltip.tsx", 4],
-  ["components/SettingStateDisplay.tsx", 8],
-  ["components/SettingsTab.tsx", 2],
+  ["components/HeadroomPanel.tsx", 2],
+  ["components/HomeTab.tsx", 1],
+  ["components/SettingInfoTooltip.tsx", 2],
   ["components/SuitePanel.tsx", 1],
-  ["components/TabNavigation.tsx", 1],
-  ["components/TweakListRow.tsx", 2],
-  ["components/TweakSetting.tsx", 11],
+  ["components/TweakSetting.tsx", 2],
   ["components/VerifyPanel.tsx", 5],
-  ["components/hardware/DeviceTweakList.tsx", 4],
-  ["components/ui/ConfirmDialog.tsx", 3],
-  ["components/ui/PillSelector.tsx", 1],
-  ["components/ui/StatusChip.tsx", 3],
+  ["components/hardware/DeviceTweakList.tsx", 1],
   ["types/setting.ts", 25],
 ]);
+
+// The third E9 pattern, live now that E2's primitives exist: a primitive's
+// class recipe retyped in a component instead of using the primitive. The
+// spellings below are the canonical recipes; ui/ itself is exempt (that is
+// where they are allowed to live).
+const PRIMITIVE_RECIPES = [
+  "bg-card rounded-lg border border-border",
+  "bg-primary text-primary-foreground hover:bg-primary/90",
+] as const;
+
+// Emptied by the E2 migration: every recipe use outside ui/ now renders the
+// primitive. Shrink-only — an entry would only ever be re-added by reverting
+// the migration, which the test above already fails.
+const _FROZEN_RECIPES = new Map<string, number>([]);
 
 function violationsByFile(): Map<string, number> {
   const found = new Map<string, number>();
@@ -73,6 +81,27 @@ function violationsByFile(): Map<string, number> {
       if (parseInt(match[1], 10) < 12) count++;
     }
     count += [...source.matchAll(RAW_COLOUR)].length;
+    if (count > 0) found.set(file, count);
+  }
+  return found;
+}
+
+function recipeViolationsByFile(): Map<string, number> {
+  const found = new Map<string, number>();
+  for (const [path, source] of Object.entries(SOURCES)) {
+    const file = path.replace(/^\.\.\//, "");
+    if (
+      file.includes(".test.") ||
+      file.includes("__tests__/") ||
+      file.startsWith("test/") ||
+      file.startsWith("components/ui/")
+    ) {
+      continue;
+    }
+    let count = 0;
+    for (const recipe of PRIMITIVE_RECIPES) {
+      count += source.split(recipe).length - 1;
+    }
     if (count > 0) found.set(file, count);
   }
   return found;
@@ -109,5 +138,35 @@ describe("E9: token discipline", () => {
       "files that improved — lower their baseline entries so the shrink is " +
         `on the record: ${stale.join("; ")}`,
     ).toEqual([]);
+  });
+
+  const recipes = recipeViolationsByFile();
+
+  it("no file re-spells a primitive's recipe by hand", () => {
+    const grown: string[] = [];
+    for (const [file, count] of recipes) {
+      const allowed = _FROZEN_RECIPES.get(file) ?? 0;
+      if (count > allowed) {
+        grown.push(`${file}: ${count} (baseline ${allowed})`);
+      }
+    }
+    expect(
+      grown,
+      "render <Card>/<Button variant=primary> instead of retyping the " +
+        `recipe: ${grown.join("; ")}`,
+    ).toEqual([]);
+  });
+
+  it("the recipe baseline only shrinks", () => {
+    const stale: string[] = [];
+    for (const [file, allowed] of _FROZEN_RECIPES) {
+      const count = recipes.get(file) ?? 0;
+      if (count < allowed) {
+        stale.push(`${file}: now ${count}, baseline says ${allowed}`);
+      }
+    }
+    expect(stale, `lower these baseline entries: ${stale.join("; ")}`).toEqual(
+      [],
+    );
   });
 });

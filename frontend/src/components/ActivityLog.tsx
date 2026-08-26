@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +25,7 @@ const levelIcons = {
  * the button lives in the top bar; the panel is a fixed overlay, closed by default.
  */
 export function ActivityLog() {
+  const { t } = useT();
   const [open, setOpen] = useState(false);
 
   const { data, isLoading } = useQuery({
@@ -50,7 +52,7 @@ export function ActivityLog() {
     <>
       <button
         onClick={() => setOpen(true)}
-        title="Open activity log"
+        title={t("activity.open")}
         className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-muted/60 text-muted-foreground hover:bg-muted transition-colors"
       >
         <ScrollText className="w-3.5 h-3.5" />
@@ -64,7 +66,7 @@ export function ActivityLog() {
         <div
           className="fixed inset-0 z-50 flex justify-end"
           role="dialog"
-          aria-label="Activity log"
+          aria-label={t("activity.title")}
         >
           <div
             className="absolute inset-0 bg-black/40"
@@ -79,7 +81,7 @@ export function ActivityLog() {
               </div>
               <button
                 onClick={() => setOpen(false)}
-                aria-label="Close activity log"
+                aria-label={t("activity.close")}
                 className="p-1 rounded hover:bg-muted text-muted-foreground"
               >
                 <X className="w-4 h-4" />

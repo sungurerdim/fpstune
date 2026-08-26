@@ -413,13 +413,13 @@ def _collect_settings_diagnostics(results: dict[str, Any]) -> None:
     whole body runs in one worker thread rather than each statement fighting the
     event loop from inside an ``async def``.
     """
-    from fpstune.api.routes.settings import _get_registry
+    import fpstune.settings.registry_cache as registry_cache
     from fpstune.settings.detection import DetectionEngine
 
     # The registry singleton, never a fresh SettingsRegistry(): constructing one
     # re-runs adapter, monitor and game discovery — seconds of PowerShell — for
     # a diagnostic that only wants to read what is already registered.
-    registry = _get_registry()
+    registry = registry_cache.get_registry()
     all_settings = registry.get_all()
     results["settings_count"] = len(all_settings)
     results["categories"] = list(registry.get_categories())

@@ -79,7 +79,7 @@ export function ToggleSwitch({
     <button
       onClick={onToggle}
       disabled={disabled}
-      className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary/50 rounded-full"
+      className="flex-shrink-0 rounded-full"
       title={title}
       aria-label={title}
       aria-describedby={describedBy}

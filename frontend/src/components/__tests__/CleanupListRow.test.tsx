@@ -83,10 +83,10 @@ describe("CleanupListRow", () => {
     expect(screen.getByText("4096 MB")).toBeInTheDocument();
   });
 
-  it("shows 'Calculating...' spinner for calculating size", () => {
+  it("shows 'Calculating…' spinner for calculating size", () => {
     const setting = makeCleanupSetting({ currentValue: "ready|calculating" });
     render(<CleanupListRow setting={setting} runner={makeRunner()} />);
-    expect(screen.getByText("Calculating...")).toBeInTheDocument();
+    expect(screen.getByText("Calculating…")).toBeInTheDocument();
   });
 
   it("shows 'Unavailable' badge for unavailable status", () => {

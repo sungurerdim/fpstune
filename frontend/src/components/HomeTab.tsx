@@ -23,17 +23,23 @@ import { useBulkApply } from "../hooks/useBulkApply";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
+import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import { SettingValueState } from "./SettingStateDisplay";
+import { Button } from "./ui/Button";
+import { Card } from "./ui/Card";
+import { Progress } from "./ui/Feedback";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
@@ -43,10 +49,16 @@ import type { Setting } from "../types/setting";
  * headline of total potential and one-click Apply All / Run All.
  */
 export function HomeTab() {
+  const { t } = useT();
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
   const categories = useStore((s) => s.categories);
   const detecting = useStore((s) => s.isAnyCategoryLoading());
+  const categoryStatus = useStore((s) => s.categoryDetectionStatus);
+  const categoriesTotal = Object.keys(categoryStatus).length;
+  const categoriesDone = Object.values(categoryStatus).filter(
+    (status) => status === "done",
+  ).length;
   const summary = useImpactSummary();
 
   // The one number here that is a measurement rather than a claim: what a game
@@ -242,7 +254,7 @@ export function HomeTab() {
         checked={restoreFirst}
         onChange={(event) => setRestoreFirst(event.target.checked)}
       />
-      Create a System Restore point first (recommended)
+      {t("scope.restoreFirst")}
     </label>
   );
 
@@ -252,6 +264,8 @@ export function HomeTab() {
 
   return (
     <div className="space-y-4 pb-8">
+      {/* What this is and that nothing has been touched — once, first. */}
+      <FirstRunNotice />
       {/* Home owns the whole product, so its notice owns every setting. */}
       <DetectionNotice />
       {/* And its self-check owns every detector (A12): a disagreement between
@@ -260,43 +274,39 @@ export function HomeTab() {
 
       {/* The two buttons: each applies exactly its category, and says so. */}
       {suboptimal.length > 0 && (
-        <section className="bg-card rounded-lg border border-border p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
-          <button
+        <Card className="p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <Button
+            size="md"
+            className="font-semibold"
+            icon={<Zap className="w-4 h-4" aria-hidden="true" />}
             onClick={() => setPendingButton("competitive")}
             disabled={isApplying || competitiveTargets.length === 0}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
-              "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-            )}
           >
-            <Zap className="w-4 h-4" aria-hidden="true" />
-            Competitive Max
+            {t("scope.competitive")}
             <span className="font-normal opacity-80">
               · {competitiveTargets.length}
             </span>
-          </button>
+          </Button>
           <span className="text-xs text-muted-foreground">
-            The most frames without touching what you can see or hear.
+            {t("scope.competitiveHint")}
           </span>
-          <button
+          <Button
+            size="md"
+            variant="outline"
+            className="font-semibold border-warning/60 text-warning hover:bg-warning/10 hover:text-warning"
+            icon={<Flame className="w-4 h-4" aria-hidden="true" />}
             onClick={() => setPendingButton("absolute")}
             disabled={isApplying || absoluteTargets.length === 0}
-            className={cn(
-              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
-              "border border-amber-500/60 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50",
-            )}
           >
-            <Flame className="w-4 h-4" aria-hidden="true" />
-            Absolute Max
+            {t("scope.absolute")}
             <span className="font-normal opacity-80">
               · {absoluteTargets.length}
             </span>
-          </button>
+          </Button>
           <span className="text-xs text-muted-foreground">
-            Every setting to its frame-rate extreme — quality is spent, and the
-            cost is listed before anything runs.
+            {t("scope.absoluteHint")}
           </span>
-        </section>
+        </Card>
       )}
       {/* The headline, and what it deliberately does not say.
           This block used to open with "Gained +28-45% FPS", produced by summing
@@ -326,19 +336,24 @@ export function HomeTab() {
             <Stat
               icon={<CheckCircle2 className="w-4 h-4 text-success" />}
               value={`${summary.score.optimized}/${summary.score.total}`}
-              label="settings at their ideal value"
+              label={t("home.statIdeal")}
               hint={
                 summary.score.optimized > 0
-                  ? `${changed} fpstune changed · ${alreadyStock} were already correct` +
+                  ? t("home.statIdealHint", {
+                      changed,
+                      stock: alreadyStock,
+                    }) +
                     (summary.score.guardsStanding > 0
-                      ? ` · ${summary.score.guardsStanding} drift guards standing watch`
+                      ? t("home.statGuards", {
+                          count: summary.score.guardsStanding,
+                        })
                       : "")
                   : undefined
               }
             />
 
             {measured.length > 0 ? (
-              <Group label="Measured" tone="success">
+              <Group label={t("home.measured")} tone="success">
                 {measured.map((game) => {
                   // The one number on this screen an instrument produced. It is
                   // written as a sentence rather than a ratio because "57/297"
@@ -356,8 +371,11 @@ export function HomeTab() {
                       label={game.label}
                       hint={
                         pct !== null
-                          ? `${pct}% of the ${game.target_fps} fps this display can show`
-                          : "no display target — panel refresh unknown"
+                          ? t("home.ofTarget", {
+                              pct,
+                              target: game.target_fps ?? 0,
+                            })
+                          : t("home.noTarget")
                       }
                     />
                   );
@@ -367,29 +385,29 @@ export function HomeTab() {
               /* Not a zero and not an estimate. Nothing has measured a frame
                  rate on this machine yet, and saying so is the honest headline
                  — with where to go to change that. */
-              <Group label="Measured" tone="muted">
+              <Group label={t("home.measured")} tone="muted">
                 <Stat
                   icon={<Gauge className="w-4 h-4 text-muted-foreground" />}
                   value="—"
-                  label="no frame rate measured yet — start a game, or open Benchmarks"
+                  label={t("home.noMeasurement")}
                 />
               </Group>
             )}
 
             {hasPotential && (
-              <Group label="Claimed by settings not yet applied" tone="warning">
+              <Group label={t("home.claimed")} tone="warning">
                 {summary.potential.latencyTweaks > 0 && (
                   <Stat
                     icon={<Timer className="w-4 h-4 text-warning" />}
                     value={`${summary.potential.latencyTweaks}`}
-                    label="latency tweaks"
+                    label={t("home.latencyTweaks")}
                   />
                 )}
                 {summary.potential.ramTweaks > 0 && (
                   <Stat
                     icon={<MemoryStick className="w-4 h-4 text-purple-500" />}
                     value={`${summary.potential.ramTweaks}`}
-                    label="memory tweaks"
+                    label={t("home.memoryTweaks")}
                   />
                 )}
                 {/* This one does add up, and is the exception that shows the
@@ -398,7 +416,7 @@ export function HomeTab() {
                   <Stat
                     icon={<HardDrive className="w-4 h-4 text-primary" />}
                     value={fmtMB(reclaimableMB)}
-                    label="disk to reclaim"
+                    label={t("home.diskToReclaim")}
                   />
                 )}
               </Group>
@@ -412,12 +430,23 @@ export function HomeTab() {
           header and says what it is measuring, so a second global line saying the
           same thing was two indicators for one wait. */}
       {detecting && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-          <span>
-            Detecting your settings — the lists and totals fill in as results
-            arrive…
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            <span>
+              {t("home.detecting", {
+                done: categoriesDone,
+                total: categoriesTotal,
+              })}
+            </span>
+          </div>
+          <Progress
+            className="max-w-md"
+            value={
+              categoriesTotal > 0 ? (categoriesDone / categoriesTotal) * 100 : 0
+            }
+            label={t("home.detectingProgress")}
+          />
         </div>
       )}
 
@@ -427,7 +456,7 @@ export function HomeTab() {
       <div
         className={cn(
           "grid gap-4 items-start",
-          suboptimal.length > 0 && cleanups.length > 0 && "lg:grid-cols-2",
+          suboptimal.length > 0 && cleanups.length > 0 && "lg:grid-cols-2 2xl:grid-cols-[2fr,1fr]",
         )}
       >
         {/* LEFT: what still needs applying, split by where it lives.
@@ -436,8 +465,8 @@ export function HomeTab() {
             to know what a button is about before pressing it. */}
         <div className="space-y-4">
           <TweakGroup
-            title="Hardware tweaks"
-            subtitle="GPU, display, adapters, storage, audio"
+            title={t("home.hardwareTweaks")}
+            subtitle={t("home.hardwareSubtitle")}
             icon={<Cpu className="w-4 h-4 text-warning" />}
             settings={hardwareSuboptimal}
             detecting={detecting}
@@ -446,8 +475,8 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
-            title="Software tweaks"
-            subtitle="Windows, services, launchers"
+            title={t("home.softwareTweaks")}
+            subtitle={t("home.softwareSubtitle")}
             icon={<Zap className="w-4 h-4 text-warning" />}
             settings={softwareSuboptimal}
             detecting={detecting}
@@ -456,8 +485,8 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
-            title="Game tweaks"
-            subtitle="Settings inside a game's own config file"
+            title={t("home.gameTweaks")}
+            subtitle={t("home.gameSubtitle")}
             icon={<Gamepad2 className="w-4 h-4 text-warning" />}
             settings={gameSuboptimal}
             detecting={detecting}
@@ -468,12 +497,12 @@ export function HomeTab() {
         </div>
 
         {/* RIGHT: cleanup opportunities */}
-        <section className="bg-card rounded-lg border border-border flex flex-col">
+        <Card className="flex flex-col">
           <div className="flex items-center justify-between p-3 border-b border-border">
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-sm">
-                Available disk cleanup actions
+                {t("home.cleanupTitle")}
               </h2>
               <span className="text-xs text-muted-foreground">
                 {cleanups.length}
@@ -482,23 +511,14 @@ export function HomeTab() {
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
               )}
             </div>
-            <button
+            <Button
               onClick={runAllCleanups}
-              disabled={cleanupRunner.isRunning || cleanups.length === 0}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-                cleanups.length === 0
-                  ? "bg-muted text-muted-foreground/50 cursor-not-allowed"
-                  : "bg-primary text-primary-foreground hover:bg-primary/90",
-              )}
+              disabled={cleanups.length === 0}
+              busy={cleanupRunner.isRunning}
+              icon={<Trash2 className="w-3.5 h-3.5" />}
             >
-              {cleanupRunner.isRunning ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <Trash2 className="w-3.5 h-3.5" />
-              )}
               Run All
-            </button>
+            </Button>
           </div>
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}
@@ -509,8 +529,8 @@ export function HomeTab() {
               // `sizesCalculating` knew all along.
               <p className="text-xs text-muted-foreground text-center py-2">
                 {sizesCalculating
-                  ? "Measuring what can be reclaimed…"
-                  : "Nothing to reclaim right now."}
+                  ? t("home.measuringReclaim")
+                  : t("home.nothingToReclaim")}
               </p>
             ) : (
               <>
@@ -529,28 +549,28 @@ export function HomeTab() {
                     className="flex items-center gap-2 p-2 rounded-md border border-border/50 text-xs text-muted-foreground"
                   >
                     <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                    <span className="font-medium">{s.displayName}</span>
-                    <span>— measuring what can be reclaimed…</span>
+                    <span className="font-medium">{localizedName(s)}</span>
+                    <span>{t("home.rowMeasuring")}</span>
                   </div>
                 ))}
               </>
             )}
           </div>
-        </section>
+        </Card>
       </div>
 
       {/* Advisories: findings only the user can act on — a BIOS toggle, a
           physical fact. No Apply button, because fpstune cannot press it. */}
       {advisories.length > 0 && (
-        <section className="bg-card rounded-lg border border-border">
+        <Card>
           <div className="flex items-center gap-2 p-3 border-b border-border">
             <Info className="w-4 h-4 text-warning" />
-            <h2 className="font-semibold text-sm">Advisories</h2>
+            <h2 className="font-semibold text-sm">{t("home.advisories")}</h2>
             <span className="text-xs text-muted-foreground">
               {advisories.length}
             </span>
-            <span className="text-[10px] text-muted-foreground hidden sm:inline">
-              findings fpstune can detect but only you can change
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {t("home.advisoriesHint")}
             </span>
           </div>
           <div className="p-3 space-y-2">
@@ -560,11 +580,11 @@ export function HomeTab() {
                 className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{s.displayName}</span>
+                  <span className="font-medium text-sm">{localizedName(s)}</span>
                   <SettingInfoTooltip setting={s} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {s.description}
+                  {localizedDescription(s)}
                 </p>
                 <div className="mt-1">
                   <SettingValueState setting={s} />
@@ -572,13 +592,13 @@ export function HomeTab() {
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {/* The already-optimal settings, behind a fold Home owns: the headline
           counts them, and a count whose members cannot be listed is a claim. */}
       {optimized.length > 0 && (
-        <section className="bg-card rounded-lg border border-border">
+        <Card>
           <button
             onClick={() => setShowOptimized((open) => !open)}
             aria-expanded={showOptimized}
@@ -590,7 +610,9 @@ export function HomeTab() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             )}
             <CheckCircle2 className="w-4 h-4 text-success" />
-            <h2 className="font-semibold text-sm">Already optimized</h2>
+            <h2 className="font-semibold text-sm">
+              {t("home.alreadyOptimized")}
+            </h2>
             <span className="text-xs text-muted-foreground">
               {optimized.length}
             </span>
@@ -606,7 +628,7 @@ export function HomeTab() {
               ))}
             </div>
           )}
-        </section>
+        </Card>
       )}
 
       {/* Repair actions (SFC, DISM) — the panel renders nothing when the
@@ -625,33 +647,32 @@ export function HomeTab() {
 
       <ConfirmDialog
         open={pendingButton === "competitive"}
-        title={`Apply Competitive Max? (${competitiveTargets.length} settings)`}
-        confirmLabel="Apply"
+        title={t("scope.competitiveConfirmTitle", {
+          count: competitiveTargets.length,
+        })}
+        confirmLabel={t("scope.apply")}
         onConfirm={() => void runScope(competitiveTargets)}
         onCancel={() => setPendingButton(null)}
       >
         <div className="space-y-2">
-          <p>
-            Applies every essential and recommended tweak — the most frames this
-            machine can reach without changing anything you can see or hear
-            in-game. Settings that spend visual or audio quality are left alone.
-          </p>
+          <p>{t("scope.competitiveConfirmBody")}</p>
           {restoreFirstCheckbox}
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={pendingButton === "absolute"}
-        title={`Apply Absolute Max? (${absoluteTargets.length} settings)`}
-        confirmLabel="Spend it"
+        title={t("scope.absoluteConfirmTitle", {
+          count: absoluteTargets.length,
+        })}
+        confirmLabel={t("scope.spendIt")}
         onConfirm={() => void runScope(absoluteTargets)}
         onCancel={() => setPendingButton(null)}
       >
         <div className="space-y-2">
           <p>
-            Pushes every setting to its frame-rate extreme, including the ones
-            that spend picture and sound quality.
-            {absoluteCosts.length > 0 && " What you give up:"}
+            {t("scope.absoluteConfirmBody")}
+            {absoluteCosts.length > 0 && ` ${t("scope.whatYouGiveUp")}`}
           </p>
           {/* Each sentence is the setting's own perceptible_cost — the cost is
               on screen before anything runs, never discovered afterwards. */}
@@ -695,8 +716,9 @@ function TweakGroup({
   onApplyAll: () => void;
   categoryLabel: (id: string) => string;
 }) {
+  const { t } = useT();
   return (
-    <section className="bg-card rounded-lg border border-border flex flex-col">
+    <Card className="flex flex-col">
       <div className="flex items-center justify-between p-3 border-b border-border">
         <div className="flex items-center gap-2 min-w-0">
           {icon}
@@ -705,26 +727,19 @@ function TweakGroup({
           {detecting && (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           )}
-          <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
+          <span className="text-xs text-muted-foreground truncate hidden sm:inline">
             {subtitle}
           </span>
         </div>
         {settings.length > 0 && (
-          <button
+          <Button
+            className="shrink-0"
+            busy={isApplying}
+            icon={<Zap className="w-3.5 h-3.5" />}
             onClick={onApplyAll}
-            disabled={isApplying}
-            className={cn(
-              "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-              "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-            )}
           >
-            {isApplying ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Zap className="w-3.5 h-3.5" />
-            )}
-            Apply all {settings.length}
-          </button>
+            {t("home.applyAll", { count: settings.length })}
+          </Button>
         )}
       </div>
       {settings.length === 0 ? (
@@ -733,8 +748,8 @@ function TweakGroup({
         // optimized" would assert a result the app does not have.
         <p className="text-xs text-muted-foreground px-3 py-2">
           {detecting
-            ? "Reading your current settings…"
-            : "Everything applicable is already optimized."}
+            ? t("home.readingSettings")
+            : t("home.allOptimized")}
         </p>
       ) : (
         <div className="p-3 space-y-2">
@@ -747,7 +762,7 @@ function TweakGroup({
           ))}
         </div>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -783,7 +798,7 @@ function Group({
       )}
     >
       <span
-        className={cn("text-[9px] font-bold uppercase tracking-wider", text)}
+        className={cn("text-xs font-bold uppercase tracking-wider", text)}
       >
         {label}
       </span>
@@ -810,11 +825,11 @@ function Stat({
       {icon}
       <div className="min-w-0">
         <p className="text-sm font-semibold leading-tight truncate">{value}</p>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider leading-tight">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">
           {label}
         </p>
         {hint && (
-          <p className="text-[10px] text-muted-foreground/70 leading-tight">
+          <p className="text-xs text-muted-foreground/70 leading-tight">
             {hint}
           </p>
         )}

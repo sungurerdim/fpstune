@@ -94,15 +94,26 @@ class GpuInfo:
 
 @dataclass
 class CpuDetailedInfo:
-    """Detailed CPU information."""
+    """Detailed CPU information.
+
+    There is deliberately no max/boost clock field: Win32_Processor exposes one
+    clock (MaxClockSpeed, which reports the rated base — live, 2304 on a CPU
+    whose boost is 4.6 GHz), and a field that duplicates another under a
+    different name is a claim nothing measured (C11). Core counts are summed
+    across sockets; ``is_hybrid`` is None when the P/E topology could not be
+    read — unknown, never "not hybrid".
+    """
 
     name: str
     physical_cores: int
     logical_cores: int
     base_clock_mhz: int
-    max_clock_mhz: int
     architecture: str
     cache_l3_mb: int
+    sockets: int = 1
+    p_cores: int = 0
+    e_cores: int = 0
+    is_hybrid: bool | None = None
 
 
 @dataclass
@@ -674,6 +685,77 @@ def get_ram_info() -> dict[str, int]:
     return {"total_mb": 0, "available_mb": 0}
 
 
+# The P/E-core split comes from GetLogicalProcessorInformationEx
+# (RelationProcessorCore): each core record carries an EfficiencyClass byte,
+# where the highest class present is the performance tier. The walk lives
+# inside the C# class — the A1 lesson: a variable-length native buffer never
+# crosses PowerShell's binder. One efficiency class means not hybrid; an empty
+# answer means unknown, which the caller reports as unknown rather than "not
+# hybrid".
+_CPU_TOPOLOGY_CSHARP = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class CpuTopology {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetLogicalProcessorInformationEx(
+        int relationshipType, IntPtr buffer, ref uint returnedLength);
+    public static string Summarize() {
+        uint len = 0;
+        GetLogicalProcessorInformationEx(0, IntPtr.Zero, ref len);
+        if (len == 0) { return ""; }
+        IntPtr buf = Marshal.AllocHGlobal((int)len);
+        try {
+            if (!GetLogicalProcessorInformationEx(0, buf, ref len)) { return ""; }
+            var counts = new System.Collections.Generic.Dictionary<byte, int>();
+            int offset = 0;
+            while (offset < (int)len) {
+                int relationship = Marshal.ReadInt32(buf, offset);
+                int size = Marshal.ReadInt32(buf, offset + 4);
+                if (size <= 0) { break; }
+                if (relationship == 0) {
+                    byte efficiency = Marshal.ReadByte(buf, offset + 9);
+                    if (!counts.ContainsKey(efficiency)) { counts[efficiency] = 0; }
+                    counts[efficiency]++;
+                }
+                offset += size;
+            }
+            if (counts.Count == 0) { return ""; }
+            byte top = 0;
+            foreach (byte k in counts.Keys) { if (k > top) { top = k; } }
+            int p = 0, e = 0;
+            foreach (var kv in counts) {
+                if (kv.Key == top) { p += kv.Value; } else { e += kv.Value; }
+            }
+            string hybrid = counts.Count > 1 ? "True" : "False";
+            return "PCores=" + p + "\nECores=" + e + "\nHybrid=" + hybrid;
+        } finally { Marshal.FreeHGlobal(buf); }
+    }
+}
+'@
+"""
+
+# All sockets are read and their core counts summed — Select-Object -First 1
+# silently halved a dual-socket machine. The one clock WMI has is MaxClockSpeed,
+# which reports the *rated* clock (live: 2304 on a CPU whose boost is 4.6 GHz);
+# it is emitted as the base clock and nothing invents a boost figure from it.
+_CPU_DETECT_PS = (
+    _CPU_TOPOLOGY_CSHARP
+    + r"""
+$cpus = @(Get-CimInstance -ClassName Win32_Processor)
+if ($cpus.Count -gt 0) {
+    "Name=$($cpus[0].Name)"
+    "Sockets=$($cpus.Count)"
+    "PhysicalCores=$(($cpus | Measure-Object -Property NumberOfCores -Sum).Sum)"
+    "LogicalCores=$(($cpus | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum)"
+    "BaseClock=$($cpus[0].MaxClockSpeed)"
+    "L3Cache=$(($cpus | Measure-Object -Property L3CacheSize -Sum).Sum)"
+}
+try { [CpuTopology]::Summarize() } catch { }
+"""
+)
+
+
 def get_cpu_detailed_info() -> CpuDetailedInfo | None:
     """Get detailed CPU information (cached — one PowerShell call per session).
 
@@ -701,23 +783,17 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
         physical_cores = 0
         logical_cores = os.cpu_count() or 0
         base_clock_mhz = 0
-        max_clock_mhz = 0
         architecture = platform.machine() or ""
         cache_l3_mb = 0
+        sockets = 1
+        p_cores = 0
+        e_cores = 0
+        is_hybrid: bool | None = None
 
         try:
             # Get ALL CPU info in single PowerShell call (optimized)
-            ps_script = """
-$cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
-"Name=$($cpu.Name)"
-"PhysicalCores=$($cpu.NumberOfCores)"
-"LogicalCores=$($cpu.NumberOfLogicalProcessors)"
-"BaseClock=$($cpu.MaxClockSpeed)"
-"MaxClock=$($cpu.MaxClockSpeed)"
-"L3Cache=$($cpu.L3CacheSize)"
-"""
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-Command", _CPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=8,
@@ -739,9 +815,17 @@ $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
                 elif line.startswith("BaseClock="):
                     with contextlib.suppress(ValueError, TypeError):
                         base_clock_mhz = int(line.split("=", 1)[1].strip())
-                elif line.startswith("MaxClock="):
+                elif line.startswith("Sockets="):
                     with contextlib.suppress(ValueError, TypeError):
-                        max_clock_mhz = int(line.split("=", 1)[1].strip())
+                        sockets = int(line.split("=", 1)[1].strip()) or 1
+                elif line.startswith("PCores="):
+                    with contextlib.suppress(ValueError, TypeError):
+                        p_cores = int(line.split("=", 1)[1].strip())
+                elif line.startswith("ECores="):
+                    with contextlib.suppress(ValueError, TypeError):
+                        e_cores = int(line.split("=", 1)[1].strip())
+                elif line.startswith("Hybrid="):
+                    is_hybrid = line.split("=", 1)[1].strip().lower() == "true"
                 elif line.startswith("L3Cache="):
                     try:
                         # L3 cache is in KB, convert to MB
@@ -754,14 +838,20 @@ $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
             logger.debug("Failed to get detailed CPU info: %s", e)
             return None
 
+        if is_hybrid is None:
+            logger.debug("CPU P/E topology unknown: GetLogicalProcessorInformationEx gave nothing")
+
         _cpu_detailed_cache = CpuDetailedInfo(
             name=name,
             physical_cores=physical_cores,
             logical_cores=logical_cores,
             base_clock_mhz=base_clock_mhz,
-            max_clock_mhz=max_clock_mhz or base_clock_mhz,
             architecture=architecture,
             cache_l3_mb=cache_l3_mb,
+            sockets=sockets,
+            p_cores=p_cores,
+            e_cores=e_cores,
+            is_hybrid=is_hybrid,
         )
         return _cpu_detailed_cache
 

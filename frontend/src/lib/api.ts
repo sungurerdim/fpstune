@@ -65,8 +65,13 @@ export interface CpuInfo {
   name: string;
   physical_cores: number;
   logical_cores: number;
+  // The rated clock WMI reports; no boost field exists (nothing measures one)
   base_clock_mhz?: number;
-  max_clock_mhz?: number;
+  sockets?: number;
+  // P/E topology; is_hybrid null = could not be read (unknown, not "no")
+  p_cores?: number;
+  e_cores?: number;
+  is_hybrid?: boolean | null;
   architecture: string;
   cache_l3_mb?: number;
 }

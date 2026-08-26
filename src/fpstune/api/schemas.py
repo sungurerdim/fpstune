@@ -17,10 +17,16 @@ class CpuInfo(BaseModel):
     name: str
     physical_cores: int
     logical_cores: int
+    # The rated clock WMI reports. There is no boost field: WMI has no boost
+    # figure, and a duplicate under another name is a claim nothing measured.
     base_clock_mhz: int | None = None
-    max_clock_mhz: int | None = None
     architecture: str = ""  # x64, ARM64
     cache_l3_mb: int | None = None
+    sockets: int = 1
+    # P/E topology; is_hybrid None = could not be read (unknown, not "no")
+    p_cores: int = 0
+    e_cores: int = 0
+    is_hybrid: bool | None = None
 
 
 class MonitorInfo(BaseModel):

@@ -240,9 +240,12 @@ async def get_hardware_info() -> HardwareInfo:
             physical_cores=_cpu_res.physical_cores,
             logical_cores=_cpu_res.logical_cores,
             base_clock_mhz=_cpu_res.base_clock_mhz,
-            max_clock_mhz=_cpu_res.max_clock_mhz,
             architecture=_cpu_res.architecture,
             cache_l3_mb=_cpu_res.cache_l3_mb,
+            sockets=_cpu_res.sockets,
+            p_cores=_cpu_res.p_cores,
+            e_cores=_cpu_res.e_cores,
+            is_hybrid=_cpu_res.is_hybrid,
         )
     if isinstance(_mon_res, BaseException):
         logger.debug("Failed to get monitors: %s", _mon_res)

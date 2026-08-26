@@ -136,9 +136,12 @@ class TestHardwareRouteUsesCachedCpuPath:
         cpu.physical_cores = 8
         cpu.logical_cores = 16
         cpu.base_clock_mhz = 3800
-        cpu.max_clock_mhz = 4700
         cpu.architecture = "AMD64"
         cpu.cache_l3_mb = 32
+        cpu.sockets = 1
+        cpu.p_cores = 8
+        cpu.e_cores = 0
+        cpu.is_hybrid = False
 
         with (
             patch("fpstune.api.routes.system.hardware_manager") as mock_hw,

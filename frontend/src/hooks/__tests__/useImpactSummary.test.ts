@@ -275,6 +275,8 @@ describe("useImpactSummary — settings that recommend the factory default", () 
         name: "tcp_auto_tuning",
         defaultValue: "normal",
         recommendedValue: "normal",
+        // The backend computes this with values_equal; fixtures state it.
+        isDriftGuard: true,
         currentValue: "normal",
         isOptimized: true,
         status: "optimal",
@@ -325,6 +327,8 @@ describe("useImpactSummary — settings that recommend the factory default", () 
         name: "tcp_auto_tuning",
         defaultValue: "normal",
         recommendedValue: "normal",
+        // The backend computes this with values_equal; fixtures state it.
+        isDriftGuard: true,
         currentValue: "disabled",
         isOptimized: false,
         status: "suboptimal",

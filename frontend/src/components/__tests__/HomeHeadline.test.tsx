@@ -80,7 +80,12 @@ function changedByUs(id: string): Setting {
 
 /** A guard: already correct, because the stock value *is* the right one. */
 function alreadyCorrect(id: string): Setting {
-  return { ...changedByUs(id), defaultValue: "disabled" } as Setting;
+  return {
+    ...changedByUs(id),
+    defaultValue: "disabled",
+    // The backend computes this with values_equal; fixtures state it.
+    isDriftGuard: true,
+  } as Setting;
 }
 
 function setStore(settings: Setting[]) {
@@ -115,7 +120,9 @@ describe("Home headline", () => {
     render(<HomeTab />);
 
     expect(
-      await screen.findByText("1 fpstune changed · 1 were already correct"),
+      await screen.findByText(
+        "1 fpstune changed · 1 were already correct · 1 drift guards standing watch",
+      ),
     ).toBeInTheDocument();
   });
 

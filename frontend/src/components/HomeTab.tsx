@@ -173,7 +173,10 @@ export function HomeTab() {
               label="settings at their ideal value"
               hint={
                 summary.score.optimized > 0
-                  ? `${changed} fpstune changed · ${alreadyStock} were already correct`
+                  ? `${changed} fpstune changed · ${alreadyStock} were already correct` +
+                    (summary.score.guardsStanding > 0
+                      ? ` · ${summary.score.guardsStanding} drift guards standing watch`
+                      : "")
                   : undefined
               }
             />

@@ -230,6 +230,11 @@ export interface Setting {
   // Non-null = this setting changes what the player can see or hear, and the
   // string says what is lost (consequence 5). Only COMPLETE settings carry it.
   perceptibleCost?: string;
+  // recommended == default under the backend's values_equal — a drift guard
+  // (consequence 2): it changes nothing on a stock machine and exists to put
+  // back what another optimizer moved. Optional so a fixture without an
+  // opinion defaults to "not a guard"; the store mapping always sets it.
+  isDriftGuard?: boolean;
 
   // === Evidence (static) ===
   evidenceLevel: "proven" | "likely" | "experimental"; // Research-backed classification
@@ -321,6 +326,7 @@ export interface SettingDefinition {
   risk_level?: string;
   risk_warning?: string;
   perceptible_cost?: string | null;
+  is_drift_guard?: boolean;
 }
 
 // =============================================================================
@@ -470,6 +476,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
       | "advanced",
     riskWarning: def.risk_warning,
     perceptibleCost: def.perceptible_cost ?? undefined,
+    isDriftGuard: def.is_drift_guard ?? false,
     evidenceLevel: (def.evidence_level || "likely") as
       | "proven"
       | "likely"

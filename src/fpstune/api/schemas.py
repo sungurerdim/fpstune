@@ -434,6 +434,12 @@ class SettingDefinitionResponse(BaseModel):
     # string says what is lost — the copy the two-button UI shows before
     # Absolute Max spends it (consequence 5; scope/impact coherence gate).
     perceptible_cost: str | None = None
+    # True when recommended == default under values_equal — a drift guard
+    # (consequence 2): it changes nothing on a stock machine and exists to put
+    # back what another optimizer moved. Counted apart from real changes so no
+    # surface promises work that will not happen. Computed here so the frontend
+    # never re-implements the one comparison truth (C6).
+    is_drift_guard: bool = False
     # MaintenanceExecutor fields
     duration_estimate: str = ""
     supports_streaming: bool = False

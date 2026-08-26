@@ -292,6 +292,13 @@ def _setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         risk_level=s.risk_level,
         risk_warning=s.risk_warning,
         perceptible_cost=s.perceptible_cost,
+        is_drift_guard=(
+            not s.is_action
+            and not s.is_readonly
+            and s.recommended_value is not None
+            and s.default_value is not None
+            and values_equal(s.recommended_value, s.default_value)
+        ),
         # MaintenanceExecutor fields (use getattr for type safety)
         duration_estimate=getattr(s, "duration_estimate", "") if is_maintenance else "",
         supports_streaming=getattr(s, "supports_streaming", False) if is_maintenance else False,

@@ -174,4 +174,36 @@ describe("D6: Home completeness", () => {
     render(<HomeTab />);
     expect(screen.getByTestId("hardware-panel")).toBeInTheDocument();
   });
+
+  it("the default view is a decision, not an inventory of all 447 (D5)", () => {
+    // A registry-sized store: 400 already-optimal settings and a handful
+    // needing work. The default view must scale with what needs doing, not
+    // with what exists — the optimal 400 live behind the fold, so they may
+    // not put rows on the first paint.
+    const bulk: Setting[] = [];
+    for (let i = 0; i < 400; i++) {
+      bulk.push(
+        makeSetting({
+          id: `system:optimal_${i}` as `${string}:${string}`,
+          displayName: `Optimal setting ${i}`,
+          status: "optimal",
+          isOptimized: true,
+        }),
+      );
+    }
+    useStore.setState({
+      settings: new Map(
+        [...REPRESENTATIVES, ...bulk].map((s) => [s.id, s]),
+      ),
+      _settingsVersion: 2,
+    } as never);
+
+    render(<HomeTab />);
+    const rows = screen.getAllByTestId("tweak-list-row");
+    expect(rows.length).toBeLessThan(20);
+    // The fold still names the count, so the 400 are a fact on screen even
+    // though they are not rows.
+    expect(screen.getByText(/Already optimized/)).toBeInTheDocument();
+    expect(screen.getByText("401")).toBeInTheDocument();
+  });
 });

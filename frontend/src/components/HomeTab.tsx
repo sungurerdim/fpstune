@@ -539,7 +539,7 @@ export function HomeTab() {
             <span className="text-xs text-muted-foreground">
               {advisories.length}
             </span>
-            <span className="text-[10px] text-muted-foreground hidden sm:inline">
+            <span className="text-xs text-muted-foreground hidden sm:inline">
               findings fpstune can detect but only you can change
             </span>
           </div>
@@ -695,7 +695,7 @@ function TweakGroup({
           {detecting && (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           )}
-          <span className="text-[10px] text-muted-foreground truncate hidden sm:inline">
+          <span className="text-xs text-muted-foreground truncate hidden sm:inline">
             {subtitle}
           </span>
         </div>
@@ -766,7 +766,7 @@ function Group({
       )}
     >
       <span
-        className={cn("text-[9px] font-bold uppercase tracking-wider", text)}
+        className={cn("text-xs font-bold uppercase tracking-wider", text)}
       >
         {label}
       </span>
@@ -793,11 +793,11 @@ function Stat({
       {icon}
       <div className="min-w-0">
         <p className="text-sm font-semibold leading-tight truncate">{value}</p>
-        <p className="text-[10px] text-muted-foreground uppercase tracking-wider leading-tight">
+        <p className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">
           {label}
         </p>
         {hint && (
-          <p className="text-[10px] text-muted-foreground/70 leading-tight">
+          <p className="text-xs text-muted-foreground/70 leading-tight">
             {hint}
           </p>
         )}

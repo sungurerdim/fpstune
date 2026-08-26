@@ -96,7 +96,7 @@ export function CleanupListRow({
           {setting.description}
         </p>
         {isDockerCleanup(setting) && (
-          <div className="flex items-start gap-1.5 mt-1.5 text-[11px] text-warning">
+          <div className="flex items-start gap-1.5 mt-1.5 text-xs text-warning">
             <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
             <span>
               Restarts Docker Desktop and all WSL distributions to compact the

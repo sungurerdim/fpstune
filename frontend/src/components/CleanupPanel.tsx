@@ -261,7 +261,7 @@ export function CleanupPanel({
                 <p className="mt-1 text-xs text-muted-foreground/70">
                   {measuring.map((setting) => setting.displayName).join(", ")}
                 </p>
-                <p className="mt-1 text-[11px] text-muted-foreground/60">
+                <p className="mt-1 text-xs text-muted-foreground/60">
                   Anything not listed above once this finishes has nothing to
                   reclaim, or its software is not installed.
                 </p>

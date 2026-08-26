@@ -202,7 +202,7 @@ export function SettingsTab({
             onClick={() => setImpactFilter("all")}
             aria-pressed={impactFilter === "all"}
             className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+              "text-xs px-2 py-0.5 rounded-full border transition-colors",
               impactFilter === "all"
                 ? "bg-primary/15 text-primary border-primary/40"
                 : "text-muted-foreground border-border hover:border-muted-foreground/50",
@@ -225,7 +225,7 @@ export function SettingsTab({
                 }
                 aria-pressed={impactFilter === c}
                 className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                  "text-xs px-2 py-0.5 rounded-full border transition-colors",
                   impactFilter === c
                     ? IMPACT_CATEGORY_META[c].className
                     : "text-muted-foreground border-border hover:border-muted-foreground/50",

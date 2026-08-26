@@ -38,7 +38,7 @@ export function SettingValueState({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 text-[11px] font-medium text-success",
+          "inline-flex items-center gap-1 text-xs font-medium text-success",
           className,
         )}
         data-testid="setting-value-state"
@@ -59,7 +59,7 @@ export function SettingValueState({
 
   return (
     <span
-      className={cn("inline-flex items-center gap-1 text-[11px]", className)}
+      className={cn("inline-flex items-center gap-1 text-xs", className)}
       data-testid="setting-value-state"
       data-state="drifted"
     >
@@ -108,7 +108,7 @@ export function ImpactCategoryTags({
           key={c}
           data-category={c}
           className={cn(
-            "text-[9px] leading-none px-1.5 py-0.5 rounded border font-medium",
+            "text-xs leading-none px-1.5 py-0.5 rounded border font-medium",
             IMPACT_CATEGORY_META[c].className,
           )}
         >
@@ -116,7 +116,7 @@ export function ImpactCategoryTags({
         </span>
       ))}
       {hidden > 0 && (
-        <span className="text-[9px] text-muted-foreground/70">+{hidden}</span>
+        <span className="text-xs text-muted-foreground/70">+{hidden}</span>
       )}
     </span>
   );
@@ -147,7 +147,7 @@ export function RiskWarningBadge({
       data-testid="risk-warning-badge"
       data-risk={setting.riskLevel}
       className={cn(
-        "text-[10px] px-1 rounded border shrink-0 cursor-default",
+        "text-xs px-1 rounded border shrink-0 cursor-default",
         isAdvanced
           ? "bg-warning/20 text-warning border-warning/30"
           : "bg-muted/60 text-muted-foreground border-border",

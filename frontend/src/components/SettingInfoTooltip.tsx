@@ -144,7 +144,7 @@ export function SettingInfoTooltip({
                       ([key, value]) => (
                         <span
                           key={key}
-                          className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-muted"
+                          className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-muted"
                         >
                           <span className="capitalize">
                             {key.replace(/_/g, " ")}:
@@ -165,7 +165,7 @@ export function SettingInfoTooltip({
           {setting.sources &&
             setting.sources.length > 0 &&
             (!setting.isOptimized || setting.isReadonly) && (
-            <div className="text-[10px] pt-1 mt-1 border-t border-border/30 space-y-0.5">
+            <div className="text-xs pt-1 mt-1 border-t border-border/30 space-y-0.5">
               <span className="text-muted-foreground font-medium">
                 Sources:
               </span>

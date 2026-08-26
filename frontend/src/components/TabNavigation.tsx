@@ -153,7 +153,7 @@ export function TabNavigation() {
                     {tab.label}
                   </span>
                   {badge !== null && (
-                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-[10px] font-bold flex items-center justify-center">
+                    <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-xs font-bold flex items-center justify-center">
                       {badge > 99 ? "99+" : badge}
                     </span>
                   )}

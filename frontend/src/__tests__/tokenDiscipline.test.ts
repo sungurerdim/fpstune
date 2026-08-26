@@ -36,24 +36,18 @@ const RAW_COLOUR =
   /(?:bg|text|border|ring|fill|stroke|from|to|via)-(?:red|green|blue|emerald|amber|purple|rose|slate|zinc|gray|neutral|stone|orange|yellow|lime|teal|cyan|sky|indigo|violet|fuchsia|pink)-\d+/g;
 
 // Frozen at the E9 audit (90 violations, 18 files); shrunk to 73/15 by the
-// amber→warning conversion and the ConfirmDialog move to primitives.
-// Shrink-only. types/setting.ts is the impact-category octet — eight
-// semantic hues that want their own tokens, not a mapping onto warning.
+// amber→warning conversion, then to 44/8 by E3's typography floor (every
+// sub-12px size deleted — what remains is raw colour only). Shrink-only.
+// types/setting.ts is the impact-category octet — eight semantic hues that
+// want their own tokens, not a mapping onto warning.
 const _FROZEN = new Map<string, number>([
-  ["components/CleanupListRow.tsx", 1],
-  ["components/CleanupPanel.tsx", 1],
   ["components/HeadroomPanel.tsx", 7],
-  ["components/HomeTab.tsx", 6],
-  ["components/SettingInfoTooltip.tsx", 4],
-  ["components/SettingStateDisplay.tsx", 5],
-  ["components/SettingsTab.tsx", 2],
+  ["components/HomeTab.tsx", 1],
+  ["components/SettingInfoTooltip.tsx", 2],
   ["components/SuitePanel.tsx", 1],
-  ["components/TabNavigation.tsx", 1],
-  ["components/TweakListRow.tsx", 2],
-  ["components/TweakSetting.tsx", 11],
+  ["components/TweakSetting.tsx", 2],
   ["components/VerifyPanel.tsx", 5],
   ["components/hardware/DeviceTweakList.tsx", 1],
-  ["components/ui/PillSelector.tsx", 1],
   ["types/setting.ts", 25],
 ]);
 

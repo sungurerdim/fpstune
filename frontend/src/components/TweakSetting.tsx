@@ -166,7 +166,7 @@ export function TweakSetting({
             <TooltipProvider>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
-                  <span className="text-[10px] text-warning shrink-0 cursor-default">
+                  <span className="text-xs text-warning shrink-0 cursor-default">
                     (R)
                   </span>
                 </TooltipTrigger>
@@ -194,7 +194,7 @@ export function TweakSetting({
         <div className="shrink-0 ml-auto flex items-center gap-1">
           {/* SSE bulk operation status badge */}
           {operationStatus === "queued" && (
-            <span className="text-[10px] text-muted-foreground/60 px-1 rounded bg-muted/50">
+            <span className="text-xs text-muted-foreground/60 px-1 rounded bg-muted/50">
               queued
             </span>
           )}
@@ -208,13 +208,13 @@ export function TweakSetting({
             <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
           )}
           {isDisabled ? (
-            <span className="text-muted-foreground/30 text-[10px]">N/A</span>
+            <span className="text-muted-foreground/30 text-xs">N/A</span>
           ) : isInitialLoading ? (
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           ) : setting.isReadonly ? (
             <span
               className={cn(
-                "text-[10px] font-medium px-2 py-0.5 rounded border",
+                "text-xs font-medium px-2 py-0.5 rounded border",
                 isOptimal
                   ? "text-success border-success/30 bg-success/10"
                   : "text-warning border-warning/30 bg-warning/10",
@@ -305,13 +305,13 @@ export function TweakSetting({
       {!isDisabled && !isInitialLoading && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 ml-7 text-xs">
           {contextLabel && (
-            <span className="flex items-center gap-1 min-w-0 text-[10px] text-muted-foreground/70">
+            <span className="flex items-center gap-1 min-w-0 text-xs text-muted-foreground/70">
               {contextIcon}
               <span className="truncate">{contextLabel}</span>
             </span>
           )}
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">
+            <span className="text-muted-foreground/50 text-xs shrink-0">
               Default
             </span>
             <span className="text-muted-foreground font-medium break-words min-w-0">
@@ -319,7 +319,7 @@ export function TweakSetting({
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">
+            <span className="text-muted-foreground/50 text-xs shrink-0">
               Current
             </span>
             <span
@@ -334,7 +334,7 @@ export function TweakSetting({
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">Target</span>
+            <span className="text-muted-foreground/50 text-xs shrink-0">Target</span>
             <span className="text-primary font-medium break-words min-w-0">
               {setting.valueHints?.[String(profileTarget)] ?? formatSettingValue(profileTarget)}
             </span>
@@ -344,7 +344,7 @@ export function TweakSetting({
 
       {/* Row 3: Last error banner */}
       {setting.lastError && (
-        <p className="mt-1 ml-7 text-[11px] text-destructive leading-tight">
+        <p className="mt-1 ml-7 text-xs text-destructive leading-tight">
           {setting.lastError}
         </p>
       )}

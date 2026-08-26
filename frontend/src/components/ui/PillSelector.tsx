@@ -46,7 +46,7 @@ export function PillSelector({
             onClick={() => !disabled && onChange(option)}
             disabled={disabled}
             className={cn(
-              "px-2 py-0.5 text-[11px] rounded transition-all font-medium",
+              "px-2 py-0.5 text-xs rounded transition-all font-medium",
               isActive
                 ? "bg-primary text-primary-foreground shadow-sm"
                 : isTarget

@@ -51,7 +51,7 @@ export function TweakListRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           {categoryLabel && (
-            <span className="text-[10px] px-1.5 py-0.5 bg-primary/10 text-primary rounded shrink-0">
+            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded shrink-0">
               {categoryLabel}
             </span>
           )}
@@ -69,7 +69,7 @@ export function TweakListRow({
           <ImpactCategoryTags setting={setting} />
         </div>
         {benefit && (
-          <p className="text-[11px] text-primary mt-1 font-medium">{benefit}</p>
+          <p className="text-xs text-primary mt-1 font-medium">{benefit}</p>
         )}
       </div>
       {canUndo && (

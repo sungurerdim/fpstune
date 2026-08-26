@@ -98,6 +98,18 @@ describe("HomeTab empty states", () => {
     expect(screen.getAllByText(/Reading your current settings/i)).toHaveLength(3);
   });
 
+  it("the scan shows real progress, not just a spinner (E5)", () => {
+    setStore([], true);
+    render(<HomeTab />);
+
+    const bar = screen.getByRole("progressbar", {
+      name: /Detection progress across setting categories/,
+    });
+    // One category, still loading: 0 of 1 done.
+    expect(bar).toHaveAttribute("aria-valuenow", "0");
+    expect(screen.getByText(/0\/1 categories read/)).toBeInTheDocument();
+  });
+
   it("says everything is optimized only once detection has finished", () => {
     setStore([], false);
     render(<HomeTab />);

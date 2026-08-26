@@ -36,6 +36,7 @@ import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import { SettingValueState } from "./SettingStateDisplay";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { Progress } from "./ui/Feedback";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
@@ -49,6 +50,11 @@ export function HomeTab() {
   const settingsVersion = useStore((s) => s._settingsVersion);
   const categories = useStore((s) => s.categories);
   const detecting = useStore((s) => s.isAnyCategoryLoading());
+  const categoryStatus = useStore((s) => s.categoryDetectionStatus);
+  const categoriesTotal = Object.keys(categoryStatus).length;
+  const categoriesDone = Object.values(categoryStatus).filter(
+    (status) => status === "done",
+  ).length;
   const summary = useImpactSummary();
 
   // The one number here that is a measurement rather than a claim: what a game
@@ -411,12 +417,21 @@ export function HomeTab() {
           header and says what it is measuring, so a second global line saying the
           same thing was two indicators for one wait. */}
       {detecting && (
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
-          <span>
-            Detecting your settings — the lists and totals fill in as results
-            arrive…
-          </span>
+        <div className="space-y-1">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground">
+            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
+            <span>
+              Detecting your settings — {categoriesDone}/{categoriesTotal}{" "}
+              categories read, the lists and totals fill in as results arrive…
+            </span>
+          </div>
+          <Progress
+            className="max-w-md"
+            value={
+              categoriesTotal > 0 ? (categoriesDone / categoriesTotal) * 100 : 0
+            }
+            label="Detection progress across setting categories"
+          />
         </div>
       )}
 

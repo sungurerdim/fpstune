@@ -1,5 +1,6 @@
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
+import { Meter } from "./ui/Feedback";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   Activity,
@@ -451,7 +452,15 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
                 </tr>
               </thead>
               <tbody>
-                {group.rows.map((m) => (
+                {group.rows.map((m) => {
+                  // Bars scale within the group, so a 40% improvement and a
+                  // 0.3% one stop looking identical (E5). The number stays;
+                  // the bar only restates it.
+                  const groupMax = Math.max(
+                    ...group.rows.map((row) => Math.abs(row.percent_change)),
+                    1,
+                  );
+                  return (
                   <tr key={m.metric} className="border-t border-border/50">
                     <td className="py-1.5 pr-3 font-mono text-xs">{m.metric}</td>
                     <td className="py-1.5 pr-3 text-right tabular-nums">
@@ -466,6 +475,17 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
                       {m.delta > 0 ? "+" : ""}
                       {m.delta.toFixed(2)}
                       {m.unit}
+                      <Meter
+                        className="mt-0.5 w-20 ml-auto"
+                        value={Math.abs(m.percent_change)}
+                        max={groupMax}
+                        // No green/red: which direction is an improvement
+                        // depends on the metric, and that judgement lives
+                        // server-side with the verdicts (C11). The bar only
+                        // sizes the change; "within noise" stays a sentence.
+                        tone="primary"
+                        label={`${m.metric}: ${Math.abs(m.percent_change).toFixed(1)}% change relative to the largest in this group`}
+                      />
                     </td>
                     <td className="py-1.5 text-xs">
                       {m.exceeds_noise ? (
@@ -485,7 +505,8 @@ function ComparisonTable({ comparison }: { comparison: SuiteComparison }) {
                       )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

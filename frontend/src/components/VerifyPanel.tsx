@@ -1,3 +1,4 @@
+import { Meter } from "./ui/Feedback";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -324,6 +325,43 @@ export function VerifyPanel() {
                         <span className="text-muted-foreground">
                           {" "}
                           — {verdict.reason}
+                        </span>
+                      )}
+                      {/* The change and the machine's own variation on one
+                          axis (E5): a change whose bar does not clear the
+                          noise bar is not a finding, and now looks like one. */}
+                      {verdict.measured && verdict.measured.noise !== null && (
+                        <span className="block mt-1 max-w-xs space-y-0.5">
+                          <Meter
+                            value={Math.abs(
+                              verdict.measured.after - verdict.measured.before,
+                            )}
+                            max={
+                              Math.max(
+                                Math.abs(
+                                  verdict.measured.after -
+                                    verdict.measured.before,
+                                ),
+                                verdict.measured.noise,
+                              ) * 1.1
+                            }
+                            tone="primary"
+                            label={`Measured change: ${Math.abs(verdict.measured.after - verdict.measured.before).toFixed(2)} ${verdict.measured.unit}`}
+                          />
+                          <Meter
+                            value={verdict.measured.noise}
+                            max={
+                              Math.max(
+                                Math.abs(
+                                  verdict.measured.after -
+                                    verdict.measured.before,
+                                ),
+                                verdict.measured.noise,
+                              ) * 1.1
+                            }
+                            tone="warning"
+                            label={`This machine's own variation (noise floor): ${verdict.measured.noise.toFixed(2)} ${verdict.measured.unit}`}
+                          />
                         </span>
                       )}
                     </span>

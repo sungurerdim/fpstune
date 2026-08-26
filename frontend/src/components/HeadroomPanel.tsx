@@ -1,4 +1,5 @@
 import { Card } from "./ui/Card";
+import { Meter } from "./ui/Feedback";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Gauge, Loader2, RefreshCw } from "lucide-react";
 import { headroomApi } from "../lib/api";
@@ -32,37 +33,42 @@ import { formatAge } from "../lib/formatAge";
 /** What each band permits, said in the user's terms rather than the code's. */
 const TIER_COPY: Record<
   GameHeadroom["tier"],
-  { label: string; meaning: string; className: string }
+  { label: string; meaning: string; className: string; tone: "primary" | "success" | "warning" | "destructive" }
 > = {
   met: {
     label: "At its ceiling",
     meaning:
       "This machine is reaching what the display can show, so there are frames spare to spend on image quality.",
-    className: "text-emerald-500",
+    className: "text-success",
+    tone: "success" as const,
   },
   near: {
     label: "Close",
     meaning:
       "Nearly there. Small savings finish the job; anything that costs frames does not.",
-    className: "text-lime-500",
+    className: "text-primary",
+    tone: "primary" as const,
   },
   short: {
     label: "Short",
     meaning:
       "Meaningfully under what the display can show. Decoration is worth spending; anything the player needs to see is not.",
-    className: "text-amber-500",
+    className: "text-warning",
+    tone: "warning" as const,
   },
   critical: {
     label: "Far short",
     meaning:
       "Under half of what the display can show. Everything that is not information is worth spending, and a sharper image is not on offer.",
-    className: "text-red-500",
+    className: "text-destructive",
+    tone: "destructive" as const,
   },
   unknown: {
     label: "Not measured",
     meaning:
       "Nothing has been measured for this game yet, and silence is not evidence — so nothing that costs frames will be recommended.",
     className: "text-muted-foreground",
+    tone: "primary" as const,
   },
 };
 
@@ -84,7 +90,7 @@ function GameRow({ game }: { game: GameHeadroom }) {
         <span className="font-medium">
           {game.label}
           {game.is_running && (
-            <span className="ml-2 text-xs font-normal text-emerald-500">
+            <span className="ml-2 text-xs font-normal text-success">
               running now
             </span>
           )}
@@ -116,6 +122,18 @@ function GameRow({ game }: { game: GameHeadroom }) {
               </span>
             )}
           </p>
+          {/* The ratio as a picture (E5): "19%" and "97%" should not look
+              the same size. The meter says the same thing the sentence above
+              says — never more, never a number of its own. */}
+          {game.target_fps !== null && game.measured_fps !== null && (
+            <Meter
+              className="mt-1.5 max-w-md"
+              value={game.measured_fps}
+              max={game.target_fps}
+              tone={tier.tone}
+              label={`${game.label}: measured frame rate against the display's ${game.target_fps} fps target`}
+            />
+          )}
           <p className="text-sm text-muted-foreground mt-1">{tier.meaning}</p>
           {bottleneck && (
             <p className="text-sm text-muted-foreground mt-1">{bottleneck}</p>

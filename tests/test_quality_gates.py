@@ -154,6 +154,7 @@ _TURKISH_LETTERS = frozenset("çğıİöşüÇĞÖŞÜ")
 _QUOTED_OS_OUTPUT = {
     ("src/fpstune/utils/path_mtu.py", '"Paketin parçalanması gerekiyor"'),
     ("src/fpstune/settings/definitions/network.py", '"1.0 Gbps Tam İkili"'),
+    ("src/fpstune/api/hardware/network_adapters.py", '"Radyo türü"'),
 }
 
 

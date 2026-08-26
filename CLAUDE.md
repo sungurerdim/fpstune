@@ -118,9 +118,10 @@ Forbidden: fragment descriptions, descriptions not ending with `.`
 All strings (UI, comments, errors, docs) in English.
 
 One carve-out, and it is about evidence rather than language: a comment quoting
-what Windows *printed back* keeps the quote verbatim. `ping.exe` and
-`ValidDisplayValues` answer in the system language, and those two strings are
-the entire reason each code path reads a numeric enum instead of the text —
+what Windows *printed back* keeps the quote verbatim. `ping.exe`,
+`ValidDisplayValues` and `netsh wlan show interfaces` answer in the system
+language, and those quoted strings are the entire reason each code path reads a
+numeric enum (or, for WiFi, wlanapi.dll's own numbers) instead of the text —
 paraphrasing them into English would delete the finding that justifies the code.
 
 Gate: `tests/test_quality_gates.py::TestC4EnglishOnly`, which compares

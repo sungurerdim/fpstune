@@ -595,3 +595,46 @@ class TestRouteModuleCeiling:
             "modules that shrank well below their ceiling — lower the entries "
             "so the improvement is on the record: " + "; ".join(stale)
         )
+
+
+class TestDuplicationCeiling:
+    """H2's DRY gate: the known copy-paste sites can only shrink.
+
+    The Steam install-path registry read is spelled 24 times across five
+    files (each file grew its own helper constant around the same core), and
+    the DEVMODE C# struct exists twice (detect.py enumerates with it,
+    display.py changes modes with it). Consolidating them changes command
+    strings byte-for-byte and therefore needs windows-contract evidence per
+    site — so the gate freezes the counts first: a 25th Steam-path spelling
+    or a 3rd DEVMODE is red on arrival, and every consolidation lowers its
+    ceiling here in the same change.
+    """
+
+    _STEAM_PATTERN = r"Valve.{1,4}Steam"
+    _STEAM_CEILING = 24
+    _DEVMODE_CEILING = 2
+
+    def _counts(self) -> tuple[int, int]:
+        steam = devmode = 0
+        for path in (ROOT / "src" / "fpstune").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            steam += len(re.findall(self._STEAM_PATTERN, text))
+            devmode += text.count("struct DEVMODE")
+        return steam, devmode
+
+    def test_no_new_copy_of_a_known_duplicate(self) -> None:
+        steam, devmode = self._counts()
+        assert steam <= self._STEAM_CEILING, (
+            f"{steam} Steam install-path spellings (ceiling {self._STEAM_CEILING}) — "
+            "reuse an existing helper constant instead of spelling the registry read again"
+        )
+        assert devmode <= self._DEVMODE_CEILING, (
+            f"{devmode} DEVMODE structs (ceiling {self._DEVMODE_CEILING})"
+        )
+
+    def test_the_ceilings_are_not_stale(self) -> None:
+        steam, devmode = self._counts()
+        assert (steam, devmode) == (self._STEAM_CEILING, self._DEVMODE_CEILING), (
+            f"the duplication shrank (steam={steam}, devmode={devmode}) — lower "
+            "the ceilings so the consolidation is on the record"
+        )

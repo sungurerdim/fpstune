@@ -293,13 +293,20 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         },
         # Apply - use InterfaceIndex with explicit int cast and error handling
         apply_type=DetectType.POWERSHELL,
+        # The '*' prefix marks a standardised NDIS keyword; vendor keywords
+        # are bare, and drivers disagree about which spelling they expose for
+        # the same feature (the advanced_eee lesson). The spelling is picked
+        # out of the adapter's own property list before writing.
         apply_command=(
             "try { "
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration' -ErrorAction Stop; "
+            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-AllProperties -ErrorAction SilentlyContinue; "
+            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
+            "@('*InterruptModeration','InterruptModeration') } | Select-Object -First 1; "
+            "if (-not $prop) { 'not_supported' } else { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration' -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' "
+            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -365,13 +372,26 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         },
         # Apply - use InterfaceIndex with explicit int cast and error handling
         apply_type=DetectType.POWERSHELL,
+        # Spelling picked from the adapter's own list (the advanced_eee
+        # lesson), and the 0..3 map cross-checked against the driver's own
+        # ValidRegistryValues before writing — a driver whose enum differs
+        # from Microsoft's map refuses loudly with its own list quoted, the
+        # same escape hatch speed_duplex's Forced_Other path uses, instead of
+        # writing a value the hardware will reject or misread.
         apply_command=(
             "try { "
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl' -ErrorAction Stop; "
+            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-AllProperties -ErrorAction SilentlyContinue; "
+            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
+            "@('*FlowControl','FlowControl') } | Select-Object -First 1; "
+            "if (-not $prop) { 'not_supported' } else { "
+            "$valid = @($prop.ValidRegistryValues); "
+            "if ($valid.Count -gt 0 -and -not ($valid -contains ([string][int]%value%))) { "
+            "'error: this driver does not accept flow-control value %value%; "
+            "its own list is ' + ($valid -join ',') } else { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl' -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' "
+            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
+            "'ok' } } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},

@@ -121,7 +121,6 @@ def register_adapter_settings(
         create_receive_buffers_setting(interface_index, display_name),
         create_transmit_buffers_setting(interface_index, display_name),
         create_packet_coalescing_setting(interface_index, display_name),
-        create_rss_base_processor_setting(interface_index, display_name),
         create_msi_mode_setting(interface_index, display_name),
         # Vendor power savers. Absent on non-Realtek adapters, where the
         # keyword lookup answers not_supported and the setting drops out.
@@ -129,6 +128,24 @@ def register_adapter_settings(
         create_gigalite_setting(interface_index, display_name),
         create_nic_power_saving_setting(interface_index, display_name),
     ]
+
+    # RSS base processor, only where a safe core exists: an unknown topology
+    # or too few P-cores means no placement — moving NIC receive DPCs onto an
+    # E-core is a regression, not a tweak (B2).
+    from fpstune.settings.definitions.network import rss_target_core
+    from fpstune.utils.detect import get_cpu_detailed_info
+
+    rss_target = rss_target_core(get_cpu_detailed_info())
+    if rss_target is not None:
+        settings_to_register.append(
+            create_rss_base_processor_setting(interface_index, display_name, rss_target)
+        )
+    else:
+        logger.info(
+            "RSS base processor not offered on %s: no safe core placement "
+            "(topology unknown or too few performance cores)",
+            display_name,
+        )
 
     # RSS queue control, only where this driver publishes the values it takes.
     if rss_queue_options is not None:

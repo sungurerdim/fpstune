@@ -26,6 +26,7 @@ ANIMATIONS = SettingExecutor(
     id="visual:animations",
     category=SettingCategory.VISUAL,
     display_name="Animations",
+    short_name="Window animations",
     description="Controls Windows UI animations and menu display delays. Disabling them eliminates visual lag and frees GPU/CPU cycles that games can use instead.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -35,7 +36,10 @@ ANIMATIONS = SettingExecutor(
     current_impact="Smooth animations consume GPU/CPU and add visual delay",
     recommended_impact="Instant window actions, frees up GPU resources for games",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=1,  # Primary visual effect
+    category_order=1,
+    perceptible_cost=(
+        "Windows UI animations are turned off — menus and windows snap instead of gliding."
+    ),  # Primary visual effect
     effect="Disables window animations and menu delays for instant UI response",
     impact_scores={
         "fps": "0%",
@@ -70,6 +74,7 @@ TRANSPARENCY = SettingExecutor(
     id="visual:transparency",
     category=SettingCategory.VISUAL,
     display_name="Transparency",
+    short_name="Transparency effects",
     description="Window transparency effects (uses GPU)",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -79,7 +84,10 @@ TRANSPARENCY = SettingExecutor(
     current_impact="Transparency effects use GPU resources continuously",
     recommended_impact="Solid windows free up GPU for gaming",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=2,  # GPU resource usage
+    category_order=2,
+    perceptible_cost=(
+        "Windows translucency effects are turned off — the taskbar and menus render solid."
+    ),  # GPU resource usage
     effect="Disables window transparency effects to reduce GPU load",
     impact_scores={
         "fps": "0%",
@@ -113,6 +121,7 @@ SMOOTH_SCROLLING = SettingExecutor(
     id="visual:smooth_scrolling",
     category=SettingCategory.VISUAL,
     display_name="Smooth Scrolling",
+    short_name="Smooth scrolling",
     description="Controls animated scroll interpolation in Windows Explorer and apps. Disabling delivers instant scroll response with no animation overhead.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -122,7 +131,10 @@ SMOOTH_SCROLLING = SettingExecutor(
     current_impact="Smooth scrolling adds slight input lag to scroll actions",
     recommended_impact="Instant scrolling with no animation delay",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=3,  # Input responsiveness
+    category_order=3,
+    perceptible_cost=(
+        "List scrolling loses its glide — content jumps line to line."
+    ),  # Input responsiveness
     effect="Disables smooth scrolling for instant scroll response",
     impact_scores={"fps": "0%", "latency_ms": 0, "stability": "high"},
     # Detection - SmoothScroll (1 = enabled, 0 = disabled)

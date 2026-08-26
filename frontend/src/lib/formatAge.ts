@@ -13,6 +13,8 @@
  *
  * @param measuredAt Unix epoch seconds, or null when nothing was measured.
  */
+import { t } from "../i18n";
+
 export function formatAge(
   measuredAt: number | null,
   nowMs: number = Date.now(),
@@ -22,10 +24,10 @@ export function formatAge(
   // is a clock disagreement, not a measurement from the future, and "-2 min ago"
   // would read as a bug in the app rather than in the clock.
   const seconds = Math.max(0, nowMs / 1000 - measuredAt);
-  if (seconds < 90) return "just now";
+  if (seconds < 90) return t("age.justNow");
   const minutes = Math.round(seconds / 60);
-  if (minutes < 90) return `${minutes} min ago`;
+  if (minutes < 90) return t("age.minutes", { count: minutes });
   const hours = Math.round(minutes / 60);
-  if (hours < 36) return `${hours} h ago`;
-  return `${Math.round(hours / 24)} d ago`;
+  if (hours < 36) return t("age.hours", { count: hours });
+  return t("age.days", { count: Math.round(hours / 24) });
 }

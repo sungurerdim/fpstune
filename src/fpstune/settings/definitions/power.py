@@ -40,6 +40,7 @@ USB_SELECTIVE_SUSPEND = SettingExecutor(
     id="power:usb_selective_suspend",
     category=SettingCategory.POWER,
     display_name="USB Selective Suspend",
+    short_name="USB sleep",
     description="Puts idle USB devices to sleep. Can cause mouse/keyboard latency.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -77,6 +78,7 @@ PCIE_LINK_STATE = SettingExecutor(
     id="power:pcie_link_state",
     category=SettingCategory.POWER,
     display_name="PCI-E Link State Power Management",
+    short_name="PCI-E power saving",
     description="Reduces PCIe link speed when idle to save power. Can cause GPU micro-stutter and frame time spikes.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "moderate", "maximum"),
@@ -119,6 +121,7 @@ WLAN_POWER_SAVING = SettingExecutor(
     id="power:wlan_power_saving",
     category=SettingCategory.POWER,
     display_name="WiFi Power Saving",
+    short_name="Wi-Fi power saving",
     description="Puts WiFi adapter to sleep between packets. Causes ping spikes of 20-100ms during gaming.",
     value_type=SettingValueType.CHOICE,
     choices=("maximum_performance", "low", "medium", "maximum"),
@@ -172,6 +175,7 @@ POWER_HIBERNATION = SettingExecutor(
     id="power:hibernation",
     category=SettingCategory.POWER,
     display_name="Hibernation",
+    short_name="Hibernation",
     description="Saves full RAM contents to disk (hiberfil.sys) for fast wake from "
     "power-off. Disabling frees 4-16GB SSD space.",
     value_type=SettingValueType.CHOICE,
@@ -245,6 +249,7 @@ POWER_CPU_BOOST = SettingExecutor(
     id="power:cpu_boost",
     category=SettingCategory.POWER,
     display_name="CPU Boost Mode",
+    short_name="CPU boost behaviour",
     description="Controls how aggressively the CPU ramps to higher frequencies under load. "
     "Efficient Aggressive gives near-maximum performance with lower power overshoot.",
     value_type=SettingValueType.CHOICE,
@@ -288,6 +293,7 @@ POWER_CPU_INCREASE_THRESHOLD = SettingExecutor(
     id="power:cpu_increase_threshold",
     category=SettingCategory.POWER,
     display_name="CPU Frequency Scale-Up Threshold",
+    short_name="Speed-up trigger point",
     description="CPU utilization % that triggers frequency increase. Lower values cause faster "
     "frequency ramp-up, reducing CPU-bound frame time spikes.",
     value_type=SettingValueType.INT,
@@ -322,6 +328,7 @@ POWER_CPU_DECREASE_THRESHOLD = SettingExecutor(
     id="power:cpu_decrease_threshold",
     category=SettingCategory.POWER,
     display_name="CPU Frequency Scale-Down Threshold",
+    short_name="Slow-down trigger point",
     description="CPU utilization % below which frequency decreases. Higher values keep "
     "the CPU at speed longer, reducing frequency yo-yo during gaming.",
     value_type=SettingValueType.INT,
@@ -356,6 +363,7 @@ POWER_CPU_INCREASE_POLICY = SettingExecutor(
     id="power:cpu_increase_policy",
     category=SettingCategory.POWER,
     display_name="CPU Scale-Up Policy",
+    short_name="How fast the CPU speeds up",
     description="Algorithm used when scaling CPU frequency up. Rocket jumps immediately "
     "to the highest needed frequency; Ideal uses gradual steps.",
     value_type=SettingValueType.CHOICE,
@@ -389,6 +397,7 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     id="power:cpu_decrease_policy",
     category=SettingCategory.POWER,
     display_name="CPU Scale-Down Policy",
+    short_name="How fast the CPU slows down",
     description="Algorithm used when scaling CPU frequency down. Rocket drops immediately; "
     "Ideal uses gradual steps. Rocket allows faster re-ramp when needed.",
     value_type=SettingValueType.CHOICE,
@@ -418,6 +427,7 @@ POWER_CPU_MIN_PARKING = SettingExecutor(
     id="power:cpu_min_parking",
     category=SettingCategory.POWER,
     display_name="CPU Core Parking (Min Unparked Cores)",
+    short_name="Cores kept awake",
     description="Minimum percentage of CPU cores that stay active. Setting to 100% disables "
     "core parking, eliminating wake latency when parked cores are needed.",
     value_type=SettingValueType.INT,
@@ -452,6 +462,7 @@ POWER_CPU_EPP = SettingExecutor(
     id="power:cpu_epp",
     category=SettingCategory.POWER,
     display_name="CPU Energy Performance Preference",
+    short_name="Performance vs battery bias",
     description="Hint to the CPU hardware scheduler balancing performance vs efficiency. "
     "Lower values bias toward performance; 0 = maximum performance, 100 = maximum efficiency.",
     value_type=SettingValueType.INT,
@@ -486,6 +497,7 @@ POWER_DISK_TIMEOUT = SettingExecutor(
     id="power:disk_timeout",
     category=SettingCategory.POWER,
     display_name="Disk Idle Timeout",
+    short_name="Disk sleep timer",
     description="Seconds before spinning the HDD down when idle. Setting to 0 disables "
     "spin-down, eliminating the re-spin delay when accessing files during gaming.",
     value_type=SettingValueType.INT,
@@ -520,6 +532,7 @@ POWER_THERMAL_COOLING = SettingExecutor(
     id="power:thermal_cooling",
     category=SettingCategory.POWER,
     display_name="Thermal Cooling Mode",
+    short_name="Fan-first or slow-down-first cooling",
     description="Controls whether the system uses the fan (active) or throttles the CPU (passive) "
     "first when temperatures rise. Active cooling prevents thermal throttling.",
     value_type=SettingValueType.CHOICE,
@@ -573,6 +586,7 @@ RYZEN_BALANCED_PLAN = SettingExecutor(
     id="power:ryzen_balanced_plan",
     category=SettingCategory.POWER,
     display_name="AMD Ryzen Balanced Plan",
+    short_name="AMD Ryzen power plan",
     description="Whether AMD's own power plan is the active one. Ryzen 1000-3000 CPUs need it "
     "for Precision Boost 2 to behave as AMD intends.",
     value_type=SettingValueType.CHOICE,
@@ -651,6 +665,7 @@ POWER_THROTTLING = SettingExecutor(
     id="power:power_throttling",
     category=SettingCategory.POWER,
     display_name="CPU Power Throttling",
+    short_name="CPU power throttling",
     description="Windows throttles processes it considers background work to save power, which "
     "on a laptop can include a game's secondary processes such as audio, shader compilation, and "
     "anti-cheat. Disabling it keeps those threads at full clock.",
@@ -766,6 +781,7 @@ def _cpu_power_setting(
     setting_id: str,
     guid: str,
     display_name: str,
+    short_name: str = "",
     description: str,
     default_value: object,
     recommended_value: object,
@@ -794,6 +810,7 @@ def _cpu_power_setting(
         id=setting_id,
         category=SettingCategory.POWER,
         display_name=display_name,
+        short_name=short_name,
         description=description,
         value_type=SettingValueType.CHOICE if choices else SettingValueType.INT,
         choices=choices,
@@ -826,6 +843,7 @@ POWER_CPU_MIN_STATE = _cpu_power_setting(
     setting_id="power:cpu_min_state",
     guid=CPU_MIN_STATE_SETTING,
     display_name="Minimum Processor State",
+    short_name="Minimum CPU speed",
     description="Lowest clock speed the CPU is allowed to drop to when nothing is asking for "
     "work. Raising it to 100 pins every core at maximum multiplier around the clock, which "
     "produces constant heat and no frame rate at all.",
@@ -850,6 +868,7 @@ POWER_CPU_MAX_STATE = _cpu_power_setting(
     setting_id="power:cpu_max_state",
     guid=CPU_MAX_STATE_SETTING,
     display_name="Maximum Processor State",
+    short_name="Maximum CPU speed",
     description="Highest clock speed the CPU is allowed to reach. The common advice to set it "
     "to 99 in order to run cooler works by switching off turbo entirely, which costs far more "
     "performance than the heat it saves.",
@@ -872,6 +891,7 @@ POWER_CPU_IDLE_DISABLE = _cpu_power_setting(
     setting_id="power:cpu_idle_states",
     guid=CPU_IDLE_DISABLE_SETTING,
     display_name="CPU Idle States",
+    short_name="CPU idle sleep",
     description="Whether cores may enter low-power C-states when they have no work. Disabling "
     "them is a widely repeated gaming tweak that produces continuous heat and shortens the "
     "part's life without gaining a single frame.",
@@ -896,6 +916,7 @@ POWER_CPU_PERF_CHECK = _cpu_power_setting(
     setting_id="power:cpu_perf_check_interval",
     guid=CPU_PERF_CHECK_SETTING,
     display_name="CPU Load Re-check Interval",
+    short_name="CPU load check interval",
     description="How often Windows looks at processor load to decide whether to change clock "
     "speed. The interval bounds how long a core can sit at the wrong speed after load changes, "
     "in both directions.",
@@ -920,6 +941,7 @@ POWER_CPU_DECREASE_TIME = _cpu_power_setting(
     setting_id="power:cpu_decrease_time",
     guid=CPU_DECREASE_TIME_SETTING,
     display_name="CPU Scale-Down Delay",
+    short_name="Slow-down delay",
     description="How many consecutive load checks must come back idle before the CPU drops to a "
     "lower clock. At the default of one, a single quiet interval between frames is enough to "
     "start a downshift the next frame has to pay to undo.",
@@ -940,6 +962,7 @@ POWER_CPU_LATENCY_HINT_UNPARK = _cpu_power_setting(
     setting_id="power:cpu_latency_hint_unpark",
     guid=CPU_LATENCY_HINT_UNPARK_SETTING,
     display_name="Latency-Sensitive Workload Core Unparking",
+    short_name="Extra cores for bursts",
     description="Share of cores Windows brings back online the moment it detects a workload that "
     "cares about response time. This is what makes idle core parking safe: cores may rest, but a "
     "game gets all of them back at once rather than one at a time.",
@@ -960,6 +983,7 @@ POWER_CPU_LATENCY_HINT_PERF = _cpu_power_setting(
     setting_id="power:cpu_latency_hint_perf",
     guid=CPU_LATENCY_HINT_PERF_SETTING,
     display_name="Latency-Sensitive Workload Clock Speed",
+    short_name="Extra speed for bursts",
     description="Clock speed Windows jumps to when it detects a latency-sensitive workload. "
     "Anything below 100 means a game asking for immediate response gets less than the machine "
     "can give.",
@@ -983,6 +1007,7 @@ POWER_CPU_PARKING_INC_POLICY = _cpu_power_setting(
     setting_id="power:cpu_parking_increase_policy",
     guid=CPU_PARKING_INC_POLICY_SETTING,
     display_name="Core Unparking Policy",
+    short_name="How cores wake up",
     description="How many parked cores Windows brings back when load rises. Waking all of them "
     "together costs nothing once they are needed and avoids the staircase of one-at-a-time wakes "
     "a loading match produces.",
@@ -1004,6 +1029,7 @@ POWER_CPU_PARKING_INC_TIME = _cpu_power_setting(
     setting_id="power:cpu_parking_increase_time",
     guid=CPU_PARKING_INC_TIME_SETTING,
     display_name="Core Unparking Delay",
+    short_name="Core wake-up delay",
     description="How many load checks must pass before a parked core is brought back. The "
     "default of three is three intervals a thread spends waiting for a core that already exists.",
     default_value=3,
@@ -1023,6 +1049,7 @@ POWER_CPU_INCREASE_TIME = _cpu_power_setting(
     setting_id="power:cpu_increase_time",
     guid=CPU_INCREASE_TIME_SETTING,
     display_name="CPU Scale-Up Delay",
+    short_name="Speed-up delay",
     description="How many consecutive load checks must show work before the CPU clocks up. "
     "Windows already ships the fastest possible value, so this exists to notice when something "
     "else has raised it.",

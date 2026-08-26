@@ -11,23 +11,21 @@ import functools
 import logging
 import re
 import sys
-import threading
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from starlette.responses import Response
+    pass
 
 from fastapi import APIRouter, HTTPException
 
+import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
     BulkApplyRequest,
     BulkApplyResponse,
-    BulkOptimizeRequest,
-    BulkResetRequest,
     CategoryMetadataResponse,
     DetectionResultResponse,
     DetectRequest,
@@ -37,6 +35,7 @@ from fpstune.api.schemas import (
     VerifyRequest,
     VerifyResponse,
 )
+from fpstune.safety import restore
 from fpstune.safety.originals import get_original_values
 from fpstune.settings import (
     CommandExecutor,
@@ -65,92 +64,15 @@ from fpstune.utils.logger import log_activity, tweak_label
 logger = logging.getLogger(__name__)
 
 
-def _is_system_restore_enabled() -> bool:
-    """Return False when System Restore / System Protection is off.
-
-    Windows 11 ships with System Protection OFF by default, in which case
-    Checkpoint-Computer fails ("ServiceDisabled"). RPSessionInterval == 0 is the
-    reliable "protection off" signal; the legacy srservice Start==4 check is kept
-    as a fallback for older systems where srservice still exists.
-    """
-    if sys.platform != "win32":
-        return False
-
-    import winreg
-
-    # System Protection state: RPSessionInterval == 0 → disabled.
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore",
-        ) as k:
-            interval, _ = winreg.QueryValueEx(k, "RPSessionInterval")
-            if int(interval) == 0:
-                return False
-    except OSError:
-        pass  # value/key absent → fall through to the service check
-
-    # Legacy service check: Start == 4 means the service is Disabled.
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SYSTEM\CurrentControlSet\Services\srservice",
-        ) as k:
-            start_type, _ = winreg.QueryValueEx(k, "Start")
-            return int(start_type) != 4
-    except OSError:
-        return True  # key absent (modern Windows) → assume available
-
-
 def _create_restore_point_async() -> None:
-    """Fire-and-forget restore point creation via PowerShell Checkpoint-Computer.
+    """Fire-and-forget restore point before a write (safety.restore owns it).
 
-    Runs in a daemon thread so it never blocks the apply pipeline. Silently
-    skipped when System Restore / System Protection is disabled.
+    A one-line delegate rather than a from-import: the mechanics — the enabled
+    probe, the checkpoint subprocess, the daemon thread — moved to
+    `fpstune.safety.restore`, next to RestorePointManager. The name stays here
+    because it is the seam the API tests patch.
     """
-    if not _is_system_restore_enabled():
-        logger.debug("System Restore service is disabled — skipping restore point")
-        return
-
-    import subprocess
-    import threading
-
-    def _run() -> None:
-        try:
-            result = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    "Checkpoint-Computer -Description 'fpstune pre-apply' -RestorePointType MODIFY_SETTINGS",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            if result.returncode != 0:
-                err = (result.stderr or "").strip()
-                if "servicedisabled" in err.lower() or "disabled" in err.lower():
-                    # Expected when System Protection is off — fpstune's own
-                    # per-setting backup still applies. Keep it quiet (one line).
-                    logger.info(
-                        "Restore point skipped: System Restore is turned off on this system."
-                    )
-                else:
-                    logger.warning(
-                        "Restore point creation failed: %s",
-                        err.splitlines()[0] if err else "unknown error",
-                    )
-            else:
-                logger.info("Restore point created before bulk apply")
-        except Exception as exc:
-            logger.warning("Restore point skipped: %s", exc)
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    restore.create_restore_point_async()
 
 
 def _get_hardware_context() -> HardwareContext:
@@ -167,48 +89,18 @@ def _get_hardware_context() -> HardwareContext:
 
 router = APIRouter()
 
-# Module-level registry cache — avoids re-running PowerShell adapter discovery
-# (10s subprocess) on every request. Invalidated on process restart.
-_registry: SettingsRegistry | None = None
-_registry_lock = threading.Lock()
-
 
 def _get_registry() -> SettingsRegistry:
-    """Return the cached SettingsRegistry, building it on first call.
+    """The process-wide registry (settings.registry_cache owns the singleton).
 
-    Locked, not a bare check-then-build. Building it enumerates adapters, reads
-    driver metadata and detects monitors, so two callers arriving together would
-    each run that — and since the warm-up below deliberately makes a second
-    caller likely, the race stopped being theoretical the moment it existed.
+    A one-line delegate rather than a from-import: the cache, its lock and the
+    warm-up moved to `fpstune.settings.registry_cache`, next to the registry
+    they cache — a route module was the only place anything could ask for the
+    registry, and the benchmark and debug routes were reaching into a sibling
+    route's privates to get it. The name stays because it is the seam the API
+    tests patch.
     """
-    global _registry
-    with _registry_lock:
-        if _registry is None:
-            _registry = SettingsRegistry()
-        return _registry
-
-
-def warm_registry() -> None:
-    """Build the registry now, off the request path.
-
-    ``/settings/definitions`` is documented as instant and is not: the first
-    call pays for the whole hardware discovery. Measured, 1.80 s for the first
-    request and 0.01 s for every one after it — so the cost is real, paid once,
-    and lands squarely on the first screen a user ever sees.
-
-    Called at startup in a daemon thread, alongside the GPU pre-warm that
-    already exists for the same reason. The browser spends its own hundreds of
-    milliseconds fetching and parsing the bundle before it can ask, and this
-    uses that window. A request that still arrives first simply blocks on the
-    lock and gets the answer the warm-up was already computing, rather than
-    starting a second discovery.
-    """
-    try:
-        _get_registry()
-    except Exception as exc:  # pragma: no cover - environment dependent
-        # The next real request rebuilds; a failed warm-up must not be the thing
-        # that takes the API down at startup.
-        logger.warning("registry warm-up failed, the first request will pay for it: %s", exc)
+    return registry_cache.get_registry()
 
 
 async def _get_registry_async() -> SettingsRegistry:
@@ -291,6 +183,14 @@ def _setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         impact_categories=derive_impact_categories(s.impact_scores),
         risk_level=s.risk_level,
         risk_warning=s.risk_warning,
+        perceptible_cost=s.perceptible_cost,
+        is_drift_guard=(
+            not s.is_action
+            and not s.is_readonly
+            and s.recommended_value is not None
+            and s.default_value is not None
+            and values_equal(s.recommended_value, s.default_value)
+        ),
         # MaintenanceExecutor fields (use getattr for type safety)
         duration_estimate=getattr(s, "duration_estimate", "") if is_maintenance else "",
         supports_streaming=getattr(s, "supports_streaming", False) if is_maintenance else False,
@@ -314,21 +214,6 @@ async def get_definitions() -> list[SettingDefinitionResponse]:
     return [_setting_to_response(s) for s in registry.get_all()]
 
 
-@router.get(
-    "/definitions/category/{category}",
-    response_model=list[SettingDefinitionResponse],
-)
-async def get_category_definitions(category: str) -> list[SettingDefinitionResponse]:
-    """Get setting definitions for a specific category."""
-    registry = await _get_registry_async()
-    settings = registry.get_by_category(category)
-
-    if not settings:
-        raise HTTPException(404, f"No settings found for category: {category}")
-
-    return [_setting_to_response(s) for s in settings]
-
-
 @router.get("/cleanup-sizes")
 async def get_cleanup_sizes() -> dict[str, Any]:
     """Return cached cleanup sizes for all background-detected cleanup settings.
@@ -342,35 +227,6 @@ async def get_cleanup_sizes() -> dict[str, Any]:
         k: {"bytes": v["bytes"], "status": v["status"]}
         for k, v in cleanup_size_cache.all_entries().items()
     }
-
-
-@router.post("/game-configs/sweep")
-async def sweep_game_configs(apply: bool = False) -> dict[str, Any]:
-    """Remove the blocks fpstune wrote for settings it no longer ships.
-
-    Deleting a setting deletes the only thing that knew its marker, so whatever
-    it already wrote into a game config stays there — orphaned, invisible to
-    detection, and impossible to undo through the product. Twelve such blocks
-    were found in one CS2 autoexec.cfg on 2026-08-23, the oldest from August.
-
-    Reports by default and writes only when asked, because this edits a file the
-    user may also have edited by hand. Which markers are live comes from the
-    registry, so a setting's removal is all it takes to make its leftovers
-    sweepable — a hand-written list would go stale on the next removal, which is
-    the defect itself.
-    """
-    from fpstune.settings.executors.config_sweep import sweep_cs2_autoexec
-
-    # File reads and a write: off the event loop, like every other blocking
-    # filesystem path in this API.
-    result: dict[str, Any] = await asyncio.to_thread(sweep_cs2_autoexec, dry_run=not apply)
-    if result["removed"]:
-        log_activity(
-            f"Swept {len(result['removed'])} orphaned game-config blocks: "
-            f"{', '.join(result['removed'])}",
-            "info",
-        )
-    return result
 
 
 # =============================================================================
@@ -459,38 +315,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     )
 
 
-@router.get("/detect/{setting_id}", response_model=DetectionResultResponse)
-async def detect_single_setting(setting_id: str) -> DetectionResultResponse:
-    """Detect current value of a single setting."""
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    hardware_context = _get_hardware_context()
-    engine = DetectionEngine(hardware_context=hardware_context)
-    result = await asyncio.to_thread(engine.detect_one, setting)
-
-    # Deliberately does NOT record an original. A single re-detect is almost
-    # always the read that follows an apply, so recording here would capture the
-    # value fpstune had just written and "undo" would put the tweak back.
-    # Originals come from the full scan, which runs before the user can apply
-    # anything. It reads the store, it does not write to it.
-    return DetectionResultResponse(
-        setting_id=result.setting_id,
-        value=result.value,
-        error=result.error,
-        time_ms=result.time_ms,
-        success=result.success,
-        is_optimized=result.is_optimized,
-        is_applicable=result.is_applicable,
-        applicable_reason=result.applicable_reason,
-        recommended_value=setting.recommended_value,
-        original_value=get_original_values().get(setting_id),
-    )
-
-
 def _record_originals(results: dict[str, Any]) -> None:
     """Store the first reading of each setting, for "undo fpstune's change".
 
@@ -532,9 +356,8 @@ class _SlowResetTolerance:
 # the middle of code that runs for all 395 makes a rename fail silently — the
 # branch simply stops matching and the setting starts reporting a false
 # verification failure. The cross-check that the key still names a registered
-# setting is in tests/test_api/test_verify_contract.py, for the same reason
-# ANTICHEAT_WARNINGS is checked there and not at import time: this module is
-# imported while the registry is being built.
+# setting is in tests/test_api/test_verify_contract.py rather than at import
+# time, because this module is imported while the registry is being built.
 _SLOW_RESET_TOLERANCES: dict[str, _SlowResetTolerance] = {
     "network:dns_security": _SlowResetTolerance(
         reset_value="default",
@@ -961,13 +784,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
 # =============================================================================
 
 
-@router.get("/categories", response_model=list[str])
-async def get_categories() -> list[str]:
-    """Get all available category IDs."""
-    registry = await _get_registry_async()
-    return registry.get_categories()
-
-
 def categories_missing_metadata(active_categories: set[str]) -> list[str]:
     """Active categories that ``CATEGORY_METADATA`` never declared."""
     return sorted(active_categories - set(CATEGORY_METADATA))
@@ -1017,32 +833,6 @@ async def get_categories_metadata() -> list[CategoryMetadataResponse]:
         )
     result.extend(_fallback_category_metadata(cat_id) for cat_id in missing)
     return result
-
-
-@router.get("/categories/{category_id}/metadata", response_model=CategoryMetadataResponse)
-async def get_category_metadata_by_id(category_id: str) -> CategoryMetadataResponse:
-    """Get metadata for a specific category.
-
-    Three-way, matching the list endpoint for the same reason ``/modules`` does:
-    declared → the declaration, active but undeclared → the same generated
-    stand-in, neither → 404.
-    """
-    meta = CATEGORY_METADATA.get(category_id)
-    if not meta:
-        registry = await _get_registry_async()
-        if category_id in set(registry.get_categories()):
-            return _fallback_category_metadata(category_id)
-        raise HTTPException(404, f"Unknown category: {category_id}")
-
-    return CategoryMetadataResponse(
-        id=meta.id,
-        display_name=meta.display_name,
-        description=meta.description,
-        icon=meta.icon,
-        color=meta.color,
-        order=meta.order,
-        is_action_only=meta.is_action_only,
-    )
 
 
 def modules_missing_metadata(active_modules: set[str]) -> list[str]:
@@ -1097,41 +887,6 @@ async def get_modules_metadata() -> list[ModuleMetadataResponse]:
         )
     result.extend(_fallback_module_metadata(module_id) for module_id in missing)
     return result
-
-
-@router.get("/modules/{module_id}/metadata", response_model=ModuleMetadataResponse)
-async def get_module_metadata_by_id(module_id: str) -> ModuleMetadataResponse:
-    """Get metadata for a specific module.
-
-    Same three-way answer as the list endpoint, because one condition may not
-    have two answers: declared → the declaration, active but undeclared → the
-    same generated stand-in the list returns, neither → 404. This used to 404
-    for an active module the list happily rendered.
-    """
-    meta = MODULE_METADATA.get(module_id)
-    if meta:
-        return ModuleMetadataResponse(
-            id=meta.id,
-            display_name=meta.display_name,
-            description=meta.description,
-            order=meta.order,
-        )
-
-    registry = await _get_registry_async()
-    if any(s.module == module_id for s in registry.get_all()):
-        return _fallback_module_metadata(module_id)
-
-    raise HTTPException(404, f"Unknown module: {module_id}")
-
-
-@router.get("/count")
-async def get_setting_count() -> dict[str, Any]:
-    """Get count of settings by category."""
-    registry = await _get_registry_async()
-    return {
-        "total": registry.count(),
-        "by_category": registry.count_by_category(),
-    }
 
 
 # =============================================================================
@@ -1214,42 +969,6 @@ def _run_bulk_op(
     )
 
 
-@router.post("/bulk/reset", response_model=BulkApplyResponse)
-async def bulk_reset_settings(request: BulkResetRequest) -> BulkApplyResponse:
-    """Reset multiple settings to their default values with verification.
-
-    Uses ThreadPoolExecutor for true parallel subprocess execution; the
-    synchronous drain runs on a worker thread so the event loop stays free
-    for its duration (PERF-14).
-    """
-    return await asyncio.to_thread(
-        _run_bulk_op,
-        request.setting_ids,
-        _reset_single_setting,
-        lambda n: f"Reset {n} setting(s) to default OK",
-        lambda n: f"Failed to reset {n} setting(s)",
-    )
-
-
-@router.post("/bulk/optimize", response_model=BulkApplyResponse)
-async def bulk_optimize_settings(request: BulkOptimizeRequest) -> BulkApplyResponse:
-    """Optimize multiple settings to their recommended values with verification.
-
-    Uses ThreadPoolExecutor for true parallel subprocess execution; the
-    synchronous drain runs on a worker thread so the event loop stays free
-    for its duration (PERF-14).
-    """
-    return await asyncio.to_thread(
-        _run_bulk_op,
-        request.setting_ids,
-        lambda setting, hc: _apply_one(
-            setting, setting.recommended_value, hc, "Optimized", skip_when_inapplicable=False
-        ),
-        lambda n: f"Optimized {n} setting(s) OK",
-        lambda n: f"Failed to optimize {n} setting(s)",
-    )
-
-
 # =============================================================================
 # Individual Apply/Reset/Disable/Verify/Revert Endpoints
 # (declared after bulk routes to avoid path conflicts)
@@ -1280,6 +999,13 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
             new_value=None,
             requires_reboot=False,
         )
+
+    # A machine fpstune has never cross-checked gets the detection self-check
+    # before its first write — a wrong detection is worth finding before
+    # anything derives from it (A12). Idempotent: one run per machine.
+    from fpstune.utils.self_check import ensure_checked_before_first_apply
+
+    await asyncio.to_thread(ensure_checked_before_first_apply)
 
     if sys.platform == "win32":
         _create_restore_point_async()
@@ -1462,63 +1188,3 @@ async def verify_setting(setting_id: str, request: VerifyRequest | None = None) 
         expected_value=expected,
         target=target,
     )
-
-
-@router.post("/{setting_id}/revert", response_model=ApplyResponse)
-async def revert_setting(setting_id: str) -> ApplyResponse:
-    """Revert a specific setting to its default value.
-
-    Deprecated: use POST /{setting_id}/reset instead.
-    """
-    from fastapi.responses import JSONResponse
-
-    response = await reset_setting(setting_id)
-    # Return with deprecation header — FastAPI doesn't support header injection
-    # on plain Pydantic responses, so we rebuild as JSONResponse.
-    return JSONResponse(  # type: ignore[return-value]
-        content=response.model_dump(),
-        headers={"Deprecation": "true", "Link": f'</{setting_id}/reset>; rel="successor-version"'},
-    )
-
-
-# =============================================================================
-# SSE Action Streaming Endpoint
-# =============================================================================
-
-
-@router.get("/actions/{setting_id}/execute")
-async def execute_action_stream(setting_id: str) -> Response:
-    """Execute a maintenance action with SSE streaming output.
-
-    Returns a Server-Sent Events stream with live console output.
-    Use this for long-running operations like DISM cleanup, SFC scan, etc.
-
-    Event format:
-    - type: "output" | "progress" | "complete" | "error"
-    - line: Output text line
-    - progress: Progress percentage (0-100)
-    - success: True if action completed successfully
-    - error: Error message if any
-    """
-    # Runtime imports for optional SSE dependency
-    from sse_starlette.sse import EventSourceResponse
-
-    from fpstune.settings.action_executor import execute_action
-
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    if not setting.is_action:
-        raise HTTPException(400, f"Setting {setting_id} is not an action")
-
-    log_activity(f"Starting action: {setting.display_name}", "info")
-
-    async def event_generator() -> AsyncGenerator[dict[str, Any], None]:
-        """Generate SSE events from action execution."""
-        async for event_data in execute_action(setting):
-            yield {"data": event_data}
-
-    return EventSourceResponse(event_generator())

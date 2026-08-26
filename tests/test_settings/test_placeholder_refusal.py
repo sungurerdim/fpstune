@@ -16,8 +16,6 @@ setting in the scan its batch.
 
 from __future__ import annotations
 
-import json
-
 import pytest
 
 from fpstune.settings.base import (
@@ -62,38 +60,6 @@ def test_the_layer_really_refuses_this_value() -> None:
 
     with pytest.raises(ValueError):
         substitute_placeholders("Get-Service -Name %name%", name=_UNPLACEABLE)
-
-
-class TestActionStreamRefusesCleanly:
-    """``ActionExecutor.execute_streaming`` used to let the ValueError fall to
-    its catch-all, which reports ``str(e)`` — the escaping layer's internal
-    wording, with no indication that nothing ran and nothing needs undoing."""
-
-    async def test_the_stream_names_the_refusal_and_stops(self) -> None:
-        from fpstune.settings.action_executor import ActionExecutor
-
-        setting = _powershell_action("Get-Service -Name %name%", {"name": _UNPLACEABLE})
-
-        events = [json.loads(raw) async for raw in ActionExecutor(setting).execute_streaming()]
-
-        errors = [e for e in events if e["type"] == "error"]
-        assert len(errors) == 1
-        assert errors[0]["error"].startswith("PowerShell command rejected:")
-        # A refusal is not a missing command: "No command configured" would send
-        # the reader looking for a definition bug that is not there.
-        assert "No command configured" not in errors[0]["error"]
-        assert not any(e["type"] == "complete" for e in events)
-
-    async def test_a_placeable_value_still_reaches_the_command(self) -> None:
-        """The refusal must not swallow the ordinary case."""
-        from fpstune.settings.action_executor import ActionExecutor
-
-        setting = _powershell_action("Get-Service -Name %name%", {"name": "Spooler"})
-
-        command = ActionExecutor(setting)._build_command()
-
-        assert command is not None
-        assert "Get-Service -Name Spooler" in command[-1]
 
 
 class TestBatchPrefetchDropsOnlyTheRefusedSetting:

@@ -17,7 +17,7 @@ export type ChipTone = "ok" | "attention" | "advisory" | "neutral";
 const TONE_CLASS: Record<ChipTone, string> = {
   ok: "bg-success/15 text-success border-success/25",
   attention: "bg-warning/20 text-warning border-warning/40",
-  advisory: "bg-amber-500/15 text-amber-400 border-amber-500/30",
+  advisory: "bg-warning/15 text-warning border-warning/30",
   neutral: "bg-muted text-muted-foreground border-border",
 };
 

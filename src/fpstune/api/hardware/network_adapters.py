@@ -224,39 +224,217 @@ _ADAPTER_INVENTORY_SCRIPT = """
     $results | ConvertTo-Json -Depth 2
     """
 
-_WIFI_DETAIL_SCRIPT = """
-    try {
-        $wifiAdapters = Get-NetAdapter | Where-Object { $_.MediaType -like '*802.11*' -and $_.Status -eq 'Up' }
-        $results = @()
-        foreach ($adapter in $wifiAdapters) {
-            $profile = netsh wlan show interfaces | Out-String
-            if ($profile -match 'SSID\\s+:\\s+(.+)') { $ssid = $matches[1].Trim() } else { $ssid = '' }
-            if ($profile -match 'Channel\\s+:\\s+(\\d+)') { $channel = [int]$matches[1] } else { $channel = 0 }
-            if ($profile -match 'Radio type\\s+:\\s+(.+)') { $radio = $matches[1].Trim() } else { $radio = '' }
-            if ($profile -match 'Signal\\s+:\\s+(\\d+)') { $signal = [int]$matches[1] } else { $signal = 0 }
-            if ($profile -match 'Authentication\\s+:\\s+(.+)') { $auth = $matches[1].Trim() } else { $auth = '' }
+# WiFi facts come from wlanapi.dll, never from netsh text: `netsh wlan show
+# interfaces` answers in the system language (a Turkish install labels the
+# fields "Kanal", "Sinyal", "Radyo türü"), so every English-label regex
+# silently yielded nothing there — and a channel number alone cannot place a Wi-Fi 6E
+# network, whose 6 GHz channels overlap 2.4 GHz numbering. The API hands back
+# numeric enums and the BSS entry's own center frequency in kHz, which answer
+# both problems at once. The walk lives inside the C# class (the A1 lesson: a
+# variable-length native buffer never crosses PowerShell's binder). Each record
+# is "guid|channel|freqKHz|phy|signal|auth|ssid" — SSID last because an SSID
+# may itself contain the separator.
+_WLANAPI_CSHARP = r"""
+Add-Type @'
+using System;
+using System.Collections.Generic;
+using System.Runtime.InteropServices;
+public class WlanQuery {
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanOpenHandle(uint version, IntPtr reserved, out uint negotiated, out IntPtr handle);
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanCloseHandle(IntPtr handle, IntPtr reserved);
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanEnumInterfaces(IntPtr handle, IntPtr reserved, out IntPtr list);
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanQueryInterface(IntPtr handle, ref Guid guid, int opcode, IntPtr reserved, out uint size, out IntPtr data, IntPtr valueType);
+    [DllImport("wlanapi.dll")]
+    private static extern int WlanGetNetworkBssList(IntPtr handle, ref Guid guid, IntPtr ssid, int bssType, bool securityEnabled, IntPtr reserved, out IntPtr list);
+    [DllImport("wlanapi.dll")]
+    private static extern void WlanFreeMemory(IntPtr memory);
 
-            # Determine frequency band from channel number
-            # 2.4 GHz: Channels 1-14
-            # 5 GHz: Channels 36-165+ (varies by region)
-            # 6 GHz (WiFi 6E): Channels 1-233 in 6 GHz band (not detected by channel alone)
-            if ($channel -ge 1 -and $channel -le 14) { $freq = 2.4 }
-            elseif ($channel -ge 36) { $freq = 5.0 }
-            else { $freq = 0 }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct DOT11_SSID {
+        public uint length;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 32)] public byte[] ssid;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WLAN_ASSOCIATION_ATTRIBUTES {
+        public DOT11_SSID ssid;
+        public int bssType;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)] public byte[] bssid;
+        public int phyType;
+        public uint phyIndex;
+        public uint signalQuality;
+        public uint rxRate;
+        public uint txRate;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WLAN_SECURITY_ATTRIBUTES {
+        [MarshalAs(UnmanagedType.Bool)] public bool securityEnabled;
+        [MarshalAs(UnmanagedType.Bool)] public bool oneXEnabled;
+        public int authAlgorithm;
+        public int cipherAlgorithm;
+    }
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct WLAN_CONNECTION_ATTRIBUTES {
+        public int state;
+        public int mode;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 256)] public string profile;
+        public WLAN_ASSOCIATION_ATTRIBUTES association;
+        public WLAN_SECURITY_ATTRIBUTES security;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WLAN_RATE_SET {
+        public ushort length;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 126)] public ushort[] rates;
+    }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct WLAN_BSS_ENTRY {
+        public DOT11_SSID ssid;
+        public uint phyId;
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = 6)] public byte[] bssid;
+        public int bssType;
+        public int bssPhyType;
+        public int rssi;
+        public uint linkQuality;
+        public byte inRegDomain;
+        public ushort beaconPeriod;
+        public ulong timestamp;
+        public ulong hostTimestamp;
+        public ushort capability;
+        public uint chCenterFrequency;
+        public WLAN_RATE_SET rateSet;
+        public uint ieOffset;
+        public uint ieSize;
+    }
 
+    private static bool SameMac(byte[] a, byte[] b) {
+        if (a == null || b == null) { return false; }
+        for (int i = 0; i < 6; i++) { if (a[i] != b[i]) { return false; } }
+        return true;
+    }
+
+    public static string[] Query() {
+        var results = new List<string>();
+        uint negotiated; IntPtr handle;
+        if (WlanOpenHandle(2, IntPtr.Zero, out negotiated, out handle) != 0) { return results.ToArray(); }
+        try {
+            IntPtr pList;
+            if (WlanEnumInterfaces(handle, IntPtr.Zero, out pList) != 0) { return results.ToArray(); }
+            try {
+                int count = Marshal.ReadInt32(pList);
+                IntPtr items = IntPtr.Add(pList, 8);
+                int itemSize = 16 + 512 + 4; // GUID + WCHAR[256] + state
+                for (int i = 0; i < count; i++) {
+                    IntPtr item = IntPtr.Add(items, i * itemSize);
+                    byte[] guidBytes = new byte[16];
+                    Marshal.Copy(item, guidBytes, 0, 16);
+                    Guid guid = new Guid(guidBytes);
+                    int state = Marshal.ReadInt32(item, 16 + 512);
+                    if (state != 1) { continue; } // connected only
+
+                    uint size; IntPtr data;
+                    if (WlanQueryInterface(handle, ref guid, 7, IntPtr.Zero, out size, out data, IntPtr.Zero) != 0) { continue; }
+                    WLAN_CONNECTION_ATTRIBUTES conn;
+                    try {
+                        conn = (WLAN_CONNECTION_ATTRIBUTES)Marshal.PtrToStructure(data, typeof(WLAN_CONNECTION_ATTRIBUTES));
+                    } finally { WlanFreeMemory(data); }
+
+                    ulong channel = 0;
+                    if (WlanQueryInterface(handle, ref guid, 8, IntPtr.Zero, out size, out data, IntPtr.Zero) == 0) {
+                        try { channel = (uint)Marshal.ReadInt32(data); } finally { WlanFreeMemory(data); }
+                    }
+
+                    ulong freqKHz = 0;
+                    IntPtr pBss;
+                    if (WlanGetNetworkBssList(handle, ref guid, IntPtr.Zero, 1, false, IntPtr.Zero, out pBss) == 0) {
+                        try {
+                            int bssCount = Marshal.ReadInt32(pBss, 4);
+                            int entrySize = Marshal.SizeOf(typeof(WLAN_BSS_ENTRY));
+                            IntPtr entries = IntPtr.Add(pBss, 8);
+                            for (int j = 0; j < bssCount; j++) {
+                                WLAN_BSS_ENTRY entry = (WLAN_BSS_ENTRY)Marshal.PtrToStructure(
+                                    IntPtr.Add(entries, j * entrySize), typeof(WLAN_BSS_ENTRY));
+                                if (SameMac(entry.bssid, conn.association.bssid)) {
+                                    freqKHz = entry.chCenterFrequency;
+                                    break;
+                                }
+                            }
+                        } finally { WlanFreeMemory(pBss); }
+                    }
+
+                    string ssid = "";
+                    if (conn.association.ssid.length > 0 && conn.association.ssid.length <= 32) {
+                        ssid = System.Text.Encoding.UTF8.GetString(
+                            conn.association.ssid.ssid, 0, (int)conn.association.ssid.length);
+                    }
+                    results.Add(guid.ToString("D") + "|" + channel + "|" + freqKHz + "|" +
+                        conn.association.phyType + "|" + conn.association.signalQuality + "|" +
+                        conn.security.authAlgorithm + "|" + ssid);
+                }
+            } finally { WlanFreeMemory(pList); }
+        } finally { WlanCloseHandle(handle, IntPtr.Zero); }
+        return results.ToArray();
+    }
+}
+'@
+"""
+
+# The record-to-report mapping is a pure function so the contract tests can run
+# the shipped text against described records. Both maps key on the API's own
+# numeric enums (dot11_phy_type, DOT11_AUTH_ALGORITHM); the band comes from the
+# BSS entry's center frequency, which is what tells a 6 GHz channel 1 from a
+# 2.4 GHz channel 1. An unknown frequency stays 0 — never guessed from the
+# channel number.
+_WIFI_MAP_PS = r"""
+function Convert-WlanRecords {
+    param([string[]]$records, $wifiAdapters)
+    $phyNames = @{ 4 = '802.11a'; 5 = '802.11b'; 6 = '802.11g'; 7 = '802.11n';
+                   8 = '802.11ac'; 9 = '802.11ad'; 10 = '802.11ax'; 11 = '802.11be' }
+    $authNames = @{ 1 = 'Open'; 2 = 'Shared'; 3 = 'WPA-Enterprise'; 4 = 'WPA-Personal';
+                    6 = 'WPA2-Enterprise'; 7 = 'WPA2-Personal'; 8 = 'WPA3-Enterprise';
+                    9 = 'WPA3-Personal'; 10 = 'OWE'; 11 = 'WPA3-Enterprise-192' }
+    $results = @()
+    foreach ($adapter in $wifiAdapters) {
+        $adapterGuid = ($adapter.InterfaceGuid -replace '[{}]', '').ToLower()
+        foreach ($rec in $records) {
+            $f = $rec -split '\|', 7
+            if ($f.Count -lt 7 -or $f[0].ToLower() -ne $adapterGuid) { continue }
+            $freqKHz = [int64]$f[2]
+            $freq = if ($freqKHz -ge 5925000) { 6.0 }
+                    elseif ($freqKHz -ge 4900000) { 5.0 }
+                    elseif ($freqKHz -ge 2400000) { 2.4 }
+                    else { 0 }
+            $phy = [int]$f[3]
+            $auth = [int]$f[5]
             $results += [PSCustomObject]@{
                 AdapterName = $adapter.Name
-                SSID = $ssid
-                Channel = $channel
+                SSID = $f[6]
+                Channel = [int]$f[1]
                 FrequencyGHz = $freq
-                RadioType = $radio
-                SignalPercent = $signal
-                AuthType = $auth
+                RadioType = if ($phyNames.ContainsKey($phy)) { $phyNames[$phy] } else { '' }
+                SignalPercent = [int]$f[4]
+                AuthType = if ($authNames.ContainsKey($auth)) { $authNames[$auth] } else { '' }
             }
         }
-        $results | ConvertTo-Json -Depth 2
-    } catch { '[]' }
-    """
+    }
+    return $results
+}
+"""
+
+_WIFI_DETAIL_SCRIPT = (
+    _WLANAPI_CSHARP
+    + _WIFI_MAP_PS
+    + r"""
+try {
+    $records = [WlanQuery]::Query()
+    $wifiAdapters = Get-NetAdapter | Where-Object { $_.MediaType -like '*802.11*' -and $_.Status -eq 'Up' }
+    $results = @(Convert-WlanRecords -records $records -wifiAdapters $wifiAdapters)
+    ConvertTo-Json -InputObject $results -Depth 2
+} catch { '[]' }
+"""
+)
 
 
 def _query_adapter_records() -> list[dict[str, Any]]:

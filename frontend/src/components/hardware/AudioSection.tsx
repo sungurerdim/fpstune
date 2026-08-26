@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMutation } from "@tanstack/react-query";
 import {
   Volume2, Mic, } from "lucide-react";
@@ -23,6 +24,7 @@ export function AudioSection({
   devices: AudioDeviceInfo[] | undefined;
   loading: boolean;
 }) {
+  const { t } = useT();
   // Filter output devices: Playback type AND not a virtual microphone loopback
   // Some virtual audio software (SteelSeries Sonar, Voicemeeter) creates playback endpoints
   // with "Microphone" in the name - these are loopback devices, not real outputs
@@ -46,7 +48,7 @@ export function AudioSection({
       {/* Output Devices */}
       <HardwareSection
         icon={<Volume2 className="w-3 h-3" />}
-        title="Audio Output"
+        title={t("hw.audioOutput")}
         count={outputDevices.length}
         loading={loading}
       >
@@ -73,7 +75,7 @@ export function AudioSection({
       {/* Input Devices */}
       <HardwareSection
         icon={<Mic className="w-3 h-3" />}
-        title="Audio Input"
+        title={t("hw.audioInput")}
         count={inputDevices.length}
         loading={loading}
       >
@@ -95,6 +97,7 @@ export function AudioSection({
  * Audio device card with enable/disable toggle and volume normalization
  */
 function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
+  const { t } = useT();
   // Toggle device enabled state
   const toggleEnabledMutation = useMutation({
     mutationFn: async () => {
@@ -179,14 +182,14 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
       {showVolNorm && device.is_enabled && (
         <div className="flex items-center gap-1.5 mt-1.5 ml-7 pl-2 border-l border-border/50">
           <Volume2 className="w-3 h-3 text-muted-foreground" />
-          <span className="text-xs text-muted-foreground">Loudness EQ</span>
+          <span className="text-xs text-muted-foreground">{t("hw.loudnessEq")}</span>
           <div className="ml-auto">
             <ToggleSwitch
               enabled={device.loudness_eq_enabled}
               onToggle={() => toggleLeqMutation.mutate()}
               isPending={toggleLeqMutation.isPending}
               size="xs"
-              title="Loudness EQ"
+              title={t("hw.loudnessEq")}
             />
           </div>
         </div>
@@ -198,7 +201,7 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
         device.is_enabled && (
           <div className="flex items-center gap-1.5 mt-1 ml-7 text-xs text-muted-foreground/60">
             <Volume2 className="w-3 h-3" />
-            <span>Loudness EQ not supported by this device</span>
+            <span>{t("hw.loudnessNotSupported")}</span>
           </div>
         )}
     </div>

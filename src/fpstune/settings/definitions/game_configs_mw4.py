@@ -68,6 +68,7 @@ def _make_mw4_setting(
     *,
     setting_id: str,
     display_name: str,
+    short_name: str = "",
     description: str,
     key: str | list[str],
     choices: tuple[str, ...],
@@ -89,6 +90,7 @@ def _make_mw4_setting(
     scope: SettingScope = SettingScope.RECOMMENDED,
     min_value: int | float | None = None,
     max_value: int | float | None = None,
+    perceptible_cost: str | None = None,
 ) -> SettingExecutor:
     """Build one MW4 setting.
 
@@ -111,6 +113,7 @@ def _make_mw4_setting(
         id=setting_id,
         category=SettingCategory.GAME_CONFIG,
         display_name=display_name,
+        short_name=short_name or display_name,
         description=description,
         value_type=value_type,
         choices=choices,
@@ -124,6 +127,7 @@ def _make_mw4_setting(
         current_impact=current_impact,
         recommended_impact=recommended_impact,
         scope=scope,
+        perceptible_cost=perceptible_cost,
         category_order=category_order,
         effect=effect,
         impact_scores=impact_scores,
@@ -152,6 +156,7 @@ def _make_mw4_setting(
 MW4_RENDER_RESOLUTION = _make_mw4_setting(
     setting_id="game_config:mw4:render_resolution",
     display_name="MW4 Render Resolution Multiplier",
+    short_name="MW4 Render Resolution Multiplier",
     description="Percentage of the window resolution the 3D scene is drawn at, applied before "
     "any upscaler. Below 100 the game renders fewer pixels and then stretches them, which is "
     "what makes a distant enemy hard to separate from the terrain.",
@@ -183,6 +188,7 @@ MW4_RENDER_RESOLUTION = _make_mw4_setting(
 MW4_DLSS_PERF_MODE = _make_mw4_setting(
     setting_id="game_config:mw4:dlss_perf_mode",
     display_name="MW4 DLSS Quality Mode",
+    short_name="MW4 DLSS Quality Mode",
     description="Internal resolution DLSS renders at before upscaling to the output. "
     "An upscaler exists to buy frames, so its most expensive tier gives back most of what "
     "it was turned on for.",
@@ -195,6 +201,9 @@ MW4_DLSS_PERF_MODE = _make_mw4_setting(
     effect="Moves DLSS to the tier that buys frames without softening a target",
     impact_scores={"fps": "+10-18%", "stability": "high"},
     category_order=11,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -209,6 +218,7 @@ MW4_DLSS_PERF_MODE = _make_mw4_setting(
 MW4_DLSS_MODEL = _make_mw4_setting(
     setting_id="game_config:mw4:dlss_model",
     display_name="MW4 DLSS Model",
+    short_name="MW4 DLSS Model",
     description="Which DLSS neural model does the upscaling. The transformer model holds fine "
     "detail together in motion better than the older convolutional one, and it costs up to 3% "
     "of the frame rate to do it.",
@@ -239,6 +249,7 @@ MW4_DLSS_MODEL = _make_mw4_setting(
 MW4_TEXTURE_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:texture_quality",
     display_name="MW4 Texture Quality",
+    short_name="MW4 Texture Quality",
     description="Resolution of the textures the game loads, on an inverted scale where 0 is the "
     "highest and 3 the lowest. Texture detail on player models is how an opponent is told apart "
     "from the scenery, so it is spent last rather than first — but spent last is not never.",
@@ -256,6 +267,7 @@ MW4_TEXTURE_QUALITY = _make_mw4_setting(
     # the stutter that comes from streaming a set that does not fit.
     impact_scores={"fps_1_percent_low": "+2-6%", "vram_mb": "-300-800"},
     category_order=13,
+    perceptible_cost=("Textures render a tier lower — surfaces read softer up close."),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -269,6 +281,7 @@ MW4_TEXTURE_QUALITY = _make_mw4_setting(
 MW4_ANISOTROPIC = _make_mw4_setting(
     setting_id="game_config:mw4:anisotropic",
     display_name="MW4 Texture Filtering",
+    short_name="MW4 Texture Filtering",
     description="Anisotropic filtering level applied to surfaces viewed at an angle. It sharpens "
     "ground and wall texture into the distance, which is scenery — an opponent is resolved by "
     "model and texture detail, not by how crisp the floor they stand on is.",
@@ -298,6 +311,7 @@ MW4_ANISOTROPIC = _make_mw4_setting(
 MW4_VOLUMETRIC_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:volumetric_quality",
     display_name="MW4 Volumetric Quality",
+    short_name="MW4 Volumetric Quality",
     description="Quality of volumetric fog, god rays and light shafts. Lowering it both returns "
     "frames and clears the air between the player and anything moving in it.",
     key="VolumetricQuality@0",
@@ -319,6 +333,7 @@ MW4_VOLUMETRIC_QUALITY = _make_mw4_setting(
 MW4_REFLECTION_PROBE_HALF_RES = _make_mw4_setting(
     setting_id="game_config:mw4:reflection_probe_half_res",
     display_name="MW4 Half-Resolution Reflection Probes",
+    short_name="MW4 Half-Resolution Reflection Probes",
     description="Renders the cubemap reflections on glass, metal and water at half resolution. "
     "Reflections carry nothing a player acts on, which makes them one of the cheapest things "
     "in the file to spend.",
@@ -344,6 +359,7 @@ MW4_REFLECTION_PROBE_HALF_RES = _make_mw4_setting(
 MW4_RECOMMENDED_SET = _make_mw4_setting(
     setting_id="game_config:mw4:recommended_set",
     display_name="MW4 Keep Custom Settings",
+    short_name="MW4 Keep Custom Settings",
     description="Marks the config as user-configured. The file's own comment states that a "
     "value of 0 makes the game reset every setting back to its recommended defaults, which "
     "would discard the whole tuned configuration on the next launch.",
@@ -367,6 +383,7 @@ MW4_RECOMMENDED_SET = _make_mw4_setting(
 MW4_CLOUD_STORAGE = _make_mw4_setting(
     setting_id="game_config:mw4:cloud_storage",
     display_name="MW4 Cloud Config Storage",
+    short_name="MW4 Cloud Config Storage",
     description="Syncs the local config with Activision's cloud copy. While it is on, a cloud "
     "copy written from another machine or an earlier session can overwrite the settings applied "
     "here without warning.",
@@ -386,6 +403,7 @@ MW4_CLOUD_STORAGE = _make_mw4_setting(
 MW4_HW_CHANGE_DETECTION = _make_mw4_setting(
     setting_id="game_config:mw4:hw_change_detection",
     display_name="MW4 Hardware Change Auto-Detect",
+    short_name="MW4 Hardware Change Auto-Detect",
     description="Re-runs the game's automatic quality detection whenever it notices a hardware "
     "or driver change. A driver update is enough to trigger it, and the re-detect overwrites "
     "tuned values with the game's own preset.",
@@ -419,6 +437,7 @@ def create_mw4_menu_fps_cap_setting(max_hz: int) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:fps_cap_menu",
         display_name="MW4 Menu Frame Cap",
+        short_name="MW4 Menu Frame Cap",
         description="Frame limit while sitting in a menu or lobby. Menus are static screens, so "
         "frames spent on them buy nothing and leave heat the machine is still carrying when the "
         "match starts.",
@@ -454,6 +473,7 @@ def create_mw4_fps_cap_setting(max_hz: int) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:fps_cap_ingame",
         display_name="MW4 In-Game Frame Rate Limit",
+        short_name="MW4 In-Game Frame Rate Limit",
         description="Maximum frames per second during a match. Held just below the panel's "
         "refresh rate so a variable-refresh display never reaches its ceiling, which is where "
         "tearing and latency spikes come back.",
@@ -504,6 +524,7 @@ def create_mw4_vram_scale_setting(vram_mb: int) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:vram_scale",
         display_name="MW4 VRAM Budget",
+        short_name="MW4 VRAM Budget",
         description=f"Share of GPU memory the game may consume. The card detected here has "
         f"{label}, so {pct}% leaves the desktop and any overlay the room they need without "
         f"stranding memory the game could be using for textures.",
@@ -534,6 +555,7 @@ def create_mw4_vram_scale_setting(vram_mb: int) -> SettingExecutor:
 MW4_FPS_CAP_OUT_OF_FOCUS = _make_mw4_setting(
     setting_id="game_config:mw4:fps_cap_out_of_focus",
     display_name="MW4 Unfocused Frame Cap",
+    short_name="MW4 Unfocused Frame Cap",
     description="Frame limit while the game window is not in focus. A game alt-tabbed to a "
     "browser has no reason to render at full rate, and every frame it does costs heat and "
     "power the foreground application wants.",
@@ -556,6 +578,7 @@ MW4_FPS_CAP_OUT_OF_FOCUS = _make_mw4_setting(
 MW4_NVIDIA_REFLEX = _make_mw4_setting(
     setting_id="game_config:mw4:nvidia_reflex",
     display_name="MW4 NVIDIA Reflex",
+    short_name="MW4 NVIDIA Reflex",
     description="NVIDIA's low-latency mode, which keeps the render queue short instead of "
     "letting frames accumulate ahead of the GPU. 'Enabled + boost' additionally holds GPU "
     "clocks up so a sudden frame does not wait for the card to spin back up.",
@@ -587,6 +610,7 @@ MW4_NVIDIA_REFLEX = _make_mw4_setting(
 MW4_MOTION_BLUR = _make_mw4_setting(
     setting_id="game_config:mw4:motion_blur",
     display_name="MW4 Motion Blur",
+    short_name="MW4 Motion Blur",
     description="Smears the scene along the direction of movement. It is the clearest case in "
     "the file of an effect that costs frames to make a moving target harder to resolve.",
     key="MotionBlur@0",
@@ -605,6 +629,7 @@ MW4_MOTION_BLUR = _make_mw4_setting(
 MW4_WEAPON_MOTION_BLUR = _make_mw4_setting(
     setting_id="game_config:mw4:weapon_motion_blur",
     display_name="MW4 Weapon Motion Blur",
+    short_name="MW4 Weapon Motion Blur",
     description="Applies motion blur to the weapon model itself while it moves. It blurs the "
     "part of the screen the player is aiming with and returns nothing for it.",
     key="WeaponMotionBlur@0",
@@ -623,6 +648,7 @@ MW4_WEAPON_MOTION_BLUR = _make_mw4_setting(
 MW4_VELOCITY_BLUR = _make_mw4_setting(
     setting_id="game_config:mw4:velocity_blur",
     display_name="MW4 Velocity-Based Blur",
+    short_name="MW4 Velocity-Based Blur",
     description="Adds a radial blur that grows with player speed. Sprinting is exactly when a "
     "player most needs to read the edges of the screen, and this is what softens them.",
     key="EnableVelocityBasedBlur@0",
@@ -641,6 +667,7 @@ MW4_VELOCITY_BLUR = _make_mw4_setting(
 MW4_DEPTH_OF_FIELD = _make_mw4_setting(
     setting_id="game_config:mw4:depth_of_field",
     display_name="MW4 Depth of Field",
+    short_name="MW4 Depth of Field",
     description="Blurs whatever the camera is not focused on. In a first-person shooter the "
     "thing out of focus is usually the distance, which is where the targets are.",
     key="DofEnable@0",
@@ -659,6 +686,7 @@ MW4_DEPTH_OF_FIELD = _make_mw4_setting(
 MW4_DOF_WEAPON = _make_mw4_setting(
     setting_id="game_config:mw4:dof_weapon",
     display_name="MW4 Weapon Depth of Field",
+    short_name="MW4 Weapon Depth of Field",
     description="Blurs the weapon model when the view focus shifts. Separate from world depth "
     "of field, and left enabled it keeps blurring even after the world effect is off.",
     key="DofWeaponDisable@0",
@@ -676,6 +704,7 @@ MW4_DOF_WEAPON = _make_mw4_setting(
 MW4_DOF_WORLD = _make_mw4_setting(
     setting_id="game_config:mw4:dof_world",
     display_name="MW4 World Depth of Field",
+    short_name="MW4 World Depth of Field",
     description="Blurs the world outside the focal plane. This is the switch that survives when "
     "the main depth-of-field control is set to Script rather than Off.",
     key="DofWorldDisable@0",
@@ -693,6 +722,7 @@ MW4_DOF_WORLD = _make_mw4_setting(
 MW4_DOF_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:dof_quality",
     display_name="MW4 Depth of Field Quality",
+    short_name="MW4 Depth of Field Quality",
     description="Sample count of the depth-of-field filter. It only costs anything while depth "
     "of field is on, which makes High the most expensive setting in the file to leave behind.",
     key="DepthOfFieldQuality@0",
@@ -710,6 +740,7 @@ MW4_DOF_QUALITY = _make_mw4_setting(
 MW4_WEATHER_GRID = _make_mw4_setting(
     setting_id="game_config:mw4:weather_grid",
     display_name="MW4 Weather Grid Volumes",
+    short_name="MW4 Weather Grid Volumes",
     description="Volumetric rain, snow and fog density grids. Weather volumes sit between the "
     "player and everything else, so turning them off returns both frames and sightlines.",
     key="WeatherGridVolumesQuality@0",
@@ -728,6 +759,7 @@ MW4_WEATHER_GRID = _make_mw4_setting(
 MW4_SUBDIVISION = _make_mw4_setting(
     setting_id="game_config:mw4:subdivision",
     display_name="MW4 Geometry Subdivision",
+    short_name="MW4 Geometry Subdivision",
     description="Catmull-Clark subdivision level, which smooths model silhouettes by adding "
     "geometry. It rounds edges the player never inspects and costs geometry throughput to do it.",
     key="SubdivisionLevel@0",
@@ -745,6 +777,7 @@ MW4_SUBDIVISION = _make_mw4_setting(
 MW4_SHADOW_FILTERING = _make_mw4_setting(
     setting_id="game_config:mw4:shadow_filtering",
     display_name="MW4 Shadow Filtering",
+    short_name="MW4 Shadow Filtering",
     description="How softly shadow edges are blended. The shadow itself is information — one "
     "cast around a corner announces someone — but how soft its edge looks is not.",
     key="ShadowFilteringQuality@0",
@@ -763,6 +796,7 @@ MW4_SHADOW_FILTERING = _make_mw4_setting(
 MW4_SHADER_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:shader_quality",
     display_name="MW4 Shader Quality",
+    short_name="MW4 Shader Quality",
     description="Complexity of the material shaders the game compiles. Lowering it simplifies "
     "how surfaces respond to light, which changes how the scene looks without hiding anything "
     "that moves.",
@@ -787,6 +821,7 @@ MW4_SHADER_QUALITY = _make_mw4_setting(
 MW4_CINEMATIC_EMISSIVE = _make_mw4_setting(
     setting_id="game_config:mw4:cinematic_emissive",
     display_name="MW4 In-Game Cinematics",
+    short_name="MW4 In-Game Cinematics",
     description="Plays the scripted cinematic sequences that interrupt gameplay. They are "
     "spectacle by definition and nothing in them is acted on.",
     key="CinematicEmissive@0",
@@ -804,6 +839,7 @@ MW4_CINEMATIC_EMISSIVE = _make_mw4_setting(
 MW4_SHOW_BRASS = _make_mw4_setting(
     setting_id="game_config:mw4:show_brass",
     display_name="MW4 Ejected Casings",
+    short_name="MW4 Ejected Casings",
     description="Draws the spent casings a weapon ejects while firing. They appear at the exact "
     "moment the player is tracking a target and carry nothing about where anyone is.",
     key="ShowBrass@0",
@@ -821,6 +857,7 @@ MW4_SHOW_BRASS = _make_mw4_setting(
 MW4_BLOOD_LIMIT = _make_mw4_setting(
     setting_id="game_config:mw4:blood_limit",
     display_name="MW4 Blood Effect Limit",
+    short_name="MW4 Blood Effect Limit",
     description="Caps how quickly blood effects can stack, using the interval the game already "
     "carries. Blood confirms a hit, which is information — but stacked blood covers the target "
     "it confirms.",
@@ -839,6 +876,7 @@ MW4_BLOOD_LIMIT = _make_mw4_setting(
 MW4_CORPSE_LIMIT = _make_mw4_setting(
     setting_id="game_config:mw4:corpse_limit",
     display_name="MW4 Corpse Limit",
+    short_name="MW4 Corpse Limit",
     description="How many bodies stay in the world at once. Each is a full model still being "
     "drawn, and in a contested objective they accumulate exactly where the sightlines are.",
     key="CorpseLimit@0",
@@ -859,6 +897,7 @@ MW4_CORPSE_LIMIT = _make_mw4_setting(
 MW4_CORPSES_CULLING = _make_mw4_setting(
     setting_id="game_config:mw4:corpses_culling",
     display_name="MW4 Corpse Culling Threshold",
+    short_name="MW4 Corpse Culling Threshold",
     description="How aggressively bodies are removed before the limit is reached. A lower value "
     "clears them sooner, which is the same gain as the limit above applied continuously.",
     key="CorpsesCullingThreshold@0",
@@ -879,6 +918,7 @@ MW4_CORPSES_CULLING = _make_mw4_setting(
 MW4_SKIP_SEASON_INTRO = _make_mw4_setting(
     setting_id="game_config:mw4:skip_season_intro",
     display_name="MW4 Season Intro Video",
+    short_name="MW4 Season Intro Video",
     description="Plays the season trailer on launch. It costs load time on every session and "
     "nothing in it affects a match.",
     key="SkipSeasonIntroVideo@0",
@@ -896,6 +936,7 @@ MW4_SKIP_SEASON_INTRO = _make_mw4_setting(
 MW4_MARKS_PLAYER_ONLY = _make_mw4_setting(
     setting_id="game_config:mw4:marks_player_only",
     display_name="MW4 Bullet Marks on Characters",
+    short_name="MW4 Bullet Marks on Characters",
     description="Restricts bullet marks on characters to the local player's own shots. It "
     "removes decals, but it also removes the marks left by other players, which is a signal "
     "about who has been firing and from where.",
@@ -908,6 +949,9 @@ MW4_MARKS_PLAYER_ONLY = _make_mw4_setting(
     effect="Draws bullet marks on characters from your shots only",
     impact_scores={"fps": "+1-2%", "visual_quality": "reduced"},
     category_order=57,
+    perceptible_cost=(
+        "Other players' bullet marks stop appearing on characters — a signal about who has been firing, and from where, goes away."
+    ),
     # COMPLETE, and stated plainly: unlike the rest of B2 this one can remove
     # information, so it is offered with that written down rather than applied by
     # default. Wall impacts (`BulletImpacts`) are a separate guard and stay on.
@@ -923,6 +967,7 @@ MW4_MARKS_PLAYER_ONLY = _make_mw4_setting(
 MW4_SSR = _make_mw4_setting(
     setting_id="game_config:mw4:ssr",
     display_name="MW4 Screen Space Reflections",
+    short_name="MW4 Screen Space Reflections",
     description="Reflections computed from what is already on screen, used on wet ground, glass "
     "and metal. They are expensive, they carry nothing a player acts on, and MW4 keeps the "
     "setting under two scope indices that have to agree.",
@@ -944,6 +989,7 @@ MW4_SSR = _make_mw4_setting(
 MW4_DXR_MODE = _make_mw4_setting(
     setting_id="game_config:mw4:dxr_mode",
     display_name="MW4 Ray Tracing",
+    short_name="MW4 Ray Tracing",
     description="The master switch for DirectX Raytracing. Ray-traced lighting is the most "
     "expensive option the game offers and changes nothing about what a player can see coming.",
     key="DxrMode@0",
@@ -962,6 +1008,7 @@ MW4_DXR_MODE = _make_mw4_setting(
 MW4_DXR_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:dxr_quality",
     display_name="MW4 Ray Tracing Quality",
+    short_name="MW4 Ray Tracing Quality",
     description="Quality tier used when ray tracing is on. MW4 stores it under a second scope "
     "with its own value list, so it can sit at a high tier while the master switch reads Off.",
     key="DxrMode@1",
@@ -979,6 +1026,7 @@ MW4_DXR_QUALITY = _make_mw4_setting(
 MW4_TESSELLATION = _make_mw4_setting(
     setting_id="game_config:mw4:tessellation",
     display_name="MW4 Tessellation",
+    short_name="MW4 Tessellation",
     description="Adds surface geometry to make flat textures look raised. It costs geometry "
     "throughput to change the shape of walls, and nothing a player reacts to is on a wall.",
     key="Tessellation@0",
@@ -997,6 +1045,7 @@ MW4_TESSELLATION = _make_mw4_setting(
 MW4_WATER_CAUSTICS = _make_mw4_setting(
     setting_id="game_config:mw4:water_caustics",
     display_name="MW4 Water Caustics",
+    short_name="MW4 Water Caustics",
     description="Simulates the rippling light patterns water casts on nearby surfaces. It is one "
     "of the purest decorations in the file — an effect with no gameplay consequence at all.",
     key="WaterCausticsMode@0",
@@ -1015,6 +1064,7 @@ MW4_WATER_CAUSTICS = _make_mw4_setting(
 MW4_WATER_WAVE_WETNESS = _make_mw4_setting(
     setting_id="game_config:mw4:water_wave_wetness",
     display_name="MW4 Persistent Wave Wetness",
+    short_name="MW4 Persistent Wave Wetness",
     description="Keeps static geometry visibly wet after waves wash over it. The effect persists "
     "long after the wave, so it is still being maintained while nothing is happening.",
     key="WaterWaveWetness@0",
@@ -1033,6 +1083,7 @@ MW4_WATER_WAVE_WETNESS = _make_mw4_setting(
 MW4_PERSISTENT_DAMAGE = _make_mw4_setting(
     setting_id="game_config:mw4:persistent_damage",
     display_name="MW4 Persistent Damage Layer",
+    short_name="MW4 Persistent Damage Layer",
     description="Keeps bullet holes and scorch marks on surfaces instead of fading them out. "
     "The marks say where fire has been coming from, which makes this information rather than "
     "decoration despite looking like the latter.",
@@ -1069,6 +1120,7 @@ MW4_PERSISTENT_DAMAGE = _make_mw4_setting(
 MW4_MODEL_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:model_quality",
     display_name="MW4 Model Quality",
+    short_name="MW4 Model Quality",
     description="Geometric detail on character and weapon models. This decides how much of an "
     "opponent is actually drawn at range, which makes it information rather than polish — and "
     "information has a tier at which it is carried, not a tier at the top of the list.",
@@ -1085,6 +1137,9 @@ MW4_MODEL_QUALITY = _make_mw4_setting(
     # the wrong direction — that is where the channel actually starts to go.
     impact_scores={"fps": "+3-6%", "target_visibility": "preserved"},
     category_order=70,
+    perceptible_cost=(
+        "Characters and objects render at reduced model detail; at long range, identification takes a beat longer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -1098,6 +1153,7 @@ MW4_MODEL_QUALITY = _make_mw4_setting(
 MW4_PARTICLE_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:particle_quality",
     display_name="MW4 Particle Quality",
+    short_name="MW4 Particle Quality",
     description="Detail of smoke, tracers, muzzle flash and grenade effects. A thrown grenade "
     "and a fired weapon are both announced by their particles, so this is a channel the player "
     "reads rather than an effect they merely see.",
@@ -1124,6 +1180,7 @@ MW4_PARTICLE_QUALITY = _make_mw4_setting(
 MW4_WORLD_STREAMING = _make_mw4_setting(
     setting_id="game_config:mw4:world_streaming",
     display_name="MW4 World Streaming Quality",
+    short_name="MW4 World Streaming Quality",
     description="How aggressively the game streams world geometry and textures in ahead of the "
     "player. What pop-in costs is a moment of blurred scenery when the view swings; what it "
     "does not cost is a player model, which is streamed on its own budget.",
@@ -1146,6 +1203,7 @@ MW4_WORLD_STREAMING = _make_mw4_setting(
 MW4_SHADOW_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:shadow_quality",
     display_name="MW4 Shadow Quality",
+    short_name="MW4 Shadow Quality",
     description="Resolution and draw distance of the shadow maps. A shadow cast around a corner "
     "is one of the few ways a player learns about someone they cannot see, so the shadow "
     "existing is information — how softly its edge is filtered is not, and that is lowered "
@@ -1174,6 +1232,7 @@ MW4_SHADOW_QUALITY = _make_mw4_setting(
 MW4_SCREEN_SPACE_SHADOWS = _make_mw4_setting(
     setting_id="game_config:mw4:screen_space_shadows",
     display_name="MW4 Screen Space Shadows",
+    short_name="MW4 Screen Space Shadows",
     description="Fine contact shadows where a model meets a surface, computed from the screen "
     "buffer. These sharpen how a body sits in the world; they are not the corner shadow that "
     "gives a position away, which comes from the shadow maps instead.",
@@ -1203,6 +1262,7 @@ MW4_SCREEN_SPACE_SHADOWS = _make_mw4_setting(
 MW4_AMBIENT_LIGHTING = _make_mw4_setting(
     setting_id="game_config:mw4:ambient_lighting",
     display_name="MW4 Ambient Lighting Quality",
+    short_name="MW4 Ambient Lighting Quality",
     description="Quality of the indirect, bounced lighting that fills shadowed areas. Turning "
     "it off flattens the scene, and a flat scene is where a prone body stops separating from "
     "the ground it is lying on.",
@@ -1221,6 +1281,7 @@ MW4_AMBIENT_LIGHTING = _make_mw4_setting(
 MW4_BULLET_IMPACTS = _make_mw4_setting(
     setting_id="game_config:mw4:bullet_impacts",
     display_name="MW4 Bullet Impacts",
+    short_name="MW4 Bullet Impacts",
     description="Draws the impact effects where rounds strike surfaces. Impacts near cover are "
     "how a player works out the direction fire is coming from before seeing anyone.",
     key="BulletImpacts@0",
@@ -1239,6 +1300,7 @@ MW4_BULLET_IMPACTS = _make_mw4_setting(
 MW4_SHOW_BLOOD = _make_mw4_setting(
     setting_id="game_config:mw4:show_blood",
     display_name="MW4 Blood Effects",
+    short_name="MW4 Blood Effects",
     description="Draws blood on hit, which is the game's confirmation that a shot connected. "
     "The stacking that obscures a target is capped separately, so the confirmation can be kept "
     "without the pile-up.",
@@ -1257,6 +1319,7 @@ MW4_SHOW_BLOOD = _make_mw4_setting(
 MW4_ST_LOD_SKIP = _make_mw4_setting(
     setting_id="game_config:mw4:st_lod_skip",
     display_name="MW4 LOD Skip",
+    short_name="MW4 LOD Skip",
     description="How many levels of detail the renderer is allowed to skip on distant geometry. "
     "Every level skipped simplifies something further away, and what is further away in a "
     "shooter is usually the person about to shoot.",
@@ -1275,6 +1338,7 @@ MW4_ST_LOD_SKIP = _make_mw4_setting(
 MW4_SHADER_PRELOAD = _make_mw4_setting(
     setting_id="game_config:mw4:shader_preload",
     display_name="MW4 Offline Shader Preload",
+    short_name="MW4 Offline Shader Preload",
     description="Compiles shaders ahead of time instead of during play. Without it the first "
     "encounter with an effect compiles its shader mid-frame, which is the traversal stutter "
     "that arrives in the middle of a fight.",
@@ -1293,6 +1357,7 @@ MW4_SHADER_PRELOAD = _make_mw4_setting(
 MW4_GPU_UPLOAD_HEAPS = _make_mw4_setting(
     setting_id="game_config:mw4:gpu_upload_heaps",
     display_name="MW4 GPU Upload Heaps",
+    short_name="MW4 GPU Upload Heaps",
     description="Uses the Resizable BAR fast path to push more data straight into VRAM when the "
     "hardware supports it. It is a free win on any machine with the feature and inert on one "
     "without.",
@@ -1311,6 +1376,7 @@ MW4_GPU_UPLOAD_HEAPS = _make_mw4_setting(
 MW4_VRS = _make_mw4_setting(
     setting_id="game_config:mw4:vrs",
     display_name="MW4 Variable Rate Shading",
+    short_name="MW4 Variable Rate Shading",
     description="Shades low-contrast areas at a coarser rate while keeping detail where the eye "
     "is looking. It returns frames from regions a player is not reading anyway.",
     key="VRS@0",
@@ -1329,6 +1395,7 @@ MW4_VRS = _make_mw4_setting(
 MW4_DYNAMIC_SCENE_RESOLUTION = _make_mw4_setting(
     setting_id="game_config:mw4:dynamic_scene_resolution",
     display_name="MW4 Dynamic Resolution",
+    short_name="MW4 Dynamic Resolution",
     description="Drops render resolution on the fly to hold a frame time target. It trades a "
     "steady image for a steady number, and the resolution drops hardest exactly when the scene "
     "gets busy — which is when a target needs to be resolved.",
@@ -1347,6 +1414,7 @@ MW4_DYNAMIC_SCENE_RESOLUTION = _make_mw4_setting(
 MW4_ABSOLUTE_TARGET_RESOLUTION = _make_mw4_setting(
     setting_id="game_config:mw4:absolute_target_resolution",
     display_name="MW4 Absolute Target Resolution",
+    short_name="MW4 Absolute Target Resolution",
     description="Overrides the render target with a fixed resolution regardless of the display. "
     "Left at none the game renders for the panel it is on, which is what the rest of the "
     "display settings assume.",
@@ -1365,6 +1433,7 @@ MW4_ABSOLUTE_TARGET_RESOLUTION = _make_mw4_setting(
 MW4_WEAPON_CYCLE_DELAY = _make_mw4_setting(
     setting_id="game_config:mw4:weapon_cycle_delay",
     display_name="MW4 Weapon Cycle Delay",
+    short_name="MW4 Weapon Cycle Delay",
     description="Minimum delay enforced between mouse wheel weapon switches. Any value above "
     "zero puts a deliberate wait between the input and the swap, which is input latency added "
     "on purpose.",
@@ -1403,6 +1472,7 @@ MW4_WEAPON_CYCLE_DELAY = _make_mw4_setting(
 MW4_MUSIC_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:music_volume",
     display_name="MW4 Music Volume",
+    short_name="MW4 Music Volume",
     description="Volume of the game's soundtrack. Music occupies the same output as footsteps "
     "and reloads, and it is the one competing sound the player never needs to locate.",
     key="MusicVolume@0",
@@ -1418,6 +1488,9 @@ MW4_MUSIC_VOLUME = _make_mw4_setting(
     effect="Silences the soundtrack so positional audio is unmasked",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=90,
+    perceptible_cost=(
+        "In-game music goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1425,6 +1498,7 @@ MW4_MUSIC_VOLUME = _make_mw4_setting(
 MW4_WARTRACKS_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:wartracks_volume",
     display_name="MW4 War Tracks Volume",
+    short_name="MW4 War Tracks Volume",
     description="Volume of the music tracks played from vehicles. It is a cosmetic feature "
     "players buy, and it masks the same cues the soundtrack does.",
     key="WarTracksVolume@0",
@@ -1440,6 +1514,9 @@ MW4_WARTRACKS_VOLUME = _make_mw4_setting(
     effect="Silences vehicle music tracks",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=91,
+    perceptible_cost=(
+        "War tracks go silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1447,6 +1524,7 @@ MW4_WARTRACKS_VOLUME = _make_mw4_setting(
 MW4_TELESCOPE_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:telescope_volume",
     display_name="MW4 Menu Feed Volume",
+    short_name="MW4 Menu Feed Volume",
     description="Volume of the message-of-the-day feed that plays in the menus. It is "
     "promotional audio and never plays during a match.",
     key="TelescopeVolume@0",
@@ -1462,6 +1540,9 @@ MW4_TELESCOPE_VOLUME = _make_mw4_setting(
     effect="Silences the menu message feed",
     impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
     category_order=92,
+    perceptible_cost=(
+        "Telescope ambience goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1469,6 +1550,7 @@ MW4_TELESCOPE_VOLUME = _make_mw4_setting(
 MW4_CINEMATIC_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:cinematic_volume",
     display_name="MW4 Cinematic Volume",
+    short_name="MW4 Cinematic Volume",
     description="Volume of the scripted cinematic sequences. Pairs with the setting that stops "
     "those cinematics rendering at all, so that one is not left audible with no picture.",
     key="CinematicVolume@0",
@@ -1484,6 +1566,9 @@ MW4_CINEMATIC_VOLUME = _make_mw4_setting(
     effect="Silences cinematic audio",
     impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
     category_order=93,
+    perceptible_cost=(
+        "Cinematic audio goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1491,6 +1576,7 @@ MW4_CINEMATIC_VOLUME = _make_mw4_setting(
 MW4_ALT_SHELL_SHOCK = _make_mw4_setting(
     setting_id="game_config:mw4:alt_shell_shock",
     display_name="MW4 Muted Shell Shock",
+    short_name="MW4 Muted Shell Shock",
     description="Replaces the ringing tinnitus effect after a flash or explosion with a muted "
     "one. The stock ringing sits directly on top of footstep frequencies for several seconds — "
     "which is exactly the window after a flashbang when knowing where someone is matters most.",
@@ -1513,6 +1599,7 @@ MW4_ALT_SHELL_SHOCK = _make_mw4_setting(
 MW4_MUTE_LICENSED_MUSIC = _make_mw4_setting(
     setting_id="game_config:mw4:mute_licensed_music",
     display_name="MW4 Licensed Music",
+    short_name="MW4 Licensed Music",
     description="Mutes the licensed tracks the game plays separately from its own score. It is "
     "a second music channel, unaffected by the soundtrack volume.",
     key="MuteLicensedMusic@0",
@@ -1525,6 +1612,9 @@ MW4_MUTE_LICENSED_MUSIC = _make_mw4_setting(
     effect="Mutes licensed music tracks",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=95,
+    perceptible_cost=(
+        "Licensed music tracks go silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1532,6 +1622,7 @@ MW4_MUTE_LICENSED_MUSIC = _make_mw4_setting(
 MW4_EFFECTS_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:effects_volume",
     display_name="MW4 Effects Volume",
+    short_name="MW4 Effects Volume",
     description="Volume of the sound effects channel, which is where footsteps, reloads and "
     "weapon fire live. This is the channel every other audio setting exists to keep clear.",
     key="EffectsVolume@0",
@@ -1553,6 +1644,7 @@ MW4_EFFECTS_VOLUME = _make_mw4_setting(
 MW4_HITMARKERS_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:hitmarkers_volume",
     display_name="MW4 Hit Marker Volume",
+    short_name="MW4 Hit Marker Volume",
     description="Volume of the hit confirmation tone. It is the fastest feedback the game gives "
     "that a shot connected, which is what tells a player whether to keep firing at a shape.",
     key="HitMarkersVolume@0",
@@ -1574,6 +1666,7 @@ MW4_HITMARKERS_VOLUME = _make_mw4_setting(
 MW4_VOICE_VOLUME = _make_mw4_setting(
     setting_id="game_config:mw4:voice_volume",
     display_name="MW4 Voice Volume",
+    short_name="MW4 Voice Volume",
     description="Volume of character dialogue and the announcer. Announcer callouts carry "
     "information a player acts on — an enemy UAV overhead, a captured objective — so this is a "
     "channel rather than flavour.",
@@ -1596,6 +1689,7 @@ MW4_VOICE_VOLUME = _make_mw4_setting(
 MW4_MONO_SOUND = _make_mw4_setting(
     setting_id="game_config:mw4:mono_sound",
     display_name="MW4 Mono Audio",
+    short_name="MW4 Mono Audio",
     description="Collapses stereo output to a single channel. It exists for accessibility, and "
     "turning it on removes the left/right difference that direction is read from — the single "
     "most destructive audio setting in the file for locating anyone.",
@@ -1624,6 +1718,7 @@ MW4_MONO_SOUND = _make_mw4_setting(
 MW4_MOUSE_ACCELERATION = _make_mw4_setting(
     setting_id="game_config:mw4:mouse_acceleration",
     display_name="MW4 Mouse Acceleration",
+    short_name="MW4 Mouse Acceleration",
     description="Scales aim by how fast the mouse is moved, so the same distance produces a "
     "different turn depending on speed. It is the reason a flick that worked once does not "
     "work again, and no amount of practice makes it consistent.",
@@ -1646,6 +1741,7 @@ MW4_MOUSE_ACCELERATION = _make_mw4_setting(
 MW4_MOUSE_FILTER = _make_mw4_setting(
     setting_id="game_config:mw4:mouse_filter",
     display_name="MW4 Mouse Filtering",
+    short_name="MW4 Mouse Filtering",
     description="Averages mouse input over several samples. Averaging means the aim lags the "
     "hand, and the lag grows with the filter strength.",
     key="MouseFilter@1",
@@ -1667,6 +1763,7 @@ MW4_MOUSE_FILTER = _make_mw4_setting(
 MW4_MOUSE_SMOOTHING = _make_mw4_setting(
     setting_id="game_config:mw4:mouse_smoothing",
     display_name="MW4 Mouse Smoothing",
+    short_name="MW4 Mouse Smoothing",
     description="Interpolates between mouse samples to make movement look smoother. What it "
     "smooths out is the small fast correction at the end of a flick, which is the part that "
     "lands the shot.",
@@ -1686,6 +1783,7 @@ MW4_MOUSE_SMOOTHING = _make_mw4_setting(
 MW4_SPRINT_ASSIST_DELAY = _make_mw4_setting(
     setting_id="game_config:mw4:sprint_assist_delay",
     display_name="MW4 Sprint Assist Delay",
+    short_name="MW4 Sprint Assist Delay",
     description="How long the player must hold a direction before sprint engages automatically. "
     "Any delay is time spent walking while intending to run, at the start of every rotation.",
     key="Sprint Assist Delay KBM@1",
@@ -1707,6 +1805,7 @@ MW4_SPRINT_ASSIST_DELAY = _make_mw4_setting(
 MW4_ADS_FOV_SCALING = _make_mw4_setting(
     setting_id="game_config:mw4:ads_fov_scaling",
     display_name="MW4 ADS Field of View Scaling",
+    short_name="MW4 ADS Field of View Scaling",
     description="Keeps the field of view scaled with the player's setting while aiming down "
     "sights. With it off, aiming narrows the view to a fixed default and hides whatever was at "
     "the edges — at the moment the player is least able to turn.",
@@ -1726,6 +1825,7 @@ MW4_ADS_FOV_SCALING = _make_mw4_setting(
 MW4_FREE_LOOK = _make_mw4_setting(
     setting_id="game_config:mw4:free_look",
     display_name="MW4 Free Look",
+    short_name="MW4 Free Look",
     description="Allows the view to turn independently of movement direction. Without it a "
     "player cannot check behind while retreating, which is when checking behind matters.",
     key="FreeLook@0",
@@ -1744,6 +1844,7 @@ MW4_FREE_LOOK = _make_mw4_setting(
 MW4_GAMEPAD_AIM = _make_mw4_setting(
     setting_id="game_config:mw4:gamepad_aim",
     display_name="MW4 Gamepad Aiming",
+    short_name="MW4 Gamepad Aiming",
     description="Restricts aiming to a gamepad stick rather than the mouse. Enabled on a "
     "mouse-and-keyboard machine it makes the mouse stop aiming entirely, which reads as the "
     "game being broken rather than as a setting.",
@@ -1763,6 +1864,7 @@ MW4_GAMEPAD_AIM = _make_mw4_setting(
 MW4_FOV = _make_mw4_setting(
     setting_id="game_config:mw4:fov",
     display_name="MW4 Field of View",
+    short_name="MW4 Field of View",
     description="How much of the world is visible at once, from 60 to 120 degrees. A wider view "
     "shows more of what is beside the player and makes everything in it smaller and further "
     "away, so there is no value here that is correct for everyone.",
@@ -1783,6 +1885,9 @@ MW4_FOV = _make_mw4_setting(
     # setting like that is offered, never assumed.
     impact_scores={"target_visibility": "preserved", "fps": "0%"},
     category_order=107,
+    perceptible_cost=(
+        "A wider view renders more of the world — targets appear smaller at the same distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1818,6 +1923,7 @@ def create_mw4_resolution_setting(width: int, height: int) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:resolution",
         display_name="MW4 Fullscreen Resolution",
+        short_name="MW4 Fullscreen Resolution",
         description="Resolution the game presents at. Below the panel's native mode the display "
         "scales the image itself, which softens every edge before the player sees it and costs "
         "nothing back.",
@@ -1849,6 +1955,7 @@ def create_mw4_refresh_rate_setting(max_hz: int) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:refresh_rate",
         display_name="MW4 Refresh Rate",
+        short_name="MW4 Refresh Rate",
         description="Refresh rate the game drives the display at. Set below the panel's maximum "
         "it discards frames the monitor could have shown, which is the one loss no graphics "
         "setting can win back.",
@@ -1869,6 +1976,7 @@ def create_mw4_refresh_rate_setting(max_hz: int) -> SettingExecutor:
 MW4_ASPECT_RATIO = _make_mw4_setting(
     setting_id="game_config:mw4:aspect_ratio",
     display_name="MW4 Aspect Ratio",
+    short_name="MW4 Aspect Ratio",
     description="Forces a specific aspect ratio regardless of the window. Anything other than "
     "auto either stretches the image or crops away the sides, and the sides are where movement "
     "is noticed first.",
@@ -1897,6 +2005,7 @@ MW4_ASPECT_RATIO = _make_mw4_setting(
 MW4_DISPLAY_MODE = _make_mw4_setting(
     setting_id="game_config:mw4:display_mode",
     display_name="MW4 Display Mode",
+    short_name="MW4 Display Mode",
     description="How the game occupies the screen. Borderless keeps the desktop compositor in "
     "the path but alt-tabs instantly and follows the desktop's resolution and refresh rate; "
     "exclusive fullscreen removes the compositor and costs those.",
@@ -1920,6 +2029,7 @@ MW4_DISPLAY_MODE = _make_mw4_setting(
 MW4_PREFERRED_DISPLAY_MODE = _make_mw4_setting(
     setting_id="game_config:mw4:preferred_display_mode",
     display_name="MW4 Preferred Display Mode",
+    short_name="MW4 Preferred Display Mode",
     description="The mode the game returns to after a display change or a driver reset. It is "
     "read separately from the active mode, so leaving it behind undoes the mode above the next "
     "time the display is touched.",
@@ -1942,6 +2052,7 @@ MW4_PREFERRED_DISPLAY_MODE = _make_mw4_setting(
 MW4_VSYNC = _make_mw4_setting(
     setting_id="game_config:mw4:vsync",
     display_name="MW4 V-Sync",
+    short_name="MW4 V-Sync",
     description="Holds each frame until the display is ready for it. On a variable-refresh panel "
     "the display already waits for the frame, so V-Sync only adds a queue — up to a full frame "
     "of input latency for tearing that was not happening.",
@@ -1961,6 +2072,7 @@ MW4_VSYNC = _make_mw4_setting(
 MW4_VSYNC_MENU = _make_mw4_setting(
     setting_id="game_config:mw4:vsync_menu",
     display_name="MW4 Menu V-Sync",
+    short_name="MW4 Menu V-Sync",
     description="V-Sync applied only in menus. Input latency does not matter on a menu, and "
     "capping there is one of the cheapest ways to stop the GPU heating the chassis before the "
     "match starts.",
@@ -1980,6 +2092,7 @@ MW4_VSYNC_MENU = _make_mw4_setting(
 MW4_CAP_FPS = _make_mw4_setting(
     setting_id="game_config:mw4:cap_fps",
     display_name="MW4 Custom Frame Cap",
+    short_name="MW4 Custom Frame Cap",
     description="The master switch for every frame limit in this game. With it off the in-game, "
     "menu and unfocused caps are all inert, which is how a machine ends up rendering 900 frames "
     "a second of a lobby.",
@@ -1998,6 +2111,7 @@ MW4_CAP_FPS = _make_mw4_setting(
 MW4_DISPLAY_GAMMA = _make_mw4_setting(
     setting_id="game_config:mw4:display_gamma",
     display_name="MW4 Colour Space",
+    short_name="MW4 Colour Space",
     description="Colour space the game outputs in. sRGB is what an ordinary SDR panel expects; "
     "the alternative targets a different transfer curve and makes shadowed areas read wrong on a "
     "display that is not set up for it.",
@@ -2016,6 +2130,7 @@ MW4_DISPLAY_GAMMA = _make_mw4_setting(
 MW4_HDR = _make_mw4_setting(
     setting_id="game_config:mw4:hdr",
     display_name="MW4 HDR",
+    short_name="MW4 HDR",
     description="Whether the game outputs high dynamic range. Automatic asks the display and "
     "acts on the answer, which is more than fpstune can do — the panel's HDR capability is not "
     "in the monitor data it reads.",
@@ -2037,6 +2152,7 @@ MW4_HDR = _make_mw4_setting(
 MW4_MENU_SCENE_RESOLUTION = _make_mw4_setting(
     setting_id="game_config:mw4:menu_scene_resolution",
     display_name="MW4 Menu Scene Resolution",
+    short_name="MW4 Menu Scene Resolution",
     description="Drops the render resolution of the 3D scene behind non-interactive menus. "
     "Nothing in a menu is aimed at, so the pixels spent there are heat the machine still carries "
     "into the match.",
@@ -2058,6 +2174,7 @@ MW4_MENU_SCENE_RESOLUTION = _make_mw4_setting(
 MW4_REDUCE_QUALITY_IDLE = _make_mw4_setting(
     setting_id="game_config:mw4:reduce_quality_idle",
     display_name="MW4 Idle Quality Reduction",
+    short_name="MW4 Idle Quality Reduction",
     description="Lowers rendering quality once the player has been idle. An idle player is by "
     "definition not looking for anyone, so the quality has nothing to show them.",
     key="SustainabilityReduceQualityIdle@0",
@@ -2075,6 +2192,7 @@ MW4_REDUCE_QUALITY_IDLE = _make_mw4_setting(
 MW4_REDUCE_QUALITY_IDLE_DELAY = _make_mw4_setting(
     setting_id="game_config:mw4:reduce_quality_idle_delay",
     display_name="MW4 Idle Quality Delay",
+    short_name="MW4 Idle Quality Delay",
     description="How long the player must be idle before quality drops. MW4 keeps this under a "
     "second scope of the same name as the switch above, with its own list of durations.",
     key="SustainabilityReduceQualityIdle@1",
@@ -2092,6 +2210,7 @@ MW4_REDUCE_QUALITY_IDLE_DELAY = _make_mw4_setting(
 MW4_PAUSE_RENDERING = _make_mw4_setting(
     setting_id="game_config:mw4:pause_rendering",
     display_name="MW4 Pause Rendering",
+    short_name="MW4 Pause Rendering",
     description="Stops rendering entirely at the pause menu or when the window loses focus. The "
     "unfocused frame cap already covers the same ground at 30 fps, and a full stop has to rebuild "
     "the frame on the way back — a stutter at exactly the moment of returning to a match.",
@@ -2111,6 +2230,7 @@ MW4_PAUSE_RENDERING = _make_mw4_setting(
 MW4_ECO_LOW_BATTERY = _make_mw4_setting(
     setting_id="game_config:mw4:eco_low_battery",
     display_name="MW4 Low Battery Mode",
+    short_name="MW4 Low Battery Mode",
     description="Lowers high-impact settings when the battery runs down, to extend a session. It "
     "is a frame-rate ceiling that binds during a match, on a laptop, without announcing itself — "
     "the shape of tweak that costs more than any setting in this file gains.",
@@ -2133,6 +2253,7 @@ MW4_ECO_LOW_BATTERY = _make_mw4_setting(
 MW4_ECO_BATTERY_THRESHOLD = _make_mw4_setting(
     setting_id="game_config:mw4:eco_battery_threshold",
     display_name="MW4 Low Battery Threshold",
+    short_name="MW4 Low Battery Threshold",
     description="Battery level at which the saver above engages. MW4 keeps it under two scope "
     "indices with the same range, so both have to agree or the threshold that binds is not the "
     "one the menu shows.",
@@ -2159,6 +2280,7 @@ MW4_ECO_BATTERY_THRESHOLD = _make_mw4_setting(
 MW4_SKIP_INTRO = _make_mw4_setting(
     setting_id="game_config:mw4:skip_intro",
     display_name="MW4 Startup Intro",
+    short_name="MW4 Startup Intro",
     description="Skips the publisher and engine logos on launch. They cost the same seconds "
     "every session and there is nothing in them to see twice.",
     key="SkipIntro@1",
@@ -2176,6 +2298,7 @@ MW4_SKIP_INTRO = _make_mw4_setting(
 MW4_SKIP_SEASON_VIDEO = _make_mw4_setting(
     setting_id="game_config:mw4:skip_season_video",
     display_name="MW4 Repeat Season Video",
+    short_name="MW4 Repeat Season Video",
     description="Skips the season video on every login after the first. It is a separate switch "
     "from the one that skips it initially, so leaving this behind brings the video back on the "
     "second session.",
@@ -2194,6 +2317,7 @@ MW4_SKIP_SEASON_VIDEO = _make_mw4_setting(
 MW4_ENABLE_HUD = _make_mw4_setting(
     setting_id="game_config:mw4:enable_hud",
     display_name="MW4 Heads-Up Display",
+    short_name="MW4 Heads-Up Display",
     description="Draws the HUD — health, ammo, the minimap, killstreak state. Every element of "
     "it is information the player acts on, which makes turning it off for frames the clearest "
     "possible false economy.",
@@ -2239,6 +2363,7 @@ def create_mw4_aa_technique_setting(gpu_vendor: str) -> SettingExecutor:
     return _make_mw4_setting(
         setting_id="game_config:mw4:aa_technique",
         display_name="MW4 Anti-Aliasing Technique",
+        short_name="MW4 Anti-Aliasing Technique",
         description="Which anti-aliasing path the game uses. Each vendor's upscaler doubles as "
         "its best anti-aliasing, so the right answer here is a property of the card rather than "
         "a preference — and the wrong one leaves dedicated hardware unused.",
@@ -2260,6 +2385,7 @@ def create_mw4_aa_technique_setting(gpu_vendor: str) -> SettingExecutor:
 MW4_AMD_ANTILAG = _make_mw4_setting(
     setting_id="game_config:mw4:amd_antilag",
     display_name="MW4 AMD Anti-Lag 2",
+    short_name="MW4 AMD Anti-Lag 2",
     description="AMD's low-latency mode, which keeps the render queue short instead of letting "
     "frames accumulate ahead of the GPU. It is the counterpart of NVIDIA Reflex, and leaving it "
     "off is the same cost on AMD hardware that Reflex being off is on NVIDIA.",
@@ -2280,6 +2406,7 @@ MW4_AMD_ANTILAG = _make_mw4_setting(
 MW4_AMD_FSR_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:amd_fsr_quality",
     display_name="MW4 FSR Quality Mode",
+    short_name="MW4 FSR Quality Mode",
     description="Internal resolution FSR 2/3 renders at before upscaling. An upscaler exists to "
     "buy frames, so its most expensive tier gives back most of what it was turned on for — the "
     "same trade DLSS makes, decided the same way.",
@@ -2298,6 +2425,9 @@ MW4_AMD_FSR_QUALITY = _make_mw4_setting(
     effect="Moves FSR to the tier that buys frames without softening a target",
     impact_scores={"fps": "+10-18%", "target_clarity": "preserved"},
     category_order=132,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "amd"},
@@ -2306,6 +2436,7 @@ MW4_AMD_FSR_QUALITY = _make_mw4_setting(
 MW4_AMD_FSR1_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:amd_fsr1_quality",
     display_name="MW4 FSR 1 Quality Mode",
+    short_name="MW4 FSR 1 Quality Mode",
     description="Quality tier for the older spatial FSR 1 path, kept separate from FSR 2/3. It "
     "only applies when FidelityFX is set to FSR 1, and a low tier here is a soft image with no "
     "temporal information to recover it.",
@@ -2321,6 +2452,9 @@ MW4_AMD_FSR1_QUALITY = _make_mw4_setting(
     # go soft faster. `Maximum Performance` is where a distant player goes.
     impact_scores={"fps": "+3-9%", "target_clarity": "preserved"},
     category_order=133,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "amd"},
@@ -2329,6 +2463,7 @@ MW4_AMD_FSR1_QUALITY = _make_mw4_setting(
 MW4_AMD_FIDELITYFX = _make_mw4_setting(
     setting_id="game_config:mw4:amd_fidelityfx",
     display_name="MW4 AMD FidelityFX",
+    short_name="MW4 AMD FidelityFX",
     description="Which FidelityFX path is active: sharpening only, spatial FSR 1, or temporal "
     "FSR 3. MW4 keeps the choice under two scope indices with the same value list, so both have "
     "to agree or the path that runs is not the one the menu shows.",
@@ -2349,6 +2484,7 @@ MW4_AMD_FIDELITYFX = _make_mw4_setting(
 MW4_AMD_CAS_STRENGTH = _make_mw4_setting(
     setting_id="game_config:mw4:amd_cas_strength",
     display_name="MW4 Contrast Adaptive Sharpening",
+    short_name="MW4 Contrast Adaptive Sharpening",
     description="Strength of AMD's sharpening filter. Sharpening recovers some of what an "
     "upscaler softened, but past a point it draws halos around edges — which adds contrast "
     "where there is no object.",
@@ -2371,6 +2507,7 @@ MW4_AMD_CAS_STRENGTH = _make_mw4_setting(
 MW4_FSR_FRAME_INTERPOLATION = _make_mw4_setting(
     setting_id="game_config:mw4:fsr_frame_interpolation",
     display_name="MW4 FSR Frame Generation",
+    short_name="MW4 FSR Frame Generation",
     description="Inserts generated frames between rendered ones. The frame counter rises and "
     "the input latency rises with it, because a generated frame cannot show anything the player "
     "did — which is the opposite of what a competitive setting should do.",
@@ -2393,6 +2530,7 @@ MW4_FSR_FRAME_INTERPOLATION = _make_mw4_setting(
 MW4_INTEL_XELL = _make_mw4_setting(
     setting_id="game_config:mw4:intel_xell",
     display_name="MW4 Intel XeLL",
+    short_name="MW4 Intel XeLL",
     description="Intel's low-latency mode, which keeps the render queue short instead of letting "
     "frames accumulate. It is the counterpart of Reflex and Anti-Lag, and an Arc owner loses the "
     "same latency without it that anyone else does.",
@@ -2413,6 +2551,7 @@ MW4_INTEL_XELL = _make_mw4_setting(
 MW4_XESS_QUALITY = _make_mw4_setting(
     setting_id="game_config:mw4:xess_quality",
     display_name="MW4 XeSS Quality Mode",
+    short_name="MW4 XeSS Quality Mode",
     description="Internal resolution XeSS renders at before upscaling. An upscaler exists to buy "
     "frames, so its most expensive tier gives back most of what it was turned on for — the same "
     "trade DLSS and FSR make, decided the same way.",
@@ -2433,6 +2572,9 @@ MW4_XESS_QUALITY = _make_mw4_setting(
     effect="Moves XeSS to the tier that buys frames without softening a target",
     impact_scores={"fps": "+8-15%", "target_clarity": "preserved"},
     category_order=138,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "intel"},
@@ -2441,6 +2583,7 @@ MW4_XESS_QUALITY = _make_mw4_setting(
 MW4_INTEL_XEFG = _make_mw4_setting(
     setting_id="game_config:mw4:intel_xefg",
     display_name="MW4 Intel XeSS Frame Generation",
+    short_name="MW4 Intel XeSS Frame Generation",
     description="Inserts generated frames between rendered ones. The counter rises and the "
     "input latency rises with it, because a generated frame cannot show anything the player did.",
     key="IntelXeFG@0",
@@ -2459,6 +2602,7 @@ MW4_INTEL_XEFG = _make_mw4_setting(
 MW4_INTEL_XEFG_MULTI = _make_mw4_setting(
     setting_id="game_config:mw4:intel_xefg_multi",
     display_name="MW4 XeSS Frame Generation Multiplier",
+    short_name="MW4 XeSS Frame Generation Multiplier",
     description="How many frames XeSS generates per rendered one. Inert while frame generation "
     "is off, and each step above 1 adds latency on top of the generation itself.",
     key="IntelXEFGMulti@0",
@@ -2483,6 +2627,7 @@ MW4_INTEL_XEFG_MULTI = _make_mw4_setting(
 MW4_DLSS_MODE = _make_mw4_setting(
     setting_id="game_config:mw4:dlss_mode",
     display_name="MW4 DLSS Mode",
+    short_name="MW4 DLSS Mode",
     description="Which DLSS path runs: upscaling, native-resolution anti-aliasing, or the ray "
     "reconstruction denoiser. DLSS upscaling is the one that returns frames while keeping the "
     "image resolvable.",
@@ -2502,6 +2647,7 @@ MW4_DLSS_MODE = _make_mw4_setting(
 MW4_DLSS_FRAME_GENERATION = _make_mw4_setting(
     setting_id="game_config:mw4:dlss_frame_generation",
     display_name="MW4 DLSS Frame Generation",
+    short_name="MW4 DLSS Frame Generation",
     description="Inserts generated frames between rendered ones. The counter rises and the input "
     "latency rises with it, because a generated frame cannot show anything the player did — the "
     "reason it is off in every competitive configuration.",
@@ -2522,6 +2668,7 @@ MW4_DLSS_FRAME_GENERATION = _make_mw4_setting(
 MW4_DLSS_SHARPNESS = _make_mw4_setting(
     setting_id="game_config:mw4:dlss_sharpness",
     display_name="MW4 DLSS Sharpness",
+    short_name="MW4 DLSS Sharpness",
     description="Sharpening applied after DLSS upscaling. Some recovers what the upscaler "
     "softened; too much draws halos around edges, adding contrast where there is no object and "
     "making a distant figure harder to separate rather than easier.",
@@ -2545,6 +2692,7 @@ MW4_DLSS_SHARPNESS = _make_mw4_setting(
 MW4_NVIDIA_IMAGE_SCALING = _make_mw4_setting(
     setting_id="game_config:mw4:nvidia_image_scaling",
     display_name="MW4 NVIDIA Image Scaling",
+    short_name="MW4 NVIDIA Image Scaling",
     description="A spatial upscaler with no temporal information, from before DLSS. Running it "
     "alongside DLSS stacks two upscalers, which is the same mistake as a low render resolution "
     "under a low DLSS tier.",
@@ -2564,6 +2712,7 @@ MW4_NVIDIA_IMAGE_SCALING = _make_mw4_setting(
 MW4_DXR_DENOISER = _make_mw4_setting(
     setting_id="game_config:mw4:dxr_denoiser",
     display_name="MW4 Ray Tracing Denoiser",
+    short_name="MW4 Ray Tracing Denoiser",
     description="Which denoiser cleans up ray-traced lighting. Inert while ray tracing is off, "
     "and the vendor-specific options here each pull in their own upscaler path as a side effect.",
     key="DxrDenoiser@0",
@@ -2583,6 +2732,7 @@ MW4_SHADER_CACHE_CLEANUP = SettingExecutor(
     id="game_cleanup:mw4:shader_cache_cleanup",
     category=SettingCategory.MAINTENANCE,
     display_name="MW4 Shader Cache Cleanup",
+    short_name="MW4 Shader Cache Cleanup",
     description="Deletes MW4's compiled shader cache and its xpak and telescope content "
     "caches from the game's own install folder. The game rebuilds all three on the next "
     "launch, which is also what clears the black screens and launch crashes a driver "
@@ -2617,6 +2767,7 @@ COD_CRASH_REPORTS_CLEANUP = SettingExecutor(
     id="game_cleanup:cod_crash_reports",
     category=SettingCategory.MAINTENANCE,
     display_name="Call of Duty Crash Reports",
+    short_name="Call of Duty Crash Reports",
     description="Deletes the crash dumps and GPU fault reports the Call of Duty launcher "
     "writes beside the player profile. They are diagnostic files for a crash that has "
     "already happened and nothing reads them afterwards.",

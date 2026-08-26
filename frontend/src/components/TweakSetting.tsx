@@ -11,6 +11,8 @@
  * Row background: green = at recommended target, red = not at target.
  */
 
+import { useT } from "../i18n";
+import { localizedName } from "../i18n/settings";
 import { Loader2, RotateCcw, ShieldCheck, CheckCircle2, XCircle, Undo2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
@@ -67,6 +69,7 @@ export function TweakSetting({
   contextLabel,
   contextIcon,
 }: TweakSettingProps) {
+  const { t } = useT();
   // Only show loading if never detected (initial load). Re-detect keeps previous value visible.
   const isInitialLoading =
     setting.status === "loading" && setting.currentValue === null;
@@ -121,7 +124,7 @@ export function TweakSetting({
             onChange={onSelect}
             onClick={(e) => e.stopPropagation()}
             className="w-3.5 h-3.5 shrink-0 accent-primary cursor-pointer"
-            aria-label={`Select ${setting.displayName}`}
+            aria-label={t("row.selectNamed", { name: localizedName(setting) })}
           />
         )}
         <SettingInfoTooltip setting={setting} />
@@ -134,9 +137,7 @@ export function TweakSetting({
             )}
             style={{ wordBreak: "break-word" }}
           >
-            {"shortName" in setting && setting.shortName
-              ? setting.shortName
-              : setting.displayName}
+            {localizedName(setting)}
           </span>
           {setting.evidenceLevel === "proven" && (
             <TooltipProvider>
@@ -145,7 +146,7 @@ export function TweakSetting({
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 cursor-default" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Proven: 3+ independent sources
+                  {t("tooltip.provenDetail")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -157,7 +158,7 @@ export function TweakSetting({
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0 cursor-default" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Experimental: safe but unproven on modern systems
+                  {t("tooltip.experimentalDetail")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -166,12 +167,12 @@ export function TweakSetting({
             <TooltipProvider>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
-                  <span className="text-[10px] text-warning shrink-0 cursor-default">
+                  <span className="text-xs text-warning shrink-0 cursor-default">
                     (R)
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Requires system restart
+                  {t("tooltip.requiresRestart")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -194,8 +195,8 @@ export function TweakSetting({
         <div className="shrink-0 ml-auto flex items-center gap-1">
           {/* SSE bulk operation status badge */}
           {operationStatus === "queued" && (
-            <span className="text-[10px] text-muted-foreground/60 px-1 rounded bg-muted/50">
-              queued
+            <span className="text-xs text-muted-foreground/60 px-1 rounded bg-muted/50">
+              {t("row.queued")}
             </span>
           )}
           {operationStatus === "running" && (
@@ -208,19 +209,21 @@ export function TweakSetting({
             <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
           )}
           {isDisabled ? (
-            <span className="text-muted-foreground/30 text-[10px]">N/A</span>
+            <span className="text-muted-foreground/30 text-xs">
+              {t("row.notApplicable")}
+            </span>
           ) : isInitialLoading ? (
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           ) : setting.isReadonly ? (
             <span
               className={cn(
-                "text-[10px] font-medium px-2 py-0.5 rounded border",
+                "text-xs font-medium px-2 py-0.5 rounded border",
                 isOptimal
                   ? "text-success border-success/30 bg-success/10"
                   : "text-warning border-warning/30 bg-warning/10",
               )}
             >
-              {isOptimal ? "OK" : "Advisory"}
+              {isOptimal ? t("row.ok") : t("row.advisory")}
             </span>
           ) : (
             <>
@@ -243,13 +246,13 @@ export function TweakSetting({
                         onClick={onVerify}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label="Verify current value"
+                        aria-label={t("row.verify")}
                       >
                         <ShieldCheck className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Verify current value
+                      {t("row.verify")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -263,14 +266,15 @@ export function TweakSetting({
                         onClick={onUndo}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label={`Undo fpstune's change, back to ${String(setting.originalValue)}`}
+                        aria-label={t("row.undo", { value: String(setting.originalValue) })}
                       >
                         <Undo2 className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Undo fpstune's change — back to {String(setting.originalValue)}, what this
-                      machine had before
+                      {t("row.undoTooltip", {
+                        value: String(setting.originalValue),
+                      })}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -284,13 +288,13 @@ export function TweakSetting({
                         onClick={onReset}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label="Restore the Windows default"
+                        aria-label={t("row.resetDefault")}
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Restore the Windows default
+                      {t("row.resetDefault")}
                       {setting.defaultValue !== undefined && ` (${String(setting.defaultValue)})`}
                     </TooltipContent>
                   </Tooltip>
@@ -305,22 +309,22 @@ export function TweakSetting({
       {!isDisabled && !isInitialLoading && (
         <div className="flex flex-wrap items-center gap-x-4 gap-y-0.5 mt-1 ml-7 text-xs">
           {contextLabel && (
-            <span className="flex items-center gap-1 min-w-0 text-[10px] text-muted-foreground/70">
+            <span className="flex items-center gap-1 min-w-0 text-xs text-muted-foreground/70">
               {contextIcon}
               <span className="truncate">{contextLabel}</span>
             </span>
           )}
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">
-              Default
+            <span className="text-muted-foreground/50 text-xs shrink-0">
+              {t("row.default")}
             </span>
             <span className="text-muted-foreground font-medium break-words min-w-0">
               {setting.valueHints?.[String(setting.defaultValue)] ?? formatSettingValue(setting.defaultValue)}
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">
-              Current
+            <span className="text-muted-foreground/50 text-xs shrink-0">
+              {t("row.current")}
             </span>
             <span
               className={cn(
@@ -334,7 +338,7 @@ export function TweakSetting({
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-[10px] shrink-0">Target</span>
+            <span className="text-muted-foreground/50 text-xs shrink-0">{t("row.target")}</span>
             <span className="text-primary font-medium break-words min-w-0">
               {setting.valueHints?.[String(profileTarget)] ?? formatSettingValue(profileTarget)}
             </span>
@@ -344,7 +348,7 @@ export function TweakSetting({
 
       {/* Row 3: Last error banner */}
       {setting.lastError && (
-        <p className="mt-1 ml-7 text-[11px] text-destructive leading-tight">
+        <p className="mt-1 ml-7 text-xs text-destructive leading-tight">
           {setting.lastError}
         </p>
       )}
@@ -369,6 +373,7 @@ function InlineControl({
   onApplyValue: (value: unknown) => void;
   onReset: () => void;
 }) {
+  const { t } = useT();
   const disabled = isPending || isModuleLoading;
 
   // Every choice is a real one. This used to filter out "not_available",
@@ -400,14 +405,14 @@ function InlineControl({
                 isPending={isPending}
                 size="sm"
                 disabled={disabled}
-                title={setting.displayName}
+                title={localizedName(setting)}
               />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
             {isAtTarget
-              ? `${setting.choices[0]} (reset)`
-              : `Set to ${targetStr}`}
+              ? t("row.resetChoice", { value: String(setting.choices[0]) })
+              : t("row.setTo", { value: targetStr })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -448,14 +453,14 @@ function InlineControl({
                 isPending={isPending}
                 size="sm"
                 disabled={disabled}
-                title={setting.displayName}
+                title={localizedName(setting)}
               />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
             {isOptimal
-              ? `Reset to ${setting.defaultValue}`
-              : `Set to ${profileTarget}`}
+              ? t("row.resetTo", { value: String(setting.defaultValue) })
+              : t("row.setTo", { value: String(profileTarget) })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -473,7 +478,7 @@ function InlineControl({
         isPending={isPending}
         size="sm"
         disabled={disabled}
-        title={setting.displayName}
+        title={localizedName(setting)}
       />
     );
   }

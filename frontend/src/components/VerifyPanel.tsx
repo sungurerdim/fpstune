@@ -1,3 +1,6 @@
+import { useT } from "../i18n";
+import type { MessageKey } from "../i18n/en";
+import { Meter } from "./ui/Feedback";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import {
@@ -34,32 +37,32 @@ import { useStore } from "../store";
 
 const STATUS_STYLE: Record<
   VerifyStatus,
-  { icon: typeof CheckCircle2; className: string; label: string }
+  { icon: typeof CheckCircle2; className: string; labelKey: MessageKey }
 > = {
   verified: {
     icon: CheckCircle2,
     className: "text-emerald-500",
-    label: "Verified",
+    labelKey: "verify.statusVerified",
   },
   contradicted: {
     icon: XCircle,
     className: "text-red-500",
-    label: "Contradicted",
+    labelKey: "verify.statusContradicted",
   },
   inconclusive: {
     icon: CircleSlash,
     className: "text-amber-500",
-    label: "Lost in the noise",
+    labelKey: "verify.statusNoise",
   },
   unmeasured: {
     icon: CircleSlash,
     className: "text-muted-foreground",
-    label: "Not measured",
+    labelKey: "verify.statusUnmeasured",
   },
   not_attributable: {
     icon: AlertTriangle,
     className: "text-amber-500",
-    label: "Not attributable",
+    labelKey: "verify.statusUnattributable",
   },
 };
 
@@ -129,6 +132,7 @@ function samplesOf(run: SuiteRun | null): Samples {
 }
 
 export function VerifyPanel() {
+  const { t } = useT();
   const selectedIds = useStore((s) => s.selectedSettingIds);
   const settingIds = useMemo(() => Array.from(selectedIds), [selectedIds]);
 
@@ -166,12 +170,10 @@ export function VerifyPanel() {
       <div className="space-y-2">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Scale className="w-5 h-5" />
-          Verify a claim
+          {t("verify.title")}
         </h3>
         <p className="text-sm text-muted-foreground">
-          Select the settings you are about to change, on the Settings tab. A
-          round is only meaningful about settings it knows changed — so this
-          asks which ones rather than guessing from what is applied.
+          {t("verify.selectFirst")}
         </p>
       </div>
     );
@@ -182,23 +184,21 @@ export function VerifyPanel() {
       <div className="space-y-1">
         <h3 className="text-lg font-semibold flex items-center gap-2">
           <Scale className="w-5 h-5" />
-          Verify a claim
+          {t("verify.title")}
         </h3>
         <p className="text-sm text-muted-foreground">
-          {settingIds.length} setting{settingIds.length === 1 ? "" : "s"}{" "}
-          selected. Measure, apply them, measure again, and this judges what the
-          settings claimed against what the machine did.
+          {t("verify.selectedSummary", { count: settingIds.length })}
         </p>
       </div>
 
       {/* 1 — what a round could show at all, answered before anything runs */}
       <section className="space-y-2" aria-labelledby="verify-coverage-heading">
         <h4 id="verify-coverage-heading" className="font-medium">
-          What this could show
+          {t("verify.couldShow")}
         </h4>
         {coverageLoading && (
           <p className="text-sm text-muted-foreground flex items-center gap-2">
-            <Loader2 className="w-4 h-4 animate-spin" /> Reading the claims…
+            <Loader2 className="w-4 h-4 animate-spin" /> {t("verify.readingClaims")}
           </p>
         )}
         {coverage && (
@@ -206,7 +206,7 @@ export function VerifyPanel() {
             <p className="text-sm">{coverage.summary}</p>
             {coverage.required_conditions.length > 0 && (
               <div className="text-sm text-muted-foreground">
-                <span className="font-medium">You would need: </span>
+                <span className="font-medium">{t("verify.youWouldNeed")}</span>
                 {coverage.required_conditions.join("; ")}
               </div>
             )}
@@ -217,11 +217,11 @@ export function VerifyPanel() {
                 of it could never be done. */}
             <ClaimList
               claims={coverage.unmeasurable.filter((claim) => claim.judgeable)}
-              title="nothing here can check yet, and why"
+              title={t("verify.gapsTitle")}
             />
             <ClaimList
               claims={coverage.unmeasurable.filter((claim) => !claim.judgeable)}
-              title="no measurement settles — real claims, not gaps"
+              title={t("verify.unmeasurableTitle")}
             />
           </>
         )}
@@ -230,25 +230,28 @@ export function VerifyPanel() {
       {/* 2 — what the suite measured, which is where the readings come from */}
       <section className="space-y-2" aria-labelledby="verify-samples-heading">
         <h4 id="verify-samples-heading" className="font-medium">
-          Readings
+          {t("verify.readings")}
         </h4>
         {beforeCount === 0 && afterCount === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No measurements yet. Take a baseline on the Measure tab, apply these
-            settings, and measure again — this judges the claims against that
-            same pair rather than asking for a second one.
+            {t("verify.noMeasurements")}
           </p>
         ) : (
           <>
             <p className="text-sm">
-              From the measurement suite: {beforeCount} reading
-              {beforeCount === 1 ? "" : "s"} before, {afterCount} after, across{" "}
-              {Object.keys({ ...before, ...after }).length} metrics.
+              {t(
+                beforeCount === 1 ? "verify.fromSuiteOne" : "verify.fromSuite",
+                {
+                  before: beforeCount,
+                  after: afterCount,
+                  metrics: Object.keys({ ...before, ...after }).length,
+                },
+              )}
             </p>
             <p className="text-sm text-muted-foreground">
               {beforeCount < SAMPLES_WANTED || afterCount < SAMPLES_WANTED
-                ? `Fewer than ${SAMPLES_WANTED} readings a side. Two runs of the same measurement on an idle machine differ, and without knowing by how much, a small change cannot be told from nothing happening — raise the repeat count on the Measure tab.`
-                : "Enough readings on both sides for the noise floor to mean something."}
+                ? t("verify.fewReadings", { wanted: SAMPLES_WANTED })
+                : t("verify.enoughReadings")}
             </p>
           </>
         )}
@@ -257,7 +260,7 @@ export function VerifyPanel() {
       {/* 3 — the verdict, which is the backend's to give */}
       <section className="space-y-2" aria-labelledby="verify-round-heading">
         <h4 id="verify-round-heading" className="font-medium">
-          Judge
+          {t("verify.judge")}
         </h4>
         <button
           onClick={() => roundMutation.mutate()}
@@ -269,12 +272,11 @@ export function VerifyPanel() {
           ) : (
             <Scale className="w-4 h-4" />
           )}
-          Judge these claims
+          {t("verify.judgeClaims")}
         </button>
         {!canJudge && (
           <p className="text-sm text-muted-foreground">
-            Needs a reading on each side, and a setting selected. One side of a
-            pair is not a small result, it is no result.
+            {t("verify.needsBothSides")}
           </p>
         )}
         {roundMutation.isError && (
@@ -307,10 +309,13 @@ export function VerifyPanel() {
                       aria-hidden="true"
                     />
                     <span>
-                      <span className="sr-only">{style.label}: </span>
+                      <span className="sr-only">{t(style.labelKey)}: </span>
                       <code className="text-xs">{verdict.setting_id}</code>{" "}
-                      claimed {verdict.claimed} for {verdict.metric} —{" "}
-                      <span className={style.className}>{style.label}</span>
+                      {t("verify.claimedLine", {
+                        claimed: verdict.claimed,
+                        metric: verdict.metric,
+                      })}
+                      <span className={style.className}>{t(style.labelKey)}</span>
                       {verdict.measured && (
                         <>
                           {" "}
@@ -324,6 +329,43 @@ export function VerifyPanel() {
                         <span className="text-muted-foreground">
                           {" "}
                           — {verdict.reason}
+                        </span>
+                      )}
+                      {/* The change and the machine's own variation on one
+                          axis (E5): a change whose bar does not clear the
+                          noise bar is not a finding, and now looks like one. */}
+                      {verdict.measured && verdict.measured.noise !== null && (
+                        <span className="block mt-1 max-w-xs space-y-0.5">
+                          <Meter
+                            value={Math.abs(
+                              verdict.measured.after - verdict.measured.before,
+                            )}
+                            max={
+                              Math.max(
+                                Math.abs(
+                                  verdict.measured.after -
+                                    verdict.measured.before,
+                                ),
+                                verdict.measured.noise,
+                              ) * 1.1
+                            }
+                            tone="primary"
+                            label={t("verify.changeBarLabel", { value: Math.abs(verdict.measured.after - verdict.measured.before).toFixed(2), unit: verdict.measured.unit })}
+                          />
+                          <Meter
+                            value={verdict.measured.noise}
+                            max={
+                              Math.max(
+                                Math.abs(
+                                  verdict.measured.after -
+                                    verdict.measured.before,
+                                ),
+                                verdict.measured.noise,
+                              ) * 1.1
+                            }
+                            tone="warning"
+                            label={t("verify.noiseBarLabel", { value: verdict.measured.noise.toFixed(2), unit: verdict.measured.unit })}
+                          />
                         </span>
                       )}
                     </span>

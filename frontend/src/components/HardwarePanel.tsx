@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+import { Card } from "./ui/Card";
 import { useState, useEffect, useSyncExternalStore, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -24,6 +26,7 @@ import { useRefreshOnFocus } from "./hardware/useRefreshOnFocus";
 import { DeviceTweakList } from "./hardware/DeviceTweakList";
 import { NetworkAdapterCard } from "./hardware/NetworkAdapterCard";
 import { AudioSection } from "./hardware/AudioSection";
+import { PowerProfileCard } from "./hardware/PowerProfileCard";
 import { StorageDriveCard } from "./hardware/StorageDriveCard";
 
 // Loading indicator component (uses shared LoadingSpinner)
@@ -50,6 +53,10 @@ function useHardware(): { hardware: HardwareInfo | null; isLoading: boolean } {
     const fetchData = async () => {
       try {
         await hardwareManager.getHardware();
+      } catch {
+        // A failed probe leaves the cached (possibly null) inventory standing;
+        // the sections render their own NotDetected. Uncaught, this rejection
+        // is unhandled — fetchData is fired without an awaiter.
       } finally {
         if (mounted) {
           setIsLoading(false);
@@ -85,6 +92,7 @@ function gpuModuleFor(vendor: string | undefined | null): string {
 }
 
 export function HardwarePanel() {
+  const { t } = useT();
   const { hardware, isLoading } = useHardware();
 
   // A change made in the Windows Sound dialog or a vendor tool is invisible to us
@@ -98,11 +106,11 @@ export function HardwarePanel() {
   });
 
   return (
-    <div className="bg-card rounded-lg border border-border p-4">
+    <Card className="p-4">
       <h3 className="font-medium mb-3 flex items-center justify-between">
         <span className="flex items-center gap-2">
           <Monitor className="w-4 h-4" />
-          Hardware
+          {t("hw.title")}
         </span>
         {systemInfo && (
           <span
@@ -115,11 +123,11 @@ export function HardwarePanel() {
           >
             {systemInfo.is_admin ? (
               <>
-                <ShieldCheck className="w-3 h-3" /> Admin
+                <ShieldCheck className="w-3 h-3" /> {t("hw.admin")}
               </>
             ) : (
               <>
-                <ShieldAlert className="w-3 h-3" /> Not Admin
+                <ShieldAlert className="w-3 h-3" /> {t("hw.notAdmin")}
               </>
             )}
           </span>
@@ -133,7 +141,7 @@ export function HardwarePanel() {
           {/* CPU */}
           <HardwareSection
             icon={<Cpu className="w-4 h-4" />}
-            title="CPU"
+            title={t("hw.cpu")}
             loading={isCategoryLoading(hardware, isLoading, "cpu")}
           >
             {hardware?.cpu ? (
@@ -163,7 +171,7 @@ export function HardwarePanel() {
             <>
               <HardwareSection
                 icon={<MemoryStick className="w-4 h-4" />}
-                title="Memory"
+                title={t("hw.memory")}
               >
                 <div className="pl-3 border-l-2 border-primary/30">
                   <p className="text-sm font-medium">
@@ -185,12 +193,13 @@ export function HardwarePanel() {
             </>
           )}
 
-          {/* Power Profile managed in Software Tweaks tab */}
+          {/* Power plan — the FPS Balanced profile's status and switch. */}
+          <PowerProfileCard />
 
           {/* GPU */}
           <HardwareSection
             icon={<Monitor className="w-4 h-4" />}
-            title="GPU"
+            title={t("hw.gpu")}
             loading={isCategoryLoading(hardware, isLoading, "gpu")}
           >
             {safeArray(hardware?.gpus).length > 0 ? (
@@ -229,7 +238,7 @@ export function HardwarePanel() {
           {/* Displays */}
           <HardwareSection
             icon={<ScreenShare className="w-4 h-4" />}
-            title="Displays"
+            title={t("hw.displays")}
             count={safeArray(hardware?.monitors).length}
             loading={isCategoryLoading(hardware, isLoading, "monitors")}
           >
@@ -253,7 +262,7 @@ export function HardwarePanel() {
           {/* Storage */}
           <HardwareSection
             icon={<HardDrive className="w-4 h-4" />}
-            title="Storage"
+            title={t("hw.storage")}
             count={hardware?.storage_drives?.length}
             loading={isCategoryLoading(hardware, isLoading, "storage")}
           >
@@ -277,7 +286,7 @@ export function HardwarePanel() {
           {/* Network */}
           <HardwareSection
             icon={<Network className="w-4 h-4" />}
-            title="Network"
+            title={t("hw.network")}
             count={hardware?.network_adapters?.length}
             loading={isCategoryLoading(hardware, isLoading, "network")}
           >
@@ -302,7 +311,7 @@ export function HardwarePanel() {
           />
         </div>
       </div>
-    </div>
+    </Card>
   );
 }
 

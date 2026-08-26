@@ -1,3 +1,6 @@
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
+import { Button } from "./ui/Button";
 import {
   Trash2,
   Loader2,
@@ -6,7 +9,6 @@ import {
   CheckCircle2,
   XCircle,
 } from "lucide-react";
-import { cn } from "../lib/utils";
 import { useStore } from "../store";
 import { parseCleanupSize, fmtMB } from "../lib/cleanupSize";
 import { isDockerCleanup, type CleanupRunner } from "../hooks/useCleanupRunner";
@@ -24,6 +26,7 @@ export function CleanupListRow({
   setting: Setting;
   runner: CleanupRunner;
 }) {
+  const { t } = useT();
   const result = useStore((s) => s.cleanupResults[setting.id]);
   const size = parseCleanupSize(setting.currentValue);
 
@@ -32,18 +35,18 @@ export function CleanupListRow({
       return (
         <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
           <Loader2 className="w-3 h-3 animate-spin" />
-          Calculating...
+          {t("cleanup.calculating")}
         </span>
       );
     }
     if (size === "unavailable") {
       return (
         <span
-          title="Service not running and could not be started. Start it, then reopen this tab."
+          title={t("cleanup.serviceDown")}
           className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
         >
           <AlertTriangle className="w-3 h-3" />
-          Unavailable
+          {t("cleanup.unavailable")}
         </span>
       );
     }
@@ -60,20 +63,20 @@ export function CleanupListRow({
     if (!result.success)
       return (
         <span className="flex items-center gap-1 text-xs text-destructive">
-          <XCircle className="w-3 h-3" /> Failed
+          <XCircle className="w-3 h-3" /> {t("cleanup.failed")}
         </span>
       );
     if (!result.sized)
       return (
         <span className="flex items-center gap-1 text-xs text-success">
-          <CheckCircle2 className="w-3 h-3" /> Done
+          <CheckCircle2 className="w-3 h-3" /> {t("cleanup.done")}
         </span>
       );
     if (result.freedMB === null)
       return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />;
     return (
       <span className="text-xs text-primary font-medium">
-        Freed {fmtMB(result.freedMB)}
+        {t("cleanup.freed", { amount: fmtMB(result.freedMB) })}
       </span>
     );
   };
@@ -83,7 +86,7 @@ export function CleanupListRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm break-words min-w-0">
-            {setting.displayName}
+            {localizedName(setting)}
           </span>
           {sizeBadge()}
           {setting.durationEstimate && (
@@ -93,34 +96,24 @@ export function CleanupListRow({
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {setting.description}
+          {localizedDescription(setting)}
         </p>
         {isDockerCleanup(setting) && (
-          <div className="flex items-start gap-1.5 mt-1.5 text-[11px] text-warning">
+          <div className="flex items-start gap-1.5 mt-1.5 text-xs text-warning">
             <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-            <span>
-              Restarts Docker Desktop and all WSL distributions to compact the
-              virtual disk; can take several minutes.
-            </span>
+            <span>{t("cleanup.dockerWarning")}</span>
           </div>
         )}
         <div className="mt-1.5">{status()}</div>
       </div>
-      <button
+      <Button
+        className="shrink-0"
+        busy={runner.isRunning}
+        icon={<Trash2 className="w-3.5 h-3.5" />}
         onClick={() => runner.run([setting.id])}
-        disabled={runner.isRunning}
-        className={cn(
-          "shrink-0 flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium transition-colors",
-          "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
-        )}
       >
-        {runner.isRunning ? (
-          <Loader2 className="w-3.5 h-3.5 animate-spin" />
-        ) : (
-          <Trash2 className="w-3.5 h-3.5" />
-        )}
-        Run
-      </button>
+        {t("action.run")}
+      </Button>
     </div>
   );
 }

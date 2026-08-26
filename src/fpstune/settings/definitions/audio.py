@@ -145,6 +145,7 @@ AUDIO_ENHANCEMENTS = SettingExecutor(
     id="audio:enhancements",
     category=SettingCategory.AUDIO,
     display_name="Audio Enhancements",
+    short_name="Audio enhancements",
     description="Windows audio DSP effects (equalizer, reverb, loudness equalisation). Processing "
     "sits between the game and the speakers and smears the positional cues it is meant to sharpen.",
     value_type=SettingValueType.CHOICE,
@@ -155,7 +156,10 @@ AUDIO_ENHANCEMENTS = SettingExecutor(
     current_impact="Enabled: DSP runs on at least one output → added latency and smeared cues",
     recommended_impact="Disabled: raw output on every active endpoint → lowest latency",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=1,  # Primary audio latency setting
+    category_order=1,
+    perceptible_cost=(
+        "Vendor audio enhancements stop applying — any bass boost, loudness or room correction you relied on goes away."
+    ),  # Primary audio latency setting
     effect="Disables Windows audio DSP effects on every active output",
     impact_scores={"latency_ms": -3, "stability": "high"},
     # Scope note, and it is deliberate. This setting observes and writes exactly
@@ -218,6 +222,7 @@ AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     id="audio:endpoint_enhancements",
     category=SettingCategory.AUDIO,
     display_name="Per-Output Audio Effects",
+    short_name="Per-output audio effects",
     description="Whether any active output still has Windows enhancements switched on for that "
     "device specifically. The global switch does not cover these.",
     value_type=SettingValueType.CHOICE,
@@ -234,6 +239,7 @@ AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     recommended_impact="Clean: every active output passes audio through unprocessed",
     scope=SettingScope.COMPLETE,
     category_order=3,
+    perceptible_cost=("Per-device audio effects stop applying — the device plays the raw stream."),
     effect="Turns off per-device Windows effects on every active output",
     impact_scores={"latency_ms": -3, "stability": "high"},
     # Windows re-reads the flag when the endpoint is next opened, so a stream that
@@ -283,6 +289,7 @@ EXCLUSIVE_MODE = SettingExecutor(
     id="audio:exclusive_mode",
     category=SettingCategory.AUDIO,
     display_name="Exclusive Audio Mode",
+    short_name="Exclusive audio mode",
     description="Allow apps exclusive audio access. Lower latency but blocks other audio.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -292,7 +299,10 @@ EXCLUSIVE_MODE = SettingExecutor(
     current_impact="Enabled: Apps can take exclusive control → lower latency but may block Discord/music",
     recommended_impact="Disabled: Shared audio → no audio conflicts, slight latency increase",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=2,  # Audio access mode
+    category_order=2,
+    perceptible_cost=(
+        "Applications can no longer take exclusive control of the device — bit-perfect playback modes stop working."
+    ),  # Audio access mode
     effect="Manages audio device exclusivity to prevent audio conflicts",
     impact_scores={"latency_ms": 0.5, "stability": "high", "ux": "improved compatibility"},
     # Detection - This is per-device, we'll use a system-wide preference
@@ -435,6 +445,7 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
     id="audio:device_format",
     category=SettingCategory.AUDIO,
     display_name="Device Sample Rate (48 kHz)",
+    short_name="Audio sample rate",
     description="The rate each input and output runs at. Anything that does not match is "
     "resampled by the Windows mixer on every buffer, which costs CPU for nothing.",
     value_type=SettingValueType.CHOICE,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import platform
 import subprocess
@@ -11,6 +12,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+
+from fpstune.utils.edid import parse_edid
 
 # GPU cache with TTL
 _gpu_cache: GpuInfo | None = None
@@ -91,15 +94,26 @@ class GpuInfo:
 
 @dataclass
 class CpuDetailedInfo:
-    """Detailed CPU information."""
+    """Detailed CPU information.
+
+    There is deliberately no max/boost clock field: Win32_Processor exposes one
+    clock (MaxClockSpeed, which reports the rated base — live, 2304 on a CPU
+    whose boost is 4.6 GHz), and a field that duplicates another under a
+    different name is a claim nothing measured (C11). Core counts are summed
+    across sockets; ``is_hybrid`` is None when the P/E topology could not be
+    read — unknown, never "not hybrid".
+    """
 
     name: str
     physical_cores: int
     logical_cores: int
     base_clock_mhz: int
-    max_clock_mhz: int
     architecture: str
     cache_l3_mb: int
+    sockets: int = 1
+    p_cores: int = 0
+    e_cores: int = 0
+    is_hybrid: bool | None = None
 
 
 @dataclass
@@ -116,11 +130,16 @@ class MonitorInfo:
     # Native values from preferred mode (what Windows read from EDID)
     native_width: int = 0
     native_height: int = 0
+    # The EDID preferred timing's own rate; 0 when the EDID was unreadable —
+    # never a copy of the mode-list maximum (the two answer different questions
+    # and may legitimately disagree). Serialized as None when 0.
     native_refresh_rate_hz: int = 0
     # Maximum values from EnumDisplaySettings (may include OC modes)
     max_refresh_rate_hz: int = 0
-    # VRR (G-Sync/FreeSync) support
-    supports_vrr: bool = False
+    # VRR (G-Sync/FreeSync) support: the EDID's declaration, tri-state.
+    # None means the EDID could not be read — unknown, not "no", and nothing
+    # that needs a VRR panel may register against it.
+    supports_vrr: bool | None = None
     # Is display active (attached to desktop) or disconnected
     is_active: bool = True
     # Hardware ID for matching (e.g., "DEL4265", "SAM0F75")
@@ -138,12 +157,15 @@ class MonitorInfo:
 
     @property
     def is_refresh_optimal(self) -> bool:
-        """Check if current refresh rate matches native.
+        """Check if current refresh rate reaches the panel's ceiling.
 
-        Returns False if native refresh rate is unknown (0).
-        Falls back to max refresh if native is unknown.
+        The ceiling is the mode-list maximum first, the EDID preferred rate
+        only as a fallback — a high-refresh panel's EDID often *prefers* 60 Hz
+        while its mode list reaches 300, and judging against the preferred rate
+        would call a panel driven at a fraction of its ceiling optimal.
+        Returns False when both are unknown (0) — unknown never claims optimal.
         """
-        target = self.native_refresh_rate_hz or self.max_refresh_rate_hz
+        target = self.max_refresh_rate_hz or self.native_refresh_rate_hz
         if target == 0:
             return False  # Unknown - don't claim optimal
         return self.refresh_rate_hz >= target
@@ -402,6 +424,33 @@ def wait_for_gpu_detection(timeout: float = GPU_DETECTION_WAIT_TIMEOUT) -> bool:
     return _gpu_detection_done.wait(timeout)
 
 
+# VRAM comes from the driver's own HardwareInformation.qwMemorySize (a QWORD),
+# reached through the device's Enum key → Driver value → Class key: an exact
+# per-device binding, no name matching. Win32_VideoController.AdapterRAM is a
+# 32-bit field that clamps at 4 GB — live, a card with 8192 MB reported
+# 4293918720 (4095 MB) — so it is never read, not even as a sort key: sorting
+# clamped values to pick "the biggest card" is undefined once two cards clamp.
+# The pick is the adapter with the most driver-reported memory; a machine where
+# no driver reports any leaves VRAM 0, which is "unknown", never a guess.
+_GPU_DETECT_PS = (
+    "$ErrorActionPreference = 'SilentlyContinue'; "
+    "$best = $null; $bestQw = [int64]-1; "
+    "foreach ($c in @(Get-CimInstance -ClassName Win32_VideoController)) { "
+    "$qw = [int64]0; "
+    '$drv = (Get-ItemProperty -Path ("HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\" + $c.PNPDeviceID) '
+    "-Name Driver -ErrorAction SilentlyContinue).Driver; "
+    "if ($drv) { "
+    '$qw = [int64](Get-ItemProperty -Path ("HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\" + $drv) '
+    "-Name 'HardwareInformation.qwMemorySize' -ErrorAction SilentlyContinue)."
+    "'HardwareInformation.qwMemorySize' }; "
+    "if ($qw -gt $bestQw) { $bestQw = $qw; $best = $c } "
+    "} "
+    "if ($best) { "
+    '"Name=$($best.Name)"; "Driver=$($best.DriverVersion)"; '
+    'if ($bestQw -gt 0) { "VramBytes=$bestQw" }; "PNP=$($best.PNPDeviceID)" }'
+)
+
+
 def _detect_gpu_sync() -> GpuInfo | None:
     """Synchronous GPU detection (internal).
 
@@ -465,15 +514,8 @@ def _detect_gpu_sync() -> GpuInfo | None:
     if not name:
         try:
             logger.info("GPU detection: Using PowerShell Get-CimInstance...")
-            # Sort by AdapterRAM descending to get dedicated GPU first (more VRAM than integrated)
-            ps_script = (
-                "Get-CimInstance -ClassName Win32_VideoController | "
-                "Sort-Object -Property AdapterRAM -Descending | "
-                "Select-Object -First 1 Name, DriverVersion, AdapterRAM, PNPDeviceID | "
-                'ForEach-Object { "Name=$($_.Name)"; "Driver=$($_.DriverVersion)"; "VRAM=$($_.AdapterRAM)"; "PNP=$($_.PNPDeviceID)" }'
-            )
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-Command", _GPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -488,10 +530,10 @@ def _detect_gpu_sync() -> GpuInfo | None:
                     name = line.split("=", 1)[1].strip()
                 elif line.startswith("Driver="):
                     driver = line.split("=", 1)[1].strip()
-                elif line.startswith("VRAM="):
+                elif line.startswith("VramBytes="):
                     try:
                         vram_str = line.split("=", 1)[1].strip()
-                        if vram_str and vram_str != "":
+                        if vram_str:
                             vram = int(vram_str) // (1024 * 1024)
                     except (ValueError, TypeError):
                         vram = 0
@@ -643,6 +685,77 @@ def get_ram_info() -> dict[str, int]:
     return {"total_mb": 0, "available_mb": 0}
 
 
+# The P/E-core split comes from GetLogicalProcessorInformationEx
+# (RelationProcessorCore): each core record carries an EfficiencyClass byte,
+# where the highest class present is the performance tier. The walk lives
+# inside the C# class — the A1 lesson: a variable-length native buffer never
+# crosses PowerShell's binder. One efficiency class means not hybrid; an empty
+# answer means unknown, which the caller reports as unknown rather than "not
+# hybrid".
+_CPU_TOPOLOGY_CSHARP = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class CpuTopology {
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool GetLogicalProcessorInformationEx(
+        int relationshipType, IntPtr buffer, ref uint returnedLength);
+    public static string Summarize() {
+        uint len = 0;
+        GetLogicalProcessorInformationEx(0, IntPtr.Zero, ref len);
+        if (len == 0) { return ""; }
+        IntPtr buf = Marshal.AllocHGlobal((int)len);
+        try {
+            if (!GetLogicalProcessorInformationEx(0, buf, ref len)) { return ""; }
+            var counts = new System.Collections.Generic.Dictionary<byte, int>();
+            int offset = 0;
+            while (offset < (int)len) {
+                int relationship = Marshal.ReadInt32(buf, offset);
+                int size = Marshal.ReadInt32(buf, offset + 4);
+                if (size <= 0) { break; }
+                if (relationship == 0) {
+                    byte efficiency = Marshal.ReadByte(buf, offset + 9);
+                    if (!counts.ContainsKey(efficiency)) { counts[efficiency] = 0; }
+                    counts[efficiency]++;
+                }
+                offset += size;
+            }
+            if (counts.Count == 0) { return ""; }
+            byte top = 0;
+            foreach (byte k in counts.Keys) { if (k > top) { top = k; } }
+            int p = 0, e = 0;
+            foreach (var kv in counts) {
+                if (kv.Key == top) { p += kv.Value; } else { e += kv.Value; }
+            }
+            string hybrid = counts.Count > 1 ? "True" : "False";
+            return "PCores=" + p + "\nECores=" + e + "\nHybrid=" + hybrid;
+        } finally { Marshal.FreeHGlobal(buf); }
+    }
+}
+'@
+"""
+
+# All sockets are read and their core counts summed — Select-Object -First 1
+# silently halved a dual-socket machine. The one clock WMI has is MaxClockSpeed,
+# which reports the *rated* clock (live: 2304 on a CPU whose boost is 4.6 GHz);
+# it is emitted as the base clock and nothing invents a boost figure from it.
+_CPU_DETECT_PS = (
+    _CPU_TOPOLOGY_CSHARP
+    + r"""
+$cpus = @(Get-CimInstance -ClassName Win32_Processor)
+if ($cpus.Count -gt 0) {
+    "Name=$($cpus[0].Name)"
+    "Sockets=$($cpus.Count)"
+    "PhysicalCores=$(($cpus | Measure-Object -Property NumberOfCores -Sum).Sum)"
+    "LogicalCores=$(($cpus | Measure-Object -Property NumberOfLogicalProcessors -Sum).Sum)"
+    "BaseClock=$($cpus[0].MaxClockSpeed)"
+    "L3Cache=$(($cpus | Measure-Object -Property L3CacheSize -Sum).Sum)"
+}
+try { [CpuTopology]::Summarize() } catch { }
+"""
+)
+
+
 def get_cpu_detailed_info() -> CpuDetailedInfo | None:
     """Get detailed CPU information (cached — one PowerShell call per session).
 
@@ -670,23 +783,17 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
         physical_cores = 0
         logical_cores = os.cpu_count() or 0
         base_clock_mhz = 0
-        max_clock_mhz = 0
         architecture = platform.machine() or ""
         cache_l3_mb = 0
+        sockets = 1
+        p_cores = 0
+        e_cores = 0
+        is_hybrid: bool | None = None
 
         try:
             # Get ALL CPU info in single PowerShell call (optimized)
-            ps_script = """
-$cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
-"Name=$($cpu.Name)"
-"PhysicalCores=$($cpu.NumberOfCores)"
-"LogicalCores=$($cpu.NumberOfLogicalProcessors)"
-"BaseClock=$($cpu.MaxClockSpeed)"
-"MaxClock=$($cpu.MaxClockSpeed)"
-"L3Cache=$($cpu.L3CacheSize)"
-"""
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-Command", _CPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=8,
@@ -708,9 +815,17 @@ $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
                 elif line.startswith("BaseClock="):
                     with contextlib.suppress(ValueError, TypeError):
                         base_clock_mhz = int(line.split("=", 1)[1].strip())
-                elif line.startswith("MaxClock="):
+                elif line.startswith("Sockets="):
                     with contextlib.suppress(ValueError, TypeError):
-                        max_clock_mhz = int(line.split("=", 1)[1].strip())
+                        sockets = int(line.split("=", 1)[1].strip()) or 1
+                elif line.startswith("PCores="):
+                    with contextlib.suppress(ValueError, TypeError):
+                        p_cores = int(line.split("=", 1)[1].strip())
+                elif line.startswith("ECores="):
+                    with contextlib.suppress(ValueError, TypeError):
+                        e_cores = int(line.split("=", 1)[1].strip())
+                elif line.startswith("Hybrid="):
+                    is_hybrid = line.split("=", 1)[1].strip().lower() == "true"
                 elif line.startswith("L3Cache="):
                     try:
                         # L3 cache is in KB, convert to MB
@@ -723,16 +838,144 @@ $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
             logger.debug("Failed to get detailed CPU info: %s", e)
             return None
 
+        if is_hybrid is None:
+            logger.debug("CPU P/E topology unknown: GetLogicalProcessorInformationEx gave nothing")
+
         _cpu_detailed_cache = CpuDetailedInfo(
             name=name,
             physical_cores=physical_cores,
             logical_cores=logical_cores,
             base_clock_mhz=base_clock_mhz,
-            max_clock_mhz=max_clock_mhz or base_clock_mhz,
             architecture=architecture,
             cache_l3_mb=cache_l3_mb,
+            sockets=sockets,
+            p_cores=p_cores,
+            e_cores=e_cores,
+            is_hybrid=is_hybrid,
         )
         return _cpu_detailed_cache
+
+
+# The EnumDisplayDevices loop lives inside the C# class. Calling the API from
+# PowerShell with [ref] is the proven failure: the identical call returned every
+# adapter from a loop inside C# and returned False with an empty name when the
+# method was invoked from PowerShell with [ref] (declared cb=840, ret=False) —
+# same session, same API, only the binder differs. So the struct never crosses
+# that boundary. Each record is "deviceName|stateFlags|monitorInterfacePath";
+# StateFlags rides along because bit 0 (ATTACHED_TO_DESKTOP) is the attachment
+# answer WMI cannot give (WMI reports Active=True for a panel not on the desktop).
+_DISPLAY_DEVICES_CSHARP = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class DisplayDevices {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool EnumDisplayDevices(
+        string lpDevice, uint iDevNum,
+        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DISPLAY_DEVICE {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceKey;
+    }
+    private const uint EDD_GET_DEVICE_INTERFACE_NAME = 1;
+    public static string[] EnumerateAdapters() {
+        var results = new System.Collections.Generic.List<string>();
+        for (uint i = 0; ; i++) {
+            DISPLAY_DEVICE ad = new DISPLAY_DEVICE();
+            ad.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            if (!EnumDisplayDevices(null, i, ref ad, 0)) { break; }
+            DISPLAY_DEVICE mon = new DISPLAY_DEVICE();
+            mon.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            string monId = "";
+            if (EnumDisplayDevices(ad.DeviceName, 0, ref mon, EDD_GET_DEVICE_INTERFACE_NAME)) {
+                monId = mon.DeviceID;
+            }
+            results.Add(ad.DeviceName.TrimEnd('\0', ' ') + "|" + ad.StateFlags + "|" + monId);
+        }
+        return results.ToArray();
+    }
+}
+'@
+"""
+
+# Correlation is a pure function so the contract tests can run the shipped text
+# against a described host. The join is by UID — the interface path's UID
+# segment is the same number WmiMonitorID.InstanceName carries — never by
+# position. There is deliberately no order-based fallback: zipping two
+# independently sorted lists handed a panel its neighbour's mode table the
+# moment a laptop's internal panel sorted first, and a wrong map is worse than
+# an empty one — empty means "could not correlate", which is visible and
+# reportable, where a plausible wrong map reports success.
+_CORRELATE_MONITORS_PS = r"""
+function Build-DeviceHwIdMap {
+    param([string[]]$adapterRecords, [hashtable]$uidToHwId)
+    $map = @{}
+    foreach ($rec in $adapterRecords) {
+        $f = $rec -split '\|', 3
+        if ($f.Count -ge 3 -and $f[2] -match 'UID(\d+)' -and $uidToHwId.ContainsKey($Matches[1])) {
+            $map[$f[0]] = $uidToHwId[$Matches[1]]
+        }
+    }
+    return $map
+}
+
+# Presence is decided by StateFlags, not by WMI: WMI reports Active=True for a
+# panel that is not on the desktop, so it cannot answer attachment. Bit 0
+# (ATTACHED_TO_DESKTOP) is the desktop; bit 2 (PRIMARY_DEVICE) is the primary;
+# bit 3 (MIRRORING_DRIVER) is a pseudo device that renders nothing a user sees.
+# A panel WMI knows that no attached head carries is present-but-inactive —
+# reported, never silently dropped.
+function Split-MonitorPresence {
+    param([string[]]$adapterRecords, [hashtable]$uidToHwId, [string[]]$wmiAllHwIds)
+    $map = Build-DeviceHwIdMap -adapterRecords $adapterRecords -uidToHwId $uidToHwId
+    $parsed = @()
+    foreach ($rec in $adapterRecords) {
+        $f = $rec -split '\|', 3
+        if ($f.Count -lt 3) { continue }
+        $flags = [int]$f[1]
+        if ($flags -band 8) { continue }
+        $hwId = if ($map.ContainsKey($f[0])) { $map[$f[0]] } else { '' }
+        $uid = if ($f[2] -match 'UID(\d+)') { $Matches[1] } else { '' }
+        $parsed += @{ Name = $f[0]; Flags = $flags; HwId = $hwId; Uid = $uid }
+    }
+    # Attached first, so a detached head still carrying the last-known path of
+    # a panel that is live on another head cannot demote that panel to
+    # inactive. A detached head is only evidence of a panel no attached head
+    # accounts for — and several detached heads carrying the same panel are
+    # one panel, not three (measured: an internal panel's UID shows up on
+    # every unused GPU head at once).
+    $attached = @()
+    $inactive = @()
+    $seen = @{}
+    foreach ($entry in $parsed) {
+        if ($entry.Flags -band 1) {
+            $attached += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid; Primary = [bool]($entry.Flags -band 4) }
+            if ($entry.HwId) { $seen[$entry.HwId] = $true }
+        }
+    }
+    foreach ($entry in $parsed) {
+        if (-not ($entry.Flags -band 1) -and $entry.HwId -and -not $seen.ContainsKey($entry.HwId)) {
+            $inactive += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid }
+            $seen[$entry.HwId] = $true
+        }
+    }
+    foreach ($hwId in $wmiAllHwIds) {
+        if (-not $seen.ContainsKey($hwId)) {
+            $inactive += @{ Name = $hwId; HwId = $hwId }
+        }
+    }
+    return @{ Attached = $attached; Inactive = $inactive }
+}
+"""
 
 
 def get_monitors() -> list[MonitorInfo]:
@@ -757,11 +1000,11 @@ def get_monitors() -> list[MonitorInfo]:
 
     monitors: list[MonitorInfo] = []
 
-    # Monitor detection using [System.Windows.Forms.Screen]::AllScreens + EnumDisplaySettings
-    # EnumDisplayDevices is unreliable in non-interactive subprocess contexts on some systems.
-    # AllScreens enumerates active displays reliably; EnumDisplaySettings reads refresh rates
-    # given the device name (e.g., \\.\DISPLAY1) that AllScreens provides.
-    ps_script = r"""
+    # Monitor detection: AllScreens enumerates the desktop, EnumDisplaySettings
+    # reads modes for the device names AllScreens provides, and the C# constant
+    # above correlates each \\.\DISPLAYn to its monitor hardware id by UID.
+    ps_script = (
+        r"""
 $ErrorActionPreference = 'SilentlyContinue'
 
 # Load Windows Forms for reliable screen enumeration
@@ -811,49 +1054,35 @@ public class DisplaySettings {
         public int dmPanningHeight;
     }
 }
-public class DisplayDevices {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool EnumDisplayDevices(
-        string lpDevice, uint iDevNum,
-        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceKey;
-    }
-}
 '@
-
+"""
+        + _DISPLAY_DEVICES_CSHARP
+        + r"""
 # Build WMI lookup tables (keyed by hardware ID like "DEL4265", "SAM0F75")
-# Single pass: collect names, UID→hwId map, and ordered hwId list simultaneously.
 $wmiNames = @{}
 $wmiNative = @{}
 $uidToHwId = @{}   # UID number string → hwId (e.g. "12345" → "DEL4265")
-$wmiHwIds = @(
-    Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null |
-    Sort-Object @{Expression={
-        if ($_.InstanceName -match 'UID(\d+)') { [int]$Matches[1] } else { 999999 }
-    }} |
-    ForEach-Object {
-        $parts = $_.InstanceName -split '\\'
-        if ($parts.Count -ge 2) {
-            $hwId = $parts[1]
-            $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
-            $name = if ($chars) { -join [char[]]$chars } else { "" }
-            $wmiNames[$hwId] = $name
-            if ($_.InstanceName -match 'UID(\d+)') { $uidToHwId[$Matches[1]] = $hwId }
-            $hwId  # emit for $wmiHwIds array
+$uidToEdid = @{}   # UID number string → base64 EDID from the device's own key
+Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Object {
+    $parts = $_.InstanceName -split '\\'
+    if ($parts.Count -ge 2) {
+        $hwId = $parts[1]
+        $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
+        $name = if ($chars) { -join [char[]]$chars } else { "" }
+        $wmiNames[$hwId] = $name
+        if ($_.InstanceName -match 'UID(\d+)') {
+            $uid = $Matches[1]
+            $uidToHwId[$uid] = $hwId
+            # The instance name doubles as the device's registry path: the EDID
+            # the panel handed the OS sits under its Device Parameters key.
+            $inst = $_.InstanceName -replace '_\d+$', ''
+            $edid = (Get-ItemProperty `
+                -Path "HKLM:\SYSTEM\CurrentControlSet\Enum\$inst\Device Parameters" `
+                -Name EDID -ErrorAction SilentlyContinue).EDID
+            if ($edid) { $uidToEdid[$uid] = [Convert]::ToBase64String([byte[]]$edid) }
         }
     }
-)
+}
 
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceModes 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
@@ -872,48 +1101,15 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceMo
     }
 }
 
-# === Build DeviceName → hwId correlation map ===
-# Must be index-order independent: the output loop sorts Primary-first which
-# breaks any assumption about position matching WMI order.
-$deviceHwIdMap = @{}
-
-# Method 1: EnumDisplayDevices with EDD_GET_DEVICE_INTERFACE_NAME (flag=1).
-# Returns \\?\DISPLAY#DEL4265#4&1a2b3c4d&0&UID12345#{GUID} — the UID segment
-# matches WmiMonitorID.InstanceName directly, giving hardware-stable correlation
-# that is completely independent of display enumeration order.
-try {
-    $adIdx = [uint32]0
-    while ($true) {
-        $ad = New-Object DisplayDevices+DISPLAY_DEVICE
-        $ad.cb = [System.Runtime.InteropServices.Marshal]::SizeOf($ad)
-        if (-not [DisplayDevices]::EnumDisplayDevices($null, $adIdx, [ref]$ad, 0)) { break }
-        $adName = $ad.DeviceName.TrimEnd([char]0, ' ')
-        $mo = New-Object DisplayDevices+DISPLAY_DEVICE
-        $mo.cb = [System.Runtime.InteropServices.Marshal]::SizeOf($mo)
-        # Flag 1 = EDD_GET_DEVICE_INTERFACE_NAME: full interface path with UID
-        if ([DisplayDevices]::EnumDisplayDevices($adName, [uint32]0, [ref]$mo, 1)) {
-            # Extract UID from path (e.g. UID12345) and look up hwId from WMI map
-            if ($mo.DeviceID -match 'UID(\d+)' -and $uidToHwId.ContainsKey($Matches[1])) {
-                $deviceHwIdMap[$adName] = $uidToHwId[$Matches[1]]
-            }
-        }
-        $adIdx++
-    }
-} catch { }
-
-# Method 2: Index-based fallback for screens still missing from the map.
-# Sort by DISPLAY number (NOT Primary-first) to match UID ascending order.
-# Primary-first sorting would swap entries when primary monitor != DISPLAY1.
-$screensByNum = @([System.Windows.Forms.Screen]::AllScreens |
-    Sort-Object @{Expression={
-        if ($_.DeviceName -match 'DISPLAY(\d+)') { [int]$Matches[1] } else { 0 }
-    }})
-for ($i = 0; $i -lt $screensByNum.Count -and $i -lt $wmiHwIds.Count; $i++) {
-    $sDevName = $screensByNum[$i].DeviceName.TrimEnd([char]0, ' ')
-    if (-not $deviceHwIdMap.ContainsKey($sDevName)) {
-        $deviceHwIdMap[$sDevName] = $wmiHwIds[$i]
-    }
-}
+"""
+        + _CORRELATE_MONITORS_PS
+        + r"""
+# Presence and identity in one pass: attachment from StateFlags bit 0, primary
+# from bit 2, hwId from the UID join. A screen the join cannot place keeps
+# hwId "" — reported as uncorrelated, never guessed.
+$presence = Split-MonitorPresence `
+    -adapterRecords ([DisplayDevices]::EnumerateAdapters()) `
+    -uidToHwId $uidToHwId -wmiAllHwIds ([string[]]$wmiNames.Keys)
 
 # Helper: current display mode (physical pixels, not DPI-scaled logical pixels)
 function Get-CurrentMode {
@@ -942,23 +1138,27 @@ function Get-MaxHz {
     return $maxHz
 }
 
-# Enumerate active displays via AllScreens (primary first, then sorted by device name)
-$screens = [System.Windows.Forms.Screen]::AllScreens |
-    Sort-Object @{Expression={if ($_.Primary) {0} else {1}}}, DeviceName
+# AllScreens survives only as a bounds fallback for when EnumDisplaySettings
+# cannot answer; which screens exist is StateFlags' answer, not AllScreens'.
+$screenBounds = @{}
+[System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+    $screenBounds[$_.DeviceName.TrimEnd([char]0, ' ')] = @{W = $_.Bounds.Width; H = $_.Bounds.Height}
+}
 
-foreach ($screen in $screens) {
-    $deviceName = $screen.DeviceName   # e.g., \\.\DISPLAY1
-    $isPrimary = $screen.Primary
+# Attached displays, primary first then by device name
+$sortedAttached = @($presence.Attached |
+    Sort-Object @{Expression={if ($_.Primary) {0} else {1}}}, @{Expression={$_.Name}})
+foreach ($entry in $sortedAttached) {
+    $deviceName = $entry.Name   # e.g., \\.\DISPLAY1
+    $isPrimary = $entry.Primary
+    $hwId = $entry.HwId
 
     # Physical resolution + refresh rate via EnumDisplaySettings (avoids DPI-scaled Bounds)
     $mode = Get-CurrentMode -dev $deviceName
-    $curW = if ($mode.W -gt 0) { $mode.W } else { $screen.Bounds.Width }
-    $curH = if ($mode.H -gt 0) { $mode.H } else { $screen.Bounds.Height }
+    $bounds = if ($screenBounds.ContainsKey($deviceName)) { $screenBounds[$deviceName] } else { @{W = 0; H = 0} }
+    $curW = if ($mode.W -gt 0) { $mode.W } else { $bounds.W }
+    $curH = if ($mode.H -gt 0) { $mode.H } else { $bounds.H }
     $curHz = $mode.Hz
-
-    # Look up hardware ID from pre-built correlation map (index-independent)
-    $cleanDevName = $deviceName.TrimEnd([char]0, ' ')
-    $hwId = if ($deviceHwIdMap.ContainsKey($cleanDevName)) { $deviceHwIdMap[$cleanDevName] } else { "" }
 
     # Native resolution from WMI; fallback to current resolution
     $nativeW = 0; $nativeH = 0
@@ -981,11 +1181,29 @@ foreach ($screen in $screens) {
         $friendlyName = "Display $dispNum"
     }
 
-    $supportsVRR = ($maxHz -gt 60)
+    # The native refresh rate and VRR support are the EDID's answers, parsed on
+    # the Python side; nothing here manufactures either from the mode list.
+    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
 
-    Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=$maxHz|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|SupportsVRR=$supportsVRR|IsActive=True"
+    Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|IsActive=True|Edid=$edidB64"
+}
+
+# Present-but-inactive: panels WMI knows that no attached head carries. No mode
+# data is read for a panel that is not on the desktop — 0 means "the panel did
+# not say" and must stay 0 (settings/panel.py's rule).
+foreach ($entry in $presence.Inactive) {
+    $nativeW = 0; $nativeH = 0
+    if ($entry.HwId -and $wmiNative.ContainsKey($entry.HwId)) {
+        $nativeW = $wmiNative[$entry.HwId].W
+        $nativeH = $wmiNative[$entry.HwId].H
+    }
+    $friendlyName = if ($entry.HwId -and $wmiNames.ContainsKey($entry.HwId)) { $wmiNames[$entry.HwId] } else { '' }
+    if (-not $friendlyName) { $friendlyName = $entry.Name }
+    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
+    Write-Output "Monitor=$($entry.Name)|Width=0|Height=0|Refresh=0|Primary=False|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=0|FriendlyName=$friendlyName|MonitorId=$($entry.HwId)|IsActive=False|Edid=$edidB64"
 }
 """
+    )
 
     try:
         from fpstune.utils.debug import debug_context, debug_log
@@ -1052,20 +1270,33 @@ foreach ($screen in $screens) {
             refresh_rate = int(parts.get("Refresh", 0) or 0)
             native_width = int(parts.get("NativeW", 0) or 0)
             native_height = int(parts.get("NativeH", 0) or 0)
-            native_refresh = int(parts.get("NativeRefresh", 0) or 0)
             max_refresh = int(parts.get("MaxRefresh", 0) or 0)
             friendly_name = parts.get("FriendlyName", "").strip()
-            supports_vrr = parts.get("SupportsVRR", "False").lower() == "true"
             is_active = parts.get("IsActive", "True").lower() == "true"
             hardware_id = parts.get("MonitorId", "").strip()
 
+            # The native refresh rate and VRR support are the EDID's answers.
+            # No EDID, or one that fails its own checksum, means both stay
+            # unknown — 0 and None — never a guess from the mode list.
+            edid_info = None
+            edid_b64 = parts.get("Edid", "").strip()
+            if edid_b64:
+                try:
+                    edid_info = parse_edid(base64.b64decode(edid_b64))
+                except Exception:
+                    edid_info = None
+            native_refresh = (edid_info.native_refresh_hz or 0) if edid_info else 0
+            supports_vrr = edid_info.supports_vrr if edid_info else None
+
             # Include monitor if:
             # - Active with resolution, OR
-            # - Disconnected with native resolution (from EnumDisplaySettings)
+            # - Present-but-inactive with a native resolution from WMI, OR
+            # - Present-but-inactive with only an identity — a panel WMI names
+            #   is a fact worth reporting even when it reports no modes
             has_resolution = width > 0 and height > 0
             has_native = native_width > 0 and native_height > 0
 
-            if has_resolution or has_native:
+            if has_resolution or has_native or hardware_id:
                 mon_info = MonitorInfo(
                     name=name,
                     width=width if width > 0 else native_width,
@@ -1075,7 +1306,7 @@ foreach ($screen in $screens) {
                     friendly_name=friendly_name,
                     native_width=native_width if native_width > 0 else width,
                     native_height=native_height if native_height > 0 else height,
-                    native_refresh_rate_hz=native_refresh if native_refresh > 0 else max_refresh,
+                    native_refresh_rate_hz=native_refresh,
                     max_refresh_rate_hz=max_refresh if max_refresh > 0 else refresh_rate,
                     supports_vrr=supports_vrr,
                     is_active=is_active,

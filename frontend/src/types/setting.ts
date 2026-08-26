@@ -5,6 +5,8 @@
  * Used by store, components, and API client.
  */
 
+import type { MessageKey } from "../i18n/en";
+
 /** Module prefix for display settings — used to trigger monitor refresh after changes. */
 export const DISPLAY_MODULE_PREFIX = "display:";
 
@@ -127,21 +129,20 @@ export type ImpactCategory =
   | "privacy"
   | "visual";
 
-/** Display metadata per impact category. Order matches the backend's. */
+/** Display metadata per impact category. Order matches the backend's.
+ * Labels live in the i18n catalogues (F3); render with t(meta.labelKey). */
 export const IMPACT_CATEGORY_META: Record<
   ImpactCategory,
-  { label: string; className: string }
+  { labelKey: MessageKey; className: string }
 > = {
-  latency: { label: "Latency", className: "text-sky-300 border-sky-400/25 bg-sky-400/10" },
-  fps: { label: "FPS", className: "text-emerald-300 border-emerald-400/25 bg-emerald-400/10" },
-  // "Heat & wear", not "Thermal": what this buys is a frame rate that still
-  // holds in minute forty, which "Thermal" reads as a fan-noise concern.
-  thermal: { label: "Heat & wear", className: "text-orange-300 border-orange-400/25 bg-orange-400/10" },
-  network: { label: "Network", className: "text-indigo-300 border-indigo-400/25 bg-indigo-400/10" },
-  resources: { label: "Resources", className: "text-violet-300 border-violet-400/25 bg-violet-400/10" },
-  storage: { label: "Storage", className: "text-teal-300 border-teal-400/25 bg-teal-400/10" },
-  privacy: { label: "Privacy", className: "text-rose-300 border-rose-400/25 bg-rose-400/10" },
-  visual: { label: "Visual", className: "text-amber-300 border-amber-400/25 bg-amber-400/10" },
+  latency: { labelKey: "impact.latency", className: "text-sky-300 border-sky-400/25 bg-sky-400/10" },
+  fps: { labelKey: "impact.fps", className: "text-emerald-300 border-emerald-400/25 bg-emerald-400/10" },
+  thermal: { labelKey: "impact.thermal", className: "text-orange-300 border-orange-400/25 bg-orange-400/10" },
+  network: { labelKey: "impact.network", className: "text-indigo-300 border-indigo-400/25 bg-indigo-400/10" },
+  resources: { labelKey: "impact.resources", className: "text-violet-300 border-violet-400/25 bg-violet-400/10" },
+  storage: { labelKey: "impact.storage", className: "text-teal-300 border-teal-400/25 bg-teal-400/10" },
+  privacy: { labelKey: "impact.privacy", className: "text-rose-300 border-rose-400/25 bg-rose-400/10" },
+  visual: { labelKey: "impact.visual", className: "text-amber-300 border-amber-400/25 bg-amber-400/10" },
 };
 
 /**
@@ -227,6 +228,14 @@ export interface Setting {
   // === Risk (static) ===
   riskLevel: "safe" | "low" | "moderate" | "advanced";
   riskWarning?: string;
+  // Non-null = this setting changes what the player can see or hear, and the
+  // string says what is lost (consequence 5). Only COMPLETE settings carry it.
+  perceptibleCost?: string;
+  // recommended == default under the backend's values_equal — a drift guard
+  // (consequence 2): it changes nothing on a stock machine and exists to put
+  // back what another optimizer moved. Optional so a fixture without an
+  // opinion defaults to "not a guard"; the store mapping always sets it.
+  isDriftGuard?: boolean;
 
   // === Evidence (static) ===
   evidenceLevel: "proven" | "likely" | "experimental"; // Research-backed classification
@@ -262,6 +271,10 @@ export interface Setting {
   isOptimized: boolean; // True if current == recommended (computed once on detection)
   isApplicable: boolean; // False if setting doesn't apply to this hardware
   applicableReason?: string; // Human-readable reason when not applicable
+  // Detection FAILED for this setting — a different fact from "not applicable".
+  // A machine where half the detection failed must not look identical to one
+  // that is already optimal, so this is surfaced above every list.
+  detectionError?: string;
 }
 
 /**
@@ -313,6 +326,8 @@ export interface SettingDefinition {
   // Risk level
   risk_level?: string;
   risk_warning?: string;
+  perceptible_cost?: string | null;
+  is_drift_guard?: boolean;
 }
 
 // =============================================================================
@@ -461,6 +476,8 @@ export function definitionToSetting(def: SettingDefinition): Setting {
       | "moderate"
       | "advanced",
     riskWarning: def.risk_warning,
+    perceptibleCost: def.perceptible_cost ?? undefined,
+    isDriftGuard: def.is_drift_guard ?? false,
     evidenceLevel: (def.evidence_level || "likely") as
       | "proven"
       | "likely"

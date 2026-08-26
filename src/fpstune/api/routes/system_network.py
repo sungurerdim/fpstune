@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import sys
 
@@ -426,66 +425,3 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
     else:
         logger.warning(f"Unexpected output for adapter '{adapter_name}': {output}")
         raise HTTPException(status_code=500, detail=f"Unexpected response: {output}")
-
-
-@router.get("/network/adapter/{adapter_name}/status")
-async def get_adapter_status(adapter_name: str) -> dict[str, bool | str | None]:
-    """Get the current status of a specific network adapter.
-
-    Args:
-        adapter_name: Name of the network adapter.
-
-    Returns:
-        Dict with adapter status details.
-    """
-    if sys.platform != "win32":
-        raise HTTPException(status_code=400, detail="Only available on Windows")
-
-    logger = logging.getLogger(__name__)
-    safe_name = _escape_ps_string(adapter_name)
-
-    ps_command = f"""
-    $adapter = Get-NetAdapter -Name '{safe_name}' -ErrorAction SilentlyContinue
-    if (-not $adapter) {{ Write-Output 'NOT_FOUND'; exit }}
-
-    $adminStr = if ($adapter.AdminStatus -eq 1) {{ 'Up' }} else {{ 'Down' }}
-    $mediaStr = if ($adapter.MediaConnectState -eq 1) {{ 'Connected' }} elseif ($adapter.MediaConnectState -eq 2) {{ 'Disconnected' }} else {{ 'Unknown' }}
-    $adapterType = if ($adapter.MediaType -like '*802.11*') {{ 'wifi' }} else {{ 'ethernet' }}
-
-    # Get IP address if connected
-    $ip = $null
-    if ($adapter.Status -eq 'Up') {{
-        $ipObj = Get-NetIPAddress -InterfaceIndex $adapter.InterfaceIndex -AddressFamily IPv4 -EA SilentlyContinue |
-            Where-Object {{ $_.PrefixOrigin -ne 'WellKnown' }} | Select-Object -First 1
-        if ($ipObj) {{ $ip = $ipObj.IPAddress }}
-    }}
-
-    [PSCustomObject]@{{
-        Name = $adapter.Name
-        IsEnabled = ($adminStr -eq 'Up')
-        IsConnected = ($mediaStr -eq 'Connected')
-        AdapterType = $adapterType
-        IPv4 = $ip
-        Status = $adapter.Status.ToString()
-    }} | ConvertTo-Json
-    """
-
-    success, output = await _run_powershell_async(ps_command)
-
-    if not success or output.strip() == "NOT_FOUND":
-        raise HTTPException(status_code=404, detail=f"Adapter '{adapter_name}' not found")
-
-    try:
-        data = json.loads(output)
-        return {
-            "success": True,
-            "adapter_name": data.get("Name", adapter_name),
-            "is_enabled": data.get("IsEnabled", False),
-            "is_connected": data.get("IsConnected", False),
-            "adapter_type": data.get("AdapterType", "ethernet"),
-            "ipv4_address": data.get("IPv4"),
-            "status": data.get("Status", "Unknown"),
-        }
-    except json.JSONDecodeError as e:
-        logger.warning(f"Failed to parse adapter status JSON: {e}")
-        raise HTTPException(status_code=500, detail="Failed to parse adapter status") from e

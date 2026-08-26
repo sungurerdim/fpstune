@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { useState, useMemo } from "react";
 import {
   Loader2,
@@ -13,7 +15,8 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { ResetAllAction } from "./ResetAllAction";
 import { TweakRows, type TweakRow } from "./TweakRows";
 import { useBulkApply } from "../hooks/useBulkApply";
-import { isGameTweak } from "../lib/tweakDomain";
+import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
+import { DetectionNotice } from "./DetectionNotice";
 import { cn } from "../lib/utils";
 import { IMPACT_CATEGORY_META } from "../types/setting";
 import type {
@@ -59,6 +62,7 @@ export function SettingsTab({
   hasGpuSettings,
   getIconByName,
 }: SettingsTabProps) {
+  const { t } = useT();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   // Filters by the kind of gain rather than the subsystem. "Which of these are
@@ -108,7 +112,9 @@ export function SettingsTab({
           q &&
           !s.displayName.toLowerCase().includes(q) &&
           !s.name.toLowerCase().includes(q) &&
-          !s.description.toLowerCase().includes(q)
+          !s.description.toLowerCase().includes(q) &&
+          !localizedName(s).toLowerCase().includes(q) &&
+          !localizedDescription(s).toLowerCase().includes(q)
         )
           continue;
 
@@ -153,6 +159,9 @@ export function SettingsTab({
 
   return (
     <div className="space-y-4 pb-16">
+      <DetectionNotice
+        owns={(s) => !isGameTweak(s) && !isHardwareTweak(s)}
+      />
       {/* Filter bar: the only navigation this screen needs now that the rows are flat. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
@@ -163,14 +172,14 @@ export function SettingsTab({
             aria-label="Search settings"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
           aria-label="Filter by category"
-          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md text-foreground"
         >
           <option value="all">All categories</option>
           {categoryOptions.map((c) => (
@@ -198,7 +207,7 @@ export function SettingsTab({
             onClick={() => setImpactFilter("all")}
             aria-pressed={impactFilter === "all"}
             className={cn(
-              "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+              "text-xs px-2 py-0.5 rounded-full border transition-colors",
               impactFilter === "all"
                 ? "bg-primary/15 text-primary border-primary/40"
                 : "text-muted-foreground border-border hover:border-muted-foreground/50",
@@ -221,13 +230,13 @@ export function SettingsTab({
                 }
                 aria-pressed={impactFilter === c}
                 className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full border transition-colors",
+                  "text-xs px-2 py-0.5 rounded-full border transition-colors",
                   impactFilter === c
                     ? IMPACT_CATEGORY_META[c].className
                     : "text-muted-foreground border-border hover:border-muted-foreground/50",
                 )}
               >
-                {IMPACT_CATEGORY_META[c].label}
+                {t(IMPACT_CATEGORY_META[c].labelKey)}
                 <span className="ml-1 opacity-60">{impactCounts.get(c)}</span>
               </button>
             ) : null,
@@ -268,7 +277,7 @@ export function SettingsTab({
             {showOptimized &&
               (optimized.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No optimized tweaks yet.
+                  {t("settings.noOptimizedYet")}
                 </p>
               ) : (
                 <TweakRows rows={optimized} />
@@ -288,6 +297,7 @@ export function SettingsTab({
  * button too, and its count is never a number the user cannot see.
  */
 function NeedsBand({ rows }: { rows: TweakRow[] }) {
+  const { t } = useT();
   const { apply, isApplying, lastResult } = useBulkApply();
 
   // Advisory rows are reported, never applied: fpstune can read the state and
@@ -305,14 +315,14 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
       <div className="flex items-center gap-2">
         <AlertCircle className="w-4 h-4 text-warning" />
         <h2 className="text-sm font-bold uppercase tracking-wider text-warning">
-          Needs optimization
+          {t("settings.needsOptimization")}
         </h2>
         <span className="text-xs text-muted-foreground/60">({rows.length})</span>
         {lastResult && (
           <span className="text-xs text-muted-foreground">
-            {lastResult.success} applied
+            {t("settings.appliedCount", { count: lastResult.success })}
             {lastResult.error > 0 && (
-              <span className="text-destructive"> · {lastResult.error} failed</span>
+              <span className="text-destructive">{t("settings.failedCount", { count: lastResult.error })}</span>
             )}
           </span>
         )}
@@ -328,14 +338,14 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
-            Fix all {fixable.length}
+            {t("settings.fixAll", { count: fixable.length })}
           </button>
         )}
       </div>
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing needs optimization.
+          {t("settings.nothingNeeds")}
         </p>
       ) : (
         <TweakRows rows={rows} />

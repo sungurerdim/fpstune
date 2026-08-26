@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { useMemo } from "react";
 import { RotateCcw, Loader2 } from "lucide-react";
 import { useStore } from "../store";
@@ -15,6 +16,7 @@ import { valuesEqual, type Setting } from "../types/setting";
  * "put everything back" has no useful narrower meaning.
  */
 export function ResetAllAction() {
+  const { t } = useT();
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const isDetecting = useStore((state) => state.isAnyCategoryLoading());
@@ -68,7 +70,7 @@ export function ResetAllAction() {
         ) : (
           <RotateCcw className="w-3 h-3" />
         )}
-        Reset to Defaults ({settingsToReset.length})
+        {t("toolbar.resetToDefaults", { count: settingsToReset.length })}
       </button>
     </div>
   );

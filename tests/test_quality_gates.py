@@ -279,8 +279,9 @@ class TestB6NoAssumedDeviceCapability:
             re.compile(r"'optimized'\) \{ 2 \}"),
             "the driver publishes *RssBaseProcNumber min/max/default and "
             "Get-NetAdapterRSS publishes MaxProcessorNumber; on a hybrid CPU "
-            "logical processor 2 may be an E-core (B2)",
-            {"src/fpstune/settings/definitions/network.py": 1},
+            "logical processor 2 may be an E-core (B2, fixed — the baseline "
+            "entry is gone)",
+            {},
         ),
         (
             "panel_refresh_fallback",

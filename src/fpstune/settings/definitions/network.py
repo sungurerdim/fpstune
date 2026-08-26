@@ -2951,7 +2951,33 @@ def create_packet_coalescing_setting(interface_index: int, display_name: str) ->
     )
 
 
-def create_rss_base_processor_setting(interface_index: int, display_name: str) -> SettingExecutor:
+def rss_target_core(cpu: object | None) -> int | None:
+    """The core RSS receive processing should start at, or None when no safe
+    placement exists.
+
+    Core 0 (and its SMT sibling) is contended by Windows default affinity, so
+    the move is always to logical processor 2 — *when* 2 is a performance
+    core. On Intel hybrids the P-cores enumerate first and only they carry
+    SMT, so the P-core logical span is ``logical_cores - e_cores``; a machine
+    whose topology could not be read gets no placement at all, because moving
+    NIC receive DPCs onto an E-core is a regression, not a tweak (B2). Too few
+    logical processors means there is nowhere better to go, which is also None.
+    """
+    if cpu is None:
+        return None
+    is_hybrid = getattr(cpu, "is_hybrid", None)
+    if is_hybrid is None:
+        return None
+    logical = int(getattr(cpu, "logical_cores", 0) or 0)
+    if is_hybrid:
+        p_logical_span = logical - int(getattr(cpu, "e_cores", 0) or 0)
+        return 2 if p_logical_span > 2 else None
+    return 2 if logical > 2 else None
+
+
+def create_rss_base_processor_setting(
+    interface_index: int, display_name: str, target_core: int
+) -> SettingExecutor:
     """Create an RSS Base Processor setting for a specific adapter.
 
     BEST PRACTICE: Use InterfaceIndex (numeric) for PowerShell commands.
@@ -2963,6 +2989,8 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
     Args:
         interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
         display_name: Human-readable adapter name (for UI display only).
+        target_core: The derived safe core from ``rss_target_core`` — the caller
+            does not register this setting when no safe core exists.
 
     Returns:
         SettingExecutor for RSS base processor control.
@@ -2986,7 +3014,9 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
             "https://learn.microsoft.com/en-us/powershell/module/netadapter/set-netadapterrss"
         ],
         current_impact="Default: RSS base on Core 0 → contends with Windows default affinity",
-        recommended_impact="Optimized: RSS base on Core 2 → fewer DPC stalls, lower jitter",
+        recommended_impact=(
+            f"Optimized: RSS base on Core {target_core} → fewer DPC stalls, lower jitter"
+        ),
         scope=SettingScope.COMPLETE,
         category_order=26,
         effect="Moves the RSS base processor off Core 0 to reduce DPC latency",
@@ -3004,15 +3034,29 @@ def create_rss_base_processor_setting(interface_index: int, display_name: str) -
         value_map={},
         apply_type=DetectType.POWERSHELL,
         apply_command=(
+            # The optimized core is derived (rss_target_core), never a literal;
+            # "default" writes the driver's own published default, falling back
+            # to 0 only because 0 is the documented Windows stock for
+            # BaseProcessorNumber, not an invention. The write is refused when
+            # the target sits outside this adapter's own RSS processor range.
             "try { "
             "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            "$base = if ('%value%' -eq 'optimized') { 2 } else { 0 }; "
-            "Set-NetAdapterRSS -Name $a.Name -BaseProcessorNumber $base -ErrorAction Stop; 'ok' "
+            "$base = 0; "
+            "if ('%value%' -eq 'optimized') { $base = %target% } else { "
+            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*RssBaseProcNumber' -ErrorAction SilentlyContinue; "
+            "if ($prop) { $base = [int]$prop.DefaultRegistryValue } }; "
+            "$rss = Get-NetAdapterRSS -Name $a.Name -ErrorAction Stop; "
+            "$maxProc = $rss.MaxProcessorNumber -as [int]; "
+            "if ($null -ne $maxProc -and $base -gt $maxProc) { "
+            "'error: the target core is outside this adapters RSS processor range' "
+            "} else { "
+            "Set-NetAdapterRSS -Name $a.Name -BaseProcessorNumber $base -ErrorAction Stop; 'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "target": target_core},
         apply_value_map={},
-        value_hints={"default": "Core 0", "optimized": "Core 2"},
+        value_hints={"default": "Driver default", "optimized": f"Core {target_core}"},
     )
 
 

@@ -254,7 +254,7 @@ class TestAdapterSettingFactories:
 
     def test_create_rss_base_processor_valid(self) -> None:
         """Factory should create valid RSS base processor setting."""
-        setting = create_rss_base_processor_setting(11, "Ethernet")
+        setting = create_rss_base_processor_setting(11, "Ethernet", 2)
         assert isinstance(setting, SettingExecutor)
         assert setting.id == "network:11:rss_base_processor"
         assert setting.recommended_value == "optimized"
@@ -275,7 +275,8 @@ class TestAdapterSettingFactories:
             create_uapsd_setting,
             create_throughput_booster_setting,
             create_packet_coalescing_setting,
-            create_rss_base_processor_setting,
+            # target_core is derived by the caller; 2 stands in as a fixture
+            lambda idx, name: create_rss_base_processor_setting(idx, name, 2),
             create_msi_mode_setting,
         ],
     )

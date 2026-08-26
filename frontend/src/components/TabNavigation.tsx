@@ -30,13 +30,15 @@ import { tabButtonId, tabPanelId } from "./ui/tabIds";
 // Game Tweaks is its own tab because it is its own domain, not a category of
 // software: those settings are written into a game's file rather than into
 // Windows, and there are more of them than of everything on the Software tab.
-const tabs: Array<{ id: TabId; label: string; icon: typeof Settings }> = [
-  { id: "home", label: "Home", icon: Home },
-  { id: "settings", label: "Software Tweaks", icon: Settings },
-  { id: "hardware", label: "Hardware Tweaks", icon: Monitor },
-  { id: "games", label: "Game Tweaks", icon: Gamepad2 },
-  { id: "cleanup", label: "Cleanup & Repair", icon: HardDrive },
-  { id: "benchmarks", label: "Benchmarks", icon: Gauge },
+import type { MessageKey } from "../i18n/en";
+
+const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = [
+  { id: "home", labelKey: "tab.home", icon: Home },
+  { id: "settings", labelKey: "tab.software", icon: Settings },
+  { id: "hardware", labelKey: "tab.hardware", icon: Monitor },
+  { id: "games", labelKey: "tab.games", icon: Gamepad2 },
+  { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
+  { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
 ];
 
 export function TabNavigation() {
@@ -45,7 +47,7 @@ export function TabNavigation() {
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
 
-  const { locale } = useT();
+  const { t, locale } = useT();
   const { data: systemInfo } = useQuery({
     queryKey: ["system"],
     queryFn: api.getSystemInfo,
@@ -154,7 +156,7 @@ export function TabNavigation() {
                       accessible name away on a narrow window and left six
                       unnamed buttons. */}
                   <span className="sr-only md:not-sr-only md:inline">
-                    {tab.label}
+                    {t(tab.labelKey)}
                   </span>
                   {badge !== null && (
                     <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-xs font-bold flex items-center justify-center">

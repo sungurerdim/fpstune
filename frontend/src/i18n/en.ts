@@ -40,6 +40,30 @@ export const en = {
   "scope.spendIt": "Spend it",
   "scope.restoreFirst": "Create a System Restore point first (recommended)",
 
+  // Tabs
+  "tab.home": "Home",
+  "tab.software": "Software Tweaks",
+  "tab.hardware": "Hardware Tweaks",
+  "tab.games": "Game Tweaks",
+  "tab.cleanup": "Cleanup & Repair",
+  "tab.benchmarks": "Benchmarks",
+
+  // Detection notice
+  "detection.failedOne": "1 setting could not be checked on this machine",
+  "detection.failedMany":
+    "{count} settings could not be checked on this machine",
+  "detection.absentOne": "1 setting doesn't apply to this hardware",
+  "detection.absentMany": "{count} settings don't apply to this hardware",
+  "detection.absentFallback": "Not applicable to this system",
+
+  // Self-check notice
+  "selfCheck.disagreementsOne":
+    "Detection self-check found 1 disagreement — the values below may be wrong on this machine.",
+  "selfCheck.disagreementsMany":
+    "Detection self-check found {count} disagreements — the values below may be wrong on this machine.",
+  "selfCheck.recheck": "Re-check",
+  "selfCheck.checking": "Checking…",
+
   // Locale switch — names the language it would switch TO, in that language.
   "locale.switch": "Switch to English",
 

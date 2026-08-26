@@ -36,6 +36,29 @@ export const tr: Record<keyof typeof en, string> = {
   "scope.spendIt": "Harca",
   "scope.restoreFirst": "Önce Sistem Geri Yükleme noktası oluştur (önerilir)",
 
+  // Tabs
+  "tab.home": "Ana Sayfa",
+  "tab.software": "Yazılım İnce Ayarları",
+  "tab.hardware": "Donanım İnce Ayarları",
+  "tab.games": "Oyun İnce Ayarları",
+  "tab.cleanup": "Temizlik ve Onarım",
+  "tab.benchmarks": "Ölçümler",
+
+  // Detection notice
+  "detection.failedOne": "1 ayar bu makinede okunamadı",
+  "detection.failedMany": "{count} ayar bu makinede okunamadı",
+  "detection.absentOne": "1 ayar bu donanıma uygulanmıyor",
+  "detection.absentMany": "{count} ayar bu donanıma uygulanmıyor",
+  "detection.absentFallback": "Bu sisteme uygulanamaz",
+
+  // Self-check notice
+  "selfCheck.disagreementsOne":
+    "Algılama öz denetimi 1 uyuşmazlık buldu — aşağıdaki değerler bu makinede yanlış olabilir.",
+  "selfCheck.disagreementsMany":
+    "Algılama öz denetimi {count} uyuşmazlık buldu — aşağıdaki değerler bu makinede yanlış olabilir.",
+  "selfCheck.recheck": "Yeniden denetle",
+  "selfCheck.checking": "Denetleniyor…",
+
   // Locale switch
   "locale.switch": "Türkçeye geç",
 

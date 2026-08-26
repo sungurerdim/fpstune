@@ -413,6 +413,33 @@ def wait_for_gpu_detection(timeout: float = GPU_DETECTION_WAIT_TIMEOUT) -> bool:
     return _gpu_detection_done.wait(timeout)
 
 
+# VRAM comes from the driver's own HardwareInformation.qwMemorySize (a QWORD),
+# reached through the device's Enum key → Driver value → Class key: an exact
+# per-device binding, no name matching. Win32_VideoController.AdapterRAM is a
+# 32-bit field that clamps at 4 GB — live, a card with 8192 MB reported
+# 4293918720 (4095 MB) — so it is never read, not even as a sort key: sorting
+# clamped values to pick "the biggest card" is undefined once two cards clamp.
+# The pick is the adapter with the most driver-reported memory; a machine where
+# no driver reports any leaves VRAM 0, which is "unknown", never a guess.
+_GPU_DETECT_PS = (
+    "$ErrorActionPreference = 'SilentlyContinue'; "
+    "$best = $null; $bestQw = [int64]-1; "
+    "foreach ($c in @(Get-CimInstance -ClassName Win32_VideoController)) { "
+    "$qw = [int64]0; "
+    '$drv = (Get-ItemProperty -Path ("HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\" + $c.PNPDeviceID) '
+    "-Name Driver -ErrorAction SilentlyContinue).Driver; "
+    "if ($drv) { "
+    '$qw = [int64](Get-ItemProperty -Path ("HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\" + $drv) '
+    "-Name 'HardwareInformation.qwMemorySize' -ErrorAction SilentlyContinue)."
+    "'HardwareInformation.qwMemorySize' }; "
+    "if ($qw -gt $bestQw) { $bestQw = $qw; $best = $c } "
+    "} "
+    "if ($best) { "
+    '"Name=$($best.Name)"; "Driver=$($best.DriverVersion)"; '
+    'if ($bestQw -gt 0) { "VramBytes=$bestQw" }; "PNP=$($best.PNPDeviceID)" }'
+)
+
+
 def _detect_gpu_sync() -> GpuInfo | None:
     """Synchronous GPU detection (internal).
 
@@ -476,15 +503,8 @@ def _detect_gpu_sync() -> GpuInfo | None:
     if not name:
         try:
             logger.info("GPU detection: Using PowerShell Get-CimInstance...")
-            # Sort by AdapterRAM descending to get dedicated GPU first (more VRAM than integrated)
-            ps_script = (
-                "Get-CimInstance -ClassName Win32_VideoController | "
-                "Sort-Object -Property AdapterRAM -Descending | "
-                "Select-Object -First 1 Name, DriverVersion, AdapterRAM, PNPDeviceID | "
-                'ForEach-Object { "Name=$($_.Name)"; "Driver=$($_.DriverVersion)"; "VRAM=$($_.AdapterRAM)"; "PNP=$($_.PNPDeviceID)" }'
-            )
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                ["powershell", "-NoProfile", "-Command", _GPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -499,10 +519,10 @@ def _detect_gpu_sync() -> GpuInfo | None:
                     name = line.split("=", 1)[1].strip()
                 elif line.startswith("Driver="):
                     driver = line.split("=", 1)[1].strip()
-                elif line.startswith("VRAM="):
+                elif line.startswith("VramBytes="):
                     try:
                         vram_str = line.split("=", 1)[1].strip()
-                        if vram_str and vram_str != "":
+                        if vram_str:
                             vram = int(vram_str) // (1024 * 1024)
                     except (ValueError, TypeError):
                         vram = 0

@@ -261,8 +261,8 @@ class TestB6NoAssumedDeviceCapability:
             re.compile(r"AdapterRAM"),
             "Win32_VideoController.AdapterRAM is a 32-bit field that clamps at "
             "4 GB; VRAM comes from HardwareInformation.qwMemorySize or DXGI "
-            "DedicatedVideoMemory (A7)",
-            {"src/fpstune/utils/detect.py": 3},
+            "DedicatedVideoMemory (A7, fixed — the baseline entry is gone)",
+            {},
         ),
         (
             "buffer_default_constant",

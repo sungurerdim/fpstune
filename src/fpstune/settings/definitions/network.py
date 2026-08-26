@@ -2511,7 +2511,7 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
         current_impact="Default: Small receive buffer → packet drops during burst traffic",
-        recommended_impact="Maximum (1024): Large buffer → absorbs burst traffic, less packet loss",
+        recommended_impact="Maximum: buffer at this adapter's own ceiling → absorbs burst traffic, less packet loss.",
         scope=SettingScope.RECOMMENDED,
         category_order=20,
         effect="Maximizing receive buffers reduces packet loss during network bursts",
@@ -2548,7 +2548,7 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
         ),
         apply_args={"ifindex": interface_index},
         apply_value_map={},
-        value_hints={"default": "256", "maximum": "1024"},
+        value_hints={"default": "Driver default", "maximum": "This adapter's own maximum"},
     )
 
 
@@ -2586,7 +2586,7 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
         current_impact="Default: Small transmit buffer → send stalls during burst traffic",
-        recommended_impact="Maximum (1024): Large buffer → absorbs send bursts, stable upload",
+        recommended_impact="Maximum: buffer at this adapter's own ceiling → absorbs send bursts, stable upload.",
         scope=SettingScope.RECOMMENDED,
         category_order=21,
         effect="Maximizing transmit buffers reduces upload stalls during gaming",

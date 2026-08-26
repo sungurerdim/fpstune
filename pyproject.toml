@@ -140,11 +140,11 @@ skip_covered = false
 # was a number this suite could not cross, so it reported green on every run and
 # diagnosed nothing; 70 leaves room for ordinary work while a real regression —
 # a module that stops being exercised — lands below it.
-# Ratcheted, never lowered (H4): measured 78.17% on 2026-08-26, so the floor
-# sits just under the water line. Raise it as the CLI benchmark tree and the
-# uncovered endpoints gain tests; a change that drops coverage below this is
-# a change that removed a guard.
-fail_under = 78
+# Ratcheted, never lowered (H4): measured 79.42% on 2026-08-26 after the CLI
+# benchmark tree gained its command-layer tests, so the floor sits just under
+# the water line. Raise it as further uncovered areas gain tests; a change
+# that drops coverage below this is a change that removed a guard.
+fail_under = 79
 
 [tool.coverage.html]
 directory = "htmlcov"

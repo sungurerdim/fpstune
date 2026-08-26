@@ -1,13 +1,6 @@
-# TEMPLATE — NOT PUBLISHABLE AS CHECKED IN. The InstallerSha256 below is a
-# zeroed placeholder and the InstallerUrl points at a release tag that has not
-# been published. `scripts/update_winget_manifest.py` rewrites the version, the
-# URL and the checksum from the published release's own bytes; nothing may be
-# submitted to winget-pkgs until that script has run against a real release.
-# The release workflow now runs that script against the binary it just built and
-# uploads the result as the `winget-manifest` artifact; submission to
-# winget-pkgs stays a human step, and no workflow pushes to that repository.
 PackageIdentifier: sungurerdim.fpstune
 PackageVersion: 0.1.0
+ReleaseDate: 2026-08-26
 InstallerType: portable
 # One file, nothing to unpack, no uninstaller to leave behind. `portable` is the
 # honest type for that; calling it an installer would have winget promise an
@@ -32,6 +25,6 @@ Installers:
     # Filled in by scripts/update_winget_manifest.py from the published
     # fpstune.exe.sha256, never typed by hand — a checksum copied by a person is
     # a checksum nobody verified.
-    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+    InstallerSha256: 816f3cdd085c6521f9ea5b428129a46503e19612629ac57ddcae99da57599ca8
 ManifestType: installer
 ManifestVersion: 1.6.0

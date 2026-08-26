@@ -1281,6 +1281,13 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
             requires_reboot=False,
         )
 
+    # A machine fpstune has never cross-checked gets the detection self-check
+    # before its first write — a wrong detection is worth finding before
+    # anything derives from it (A12). Idempotent: one run per machine.
+    from fpstune.utils.self_check import ensure_checked_before_first_apply
+
+    await asyncio.to_thread(ensure_checked_before_first_apply)
+
     if sys.platform == "win32":
         _create_restore_point_async()
 

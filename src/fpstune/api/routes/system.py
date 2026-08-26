@@ -276,6 +276,24 @@ async def get_hardware_info() -> HardwareInfo:
     )
 
 
+@router.get("/self-check")
+async def get_self_check(refresh: bool = False) -> dict[str, Any]:
+    """Every detector cross-checked against an independent source (A12).
+
+    Returns the persisted report; ``refresh=true`` (or no report yet) runs the
+    checks against the live machine first. A disagreement is a named finding —
+    the exact sources compared and what each said.
+    """
+    from fpstune.utils.self_check import load_last_report, run_self_check
+
+    if not refresh:
+        persisted = await asyncio.to_thread(load_last_report)
+        if persisted is not None:
+            return persisted
+    report = await asyncio.to_thread(run_self_check)
+    return report.to_dict()
+
+
 @router.get("/hardware/context", response_model=HardwareContextResponse)
 async def get_hardware_context() -> HardwareContextResponse:
     """Get hardware context for setting applicability checks.

@@ -250,3 +250,68 @@ class TestQualityGates:
         for s in settings:
             for text in (s.display_name, s.description, s.effect, s.recommended_impact):
                 assert not (forbidden & set(str(text))), s.id
+
+
+class TestTheSixthDerivationIsGone:
+    """B5: nvprofile no longer derives the panel itself, and never invents 60."""
+
+    def test_an_unknown_rate_stays_zero_and_never_becomes_sixty(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(NvProfileExecutor, "_primary_monitor_info", None)
+        monkeypatch.setattr(
+            "fpstune.utils.hardware_manager.hardware_manager.detect_monitors",
+            lambda *_a, **_k: [],
+        )
+        refresh, supports_vrr = NvProfileExecutor()._get_primary_monitor_info()
+        assert (refresh, supports_vrr) == (0, None)
+
+    def test_an_unknown_is_not_cached_so_the_next_caller_retries(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(NvProfileExecutor, "_primary_monitor_info", None)
+        monkeypatch.setattr(
+            "fpstune.utils.hardware_manager.hardware_manager.detect_monitors",
+            lambda *_a, **_k: [],
+        )
+        NvProfileExecutor()._get_primary_monitor_info()
+        assert NvProfileExecutor._primary_monitor_info is None
+
+    def test_a_vrr_panel_with_an_unknown_rate_gets_no_fabricated_cap(self) -> None:
+        # frame_cap_for_refresh(0) floors at 30 — a ceiling nothing measured.
+        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(0, True)
+        assert info["recommended_fps_limit"] == 0
+
+    def test_a_parked_inactive_panel_is_not_the_panel(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """panel.py's active-only rule now governs this module too."""
+
+        class Parked:
+            is_active = False
+            is_primary = True
+            max_refresh_rate_hz = 60
+            native_refresh_rate_hz = 60
+            refresh_rate_hz = 60
+            supports_vrr = False
+            friendly_name = "internal"
+            name = "AAA0001"
+
+        class External:
+            is_active = True
+            is_primary = False
+            max_refresh_rate_hz = 300
+            native_refresh_rate_hz = 60
+            refresh_rate_hz = 120
+            supports_vrr = True
+            friendly_name = "external"
+            name = r"\.\DISPLAY5"
+
+        monkeypatch.setattr(NvProfileExecutor, "_primary_monitor_info", None)
+        monkeypatch.setattr(
+            "fpstune.utils.hardware_manager.hardware_manager.detect_monitors",
+            lambda *_a, **_k: [Parked(), External()],
+        )
+        refresh, supports_vrr = NvProfileExecutor()._get_primary_monitor_info()
+        monkeypatch.setattr(NvProfileExecutor, "_primary_monitor_info", None)
+        assert (refresh, supports_vrr) == (300, True)

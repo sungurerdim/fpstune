@@ -285,8 +285,9 @@ class TestB6NoAssumedDeviceCapability:
             "panel_refresh_fallback",
             re.compile(r"\(60, False\)"),
             "settings/panel.py is the one panel derivation and its rule is "
-            "that an unknown rate stays 0 and never becomes 60 (B5)",
-            {"src/fpstune/settings/executors/nvprofile.py": 2},
+            "that an unknown rate stays 0 and never becomes 60 (B5, fixed — "
+            "the baseline entry is gone)",
+            {},
         ),
     )
 

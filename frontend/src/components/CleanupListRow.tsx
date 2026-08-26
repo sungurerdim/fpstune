@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { Button } from "./ui/Button";
 import {
   Trash2,
@@ -34,7 +35,7 @@ export function CleanupListRow({
       return (
         <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-muted text-muted-foreground">
           <Loader2 className="w-3 h-3 animate-spin" />
-          Calculating...
+          {t("cleanup.calculating")}
         </span>
       );
     }
@@ -45,7 +46,7 @@ export function CleanupListRow({
           className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
         >
           <AlertTriangle className="w-3 h-3" />
-          Unavailable
+          {t("cleanup.unavailable")}
         </span>
       );
     }
@@ -62,20 +63,20 @@ export function CleanupListRow({
     if (!result.success)
       return (
         <span className="flex items-center gap-1 text-xs text-destructive">
-          <XCircle className="w-3 h-3" /> Failed
+          <XCircle className="w-3 h-3" /> {t("cleanup.failed")}
         </span>
       );
     if (!result.sized)
       return (
         <span className="flex items-center gap-1 text-xs text-success">
-          <CheckCircle2 className="w-3 h-3" /> Done
+          <CheckCircle2 className="w-3 h-3" /> {t("cleanup.done")}
         </span>
       );
     if (result.freedMB === null)
       return <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />;
     return (
       <span className="text-xs text-primary font-medium">
-        Freed {fmtMB(result.freedMB)}
+        {t("cleanup.freed", { amount: fmtMB(result.freedMB) })}
       </span>
     );
   };
@@ -85,7 +86,7 @@ export function CleanupListRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="font-medium text-sm break-words min-w-0">
-            {setting.displayName}
+            {localizedName(setting)}
           </span>
           {sizeBadge()}
           {setting.durationEstimate && (
@@ -95,15 +96,12 @@ export function CleanupListRow({
           )}
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {setting.description}
+          {localizedDescription(setting)}
         </p>
         {isDockerCleanup(setting) && (
           <div className="flex items-start gap-1.5 mt-1.5 text-xs text-warning">
             <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
-            <span>
-              Restarts Docker Desktop and all WSL distributions to compact the
-              virtual disk; can take several minutes.
-            </span>
+            <span>{t("cleanup.dockerWarning")}</span>
           </div>
         )}
         <div className="mt-1.5">{status()}</div>

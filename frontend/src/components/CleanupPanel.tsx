@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { Card } from "./ui/Card";
 import { useState, useMemo } from "react";
 import {
@@ -172,7 +173,7 @@ export function CleanupPanel({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="font-medium text-sm break-words min-w-0">
-                          {setting.displayName}
+                          {localizedName(setting)}
                         </span>
                         {(() => {
                           const size = parseCleanupSize(setting.currentValue);
@@ -184,7 +185,7 @@ export function CleanupPanel({
                                 className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
                               >
                                 <AlertTriangle className="w-3 h-3" />
-                                Unavailable
+                                {t("cleanup.unavailable")}
                               </span>
                             );
                           }
@@ -202,17 +203,13 @@ export function CleanupPanel({
                         )}
                       </div>
                       <p className="text-sm text-muted-foreground mt-1">
-                        {setting.description}
+                        {localizedDescription(setting)}
                       </p>
                       {/* Show warning for long operations */}
                       {setting.name === "dism_cleanup" && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
                           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                          <span>
-                            Takes 5-15 minutes. Cannot uninstall updates removed by
-                            ResetBase. Reported size is reclaimable component store —
-                            actual free disk space may only appear after a reboot.
-                          </span>
+                          <span>{t("cleanup.dismWarning")}</span>
                         </div>
                       )}
                       {/* Docker prune now compacts the WSL2 vhdx so space truly
@@ -221,24 +218,14 @@ export function CleanupPanel({
                         setting.name === "docker_prune_all") && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
                           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                          <span>
-                            Shuts down Docker Desktop and all WSL distributions to
-                            compact the virtual disk and return real disk space. Can
-                            take several minutes; save your work first.
-                          </span>
+                          <span>{t("cleanup.dockerShutdownWarning")}</span>
                         </div>
                       )}
                       {/* Show warning for the disruptive WSL shutdown */}
                       {setting.name === "wsl_compact" && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
                           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                          <span>
-                            Runs "wsl --shutdown" first, immediately closing all
-                            running WSL distributions and Docker Desktop (WSL
-                            backend). Save your work before running. Reported size is
-                            the current disk footprint, not the exact reclaimable
-                            amount.
-                          </span>
+                          <span>{t("cleanup.wslWarning")}</span>
                         </div>
                       )}
                       {/* What running this does — present-tense, unambiguous (effect),
@@ -260,14 +247,17 @@ export function CleanupPanel({
               <div className="rounded-md border border-dashed border-border/70 p-3">
                 <div className="flex items-center gap-2 text-xs text-muted-foreground">
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Measuring {measuring.length} more…</span>
+                  <span>
+                    {t("cleanup.measuringMore", {
+                      count: measuring.length,
+                    })}
+                  </span>
                 </div>
                 <p className="mt-1 text-xs text-muted-foreground/70">
-                  {measuring.map((setting) => setting.displayName).join(", ")}
+                  {measuring.map((setting) => localizedName(setting)).join(", ")}
                 </p>
                 <p className="mt-1 text-xs text-muted-foreground/60">
-                  Anything not listed above once this finishes has nothing to
-                  reclaim, or its software is not installed.
+                  {t("cleanup.measuringFootnote")}
                 </p>
               </div>
             )}

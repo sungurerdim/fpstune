@@ -88,6 +88,14 @@ export const en = {
   "row.resetDefault": "Restore the Windows default",
   "row.target": "Target",
   "row.applyNamed": "Apply {name}",
+  "row.selectNamed": "Select {name}",
+  "row.default": "Default",
+  "row.current": "Current",
+  "row.queued": "queued",
+  "row.notApplicable": "N/A",
+  "row.setTo": "Set to {value}",
+  "row.resetTo": "Reset to {value}",
+  "row.resetChoice": "{value} (reset)",
   "sr.optimal": "Already at the recommended value: ",
   "sr.currently": "Currently ",
   "sr.recommendedIs": ", recommended value is ",
@@ -156,11 +164,25 @@ export const en = {
   "cleanup.done": "Done",
   "cleanup.serviceDown":
     "Service not running and could not be started. Start it, then reopen this tab.",
+  "cleanup.unavailable": "Unavailable",
+  "cleanup.dockerWarning":
+    "Restarts Docker Desktop and all WSL distributions to compact the virtual disk; can take several minutes.",
+  "cleanup.dismWarning":
+    "Takes 5-15 minutes. Cannot uninstall updates removed by ResetBase. Reported size is reclaimable component store — actual free disk space may only appear after a reboot.",
+  "cleanup.dockerShutdownWarning":
+    "Shuts down Docker Desktop and all WSL distributions to compact the virtual disk and return real disk space. Can take several minutes; save your work first.",
+  "cleanup.wslWarning":
+    'Runs "wsl --shutdown" first, immediately closing all running WSL distributions and Docker Desktop (WSL backend). Save your work before running. Reported size is the current disk footprint, not the exact reclaimable amount.',
+  "cleanup.measuringMore": "Measuring {count} more…",
+  "cleanup.measuringFootnote":
+    "Anything not listed above once this finishes has nothing to reclaim, or its software is not installed.",
   "cleanup.runCleanup": "Run Cleanup",
   "cleanup.runCleanupCount": "Run Cleanup ({count})",
   "maintenance.title": "System Maintenance",
   "maintenance.description": "Repair and troubleshoot Windows system issues.",
   "maintenance.running": "Running...",
+  "maintenance.dismHealthWarning":
+    "May require internet connection to download repair files.",
   "maintenance.run": "Run",
   "maintenance.runCount": "Run ({count})",
   "docker.title": "Restart Docker & WSL?",
@@ -202,6 +224,8 @@ export const en = {
   "devices.showIdeal": "Show tweaks already ideal",
   "devices.hideIdeal": "Hide tweaks already ideal",
   "devices.advisoryHint": "fpstune cannot change these — each row says where to.",
+  "devices.fix": "Fix",
+  "devices.advancedBadge": "ADV",
 
   // Monitor card
   "monitor.applying": "Applying…",
@@ -407,6 +431,13 @@ export const en = {
   "tooltip.proven": "Proven",
   "tooltip.experimental": "Experimental",
   "tooltip.likely": "Likely",
+  "tooltip.ariaInfo": "Information about {name}",
+  "tooltip.provenDetail": "Proven: 3+ independent sources",
+  "tooltip.experimentalDetail":
+    "Experimental: safe but unproven on modern systems",
+  "tooltip.monitorOnly": "FPSTune cannot apply this automatically — monitor only.",
+  "tooltip.sources": "Sources:",
+  "tooltip.requiresRestart": "Requires system restart",
 
   // Notifications
   "toast.errorsRegion": "Errors and warnings",

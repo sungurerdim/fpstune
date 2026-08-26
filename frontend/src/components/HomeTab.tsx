@@ -24,6 +24,7 @@ import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
@@ -548,7 +549,7 @@ export function HomeTab() {
                     className="flex items-center gap-2 p-2 rounded-md border border-border/50 text-xs text-muted-foreground"
                   >
                     <Loader2 className="w-3 h-3 animate-spin shrink-0" />
-                    <span className="font-medium">{s.displayName}</span>
+                    <span className="font-medium">{localizedName(s)}</span>
                     <span>{t("home.rowMeasuring")}</span>
                   </div>
                 ))}
@@ -579,11 +580,11 @@ export function HomeTab() {
                 className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{s.displayName}</span>
+                  <span className="font-medium text-sm">{localizedName(s)}</span>
                   <SettingInfoTooltip setting={s} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {s.description}
+                  {localizedDescription(s)}
                 </p>
                 <div className="mt-1">
                   <SettingValueState setting={s} />

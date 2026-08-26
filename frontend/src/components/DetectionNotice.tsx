@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
 import { useT } from "../i18n";
+import { localizedName } from "../i18n/settings";
 import { useStore } from "../store";
 import type { Setting } from "../types/setting";
 
@@ -67,7 +68,7 @@ export function DetectionNotice({
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {failures.map((setting) => (
                 <li key={setting.id}>
-                  <span className="text-foreground">{setting.displayName}</span>
+                  <span className="text-foreground">{localizedName(setting)}</span>
                   {" — "}
                   {setting.detectionError}
                 </li>
@@ -97,7 +98,7 @@ export function DetectionNotice({
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {absent.map((setting) => (
                 <li key={setting.id}>
-                  <span className="text-foreground/80">{setting.displayName}</span>
+                  <span className="text-foreground/80">{localizedName(setting)}</span>
                   {" — "}
                   {setting.applicableReason || t("detection.absentFallback")}
                 </li>

@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { useState, useMemo } from "react";
 import {
   Loader2,
@@ -111,7 +112,9 @@ export function SettingsTab({
           q &&
           !s.displayName.toLowerCase().includes(q) &&
           !s.name.toLowerCase().includes(q) &&
-          !s.description.toLowerCase().includes(q)
+          !s.description.toLowerCase().includes(q) &&
+          !localizedName(s).toLowerCase().includes(q) &&
+          !localizedDescription(s).toLowerCase().includes(q)
         )
           continue;
 

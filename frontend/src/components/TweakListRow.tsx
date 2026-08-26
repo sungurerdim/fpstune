@@ -1,6 +1,7 @@
 import { Button } from "./ui/Button";
 import { Zap, Undo2 } from "lucide-react";
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { cn } from "../lib/utils";
 import { formatBenefit } from "../lib/impact";
 import { useApplySingle } from "../hooks/useApplySingle";
@@ -58,13 +59,13 @@ export function TweakListRow({
             </span>
           )}
           <span className="font-medium text-sm break-words min-w-0">
-            {setting.shortName || setting.displayName}
+            {localizedName(setting)}
           </span>
           <RiskWarningBadge setting={setting} />
           <SettingInfoTooltip setting={setting} />
         </div>
         <p className="text-xs text-muted-foreground mt-0.5">
-          {setting.description}
+          {localizedDescription(setting)}
         </p>
         <div className="flex items-center gap-2 flex-wrap mt-1">
           <SettingValueState setting={setting} />

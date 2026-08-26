@@ -12,6 +12,7 @@
  */
 
 import { useT } from "../i18n";
+import { localizedName } from "../i18n/settings";
 import { Loader2, RotateCcw, ShieldCheck, CheckCircle2, XCircle, Undo2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
@@ -123,7 +124,7 @@ export function TweakSetting({
             onChange={onSelect}
             onClick={(e) => e.stopPropagation()}
             className="w-3.5 h-3.5 shrink-0 accent-primary cursor-pointer"
-            aria-label={`Select ${setting.displayName}`}
+            aria-label={t("row.selectNamed", { name: localizedName(setting) })}
           />
         )}
         <SettingInfoTooltip setting={setting} />
@@ -136,9 +137,7 @@ export function TweakSetting({
             )}
             style={{ wordBreak: "break-word" }}
           >
-            {"shortName" in setting && setting.shortName
-              ? setting.shortName
-              : setting.displayName}
+            {localizedName(setting)}
           </span>
           {setting.evidenceLevel === "proven" && (
             <TooltipProvider>
@@ -147,7 +146,7 @@ export function TweakSetting({
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-green-500 shrink-0 cursor-default" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Proven: 3+ independent sources
+                  {t("tooltip.provenDetail")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -159,7 +158,7 @@ export function TweakSetting({
                   <span className="inline-block w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0 cursor-default" />
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Experimental: safe but unproven on modern systems
+                  {t("tooltip.experimentalDetail")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -173,7 +172,7 @@ export function TweakSetting({
                   </span>
                 </TooltipTrigger>
                 <TooltipContent side="top">
-                  Requires system restart
+                  {t("tooltip.requiresRestart")}
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
@@ -197,7 +196,7 @@ export function TweakSetting({
           {/* SSE bulk operation status badge */}
           {operationStatus === "queued" && (
             <span className="text-xs text-muted-foreground/60 px-1 rounded bg-muted/50">
-              queued
+              {t("row.queued")}
             </span>
           )}
           {operationStatus === "running" && (
@@ -210,7 +209,9 @@ export function TweakSetting({
             <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
           )}
           {isDisabled ? (
-            <span className="text-muted-foreground/30 text-xs">N/A</span>
+            <span className="text-muted-foreground/30 text-xs">
+              {t("row.notApplicable")}
+            </span>
           ) : isInitialLoading ? (
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           ) : setting.isReadonly ? (
@@ -315,7 +316,7 @@ export function TweakSetting({
           )}
           <span className="flex items-center gap-1 min-w-0">
             <span className="text-muted-foreground/50 text-xs shrink-0">
-              Default
+              {t("row.default")}
             </span>
             <span className="text-muted-foreground font-medium break-words min-w-0">
               {setting.valueHints?.[String(setting.defaultValue)] ?? formatSettingValue(setting.defaultValue)}
@@ -323,7 +324,7 @@ export function TweakSetting({
           </span>
           <span className="flex items-center gap-1 min-w-0">
             <span className="text-muted-foreground/50 text-xs shrink-0">
-              Current
+              {t("row.current")}
             </span>
             <span
               className={cn(
@@ -372,6 +373,7 @@ function InlineControl({
   onApplyValue: (value: unknown) => void;
   onReset: () => void;
 }) {
+  const { t } = useT();
   const disabled = isPending || isModuleLoading;
 
   // Every choice is a real one. This used to filter out "not_available",
@@ -403,14 +405,14 @@ function InlineControl({
                 isPending={isPending}
                 size="sm"
                 disabled={disabled}
-                title={setting.displayName}
+                title={localizedName(setting)}
               />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
             {isAtTarget
-              ? `${setting.choices[0]} (reset)`
-              : `Set to ${targetStr}`}
+              ? t("row.resetChoice", { value: String(setting.choices[0]) })
+              : t("row.setTo", { value: targetStr })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -451,14 +453,14 @@ function InlineControl({
                 isPending={isPending}
                 size="sm"
                 disabled={disabled}
-                title={setting.displayName}
+                title={localizedName(setting)}
               />
             </span>
           </TooltipTrigger>
           <TooltipContent side="top">
             {isOptimal
-              ? `Reset to ${setting.defaultValue}`
-              : `Set to ${profileTarget}`}
+              ? t("row.resetTo", { value: String(setting.defaultValue) })
+              : t("row.setTo", { value: String(profileTarget) })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -476,7 +478,7 @@ function InlineControl({
         isPending={isPending}
         size="sm"
         disabled={disabled}
-        title={setting.displayName}
+        title={localizedName(setting)}
       />
     );
   }

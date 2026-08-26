@@ -83,6 +83,14 @@ export const tr: Record<keyof typeof en, string> = {
   "row.resetDefault": "Windows varsayılanına döndür",
   "row.target": "Hedef",
   "row.applyNamed": "Uygula: {name}",
+  "row.selectNamed": "Seç: {name}",
+  "row.default": "Varsayılan",
+  "row.current": "Mevcut",
+  "row.queued": "sırada",
+  "row.notApplicable": "N/A",
+  "row.setTo": "{value} yap",
+  "row.resetTo": "{value} değerine sıfırla",
+  "row.resetChoice": "{value} (sıfırla)",
   "sr.optimal": "Zaten önerilen değerde: ",
   "sr.currently": "Şu an ",
   "sr.recommendedIs": ", önerilen değer ",
@@ -149,11 +157,25 @@ export const tr: Record<keyof typeof en, string> = {
   "cleanup.done": "Tamamlandı",
   "cleanup.serviceDown":
     "Hizmet çalışmıyor ve başlatılamadı. Hizmeti başlatıp bu sekmeyi yeniden açın.",
+  "cleanup.unavailable": "Kullanılamıyor",
+  "cleanup.dockerWarning":
+    "Sanal diski küçültmek için Docker Desktop'ı ve tüm WSL dağıtımlarını yeniden başlatır; birkaç dakika sürebilir.",
+  "cleanup.dismWarning":
+    "5-15 dakika sürer. ResetBase ile kaldırılan güncellemeler geri alınamaz. Bildirilen boyut, bileşen deposunun geri kazanılabilir kısmıdır — gerçek boş alan ancak yeniden başlatmadan sonra görünebilir.",
+  "cleanup.dockerShutdownWarning":
+    "Sanal diski küçültüp gerçek disk alanını geri vermek için Docker Desktop'ı ve tüm WSL dağıtımlarını kapatır. Birkaç dakika sürebilir; önce çalışmalarınızı kaydedin.",
+  "cleanup.wslWarning":
+    'Önce "wsl --shutdown" çalıştırır; tüm çalışan WSL dağıtımları ve Docker Desktop (WSL arka ucu) anında kapanır. Çalıştırmadan önce işinizi kaydedin. Bildirilen boyut mevcut disk ayak izidir, tam geri kazanılabilir miktar değildir.',
+  "cleanup.measuringMore": "{count} öge daha ölçülüyor…",
+  "cleanup.measuringFootnote":
+    "Bu bittiğinde yukarıda listelenmeyenlerin geri kazanılacak bir şeyi yoktur ya da yazılımı kurulu değildir.",
   "cleanup.runCleanup": "Temizliği Çalıştır",
   "cleanup.runCleanupCount": "Temizliği Çalıştır ({count})",
   "maintenance.title": "Sistem Bakımı",
   "maintenance.description": "Windows sistem sorunlarını onarır ve giderir.",
   "maintenance.running": "Çalışıyor...",
+  "maintenance.dismHealthWarning":
+    "Onarım dosyalarını indirmek için internet bağlantısı gerekebilir.",
   "maintenance.run": "Çalıştır",
   "maintenance.runCount": "Çalıştır ({count})",
   "docker.title": "Docker ve WSL yeniden başlatılsın mı?",
@@ -195,6 +217,8 @@ export const tr: Record<keyof typeof en, string> = {
   "devices.hideIdeal": "Zaten ideal olan ayarları gizle",
   "devices.advisoryHint":
     "fpstune bunları değiştiremez — her satır nereden değişeceğini söyler.",
+  "devices.fix": "Düzelt",
+  "devices.advancedBadge": "İLERİ",
 
   // Monitor card
   "monitor.applying": "Uygulanıyor…",
@@ -399,6 +423,14 @@ export const tr: Record<keyof typeof en, string> = {
   "tooltip.proven": "Kanıtlı",
   "tooltip.experimental": "Deneysel",
   "tooltip.likely": "Olası",
+  "tooltip.ariaInfo": "{name} hakkında bilgi",
+  "tooltip.provenDetail": "Kanıtlı: 3+ bağımsız kaynak",
+  "tooltip.experimentalDetail":
+    "Deneysel: güvenli ama modern sistemlerde kanıtlanmamış",
+  "tooltip.monitorOnly":
+    "FPSTune bunu kendiliğinden uygulayamaz — yalnızca izler.",
+  "tooltip.sources": "Kaynaklar:",
+  "tooltip.requiresRestart": "Sistemin yeniden başlatılması gerekir",
 
   // Notifications
   "toast.errorsRegion": "Hatalar ve uyarılar",

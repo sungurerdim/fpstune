@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { useMemo } from "react";
@@ -100,7 +101,7 @@ export function MaintenancePanel() {
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="font-medium text-sm">
-                  {setting.displayName}
+                  {localizedName(setting)}
                 </span>
                 {setting.durationEstimate && (
                   <span className="text-xs text-muted-foreground">
@@ -109,15 +110,13 @@ export function MaintenancePanel() {
                 )}
               </div>
               <p className="text-sm text-muted-foreground mt-1">
-                {setting.description}
+                {localizedDescription(setting)}
               </p>
               {/* Kept: this one is a precondition, not a restatement. */}
               {setting.name === "dism_health" && (
                 <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
                   <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-                  <span>
-                    May require internet connection to download repair files.
-                  </span>
+                  <span>{t("maintenance.dismHealthWarning")}</span>
                 </div>
               )}
             </div>

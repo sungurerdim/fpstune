@@ -1,4 +1,5 @@
 import { useT } from "../../i18n";
+import { localizedDescription, localizedName } from "../../i18n/settings";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Zap, CircleCheck, Wrench } from "lucide-react";
 import { useStore } from "../../store";
@@ -164,11 +165,17 @@ function TweakRow({
   pending: boolean;
   onApply: () => void;
 }) {
+  const { t } = useT();
   const off = isTweakSuboptimal(setting);
 
   return (
-    <div className="flex items-center gap-2 text-xs" title={setting.description}>
-      <span className="truncate text-muted-foreground">{setting.displayName}</span>
+    <div
+      className="flex items-center gap-2 text-xs"
+      title={localizedDescription(setting)}
+    >
+      <span className="truncate text-muted-foreground">
+        {localizedName(setting)}
+      </span>
       <span className={cn("font-medium", off ? "text-warning" : "text-success")}>
         {String(setting.currentValue)}
       </span>
@@ -185,16 +192,20 @@ function TweakRow({
               title={setting.riskWarning}
               className="cursor-default rounded border border-warning/30 bg-warning/20 px-1 text-xs font-medium text-warning"
             >
-              ADV
+              {t("devices.advancedBadge")}
             </span>
           )}
           <button
             onClick={onApply}
             disabled={pending}
-            aria-label={`Apply ${setting.displayName}`}
+            aria-label={t("row.applyNamed", { name: localizedName(setting) })}
             className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
           >
-            {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fix"}
+            {pending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              t("devices.fix")
+            )}
           </button>
         </>
       )}
@@ -213,7 +224,9 @@ function TweakRow({
 function AdvisoryRow({ setting }: { setting: Setting }) {
   return (
     <div className="flex items-start gap-2 text-xs">
-      <span className="truncate text-muted-foreground">{setting.displayName}</span>
+      <span className="truncate text-muted-foreground">
+        {localizedName(setting)}
+      </span>
       <span className="font-medium text-amber-400">{String(setting.currentValue)}</span>
       <span
         className="ml-auto max-w-[60%] shrink text-right leading-snug text-muted-foreground"

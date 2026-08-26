@@ -6,6 +6,7 @@
  */
 
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { Info, Eye } from "lucide-react";
 import { cn } from "../lib/utils";
 import {
@@ -41,7 +42,7 @@ export function SettingInfoTooltip({
           <button
             type="button"
             className={`p-0.5 rounded hover:bg-muted/50 transition-colors ${className}`}
-            aria-label={`Information about ${setting.displayName}`}
+            aria-label={t("tooltip.ariaInfo", { name: localizedName(setting) })}
           >
             <Info className={`h-4 w-4 ${VARIANT_COLORS[variant]}`} />
           </button>
@@ -53,7 +54,7 @@ export function SettingInfoTooltip({
         >
           {/* Title and badges */}
           <div className="flex items-start justify-between gap-2">
-            <p className="font-medium text-sm">{setting.displayName}</p>
+            <p className="font-medium text-sm">{localizedName(setting)}</p>
             <div className="flex gap-1">
               <span
                 className={cn(
@@ -74,7 +75,7 @@ export function SettingInfoTooltip({
 
           {/* Description */}
           <p className="text-sm text-muted-foreground leading-relaxed">
-            {setting.description}
+            {localizedDescription(setting)}
           </p>
 
           {/* What the machine is actually at, and what the other state means.
@@ -89,7 +90,9 @@ export function SettingInfoTooltip({
             // while there is still a decision to make.
             setting.recommendedImpact && (
               <div className="text-xs space-y-0.5">
-                <span className="font-medium text-success">Current:</span>
+                <span className="font-medium text-success">
+                  {t("tooltip.current")}
+                </span>
                 <p className="text-success/80">{setting.recommendedImpact}</p>
               </div>
             )
@@ -107,7 +110,9 @@ export function SettingInfoTooltip({
               )}
               {setting.recommendedImpact && (
                 <div className="text-xs space-y-0.5">
-                  <span className="font-medium text-success">Recommended:</span>
+                  <span className="font-medium text-success">
+                    {t("tooltip.recommended")}
+                  </span>
                   <p className="text-success/80">{setting.recommendedImpact}</p>
                 </div>
               )}
@@ -118,9 +123,7 @@ export function SettingInfoTooltip({
           {setting.isReadonly && (
             <div className="flex items-start gap-1.5 text-xs pt-1.5 mt-1.5 border-t border-border/30 text-warning">
               <Eye className="w-3 h-3 mt-0.5 shrink-0" />
-              <span>
-                FPSTune cannot apply this automatically — monitor only.
-              </span>
+              <span>{t("tooltip.monitorOnly")}</span>
             </div>
           )}
 
@@ -169,7 +172,7 @@ export function SettingInfoTooltip({
             (!setting.isOptimized || setting.isReadonly) && (
             <div className="text-xs pt-1 mt-1 border-t border-border/30 space-y-0.5">
               <span className="text-muted-foreground font-medium">
-                Sources:
+                {t("tooltip.sources")}
               </span>
               {setting.sources.map((url, i) => {
                 const domain = new URL(url).hostname.replace("www.", "");
@@ -193,7 +196,7 @@ export function SettingInfoTooltip({
           {setting.requiresReboot && (
             <div className="text-xs text-warning flex items-center gap-1">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-warning" />
-              Requires system restart
+              {t("tooltip.requiresRestart")}
             </div>
           )}
 

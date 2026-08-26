@@ -1,4 +1,5 @@
 import { useT } from "../i18n";
+import { localizedDescription, localizedName } from "../i18n/settings";
 import { useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -76,7 +77,9 @@ export function GameTweaksTab() {
         q &&
         !s.displayName.toLowerCase().includes(q) &&
         !s.name.toLowerCase().includes(q) &&
-        !s.description.toLowerCase().includes(q)
+        !s.description.toLowerCase().includes(q) &&
+        !localizedName(s).toLowerCase().includes(q) &&
+        !localizedDescription(s).toLowerCase().includes(q)
       ) {
         hidden++;
         continue;

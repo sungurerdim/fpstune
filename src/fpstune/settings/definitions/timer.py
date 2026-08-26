@@ -53,6 +53,7 @@ GLOBAL_TIMER_RESOLUTION = SettingExecutor(
     id="timer:global_timer_resolution",
     category=SettingCategory.TIMER,
     display_name="Global Timer Resolution (Win11)",
+    short_name="Windows timer precision",
     description="Makes timer resolution requests system-wide instead of per-process.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),

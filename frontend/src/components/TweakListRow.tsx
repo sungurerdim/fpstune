@@ -58,7 +58,7 @@ export function TweakListRow({
             </span>
           )}
           <span className="font-medium text-sm break-words min-w-0">
-            {setting.displayName}
+            {setting.shortName || setting.displayName}
           </span>
           <RiskWarningBadge setting={setting} />
           <SettingInfoTooltip setting={setting} />

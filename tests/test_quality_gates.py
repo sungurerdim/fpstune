@@ -400,8 +400,9 @@ class TestF4CopyRegister:
     same change, so the migration is on the record.
     """
 
-    # Frozen at the F1 landing (2026-08-26): 375 of 395 settings unnamed.
-    _MISSING_SHORT_NAME_CEILING = 375
+    # F2 named every setting on 2026-08-26; the ceiling is now the floor:
+    # a setting may not ship without its plain name.
+    _MISSING_SHORT_NAME_CEILING = 0
 
     def test_the_unnamed_count_only_shrinks(self) -> None:
         from fpstune.settings.definitions import get_all_static_settings

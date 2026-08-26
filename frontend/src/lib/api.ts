@@ -277,7 +277,17 @@ export const api = {
       resolution: string;
       refresh_rate: number;
       message: string;
+      // A real write awaits confirmation: unless confirmDisplayChange arrives
+      // within revert_timeout_s the backend restores the prior mode.
+      requires_confirmation: boolean;
+      revert_timeout_s: number | null;
     }>(`/display/${displayIndex}/auto`, { method: "POST" }),
+
+  confirmDisplayChange: (displayIndex: number) =>
+    fetchJson<{ success: boolean; message: string }>(
+      `/display/${displayIndex}/confirm`,
+      { method: "POST" },
+    ),
 
   refreshDisplays: () =>
     fetchJson<{ success: boolean; monitors: MonitorInfo[] }>(

@@ -17,6 +17,23 @@ def client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.fixture(autouse=True)
+def _no_stray_reverts():
+    """Cancel any revert timer a test scheduled.
+
+    A leaked timer would fire after its test's subprocess patch is gone and run
+    a real mode change against whatever display the fixture named — on the
+    machine running the suite.
+    """
+    yield
+    from fpstune.api.routes import display as display_module
+
+    with display_module._pending_lock:
+        for pending in display_module._pending_reverts.values():
+            pending["timer"].cancel()
+        display_module._pending_reverts.clear()
+
+
 def _make_monitor(
     name: str = "DISPLAY1",
     width: int = 2560,
@@ -197,7 +214,7 @@ class TestSetDisplayAuto:
             max_refresh_rate_hz=165,
         )
         mock_proc = MagicMock()
-        mock_proc.stdout = "SUCCESS"
+        mock_proc.stdout = "PRIOR=1920x1080@60\nSUCCESS"
         mock_proc.returncode = 0
 
         # Patch sys.platform at module level so the creationflags branch is consistent
@@ -538,3 +555,122 @@ class TestMonitorPayloadContract:
             assert payload["is_active"] is False
             # C5 stable identifier the card shows next to the device name.
             assert payload["hardware_id"] == "GSM5B08"
+
+
+# ---------------------------------------------------------------------------
+# POST /api/display/{index}/auto — the two write guards (A10)
+# ---------------------------------------------------------------------------
+
+
+class TestModeWriteGuards:
+    """A wrong mode on a friend's machine is a black screen nobody can debug.
+
+    Two guards: CDS_TEST validates the mode before anything is written, and a
+    revert timer writes the prior mode back unless the user keeps the change.
+    A change whose prior mode could not be read is refused outright — a write
+    that cannot be undone is a one-way door.
+    """
+
+    def _suboptimal(self) -> MagicMock:
+        return _make_monitor(
+            name="\\.\\DISPLAY7",
+            refresh_rate_hz=60,
+            is_refresh_optimal=False,
+            native_width=2560,
+            native_height=1440,
+            max_refresh_rate_hz=165,
+        )
+
+    def _post(self, client: TestClient, stdout: str):
+        mock_proc = MagicMock()
+        mock_proc.stdout = stdout
+        mock_proc.returncode = 0
+        with (
+            patch("fpstune.api.routes.display.sys.platform", "win32"),
+            patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
+            patch("fpstune.api.routes.display.subprocess.run", return_value=mock_proc) as mock_run,
+        ):
+            mock_hw.detect_monitors.return_value = [self._suboptimal()]
+            response = client.post("/api/display/0/auto")
+        return response, mock_run
+
+    def test_a_mode_the_driver_rejects_is_never_written(self, client: TestClient) -> None:
+        """CDS_TEST said no; the endpoint reports it and nothing changed."""
+        response, _ = self._post(client, "PRIOR=1920x1080@60\nTESTFAIL:-5")
+        assert response.status_code == 409
+        assert "Nothing was changed" in response.json()["detail"]
+
+    def test_the_test_call_precedes_the_write_in_the_shipped_script(self) -> None:
+        from fpstune.api.routes.display import _MODE_CHANGE_SCRIPT
+
+        test_call = _MODE_CHANGE_SCRIPT.index("CDS_TEST, [IntPtr]")
+        write_call = _MODE_CHANGE_SCRIPT.index("CDS_UPDATEREGISTRY, [IntPtr]")
+        assert test_call < write_call
+
+    def test_an_unreadable_prior_mode_refuses_the_change(self, client: TestClient) -> None:
+        """No mode to revert to means no write happens at all."""
+        response, _ = self._post(client, "NOPRIOR")
+        assert response.status_code == 500
+        assert "one-way door" in response.json()["detail"]
+
+    def test_a_successful_write_awaits_confirmation(self, client: TestClient) -> None:
+        response, _ = self._post(client, "PRIOR=1920x1080@60\nSUCCESS")
+        assert response.status_code == 200
+        data = response.json()
+        assert data["requires_confirmation"] is True
+        assert data["revert_timeout_s"] is not None
+
+    def test_no_confirmation_reverts_to_the_prior_mode(self, client: TestClient) -> None:
+        """The gate: the timer fires and writes back exactly what was read."""
+        import time
+
+        from fpstune.api.routes import display as display_module
+
+        mock_proc = MagicMock()
+        mock_proc.stdout = "PRIOR=1920x1080@60\nSUCCESS"
+        mock_proc.returncode = 0
+        with (
+            patch("fpstune.api.routes.display.sys.platform", "win32"),
+            patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
+            patch.object(display_module, "_REVERT_TIMEOUT_S", 0.05),
+            patch("fpstune.api.routes.display.subprocess.run", return_value=mock_proc) as mock_run,
+        ):
+            mock_hw.detect_monitors.return_value = [self._suboptimal()]
+            response = client.post("/api/display/0/auto")
+            assert response.status_code == 200
+            deadline = time.monotonic() + 2.0
+            while mock_run.call_count < 2 and time.monotonic() < deadline:
+                time.sleep(0.02)
+            assert mock_run.call_count == 2, "the revert never ran"
+            revert_script = mock_run.call_args_list[1].args[0][3]
+            # The revert writes back exactly the mode the apply read out.
+            assert "$dm.dmPelsWidth = 1920" in revert_script
+            assert "$dm.dmPelsHeight = 1080" in revert_script
+            assert "$dm.dmDisplayFrequency = 60" in revert_script
+
+    def test_confirmation_keeps_the_mode_and_cancels_the_revert(self, client: TestClient) -> None:
+        import time
+
+        from fpstune.api.routes import display as display_module
+
+        mock_proc = MagicMock()
+        mock_proc.stdout = "PRIOR=1920x1080@60\nSUCCESS"
+        mock_proc.returncode = 0
+        with (
+            patch("fpstune.api.routes.display.sys.platform", "win32"),
+            patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
+            patch.object(display_module, "_REVERT_TIMEOUT_S", 0.2),
+            patch("fpstune.api.routes.display.subprocess.run", return_value=mock_proc) as mock_run,
+        ):
+            mock_hw.detect_monitors.return_value = [self._suboptimal()]
+            assert client.post("/api/display/0/auto").status_code == 200
+            confirm = client.post("/api/display/0/confirm")
+            assert confirm.status_code == 200
+            time.sleep(0.4)
+            assert mock_run.call_count == 1, "the cancelled revert still ran"
+
+    def test_confirming_with_nothing_pending_is_a_404(self, client: TestClient) -> None:
+        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
+            mock_hw.detect_monitors.return_value = [self._suboptimal()]
+            response = client.post("/api/display/0/confirm")
+        assert response.status_code == 404

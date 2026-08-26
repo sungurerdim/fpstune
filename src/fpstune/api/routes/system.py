@@ -20,18 +20,10 @@ from fpstune.api.schemas import (
     CpuInfo,
     GpuDeviceInfo,
     HardwareInfo,
-    ModuleSettingResponse,
-    ModuleStatusResponse,
     MonitorInfo,
     NetworkAdapterInfo,
-    OverallStatus,
     StorageDriveInfo,
     SystemInfo,
-)
-from fpstune.api.status_cache import (
-    force_refresh,
-    get_cached_status,
-    start_background_update,
 )
 from fpstune.utils.admin import is_admin
 from fpstune.utils.detect import (
@@ -47,30 +39,6 @@ router = APIRouter()
 
 
 logger = logging.getLogger(__name__)
-
-_reported_unknown_cache_keys: set[str] = set()
-
-
-def _module_setting_from_cache(raw: dict[str, Any]) -> ModuleSettingResponse:
-    """Build the response model from a status-cache dict, loudly.
-
-    ``status_cache`` hands over plain dicts, so nothing type-checks the handoff
-    and ``ModuleSettingResponse(**raw)`` silently discarded every key the model
-    did not declare. A key the model has no field for is logged once with its
-    name, so the next divergence is discoverable from the log instead of from a
-    missing value in the UI.
-    """
-    unknown = set(raw) - set(ModuleSettingResponse.model_fields)
-    new = unknown - _reported_unknown_cache_keys
-    if new:
-        _reported_unknown_cache_keys.update(new)
-        logger.warning(
-            "status cache produced setting keys ModuleSettingResponse cannot carry: %s",
-            ", ".join(sorted(new)),
-        )
-    return ModuleSettingResponse.model_validate(
-        {k: v for k, v in raw.items() if k in ModuleSettingResponse.model_fields}
-    )
 
 
 @router.get("/system", response_model=SystemInfo)
@@ -108,54 +76,6 @@ async def get_system_info() -> SystemInfo:
         gpu_driver=gpu_info.driver_version if gpu_info else None,
         gpu_vram_mb=gpu_info.vram_mb if gpu_info else None,
         gpu_detecting=detecting,
-    )
-
-
-@router.get("/status", response_model=OverallStatus)
-async def get_overall_status(refresh: bool = False) -> OverallStatus:
-    """Get overall optimization status.
-
-    Returns cached status for fast response. Status is updated in background.
-    Use refresh=true to trigger synchronous refresh and wait for completion.
-
-    Args:
-        refresh: If True, waits for cache refresh before returning.
-    """
-    # Start background update if not running
-    start_background_update()
-
-    if refresh:
-        # Wait for refresh to complete before returning. The refresh is a full
-        # detection run (up to 120 s), so it must not hold the event loop.
-        await asyncio.to_thread(force_refresh, _wait=True)
-
-    # Get cached status (non-blocking)
-    cached, is_loading = get_cached_status()
-
-    # Convert cache to response (modules is now a dict)
-    modules = [
-        ModuleStatusResponse(
-            name=m.name,
-            display_name=m.display_name,
-            description=m.description,
-            status=m.status,
-            message=m.message,
-            details=m.details,
-            changes=m.changes,
-            is_available=m.is_available,
-            requires_reboot=m.requires_reboot,
-            settings=[_module_setting_from_cache(s) for s in m.settings] if m.settings else [],
-            loading=getattr(m, "loading", False),
-        )
-        for m in cached.modules.values()
-    ]
-
-    return OverallStatus(
-        modules=modules,
-        applied_count=cached.applied_count,
-        total_count=cached.total_count,
-        loading=is_loading,
-        is_admin=is_admin(),
     )
 
 

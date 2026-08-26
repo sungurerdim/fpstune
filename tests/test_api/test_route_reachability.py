@@ -23,15 +23,17 @@ from fpstune.api.main import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
 
-# Frozen at the D7 audit. Entries leave this set by gaining a caller or by
-# being deleted — never by growing the set.
-_UNCALLED_BASELINE = {
-    # Awaiting the C6-true row wiring (reset endpoint instead of apply+default):
-    "POST /api/settings/{setting_id}/reset",
-    "POST /api/settings/{setting_id}/verify",
-    # Fate decided by H1's status_cache verdict:
-    "GET /api/status",
-    # Documented non-UI consumer: supervisors and uptime checks (api/main.py).
+# Frozen at the D7 audit; emptied by the D4 wiring (#37). It may only shrink:
+# a new uncalled route fails immediately, and an entry that gains a caller (or
+# is deleted) turns stale and must be removed here in the same change, so the
+# shrink is visible in the diff.
+_UNCALLED_BASELINE: set[str] = set()
+
+# Routes whose consumer is documented and is not the UI. Not a verdict queue
+# like the baseline: an entry here names who calls it, and a route with no
+# such consumer never earns a place — it gets wired or deleted instead.
+_DOCUMENTED_NON_UI = {
+    # Supervisors and uptime checks (api/main.py's /health docstring).
     "GET /health",
 }
 
@@ -73,14 +75,14 @@ def _uncalled_routes() -> set[str]:
 
 class TestEveryRouteHasACallerOrAVerdict:
     def test_no_route_outside_the_frozen_baseline_is_uncalled(self) -> None:
-        new_orphans = sorted(_uncalled_routes() - _UNCALLED_BASELINE)
+        new_orphans = sorted(_uncalled_routes() - _UNCALLED_BASELINE - _DOCUMENTED_NON_UI)
         assert not new_orphans, (
             "routes with no UI caller and no baseline verdict — wire them or "
             f"delete them: {new_orphans}"
         )
 
     def test_the_baseline_only_shrinks(self) -> None:
-        stale = sorted(_UNCALLED_BASELINE - _uncalled_routes())
+        stale = sorted((_UNCALLED_BASELINE | _DOCUMENTED_NON_UI) - _uncalled_routes())
         assert not stale, (
             "baseline entries that gained a caller or were deleted — remove "
             f"them from _UNCALLED_BASELINE so the shrink is on the record: {stale}"

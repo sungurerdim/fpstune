@@ -64,30 +64,6 @@ class TestRestorePointOffload:
         assert record["on_event_loop"] is False
 
 
-class TestStatusRefreshOffload:
-    """PERF-16: force_refresh(_wait=True) held the loop for a full detection run."""
-
-    def test_refresh_true_runs_force_refresh_off_the_event_loop(self, client: TestClient) -> None:
-        from fpstune.api.status_cache import CachedStatus
-
-        record: dict[str, bool] = {}
-        with (
-            patch("fpstune.api.routes.system.start_background_update"),
-            patch(
-                "fpstune.api.routes.system.force_refresh",
-                side_effect=_loop_recorder(record, None),
-            ),
-            patch(
-                "fpstune.api.routes.system.get_cached_status",
-                return_value=(CachedStatus(), False),
-            ),
-        ):
-            response = client.get("/api/status?refresh=true")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-
 class TestSystemInfoCpuOffload:
     """PERF-17 (route side): /api/system reached the CPU detector on the loop."""
 

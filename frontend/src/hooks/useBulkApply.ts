@@ -72,7 +72,6 @@ export function useBulkApply(
       }
 
       setLastResult({ success: response.success_count, error: realErrorCount });
-      queryClient.invalidateQueries({ queryKey: ["status"] });
       // Surface successes AND failures in the Activity drawer promptly.
       queryClient.invalidateQueries({ queryKey: ["activity"] });
 

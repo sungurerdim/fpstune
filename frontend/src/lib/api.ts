@@ -481,6 +481,17 @@ export interface BulkApplyResponse {
   requires_reboot: boolean;
 }
 
+export interface VerifyResponse {
+  setting_id: string;
+  matches: boolean;
+  current_value: unknown;
+  expected_value: unknown;
+  // Which question was answered — echoed so a caller that assumed a different
+  // target cannot read a correct machine as a failed operation.
+  target: "recommended" | "default" | "original";
+  error?: string | null;
+}
+
 // =============================================================================
 // Settings API Methods (new SettingExecutor architecture)
 // =============================================================================
@@ -522,6 +533,29 @@ export const settingsApi = {
    */
   undoSetting: (settingId: string) =>
     fetchJson<ApplyResponse>(`/settings/${settingId}/undo`, {
+      method: "POST",
+    }),
+
+  /**
+   * Write the curated Windows-stock value (C6's other promise).
+   *
+   * A different endpoint from undo on purpose: reset writes what stock
+   * Windows holds, undo writes what this machine held. The row used to fake
+   * this by posting `/apply` with `defaultValue` — same write, but the
+   * backend never knew it was a reset, so the activity log called it an
+   * apply and the dedicated route sat uncalled.
+   */
+  resetSetting: (settingId: string) =>
+    fetchJson<ApplyResponse>(`/settings/${settingId}/reset`, {
+      method: "POST",
+    }),
+
+  /**
+   * Detect only — which question is being asked is named by `target`
+   * and echoed back in the response.
+   */
+  verifySetting: (settingId: string) =>
+    fetchJson<VerifyResponse>(`/settings/${settingId}/verify`, {
       method: "POST",
     }),
 

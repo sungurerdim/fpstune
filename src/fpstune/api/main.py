@@ -34,7 +34,6 @@ from fpstune.api.routes import (
     system_storage_router,
 )
 from fpstune.api.routes.debug import router as debug_router
-from fpstune.api.status_cache import stop_background_refresh
 from fpstune.utils.debug import is_debug_enabled
 from fpstune.utils.detect import start_gpu_detection_async
 from fpstune.utils.logger import get_logger as _get_shared_logger
@@ -123,8 +122,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Shutdown
     get_logger().info("fpstune API shutting down...")
     # Signal background threads to stop
-    with contextlib.suppress(Exception):
-        stop_background_refresh()
     with contextlib.suppress(Exception):
         _hw_mgr.stop_hotplug_polling()
     with contextlib.suppress(Exception):
@@ -278,12 +275,9 @@ def create_app() -> FastAPI:
         capability lookup or a cached query — no subprocess, no I/O — so
         /health stays cheap to call from supervisors and uptime checks.
         """
-        from fpstune.api.status_cache import get_cached_status
         from fpstune.utils.admin import is_admin
         from fpstune.utils.detect import is_gpu_detecting
         from fpstune.utils.hardware_manager import hardware_manager
-
-        _, is_loading = get_cached_status()
 
         is_windows = sys.platform == "win32"
         gpu_ready = hardware_manager.cache.gpu is not None
@@ -304,7 +298,6 @@ def create_app() -> FastAPI:
 
         return {
             "status": "healthy" if required_ok else "degraded",
-            "loading": is_loading,
             "platform": sys.platform,
             "is_admin": is_admin(),
             "subsystems": subsystems,

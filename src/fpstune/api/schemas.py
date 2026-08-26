@@ -231,59 +231,6 @@ class SystemInfo(BaseModel):
     gpu_detecting: bool = False
 
 
-class ModuleSettingResponse(BaseModel):
-    """Individual module setting response."""
-
-    name: str
-    display_name: str
-    description: str
-    current_value: Any
-    recommended_value: Any
-    value_type: str  # 'bool', 'int', 'string', 'choice'
-    choices: list[str] = []
-    requires_reboot: bool = False
-    # Tooltip content explaining impact
-    current_impact: str = ""  # What the current value causes
-    recommended_impact: str = ""  # What the recommended value improves
-    default_value: Any = None  # Default value for this setting
-    is_action: bool = False  # True for one-time operations (TRIM, cleanup)
-    # Whether the current value already matches the recommendation. The status
-    # cache has produced this since it was added and pydantic dropped it on
-    # every request, because a key with no field on the model is discarded
-    # without a word — so /api/status reported per-module counts derived from a
-    # flag the client never received.
-    is_optimized: bool = False
-
-
-# Unified Tweak/Action Types (for per-category detection)
-class ModuleStatusResponse(BaseModel):
-    """Module status response."""
-
-    name: str
-    display_name: str
-    description: str
-    status: str  # 'loading', 'not_applied', 'applied', 'partially_applied', 'error'
-    message: str
-    details: list[str] = []
-    changes: dict[str, Any] = {}
-    is_available: bool = True
-    requires_reboot: bool = False
-    settings: list[ModuleSettingResponse] = []
-    loading: bool = False  # True if this module is still loading
-
-
-class OverallStatus(BaseModel):
-    """Overall optimization status."""
-
-    modules: list[ModuleStatusResponse]
-    applied_count: int
-    total_count: int
-    loading: bool = False
-    is_admin: bool = False
-
-
-# Module apply schemas
-# GPU schemas
 class GpuDetectResponse(BaseModel):
     """GPU detection response."""
 

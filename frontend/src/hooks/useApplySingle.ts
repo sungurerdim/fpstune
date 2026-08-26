@@ -10,7 +10,7 @@ import { isDisplaySetting, valuesEqual, type Setting } from "../types/setting";
  * Shared single-setting apply. Extracted from ModuleCard so the list rows and
  * the cards apply identically: POST apply, then update the store from the
  * backend-detected new_value (fallback: re-detect). Always invalidates
- * ["activity"] + ["status"] so successes AND failures surface in the drawer.
+ * ["activity"] so successes AND failures surface in the drawer.
  */
 export function useApplySingle() {
   const queryClient = useQueryClient();
@@ -52,7 +52,6 @@ export function useApplySingle() {
           return n;
         });
         queryClient.invalidateQueries({ queryKey: ["activity"] });
-        queryClient.invalidateQueries({ queryKey: ["status"] });
       }
     },
     [queryClient, setSettingDetectionResult],
@@ -90,14 +89,57 @@ export function useApplySingle() {
           return n;
         });
         queryClient.invalidateQueries({ queryKey: ["activity"] });
-        queryClient.invalidateQueries({ queryKey: ["status"] });
       }
     },
     [queryClient],
   );
 
+  /**
+   * Write the curated Windows-stock value through the dedicated endpoint.
+   *
+   * Not `applySingle(setting, setting.defaultValue)`: the write is the same,
+   * but through /apply the backend never knew it was a reset — the activity
+   * log recorded an apply, and the /reset route (which detects, writes the
+   * stock value, and verifies against it) sat uncalled.
+   */
+  const resetSingle = useCallback(
+    async (setting: Setting): Promise<ApplyResponse> => {
+      setPendingIds((prev) => new Set(prev).add(setting.id));
+      try {
+        const response = await settingsApi.resetSetting(setting.id);
+        if (response.success) {
+          if (response.new_value !== null && response.new_value !== undefined) {
+            const isOptimized = valuesEqual(
+              response.new_value,
+              setting.recommendedValue,
+            );
+            setSettingDetectionResult(
+              setting.id,
+              response.new_value,
+              isOptimized,
+              true,
+            );
+          } else {
+            await detectionManager.redetectSettings([setting.id]);
+          }
+          if (isDisplaySetting(setting.id)) hardwareManager.refreshMonitors();
+        }
+        return response;
+      } finally {
+        setPendingIds((prev) => {
+          const n = new Set(prev);
+          n.delete(setting.id);
+          return n;
+        });
+        queryClient.invalidateQueries({ queryKey: ["activity"] });
+      }
+    },
+    [queryClient, setSettingDetectionResult],
+  );
+
   return {
     applySingle,
+    resetSingle,
     undoSingle,
     pendingIds,
     isPending: (id: string) => pendingIds.has(id),

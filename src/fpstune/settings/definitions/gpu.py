@@ -38,6 +38,14 @@ NVIDIA_LOW_LATENCY = SettingExecutor(
     ],
     current_impact="Off: GPU pre-renders 2-3 frames → 33-50ms input delay",
     recommended_impact="On: 1 frame buffer → 15-20% lower input lag, safe for all games",
+    # The one anti-cheat fact this product knows, carried where the user
+    # reads it rather than in a checker nothing called (H8): 'ultra' hooks
+    # deeper into the driver than some anti-cheat likes; 'on' — the
+    # recommended value — is safe everywhere.
+    risk_warning=(
+        "The 'ultra' tier may conflict with some anti-cheat software "
+        "(BattlEye FAQ); the recommended 'on' is safe in every game."
+    ),
     scope=SettingScope.ESSENTIAL,  # High impact on input latency
     category_order=1,  # Primary latency setting
     effect="Reduces GPU pre-rendered frames for lower input delay",

@@ -462,9 +462,8 @@ class _SlowResetTolerance:
 # the middle of code that runs for all 395 makes a rename fail silently — the
 # branch simply stops matching and the setting starts reporting a false
 # verification failure. The cross-check that the key still names a registered
-# setting is in tests/test_api/test_verify_contract.py, for the same reason
-# ANTICHEAT_WARNINGS is checked there and not at import time: this module is
-# imported while the registry is being built.
+# setting is in tests/test_api/test_verify_contract.py rather than at import
+# time, because this module is imported while the registry is being built.
 _SLOW_RESET_TOLERANCES: dict[str, _SlowResetTolerance] = {
     "network:dns_security": _SlowResetTolerance(
         reset_value="default",

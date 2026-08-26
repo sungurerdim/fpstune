@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { Card } from "./ui/Card";
 import { useState } from "react";
 import { Scale, Activity } from "lucide-react";
@@ -34,11 +35,12 @@ type BenchTab = "suite" | "verify";
  * measured anything.
  */
 export function BenchmarksTab() {
+  const { t } = useT();
   const [activeTab, setActiveTab] = useState<BenchTab>("suite");
 
   const tabs: { id: BenchTab; label: string; icon: typeof Activity }[] = [
-    { id: "suite", label: "Measure", icon: Activity },
-    { id: "verify", label: "Verify claims", icon: Scale },
+    { id: "suite", label: t("bench.measure"), icon: Activity },
+    { id: "verify", label: t("bench.verifyClaims"), icon: Scale },
   ];
 
   return (

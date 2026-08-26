@@ -30,14 +30,11 @@ const COMPONENTS = import.meta.glob("../**/*.tsx", {
 const _UNTRANSLATED_BASELINE = new Set([
   "App.tsx",
   "components/ActivityLog.tsx",
-  "components/BenchmarksTab.tsx",
   "components/CleanupRunnerProvider.tsx",
   "components/GameTweaksTab.tsx",
   // string-free (renders HardwarePanel only) — nothing to migrate:
   "components/HardwareTab.tsx",
-  "components/HeadroomPanel.tsx",
   "components/SettingInfoTooltip.tsx",
-  "components/SuitePanel.tsx",
   "components/TweakRows.tsx",
   "components/ui/Badge.tsx",
   "components/ui/Button.tsx",
@@ -49,7 +46,6 @@ const _UNTRANSLATED_BASELINE = new Set([
   "components/ui/StatusChip.tsx",
   "components/ui/ToggleSwitch.tsx",
   "components/ui/tooltip.tsx",
-  "components/VerifyPanel.tsx",
   "main.tsx",
 ]);
 

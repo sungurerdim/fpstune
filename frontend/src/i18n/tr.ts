@@ -243,4 +243,121 @@ export const tr: Record<keyof typeof en, string> = {
   "storage.retrim": "Retrim",
   "storage.defrag": "Birleştir",
   "storage.running": "{action} çalışıyor…",
+  // Time distance (formatAge)
+  "age.justNow": "az önce",
+  "age.minutes": "{count} dk önce",
+  "age.hours": "{count} sa önce",
+  "age.days": "{count} gün önce",
+
+  // Headroom panel
+  "headroom.title": "Bu makinenin ulaştığı",
+  "headroom.subtitle":
+    "Ekranın gösterebildiğine karşı ölçülür. Görüntü kalitesine harcanacak kare olup olmadığına bu karar verir.",
+  "headroom.measureNow": "Şimdi ölç",
+  "headroom.measuring": "Ölçülüyor…",
+  "headroom.startFailed": "Ölçüm başlatılamadı.",
+  "headroom.readingLast": "Son sonuç okunuyor…",
+  "headroom.needsGame":
+    "Kare hızı ölçmek için ekranda bir şeyin çizilmesi gerekir. Bir oyun başlatın; fpstune ölçümü kendiliğinden alır — ya da oyun açıkken Şimdi ölç'e basın.",
+  "headroom.runningNow": "şu an çalışıyor",
+  "headroom.onePercentLow": "(%1 düşüklerde {value})",
+  "headroom.againstTarget": "bu panelin {target} fps hedefine karşı",
+  "headroom.measuredAgo": "Ölçüm: {age}",
+  "headroom.gaugeLabel":
+    "{game}: ekranın {target} fps hedefine karşı ölçülen kare hızı",
+  "headroom.tierMet": "Tavanında",
+  "headroom.tierMetMeaning":
+    "Bu makine ekranın gösterebildiğine ulaşıyor; görüntü kalitesine harcanacak kare fazlası var.",
+  "headroom.tierNear": "Yakın",
+  "headroom.tierNearMeaning":
+    "Neredeyse tamam. Küçük tasarruflar işi bitirir; kare hızına mal olan hiçbir şey bitirmez.",
+  "headroom.tierShort": "Eksik",
+  "headroom.tierShortMeaning":
+    "Ekranın gösterebildiğinin belirgin altında. Süsleme harcanmaya değer; oyuncunun görmesi gerekenler değil.",
+  "headroom.tierCritical": "Çok eksik",
+  "headroom.tierCriticalMeaning":
+    "Ekranın gösterebildiğinin yarısından az. Bilgi olmayan her şey harcanmaya değer; daha keskin bir görüntü zaten masada yok.",
+  "headroom.tierUnknown": "Ölçülmedi",
+  "headroom.tierUnknownMeaning":
+    "Bu oyun için henüz bir ölçüm yok ve sessizlik kanıt değildir — bu yüzden kare hızına mal olan hiçbir şey önerilmeyecek.",
+  "headroom.gpuBound":
+    "GPU'ya bağlı — kareler grafik ayarlarında saklı",
+  "headroom.cpuBound":
+    "CPU'ya bağlı — grafik ayarları bunu pek değiştirmez",
+  "headroom.bothBound":
+    "İki taraf da doymuş — tek başına grafik ayarları farkı kapatmaz",
+
+  // Benchmarks tab
+  "bench.measure": "Ölç",
+  "bench.verifyClaims": "İddiaları doğrula",
+  // Measure (suite) panel
+  "suite.loading": "Araç listesi yükleniyor…",
+  "suite.title": "Neyin değiştiğini ölç",
+  "suite.baselineTaken":
+    "Taban ölçüm alındı. İstediğiniz ince ayarları uygulayın, sonra tekrar basın — iki koşu sizin için karşılaştırılır.",
+  "suite.takesBaseline":
+    "Bu makinenin taban ölçümünü alır. Hiçbir şey değiştirilmez, hiçbir şey yazılmaz.",
+  "suite.measureAgain": "Tekrar ölç ve karşılaştır",
+  "suite.measureThis": "Bu makineyi ölç",
+  "suite.startOver": "Baştan başla",
+  "suite.selectionSummary": "{total} araçtan {selected} seçili · {repeats} tekrar",
+  "suite.before": "Önce",
+  "suite.after": "Sonra",
+  "suite.notMeasuredYet": "Henüz ölçülmedi",
+  "suite.whichInstruments": "Hangi araçlar ve kaç tekrar",
+  "suite.notInRunAll": "(\u201ctümünü çalıştır\u201d kapsamında değil)",
+  "suite.measuringBench": "{bench} ölçülüyor…",
+  "suite.startingRun": "{label} koşusu başlatılıyor…",
+  "suite.minRepeats": "{min} veya daha fazla — tek okumanın gürültü tabanı olmaz",
+  "suite.notCompared": "Karşılaştırılmadı",
+  "suite.metric": "Metrik",
+  "suite.change": "Değişim",
+  "suite.verdict": "Karar",
+  "suite.withinNoise": "gürültü içinde (±{noise}{unit})",
+  "suite.deltaBarLabel":
+    "{metric}: bu gruptaki en büyüğe göre %{pct} değişim",
+  "suite.otherMeasurements": "Diğer ölçümler",
+  "suiteCat.latency": "Gecikme",
+  "suiteCat.fps": "Kare hızı",
+  "suiteCat.thermal": "Isı ve aşınma",
+  "suiteCat.network": "Ağ",
+  "suiteCat.resources": "Bellek ve CPU",
+  "suiteCat.storage": "Depolama",
+
+  // Verify panel
+  "verify.title": "Bir iddiayı doğrula",
+  "verify.selectFirst":
+    "Değiştirmek üzere olduğunuz ayarları Ayarlar sekmesinden seçin. Bir tur ancak değiştiğini bildiği ayarlar hakkında anlamlıdır — bu yüzden uygulananlardan tahmin etmek yerine hangileri olduğunu sorar.",
+  "verify.selectedSummary":
+    "{count} ayar seçili. Ölçün, uygulayın, tekrar ölçün; bu, ayarların iddia ettiğini makinenin yaptığıyla yargılar.",
+  "verify.couldShow": "Bunun gösterebilecekleri",
+  "verify.readingClaims": "İddialar okunuyor…",
+  "verify.youWouldNeed": "Gerekenler: ",
+  "verify.gapsTitle": "burada henüz denetlenemeyenler ve nedenleri",
+  "verify.unmeasurableTitle":
+    "hiçbir ölçümün karara bağlamadığı — gerçek iddialar, eksik değil",
+  "verify.readings": "Okumalar",
+  "verify.noMeasurements":
+    "Henüz ölçüm yok. Ölç sekmesinden bir taban alın, bu ayarları uygulayın ve tekrar ölçün — iddialar ikinci bir çift istemek yerine aynı çifte karşı yargılanır.",
+  "verify.fromSuite":
+    "Ölçüm takımından: önce {before}, sonra {after} okuma, {metrics} metrik boyunca.",
+  "verify.fromSuiteOne":
+    "Ölçüm takımından: önce 1, sonra {after} okuma, {metrics} metrik boyunca.",
+  "verify.fewReadings":
+    "Taraf başına {wanted} okumadan az. Boştaki bir makinede aynı ölçümün iki koşusu bile farklı çıkar; ne kadar farklı çıktığı bilinmeden küçük bir değişim hiçbir şey olmamasından ayırt edilemez — Ölç sekmesinde tekrar sayısını artırın.",
+  "verify.enoughReadings":
+    "Gürültü tabanının anlam taşıması için iki tarafta da yeterli okuma var.",
+  "verify.judge": "Yargıla",
+  "verify.judgeClaims": "Bu iddiaları yargıla",
+  "verify.needsBothSides":
+    "Her iki tarafta bir okuma ve seçili bir ayar gerekir. Çiftin tek tarafı küçük bir sonuç değil, sonuçsuzluktur.",
+  "verify.claimedLine": "{metric} için {claimed} iddia etti — ",
+  "verify.changeBarLabel": "Ölçülen değişim: {value} {unit}",
+  "verify.noiseBarLabel":
+    "Bu makinenin kendi oynaması (gürültü tabanı): {value} {unit}",
+  "verify.statusVerified": "Doğrulandı",
+  "verify.statusContradicted": "Yalanlandı",
+  "verify.statusNoise": "Gürültüde kayboldu",
+  "verify.statusUnmeasured": "Ölçülmedi",
+  "verify.statusUnattributable": "Atfedilemez",
 };

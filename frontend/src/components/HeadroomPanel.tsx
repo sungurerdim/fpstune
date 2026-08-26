@@ -1,3 +1,5 @@
+import { useT } from "../i18n";
+import type { MessageKey } from "../i18n/en";
 import { Card } from "./ui/Card";
 import { Meter } from "./ui/Feedback";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -33,56 +35,52 @@ import { formatAge } from "../lib/formatAge";
 /** What each band permits, said in the user's terms rather than the code's. */
 const TIER_COPY: Record<
   GameHeadroom["tier"],
-  { label: string; meaning: string; className: string; tone: "primary" | "success" | "warning" | "destructive" }
+  { labelKey: MessageKey; meaningKey: MessageKey; className: string; tone: "primary" | "success" | "warning" | "destructive" }
 > = {
   met: {
-    label: "At its ceiling",
-    meaning:
-      "This machine is reaching what the display can show, so there are frames spare to spend on image quality.",
+    labelKey: "headroom.tierMet",
+    meaningKey: "headroom.tierMetMeaning",
     className: "text-success",
     tone: "success" as const,
   },
   near: {
-    label: "Close",
-    meaning:
-      "Nearly there. Small savings finish the job; anything that costs frames does not.",
+    labelKey: "headroom.tierNear",
+    meaningKey: "headroom.tierNearMeaning",
     className: "text-primary",
     tone: "primary" as const,
   },
   short: {
-    label: "Short",
-    meaning:
-      "Meaningfully under what the display can show. Decoration is worth spending; anything the player needs to see is not.",
+    labelKey: "headroom.tierShort",
+    meaningKey: "headroom.tierShortMeaning",
     className: "text-warning",
     tone: "warning" as const,
   },
   critical: {
-    label: "Far short",
-    meaning:
-      "Under half of what the display can show. Everything that is not information is worth spending, and a sharper image is not on offer.",
+    labelKey: "headroom.tierCritical",
+    meaningKey: "headroom.tierCriticalMeaning",
     className: "text-destructive",
     tone: "destructive" as const,
   },
   unknown: {
-    label: "Not measured",
-    meaning:
-      "Nothing has been measured for this game yet, and silence is not evidence — so nothing that costs frames will be recommended.",
+    labelKey: "headroom.tierUnknown",
+    meaningKey: "headroom.tierUnknownMeaning",
     className: "text-muted-foreground",
     tone: "primary" as const,
   },
 };
 
 /** Which side the frame waited on. Changes which tweak is worth anything. */
-const BOTTLENECK_COPY: Record<string, string> = {
-  gpu: "GPU-bound — graphics settings are where the frames are",
-  cpu: "CPU-bound — graphics settings will not move this much",
-  both: "Both sides saturated — graphics settings alone will not close the gap",
-  unknown: "",
+const BOTTLENECK_KEY: Record<string, MessageKey | null> = {
+  gpu: "headroom.gpuBound",
+  cpu: "headroom.cpuBound",
+  both: "headroom.bothBound",
+  unknown: null,
 };
 
 function GameRow({ game }: { game: GameHeadroom }) {
+  const { t } = useT();
   const tier = TIER_COPY[game.tier] ?? TIER_COPY.unknown;
-  const bottleneck = BOTTLENECK_COPY[game.bottleneck] ?? "";
+  const bottleneckKey = BOTTLENECK_KEY[game.bottleneck] ?? null;
 
   return (
     <li className="py-3 first:pt-0 last:pb-0 border-b border-border last:border-b-0">
@@ -91,12 +89,12 @@ function GameRow({ game }: { game: GameHeadroom }) {
           {game.label}
           {game.is_running && (
             <span className="ml-2 text-xs font-normal text-success">
-              running now
+              {t("headroom.runningNow")}
             </span>
           )}
         </span>
         <span className={`text-sm font-medium ${tier.className}`}>
-          {tier.label}
+          {t(tier.labelKey)}
         </span>
       </div>
 
@@ -110,13 +108,15 @@ function GameRow({ game }: { game: GameHeadroom }) {
             {game.fps_1_percent_low !== null && (
               <span className="text-muted-foreground">
                 {" "}
-                ({game.fps_1_percent_low.toFixed(1)} at the 1% low)
+                {t("headroom.onePercentLow", {
+                  value: game.fps_1_percent_low.toFixed(1),
+                })}
               </span>
             )}
             {game.target_fps !== null && (
               <span className="text-muted-foreground">
                 {" "}
-                against this panel&rsquo;s {game.target_fps} fps target
+                {t("headroom.againstTarget", { target: game.target_fps })}
                 {game.achievement_percent !== null &&
                   ` — ${game.achievement_percent}%`}
               </span>
@@ -131,25 +131,28 @@ function GameRow({ game }: { game: GameHeadroom }) {
               value={game.measured_fps}
               max={game.target_fps}
               tone={tier.tone}
-              label={`${game.label}: measured frame rate against the display's ${game.target_fps} fps target`}
+              label={t("headroom.gaugeLabel", { game: game.label, target: game.target_fps ?? 0 })}
             />
           )}
-          <p className="text-sm text-muted-foreground mt-1">{tier.meaning}</p>
-          {bottleneck && (
-            <p className="text-sm text-muted-foreground mt-1">{bottleneck}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t(tier.meaningKey)}</p>
+          {bottleneckKey && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {t(bottleneckKey)}
+            </p>
           )}
           <p className="text-xs text-muted-foreground mt-1">
-            Measured {formatAge(game.measured_at)}
+            {t("headroom.measuredAgo", { age: formatAge(game.measured_at) })}
           </p>
         </>
       ) : (
-        <p className="text-sm text-muted-foreground mt-1">{tier.meaning}</p>
+        <p className="text-sm text-muted-foreground mt-1">{t(tier.meaningKey)}</p>
       )}
     </li>
   );
 }
 
 export function HeadroomPanel() {
+  const { t } = useT();
   const queryClient = useQueryClient();
 
   const { data, isLoading } = useQuery({
@@ -183,11 +186,10 @@ export function HeadroomPanel() {
             className="text-lg font-semibold flex items-center gap-2"
           >
             <Gauge className="w-5 h-5" />
-            What this machine reaches
+            {t("headroom.title")}
           </h3>
           <p className="text-sm text-muted-foreground">
-            Measured against what the display could show. This is what decides
-            whether there are frames spare to spend on image quality.
+            {t("headroom.subtitle")}
           </p>
         </div>
         <button
@@ -201,7 +203,7 @@ export function HeadroomPanel() {
           ) : (
             <RefreshCw className="w-4 h-4" />
           )}
-          {measure.isPending ? "Measuring…" : "Measure now"}
+          {measure.isPending ? t("headroom.measuring") : t("headroom.measureNow")}
         </button>
       </div>
 
@@ -214,13 +216,13 @@ export function HeadroomPanel() {
       )}
       {measure.isError && (
         <p role="status" className="text-sm text-red-500">
-          The measurement could not be started.
+          {t("headroom.startFailed")}
         </p>
       )}
 
       {isLoading ? (
         <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <Loader2 className="w-4 h-4 animate-spin" /> Reading the last result…
+          <Loader2 className="w-4 h-4 animate-spin" /> {t("headroom.readingLast")}
         </p>
       ) : (
         <ul className="text-sm">
@@ -232,9 +234,7 @@ export function HeadroomPanel() {
 
       {!isLoading && !anyMeasured && (
         <p className="text-sm text-muted-foreground">
-          A frame rate needs something rendering to measure. Start a game and
-          fpstune will take a reading on its own — or press Measure now while it
-          is open.
+          {t("headroom.needsGame")}
         </p>
       )}
     </Card>

@@ -250,6 +250,123 @@ export const en = {
   "storage.retrim": "Retrim",
   "storage.defrag": "Defrag",
   "storage.running": "{action} running…",
+
+  // Time distance (formatAge)
+  "age.justNow": "just now",
+  "age.minutes": "{count} min ago",
+  "age.hours": "{count} h ago",
+  "age.days": "{count} d ago",
+
+  // Headroom panel
+  "headroom.title": "What this machine reaches",
+  "headroom.subtitle":
+    "Measured against what the display could show. This is what decides whether there are frames spare to spend on image quality.",
+  "headroom.measureNow": "Measure now",
+  "headroom.measuring": "Measuring…",
+  "headroom.startFailed": "The measurement could not be started.",
+  "headroom.readingLast": "Reading the last result…",
+  "headroom.needsGame":
+    "A frame rate needs something rendering to measure. Start a game and fpstune will take a reading on its own — or press Measure now while it is open.",
+  "headroom.runningNow": "running now",
+  "headroom.onePercentLow": "({value} at the 1% low)",
+  "headroom.againstTarget": "against this panel's {target} fps target",
+  "headroom.measuredAgo": "Measured {age}",
+  "headroom.gaugeLabel":
+    "{game}: measured frame rate against the display's {target} fps target",
+  "headroom.tierMet": "At its ceiling",
+  "headroom.tierMetMeaning":
+    "This machine is reaching what the display can show, so there are frames spare to spend on image quality.",
+  "headroom.tierNear": "Close",
+  "headroom.tierNearMeaning":
+    "Nearly there. Small savings finish the job; anything that costs frames does not.",
+  "headroom.tierShort": "Short",
+  "headroom.tierShortMeaning":
+    "Meaningfully under what the display can show. Decoration is worth spending; anything the player needs to see is not.",
+  "headroom.tierCritical": "Far short",
+  "headroom.tierCriticalMeaning":
+    "Under half of what the display can show. Everything that is not information is worth spending, and a sharper image is not on offer.",
+  "headroom.tierUnknown": "Not measured",
+  "headroom.tierUnknownMeaning":
+    "Nothing has been measured for this game yet, and silence is not evidence — so nothing that costs frames will be recommended.",
+  "headroom.gpuBound": "GPU-bound — graphics settings are where the frames are",
+  "headroom.cpuBound": "CPU-bound — graphics settings will not move this much",
+  "headroom.bothBound":
+    "Both sides saturated — graphics settings alone will not close the gap",
+
+  // Benchmarks tab
+  "bench.measure": "Measure",
+  "bench.verifyClaims": "Verify claims",
+
+  // Measure (suite) panel
+  "suite.loading": "Loading the instrument list…",
+  "suite.title": "Measure what changed",
+  "suite.baselineTaken":
+    "Baseline taken. Apply the tweaks you want, then press again — the two runs are compared for you.",
+  "suite.takesBaseline":
+    "Takes a baseline of this machine. Nothing is changed and nothing is written.",
+  "suite.measureAgain": "Measure again and compare",
+  "suite.measureThis": "Measure this machine",
+  "suite.startOver": "Start over",
+  "suite.selectionSummary":
+    "{selected} of {total} instruments · {repeats} repeats",
+  "suite.before": "Before",
+  "suite.after": "After",
+  "suite.notMeasuredYet": "Not measured yet",
+  "suite.whichInstruments": "Which instruments, and how many repeats",
+  "suite.notInRunAll": "(not in \u201crun all\u201d)",
+  "suite.measuringBench": "Measuring {bench}…",
+  "suite.startingRun": "Starting the {label} run…",
+  "suite.minRepeats": "{min} or more — a single reading has no noise floor",
+  "suite.notCompared": "Not compared",
+  "suite.metric": "Metric",
+  "suite.change": "Change",
+  "suite.verdict": "Verdict",
+  "suite.withinNoise": "within noise (±{noise}{unit})",
+  "suite.deltaBarLabel":
+    "{metric}: {pct}% change relative to the largest in this group",
+  "suite.otherMeasurements": "Other measurements",
+  "suiteCat.latency": "Latency",
+  "suiteCat.fps": "Frame rate",
+  "suiteCat.thermal": "Heat & wear",
+  "suiteCat.network": "Network",
+  "suiteCat.resources": "Memory & CPU",
+  "suiteCat.storage": "Storage",
+
+  // Verify panel
+  "verify.title": "Verify a claim",
+  "verify.selectFirst":
+    "Select the settings you are about to change, on the Settings tab. A round is only meaningful about settings it knows changed — so this asks which ones rather than guessing from what is applied.",
+  "verify.selectedSummary":
+    "{count} selected. Measure, apply them, measure again, and this judges what the settings claimed against what the machine did.",
+  "verify.couldShow": "What this could show",
+  "verify.readingClaims": "Reading the claims…",
+  "verify.youWouldNeed": "You would need: ",
+  "verify.gapsTitle": "nothing here can check yet, and why",
+  "verify.unmeasurableTitle": "no measurement settles — real claims, not gaps",
+  "verify.readings": "Readings",
+  "verify.noMeasurements":
+    "No measurements yet. Take a baseline on the Measure tab, apply these settings, and measure again — this judges the claims against that same pair rather than asking for a second one.",
+  "verify.fromSuite":
+    "From the measurement suite: {before} readings before, {after} after, across {metrics} metrics.",
+  "verify.fromSuiteOne":
+    "From the measurement suite: 1 reading before, {after} after, across {metrics} metrics.",
+  "verify.fewReadings":
+    "Fewer than {wanted} readings a side. Two runs of the same measurement on an idle machine differ, and without knowing by how much, a small change cannot be told from nothing happening — raise the repeat count on the Measure tab.",
+  "verify.enoughReadings":
+    "Enough readings on both sides for the noise floor to mean something.",
+  "verify.judge": "Judge",
+  "verify.judgeClaims": "Judge these claims",
+  "verify.needsBothSides":
+    "Needs a reading on each side, and a setting selected. One side of a pair is not a small result, it is no result.",
+  "verify.claimedLine": "claimed {claimed} for {metric} — ",
+  "verify.changeBarLabel": "Measured change: {value} {unit}",
+  "verify.noiseBarLabel":
+    "This machine's own variation (noise floor): {value} {unit}",
+  "verify.statusVerified": "Verified",
+  "verify.statusContradicted": "Contradicted",
+  "verify.statusNoise": "Lost in the noise",
+  "verify.statusUnmeasured": "Not measured",
+  "verify.statusUnattributable": "Not attributable",
 } as const;
 
 export type MessageKey = keyof typeof en;

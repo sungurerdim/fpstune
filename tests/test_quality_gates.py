@@ -238,6 +238,47 @@ class TestC9MachineNeutral:
         assert not offenders, "C9: shipped source names this machine:\n" + "\n".join(offenders)
 
 
+class TestScopeImpactCoherence:
+    """The two buttons mean what they say (programme gate C4).
+
+    Competitive Max applies ``essential + recommended`` — the most frames
+    obtainable without degrading the game experience — and Absolute Max adds
+    ``complete``, where quality is spent and the copy says what is lost. Two
+    rules keep that mapping true: an ``advanced``-risk (experimental) setting
+    may never sit inside the safe button's scope, and a setting that changes
+    what the player can see or hear (``perceptible_cost``) may only be
+    offered, never assumed.
+    """
+
+    def test_advanced_risk_never_sits_inside_the_safe_button(self) -> None:
+        from fpstune.settings.base import SettingScope
+        from fpstune.settings.definitions import get_all_static_settings
+
+        offenders = sorted(
+            setting.id
+            for setting in get_all_static_settings()
+            if setting.risk_level == "advanced" and setting.scope is not SettingScope.COMPLETE
+        )
+        assert not offenders, (
+            "the safe button would apply these advanced-risk settings: " + ", ".join(offenders)
+        )
+
+    def test_a_perceptible_cost_is_offered_never_assumed(self) -> None:
+        from fpstune.settings.base import SettingScope
+        from fpstune.settings.definitions import get_all_static_settings
+
+        for setting in get_all_static_settings():
+            if setting.perceptible_cost is None:
+                continue
+            assert setting.scope is SettingScope.COMPLETE, (
+                f"{setting.id} changes what the player perceives "
+                f"({setting.perceptible_cost}) but sits in {setting.scope.value} — "
+                "a cost the user did not agree to"
+            )
+            # The cost is copy the player reads, so it is a sentence, not a tag.
+            assert setting.perceptible_cost.strip().endswith("."), setting.id
+
+
 class TestB6NoAssumedDeviceCapability:
     """C9's sibling for capabilities: no constant where the device publishes the value.
 

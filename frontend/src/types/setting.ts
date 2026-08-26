@@ -227,6 +227,9 @@ export interface Setting {
   // === Risk (static) ===
   riskLevel: "safe" | "low" | "moderate" | "advanced";
   riskWarning?: string;
+  // Non-null = this setting changes what the player can see or hear, and the
+  // string says what is lost (consequence 5). Only COMPLETE settings carry it.
+  perceptibleCost?: string;
 
   // === Evidence (static) ===
   evidenceLevel: "proven" | "likely" | "experimental"; // Research-backed classification
@@ -317,6 +320,7 @@ export interface SettingDefinition {
   // Risk level
   risk_level?: string;
   risk_warning?: string;
+  perceptible_cost?: string | null;
 }
 
 // =============================================================================
@@ -465,6 +469,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
       | "moderate"
       | "advanced",
     riskWarning: def.risk_warning,
+    perceptibleCost: def.perceptible_cost ?? undefined,
     evidenceLevel: (def.evidence_level || "likely") as
       | "proven"
       | "likely"

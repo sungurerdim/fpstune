@@ -82,7 +82,7 @@ DISABLE_8DOT3 = SettingExecutor(
     ],
     current_impact="Enabled: Creates short names for every file → extra I/O overhead",
     recommended_impact="Disabled: No short names → reduced disk I/O, faster file operations",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for I/O performance
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=2,  # I/O overhead reduction
     effect="Eliminates legacy DOS-style filename generation overhead",
     impact_scores={"fps": "0%", "latency_ms": 0, "storage_performance": "+0-1%"},

@@ -489,6 +489,12 @@ class SettingExecutor:
 
     # === Scope ===
     scope: SettingScope = SettingScope.RECOMMENDED  # Optimization scope for filtering
+    # Consequence 5's line between information and decoration, carried as data:
+    # non-None means this setting changes what the player can see or hear, and
+    # the string says what is lost, in words the player reads before agreeing.
+    # Such a setting may only live in COMPLETE — offered, never assumed — and
+    # the scope/impact coherence gate enforces exactly that.
+    perceptible_cost: str | None = None
 
     # === Detection (String-based) ===
     detect_type: DetectType = DetectType.REGISTRY

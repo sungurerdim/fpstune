@@ -140,7 +140,7 @@ def create_mpo_setting(build: int) -> SettingExecutor:
         ],
         current_impact="Enabled: Hardware plane compositing → flicker and frame-pacing issues on some setups",
         recommended_impact="Disabled: DWM composites instead → steadier frame delivery where MPO misbehaves",
-        scope=SettingScope.RECOMMENDED,
+        scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
         category_order=5,
         effect="Stops the display engine compositing in hardware where that misbehaves",
         # The old "+0-15%" and "-1.5 ms" came from a single blog post. The honest

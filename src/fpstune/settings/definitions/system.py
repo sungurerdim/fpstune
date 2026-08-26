@@ -1990,7 +1990,7 @@ NETWORK_AFD_RECEIVE_WINDOW = SettingExecutor(
     sources=_AFD_SOURCES,
     current_impact="Default: OS-chosen receive buffer → drops under burst traffic",
     recommended_impact="Optimized: 128 KB receive buffer → fewer drops in fast-paced online games",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=55,
     effect="Sets AFD DefaultReceiveWindow=131072 to reduce UDP receive packet loss",
     impact_scores={"latency_ms": 0, "stability": "marginal"},
@@ -2029,7 +2029,7 @@ NETWORK_AFD_SEND_WINDOW = SettingExecutor(
     sources=_AFD_SOURCES,
     current_impact="Default: OS-chosen send buffer → drops under burst traffic",
     recommended_impact="Optimized: 128 KB send buffer → fewer drops in fast-paced online games",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=56,
     effect="Sets AFD DefaultSendWindow=131072 to reduce UDP send packet loss",
     impact_scores={"latency_ms": 0, "stability": "marginal"},

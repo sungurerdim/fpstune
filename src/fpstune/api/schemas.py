@@ -430,6 +430,10 @@ class SettingDefinitionResponse(BaseModel):
     # Risk taxonomy (added Phase 1)
     risk_level: str = "low"
     risk_warning: str | None = None
+    # Non-None = this setting changes what the player can see or hear, and the
+    # string says what is lost — the copy the two-button UI shows before
+    # Absolute Max spends it (consequence 5; scope/impact coherence gate).
+    perceptible_cost: str | None = None
     # MaintenanceExecutor fields
     duration_estimate: str = ""
     supports_streaming: bool = False

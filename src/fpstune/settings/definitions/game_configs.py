@@ -291,7 +291,7 @@ MW3_TEXTURE_STREAMING = SettingExecutor(
     ],
     current_impact="1024 MB: Textures download over HTTP mid-match, sharing the line with match traffic",
     recommended_impact="0 MB: No mid-match texture download → the connection carries only the match",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=10,
     effect="Stops mid-match texture downloads competing with the match's own traffic",
     # Scored as network, not FPS. It was `{"fps_1_percent_low": "+5-15%"}` with

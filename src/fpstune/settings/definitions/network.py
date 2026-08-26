@@ -595,7 +595,7 @@ NETWORK_THROTTLING = SettingExecutor(
     "from an era of much slower links.",
     current_impact="Enabled: Windows limits network to 10 packets/ms for multimedia",
     recommended_impact="Disabled: No throttling → full network bandwidth available",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for bandwidth
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=6,  # Bandwidth throttling
     effect="Removes Windows multimedia network throttling limit",
     impact_scores={"throughput": "high", "latency_ms": -1, "stability": "medium"},
@@ -1366,7 +1366,7 @@ QOS_BANDWIDTH = SettingExecutor(
     "desktop, while removing the headroom that VoIP and conferencing apps rely on to stay smooth.",
     current_impact="Enabled: Reserve available to apps that request QoS — unused otherwise",
     recommended_impact="Disabled (0): No reservation possible → recovers little on a normal desktop",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=9,
     effect="Sets NonBestEffortLimit=0 to remove Windows QoS bandwidth reservation",
     impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},
@@ -1410,7 +1410,7 @@ QOS_NLA = SettingExecutor(
     "rules from following you onto untrusted networks.",
     current_impact="Enabled: QoS may throttle on non-home network profiles",
     recommended_impact="Disabled (NLA bypassed): QoS behaves consistently on all networks",
-    scope=SettingScope.RECOMMENDED,
+    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=9,
     effect="Sets QoS 'Do not use NLA'=1 to prevent network-profile-based throttling",
     impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},

@@ -11,7 +11,6 @@ import functools
 import logging
 import re
 import sys
-import threading
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
@@ -21,6 +20,7 @@ if TYPE_CHECKING:
 
 from fastapi import APIRouter, HTTPException
 
+import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -35,6 +35,7 @@ from fpstune.api.schemas import (
     VerifyRequest,
     VerifyResponse,
 )
+from fpstune.safety import restore
 from fpstune.safety.originals import get_original_values
 from fpstune.settings import (
     CommandExecutor,
@@ -63,92 +64,15 @@ from fpstune.utils.logger import log_activity, tweak_label
 logger = logging.getLogger(__name__)
 
 
-def _is_system_restore_enabled() -> bool:
-    """Return False when System Restore / System Protection is off.
-
-    Windows 11 ships with System Protection OFF by default, in which case
-    Checkpoint-Computer fails ("ServiceDisabled"). RPSessionInterval == 0 is the
-    reliable "protection off" signal; the legacy srservice Start==4 check is kept
-    as a fallback for older systems where srservice still exists.
-    """
-    if sys.platform != "win32":
-        return False
-
-    import winreg
-
-    # System Protection state: RPSessionInterval == 0 → disabled.
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\SystemRestore",
-        ) as k:
-            interval, _ = winreg.QueryValueEx(k, "RPSessionInterval")
-            if int(interval) == 0:
-                return False
-    except OSError:
-        pass  # value/key absent → fall through to the service check
-
-    # Legacy service check: Start == 4 means the service is Disabled.
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SYSTEM\CurrentControlSet\Services\srservice",
-        ) as k:
-            start_type, _ = winreg.QueryValueEx(k, "Start")
-            return int(start_type) != 4
-    except OSError:
-        return True  # key absent (modern Windows) → assume available
-
-
 def _create_restore_point_async() -> None:
-    """Fire-and-forget restore point creation via PowerShell Checkpoint-Computer.
+    """Fire-and-forget restore point before a write (safety.restore owns it).
 
-    Runs in a daemon thread so it never blocks the apply pipeline. Silently
-    skipped when System Restore / System Protection is disabled.
+    A one-line delegate rather than a from-import: the mechanics — the enabled
+    probe, the checkpoint subprocess, the daemon thread — moved to
+    `fpstune.safety.restore`, next to RestorePointManager. The name stays here
+    because it is the seam the API tests patch.
     """
-    if not _is_system_restore_enabled():
-        logger.debug("System Restore service is disabled — skipping restore point")
-        return
-
-    import subprocess
-    import threading
-
-    def _run() -> None:
-        try:
-            result = subprocess.run(
-                [
-                    "powershell",
-                    "-NoProfile",
-                    "-ExecutionPolicy",
-                    "Bypass",
-                    "-Command",
-                    "Checkpoint-Computer -Description 'fpstune pre-apply' -RestorePointType MODIFY_SETTINGS",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-            if result.returncode != 0:
-                err = (result.stderr or "").strip()
-                if "servicedisabled" in err.lower() or "disabled" in err.lower():
-                    # Expected when System Protection is off — fpstune's own
-                    # per-setting backup still applies. Keep it quiet (one line).
-                    logger.info(
-                        "Restore point skipped: System Restore is turned off on this system."
-                    )
-                else:
-                    logger.warning(
-                        "Restore point creation failed: %s",
-                        err.splitlines()[0] if err else "unknown error",
-                    )
-            else:
-                logger.info("Restore point created before bulk apply")
-        except Exception as exc:
-            logger.warning("Restore point skipped: %s", exc)
-
-    t = threading.Thread(target=_run, daemon=True)
-    t.start()
+    restore.create_restore_point_async()
 
 
 def _get_hardware_context() -> HardwareContext:
@@ -165,48 +89,18 @@ def _get_hardware_context() -> HardwareContext:
 
 router = APIRouter()
 
-# Module-level registry cache — avoids re-running PowerShell adapter discovery
-# (10s subprocess) on every request. Invalidated on process restart.
-_registry: SettingsRegistry | None = None
-_registry_lock = threading.Lock()
-
 
 def _get_registry() -> SettingsRegistry:
-    """Return the cached SettingsRegistry, building it on first call.
+    """The process-wide registry (settings.registry_cache owns the singleton).
 
-    Locked, not a bare check-then-build. Building it enumerates adapters, reads
-    driver metadata and detects monitors, so two callers arriving together would
-    each run that — and since the warm-up below deliberately makes a second
-    caller likely, the race stopped being theoretical the moment it existed.
+    A one-line delegate rather than a from-import: the cache, its lock and the
+    warm-up moved to `fpstune.settings.registry_cache`, next to the registry
+    they cache — a route module was the only place anything could ask for the
+    registry, and the benchmark and debug routes were reaching into a sibling
+    route's privates to get it. The name stays because it is the seam the API
+    tests patch.
     """
-    global _registry
-    with _registry_lock:
-        if _registry is None:
-            _registry = SettingsRegistry()
-        return _registry
-
-
-def warm_registry() -> None:
-    """Build the registry now, off the request path.
-
-    ``/settings/definitions`` is documented as instant and is not: the first
-    call pays for the whole hardware discovery. Measured, 1.80 s for the first
-    request and 0.01 s for every one after it — so the cost is real, paid once,
-    and lands squarely on the first screen a user ever sees.
-
-    Called at startup in a daemon thread, alongside the GPU pre-warm that
-    already exists for the same reason. The browser spends its own hundreds of
-    milliseconds fetching and parsing the bundle before it can ask, and this
-    uses that window. A request that still arrives first simply blocks on the
-    lock and gets the answer the warm-up was already computing, rather than
-    starting a second discovery.
-    """
-    try:
-        _get_registry()
-    except Exception as exc:  # pragma: no cover - environment dependent
-        # The next real request rebuilds; a failed warm-up must not be the thing
-        # that takes the API down at startup.
-        logger.warning("registry warm-up failed, the first request will pay for it: %s", exc)
+    return registry_cache.get_registry()
 
 
 async def _get_registry_async() -> SettingsRegistry:

@@ -73,9 +73,9 @@ def _resolve(setting_ids: list[str]) -> list[Any]:
     settings while the user believes it reports on five — the same
     narrower-observation-than-action defect the apply path had to learn.
     """
-    from fpstune.api.routes.settings import _get_registry
+    import fpstune.settings.registry_cache as registry_cache
 
-    registry = _get_registry()
+    registry = registry_cache.get_registry()
     resolved = []
     missing = []
     for setting_id in setting_ids:

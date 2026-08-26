@@ -369,12 +369,12 @@ class TestRegistryReuse:
     def test_live_markers_reuses_the_warm_api_singleton(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """When the API has already built the registry, the sweep must read
+        """When the warm registry singleton exists, the sweep must read
         markers off that one — it includes dynamically discovered settings, so
         a dynamic setting that ever gains a marker is counted live rather than
         swept — instead of constructing a second registry per call."""
-        from fpstune.api.routes import settings as settings_routes
+        import fpstune.settings.registry_cache as registry_cache
 
-        monkeypatch.setattr(settings_routes, "_registry", _FakeRegistry({"from_singleton"}))
+        monkeypatch.setattr(registry_cache, "_registry", _FakeRegistry({"from_singleton"}))
 
         assert config_sweep.live_markers() == {"from_singleton"}

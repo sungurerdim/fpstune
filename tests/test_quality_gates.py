@@ -566,9 +566,9 @@ class TestRouteModuleCeiling:
     system_* splits are the precedent), never onto the largest file.
     """
 
-    # Frozen at the H1 audit (2026-08-26), in lines.
+    # Frozen at the H1 audit (2026-08-26), in lines; lowered as modules shrink.
     _CEILING = {
-        "src/fpstune/api/routes/settings.py": 1296,
+        "src/fpstune/api/routes/settings.py": 1190,
         "src/fpstune/api/routes/display.py": 721,
         "src/fpstune/api/routes/debug.py": 555,
     }
@@ -595,6 +595,41 @@ class TestRouteModuleCeiling:
         assert not stale, (
             "modules that shrank well below their ceiling — lower the entries "
             "so the improvement is on the record: " + "; ".join(stale)
+        )
+
+
+class TestRouteLayering:
+    """H1's layering gate: route modules import orchestration, never define it.
+
+    The registry singleton and the restore-point orchestration each have an
+    owning module (`settings.registry_cache`, `safety.restore`). A route module
+    that instantiates the registry builds a second cache nobody warms; one that
+    runs Checkpoint-Computer itself owns a subprocess the safety layer cannot
+    see. Both shipped exactly that way, which is why this gate exists.
+    """
+
+    _ROUTES = ROOT / "src" / "fpstune" / "api" / "routes"
+
+    def _offending_lines(self, needle: str) -> list[str]:
+        offenders = []
+        for path in self._ROUTES.glob("*.py"):
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                if needle in line and not line.lstrip().startswith("#"):
+                    offenders.append(f"{path.name}:{number}: {line.strip()}")
+        return offenders
+
+    def test_no_route_module_builds_the_registry(self) -> None:
+        offenders = self._offending_lines("SettingsRegistry()")
+        assert not offenders, (
+            "route modules must get the registry from settings.registry_cache, "
+            "never build their own: " + "; ".join(offenders)
+        )
+
+    def test_no_route_module_creates_restore_points_itself(self) -> None:
+        offenders = self._offending_lines("Checkpoint-Computer")
+        assert not offenders, (
+            "restore-point orchestration lives in safety.restore; route modules "
+            "delegate: " + "; ".join(offenders)
         )
 
 

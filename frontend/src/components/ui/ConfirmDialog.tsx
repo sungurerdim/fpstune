@@ -130,9 +130,12 @@ export function ConfirmDialog({
             {title}
           </h2>
         </div>
-        <p id={descriptionId} className="text-xs text-muted-foreground">
+        {/* A div, not a <p>: callers legitimately pass block content (lists
+            of what a change costs), and block elements inside a <p> are
+            invalid DOM that React unwinds the whole tree over. */}
+        <div id={descriptionId} className="text-xs text-muted-foreground">
           {children}
-        </p>
+        </div>
         <div className="flex justify-end gap-2">
           <button
             type="button"

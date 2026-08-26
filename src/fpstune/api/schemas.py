@@ -546,12 +546,6 @@ class BulkResetRequest(BaseModel):
     setting_ids: list[str] = Field(..., description="Settings to reset to default")
 
 
-class BulkOptimizeRequest(BaseModel):
-    """Request to optimize multiple settings to their recommended values."""
-
-    setting_ids: list[str] = Field(..., description="Settings to optimize")
-
-
 class BulkStreamRequest(BaseModel):
     """Request for sequential SSE bulk operations."""
 

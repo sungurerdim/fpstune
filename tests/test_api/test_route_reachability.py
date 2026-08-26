@@ -33,9 +33,6 @@ _UNCALLED_BASELINE = {
     "GET /api/power-profile/status",
     "POST /api/power-profile/activate",
     "POST /api/power-profile/revert",
-    # Awaiting D2's two buttons (restore point offered before Absolute Max):
-    "POST /api/restore-point",
-    "POST /api/settings/bulk/optimize",
     # Awaiting the C6-true row wiring (reset endpoint instead of apply+default):
     "POST /api/settings/{setting_id}/reset",
     "POST /api/settings/{setting_id}/verify",

@@ -26,7 +26,6 @@ from fpstune.api.schemas import (
     ApplyResponse,
     BulkApplyRequest,
     BulkApplyResponse,
-    BulkOptimizeRequest,
     CategoryMetadataResponse,
     DetectionResultResponse,
     DetectRequest,
@@ -1081,25 +1080,6 @@ def _run_bulk_op(
         success_count=success_count,
         error_count=error_count,
         requires_reboot=any_requires_reboot,
-    )
-
-
-@router.post("/bulk/optimize", response_model=BulkApplyResponse)
-async def bulk_optimize_settings(request: BulkOptimizeRequest) -> BulkApplyResponse:
-    """Optimize multiple settings to their recommended values with verification.
-
-    Uses ThreadPoolExecutor for true parallel subprocess execution; the
-    synchronous drain runs on a worker thread so the event loop stays free
-    for its duration (PERF-14).
-    """
-    return await asyncio.to_thread(
-        _run_bulk_op,
-        request.setting_ids,
-        lambda setting, hc: _apply_one(
-            setting, setting.recommended_value, hc, "Optimized", skip_when_inapplicable=False
-        ),
-        lambda n: f"Optimized {n} setting(s) OK",
-        lambda n: f"Failed to optimize {n} setting(s)",
     )
 
 

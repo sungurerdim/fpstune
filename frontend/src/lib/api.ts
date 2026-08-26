@@ -283,6 +283,11 @@ export const api = {
       revert_timeout_s: number | null;
     }>(`/display/${displayIndex}/auto`, { method: "POST" }),
 
+  createRestorePoint: () =>
+    fetchJson<{ success: boolean; message: string }>("/restore-point", {
+      method: "POST",
+    }),
+
   confirmDisplayChange: (displayIndex: number) =>
     fetchJson<{ success: boolean; message: string }>(
       `/display/${displayIndex}/confirm`,

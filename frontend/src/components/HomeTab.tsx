@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Zap,
@@ -11,6 +11,7 @@ import {
   Loader2,
   Cpu,
   Gamepad2,
+  Flame,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
@@ -18,13 +19,14 @@ import { useImpactSummary } from "../hooks/useImpactSummary";
 import { useBulkApply } from "../hooks/useBulkApply";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
-import { headroomApi } from "../lib/api";
+import { api, headroomApi } from "../lib/api";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
 /**
@@ -134,6 +136,61 @@ export function HomeTab() {
     await apply(payload);
   };
 
+  // The two buttons (D2). They are the scope enum made visible: Competitive Max
+  // is essential + recommended — the most frames without touching what the
+  // player can see or hear — and Absolute Max adds `complete`, whose cost is
+  // stated on screen, in each setting's own perceptible_cost sentence, before
+  // anything runs. Neither runs unconfirmed.
+  const addNotification = useStore((s) => s.addNotification);
+  const [pendingButton, setPendingButton] = useState<
+    "competitive" | "absolute" | null
+  >(null);
+  const [restoreFirst, setRestoreFirst] = useState(true);
+  const competitiveTargets = useMemo(
+    () => suboptimal.filter((s) => s.scope !== "complete"),
+    [suboptimal],
+  );
+  const absoluteTargets = suboptimal;
+  const absoluteCosts = useMemo(() => {
+    const costs = new Set<string>();
+    for (const s of absoluteTargets) {
+      if (s.perceptibleCost) costs.add(s.perceptibleCost);
+    }
+    return [...costs];
+  }, [absoluteTargets]);
+
+  const runScope = async (targets: Setting[]) => {
+    setPendingButton(null);
+    if (restoreFirst) {
+      try {
+        const result = await api.createRestorePoint();
+        if (!result.success) throw new Error(result.message);
+      } catch (error) {
+        // The user asked for the safety net; applying without it would honour
+        // the button and betray the checkbox.
+        addNotification(
+          `Restore point failed — nothing was applied. ${
+            error instanceof Error ? error.message : ""
+          }`.trim(),
+          "error",
+        );
+        return;
+      }
+    }
+    await applyGroup(targets);
+  };
+
+  const restoreFirstCheckbox = (
+    <label className="flex items-center gap-2 pt-1 text-xs">
+      <input
+        type="checkbox"
+        checked={restoreFirst}
+        onChange={(event) => setRestoreFirst(event.target.checked)}
+      />
+      Create a System Restore point first (recommended)
+    </label>
+  );
+
   const runAllCleanups = () => {
     cleanupRunner.run(cleanups.map((s) => s.id));
   };
@@ -142,6 +199,47 @@ export function HomeTab() {
     <div className="space-y-4 pb-8">
       {/* Home owns the whole product, so its notice owns every setting. */}
       <DetectionNotice />
+
+      {/* The two buttons: each applies exactly its category, and says so. */}
+      {suboptimal.length > 0 && (
+        <section className="bg-card rounded-lg border border-border p-3 flex flex-wrap items-center gap-x-4 gap-y-2">
+          <button
+            onClick={() => setPendingButton("competitive")}
+            disabled={isApplying || competitiveTargets.length === 0}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
+              "bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50",
+            )}
+          >
+            <Zap className="w-4 h-4" aria-hidden="true" />
+            Competitive Max
+            <span className="font-normal opacity-80">
+              · {competitiveTargets.length}
+            </span>
+          </button>
+          <span className="text-xs text-muted-foreground">
+            The most frames without touching what you can see or hear.
+          </span>
+          <button
+            onClick={() => setPendingButton("absolute")}
+            disabled={isApplying || absoluteTargets.length === 0}
+            className={cn(
+              "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
+              "border border-amber-500/60 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50",
+            )}
+          >
+            <Flame className="w-4 h-4" aria-hidden="true" />
+            Absolute Max
+            <span className="font-normal opacity-80">
+              · {absoluteTargets.length}
+            </span>
+          </button>
+          <span className="text-xs text-muted-foreground">
+            Every setting to its frame-rate extreme — quality is spent, and the
+            cost is listed before anything runs.
+          </span>
+        </section>
+      )}
       {/* The headline, and what it deliberately does not say.
           This block used to open with "Gained +28-45% FPS", produced by summing
           every setting's claimed fps midpoint under an invented decay curve. No
@@ -370,6 +468,49 @@ export function HomeTab() {
         onConfirm={cleanupRunner.confirmRun}
         onCancel={cleanupRunner.cancelConfirm}
       />
+
+      <ConfirmDialog
+        open={pendingButton === "competitive"}
+        title={`Apply Competitive Max? (${competitiveTargets.length} settings)`}
+        confirmLabel="Apply"
+        onConfirm={() => void runScope(competitiveTargets)}
+        onCancel={() => setPendingButton(null)}
+      >
+        <div className="space-y-2">
+          <p>
+            Applies every essential and recommended tweak — the most frames this
+            machine can reach without changing anything you can see or hear
+            in-game. Settings that spend visual or audio quality are left alone.
+          </p>
+          {restoreFirstCheckbox}
+        </div>
+      </ConfirmDialog>
+
+      <ConfirmDialog
+        open={pendingButton === "absolute"}
+        title={`Apply Absolute Max? (${absoluteTargets.length} settings)`}
+        confirmLabel="Spend it"
+        onConfirm={() => void runScope(absoluteTargets)}
+        onCancel={() => setPendingButton(null)}
+      >
+        <div className="space-y-2">
+          <p>
+            Pushes every setting to its frame-rate extreme, including the ones
+            that spend picture and sound quality.
+            {absoluteCosts.length > 0 && " What you give up:"}
+          </p>
+          {/* Each sentence is the setting's own perceptible_cost — the cost is
+              on screen before anything runs, never discovered afterwards. */}
+          {absoluteCosts.length > 0 && (
+            <ul className="list-disc pl-4 space-y-1 max-h-48 overflow-y-auto">
+              {absoluteCosts.map((cost) => (
+                <li key={cost}>{cost}</li>
+              ))}
+            </ul>
+          )}
+          {restoreFirstCheckbox}
+        </div>
+      </ConfirmDialog>
     </div>
   );
 }

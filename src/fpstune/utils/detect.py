@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import contextlib
 import platform
 import subprocess
@@ -11,6 +12,8 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
+
+from fpstune.utils.edid import parse_edid
 
 # GPU cache with TTL
 _gpu_cache: GpuInfo | None = None
@@ -116,11 +119,16 @@ class MonitorInfo:
     # Native values from preferred mode (what Windows read from EDID)
     native_width: int = 0
     native_height: int = 0
+    # The EDID preferred timing's own rate; 0 when the EDID was unreadable —
+    # never a copy of the mode-list maximum (the two answer different questions
+    # and may legitimately disagree). Serialized as None when 0.
     native_refresh_rate_hz: int = 0
     # Maximum values from EnumDisplaySettings (may include OC modes)
     max_refresh_rate_hz: int = 0
-    # VRR (G-Sync/FreeSync) support
-    supports_vrr: bool = False
+    # VRR (G-Sync/FreeSync) support: the EDID's declaration, tri-state.
+    # None means the EDID could not be read — unknown, not "no", and nothing
+    # that needs a VRR panel may register against it.
+    supports_vrr: bool | None = None
     # Is display active (attached to desktop) or disconnected
     is_active: bool = True
     # Hardware ID for matching (e.g., "DEL4265", "SAM0F75")
@@ -138,12 +146,15 @@ class MonitorInfo:
 
     @property
     def is_refresh_optimal(self) -> bool:
-        """Check if current refresh rate matches native.
+        """Check if current refresh rate reaches the panel's ceiling.
 
-        Returns False if native refresh rate is unknown (0).
-        Falls back to max refresh if native is unknown.
+        The ceiling is the mode-list maximum first, the EDID preferred rate
+        only as a fallback — a high-refresh panel's EDID often *prefers* 60 Hz
+        while its mode list reaches 300, and judging against the preferred rate
+        would call a panel driven at a fraction of its ceiling optimal.
+        Returns False when both are unknown (0) — unknown never claims optimal.
         """
-        target = self.native_refresh_rate_hz or self.max_refresh_rate_hz
+        target = self.max_refresh_rate_hz or self.native_refresh_rate_hz
         if target == 0:
             return False  # Unknown - don't claim optimal
         return self.refresh_rate_hz >= target
@@ -823,7 +834,8 @@ function Split-MonitorPresence {
         $flags = [int]$f[1]
         if ($flags -band 8) { continue }
         $hwId = if ($map.ContainsKey($f[0])) { $map[$f[0]] } else { '' }
-        $parsed += @{ Name = $f[0]; Flags = $flags; HwId = $hwId }
+        $uid = if ($f[2] -match 'UID(\d+)') { $Matches[1] } else { '' }
+        $parsed += @{ Name = $f[0]; Flags = $flags; HwId = $hwId; Uid = $uid }
     }
     # Attached first, so a detached head still carrying the last-known path of
     # a panel that is live on another head cannot demote that panel to
@@ -836,13 +848,13 @@ function Split-MonitorPresence {
     $seen = @{}
     foreach ($entry in $parsed) {
         if ($entry.Flags -band 1) {
-            $attached += @{ Name = $entry.Name; HwId = $entry.HwId; Primary = [bool]($entry.Flags -band 4) }
+            $attached += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid; Primary = [bool]($entry.Flags -band 4) }
             if ($entry.HwId) { $seen[$entry.HwId] = $true }
         }
     }
     foreach ($entry in $parsed) {
         if (-not ($entry.Flags -band 1) -and $entry.HwId -and -not $seen.ContainsKey($entry.HwId)) {
-            $inactive += @{ Name = $entry.Name; HwId = $entry.HwId }
+            $inactive += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid }
             $seen[$entry.HwId] = $true
         }
     }
@@ -940,6 +952,7 @@ public class DisplaySettings {
 $wmiNames = @{}
 $wmiNative = @{}
 $uidToHwId = @{}   # UID number string → hwId (e.g. "12345" → "DEL4265")
+$uidToEdid = @{}   # UID number string → base64 EDID from the device's own key
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
     if ($parts.Count -ge 2) {
@@ -947,7 +960,17 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Ob
         $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
         $name = if ($chars) { -join [char[]]$chars } else { "" }
         $wmiNames[$hwId] = $name
-        if ($_.InstanceName -match 'UID(\d+)') { $uidToHwId[$Matches[1]] = $hwId }
+        if ($_.InstanceName -match 'UID(\d+)') {
+            $uid = $Matches[1]
+            $uidToHwId[$uid] = $hwId
+            # The instance name doubles as the device's registry path: the EDID
+            # the panel handed the OS sits under its Device Parameters key.
+            $inst = $_.InstanceName -replace '_\d+$', ''
+            $edid = (Get-ItemProperty `
+                -Path "HKLM:\SYSTEM\CurrentControlSet\Enum\$inst\Device Parameters" `
+                -Name EDID -ErrorAction SilentlyContinue).EDID
+            if ($edid) { $uidToEdid[$uid] = [Convert]::ToBase64String([byte[]]$edid) }
+        }
     }
 }
 
@@ -1048,9 +1071,11 @@ foreach ($entry in $sortedAttached) {
         $friendlyName = "Display $dispNum"
     }
 
-    $supportsVRR = ($maxHz -gt 60)
+    # The native refresh rate and VRR support are the EDID's answers, parsed on
+    # the Python side; nothing here manufactures either from the mode list.
+    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
 
-    Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=$maxHz|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|SupportsVRR=$supportsVRR|IsActive=True"
+    Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|IsActive=True|Edid=$edidB64"
 }
 
 # Present-but-inactive: panels WMI knows that no attached head carries. No mode
@@ -1064,7 +1089,8 @@ foreach ($entry in $presence.Inactive) {
     }
     $friendlyName = if ($entry.HwId -and $wmiNames.ContainsKey($entry.HwId)) { $wmiNames[$entry.HwId] } else { '' }
     if (-not $friendlyName) { $friendlyName = $entry.Name }
-    Write-Output "Monitor=$($entry.Name)|Width=0|Height=0|Refresh=0|Primary=False|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=0|MaxRefresh=0|FriendlyName=$friendlyName|MonitorId=$($entry.HwId)|SupportsVRR=False|IsActive=False"
+    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
+    Write-Output "Monitor=$($entry.Name)|Width=0|Height=0|Refresh=0|Primary=False|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=0|FriendlyName=$friendlyName|MonitorId=$($entry.HwId)|IsActive=False|Edid=$edidB64"
 }
 """
     )
@@ -1134,12 +1160,23 @@ foreach ($entry in $presence.Inactive) {
             refresh_rate = int(parts.get("Refresh", 0) or 0)
             native_width = int(parts.get("NativeW", 0) or 0)
             native_height = int(parts.get("NativeH", 0) or 0)
-            native_refresh = int(parts.get("NativeRefresh", 0) or 0)
             max_refresh = int(parts.get("MaxRefresh", 0) or 0)
             friendly_name = parts.get("FriendlyName", "").strip()
-            supports_vrr = parts.get("SupportsVRR", "False").lower() == "true"
             is_active = parts.get("IsActive", "True").lower() == "true"
             hardware_id = parts.get("MonitorId", "").strip()
+
+            # The native refresh rate and VRR support are the EDID's answers.
+            # No EDID, or one that fails its own checksum, means both stay
+            # unknown — 0 and None — never a guess from the mode list.
+            edid_info = None
+            edid_b64 = parts.get("Edid", "").strip()
+            if edid_b64:
+                try:
+                    edid_info = parse_edid(base64.b64decode(edid_b64))
+                except Exception:
+                    edid_info = None
+            native_refresh = (edid_info.native_refresh_hz or 0) if edid_info else 0
+            supports_vrr = edid_info.supports_vrr if edid_info else None
 
             # Include monitor if:
             # - Active with resolution, OR
@@ -1159,7 +1196,7 @@ foreach ($entry in $presence.Inactive) {
                     friendly_name=friendly_name,
                     native_width=native_width if native_width > 0 else width,
                     native_height=native_height if native_height > 0 else height,
-                    native_refresh_rate_hz=native_refresh if native_refresh > 0 else max_refresh,
+                    native_refresh_rate_hz=native_refresh,
                     max_refresh_rate_hz=max_refresh if max_refresh > 0 else refresh_rate,
                     supports_vrr=supports_vrr,
                     is_active=is_active,

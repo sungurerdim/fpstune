@@ -45,8 +45,9 @@ class MonitorInfo(BaseModel):
     # Optimal status (computed from current vs native)
     is_resolution_optimal: bool = False
     is_refresh_optimal: bool = False
-    # VRR (G-Sync/FreeSync) support
-    supports_vrr: bool = False
+    # VRR (G-Sync/FreeSync) support — the EDID's declaration, tri-state.
+    # None means the EDID could not be read: unknown, not "no".
+    supports_vrr: bool | None = None
     # Is display active (attached to desktop) or disconnected. The UI renders a
     # "Disconnected" badge from this, so dropping it made a detached monitor
     # look live until the next refresh.

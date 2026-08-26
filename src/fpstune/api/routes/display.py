@@ -68,7 +68,9 @@ async def set_display_to_auto(display_index: int = Path(ge=0, le=10)) -> Display
     # applying `max` unconditionally could write a rate the arrow never promised —
     # they differ on panels whose maximum is an overclock above the EDID native
     # rate. One source of truth, and it is the one the user was shown.
-    target_refresh = monitor.native_refresh_rate_hz or monitor.max_refresh_rate_hz
+    # Ceiling first: a high-refresh panel's EDID often prefers 60 Hz while its
+    # mode list reaches 300 — targeting the preferred rate would set it there.
+    target_refresh = monitor.max_refresh_rate_hz or monitor.native_refresh_rate_hz
 
     # Check if already optimal
     if monitor.is_resolution_optimal and monitor.is_refresh_optimal:
@@ -295,7 +297,7 @@ class VrrOptimizationInfo(BaseModel):
     # Monitor info
     monitor_name: str
     monitor_refresh_hz: int
-    supports_vrr: bool
+    supports_vrr: bool | None
 
     # Recommended settings
     recommended_fps_limit: int
@@ -388,10 +390,12 @@ async def get_vrr_optimization_info(
     else:
         monitor = next((m for m in monitors if m.is_primary), monitors[0])
 
-    # Get monitor's refresh rate (prefer native, then max, then current)
+    # The panel's ceiling: mode-list max first, EDID preferred rate only as a
+    # fallback (a high-refresh panel's EDID often prefers 60 Hz). The trailing
+    # 60 is the forbidden constant panel.py names; deleting it is B5's work.
     refresh_rate = (
-        monitor.native_refresh_rate_hz
-        or monitor.max_refresh_rate_hz
+        monitor.max_refresh_rate_hz
+        or monitor.native_refresh_rate_hz
         or monitor.refresh_rate_hz
         or 60
     )
@@ -410,18 +414,25 @@ async def get_vrr_optimization_info(
     current_vsync = cache.get("vsync", "off")
 
     # Check if already optimized for this monitor
-    is_optimized = (
+    is_optimized = bool(
         vrr_info["supports_vrr"]
         and current_vrr == vrr_info["recommended_vrr_mode"]
         and current_vsync == vrr_info["recommended_vsync"]
         and current_fps == vrr_info["recommended_fps_limit"]
     )
 
-    # Build warning if VRR not supported
+    # Unknown and unsupported are different answers: the EDID failing to read
+    # is a fact about detection, not about the panel, and asserting
+    # "doesn't support" on it told FreeSync owners their panel had nothing.
     warning = None
-    if not vrr_info["supports_vrr"]:
+    if vrr_info["supports_vrr"] is None:
         warning = (
-            "This monitor doesn't support G-Sync or FreeSync. "
+            "This panel's G-Sync/FreeSync support could not be read from its "
+            "EDID, so it is unknown — nothing is assumed either way."
+        )
+    elif not vrr_info["supports_vrr"]:
+        warning = (
+            "This monitor does not declare G-Sync or FreeSync support. "
             "VRR optimization won't provide benefits. FPS will remain uncapped."
         )
 

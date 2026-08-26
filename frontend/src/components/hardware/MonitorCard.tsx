@@ -99,9 +99,10 @@ export function MonitorCard({
     isResolutionKnown && monitor.native_width && monitor.native_height
       ? `${monitor.native_width}x${monitor.native_height}`
       : null;
-  // Prefer native refresh rate from EDID, fallback to max from EnumDisplaySettings
+  // The panel's ceiling: mode-list max first, EDID preferred rate as fallback —
+  // a high-refresh panel's EDID often prefers 60 Hz while its modes reach 300.
   const nativeHz = isRefreshKnown
-    ? monitor.native_refresh_rate_hz || monitor.max_refresh_rate_hz || 0
+    ? monitor.max_refresh_rate_hz || monitor.native_refresh_rate_hz || 0
     : null;
 
   // Optimal status - only trust if detection succeeded (disconnected displays can't be optimal)

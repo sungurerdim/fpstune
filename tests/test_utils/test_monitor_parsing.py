@@ -9,6 +9,7 @@ rows; these tests pin what the parser does with them.
 
 from __future__ import annotations
 
+import base64
 import subprocess
 import sys
 from types import SimpleNamespace
@@ -16,6 +17,7 @@ from types import SimpleNamespace
 import pytest
 
 from fpstune.utils.detect import get_monitors
+from tests.test_utils.edid_builder import build_edid
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
@@ -77,3 +79,56 @@ class TestTheDisconnectedBranchIsReal:
         assert active.is_primary is True
         assert active.max_refresh_rate_hz == 300
         assert active.hardware_id == "CCC0003"
+
+
+class TestTheEdidIsTheOnlySourceOfNativeRefreshAndVrr:
+    def test_native_refresh_can_differ_from_the_mode_list_maximum(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The A4 gate: the two fields answer different questions.
+
+        The mode list reaches 300 through an overclocked mode; the panel's own
+        preferred timing says 144. Before this change the native field was
+        assigned the max, so this difference could never exist.
+        """
+        edid = base64.b64encode(
+            build_edid(width=2560, height=1440, refresh=144, freesync_block=True)
+        ).decode()
+        line = ACTIVE + f"|Edid={edid}"
+        monitor = _detect(monkeypatch, line)[0]
+        assert monitor.native_refresh_rate_hz == 144
+        assert monitor.max_refresh_rate_hz == 300
+        assert monitor.supports_vrr is True
+
+    def test_no_edid_means_unknown_never_a_copy_of_max(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monitor = _detect(monkeypatch, ACTIVE)[0]
+        assert monitor.native_refresh_rate_hz == 0  # serialized as None
+        # The fixture line still carries the old SupportsVRR=True key; the
+        # parser must not read the deleted guess.
+        assert monitor.supports_vrr is None
+
+    def test_a_corrupt_edid_means_unknown_too(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        monitor = _detect(monkeypatch, ACTIVE + "|Edid=not-base64!!")[0]
+        assert monitor.native_refresh_rate_hz == 0
+        assert monitor.supports_vrr is None
+
+
+class TestOptimalJudgesAgainstTheCeiling:
+    def test_a_panel_below_its_mode_list_max_is_not_optimal(self) -> None:
+        """The dev machine's real state: a 300 Hz panel driven at 120, whose
+        EDID *prefers* 60. Judged against the preferred rate, 120 >= 60 reads
+        as optimal and the product stops offering the panel's own 300."""
+        from fpstune.utils.detect import MonitorInfo
+
+        misdriven = MonitorInfo(
+            name=r"\\.\DISPLAY5",
+            width=2560,
+            height=1440,
+            refresh_rate_hz=120,
+            is_primary=True,
+            native_refresh_rate_hz=60,
+            max_refresh_rate_hz=300,
+        )
+        assert misdriven.is_refresh_optimal is False

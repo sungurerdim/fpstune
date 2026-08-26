@@ -198,6 +198,32 @@ class TestDiscoveryRegistersTheDerivedCap:
             lambda *_a, **_k: [FixedRefresh()],
         )
         assert discover_vrr_dependent_settings(reg, reg._probes) == 0
+
+    def test_an_unknown_panel_registers_neither_setting(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # supports_vrr None means the EDID could not be read. Registering the
+        # VRR variants on it would put V-Sync and a frame cap on a panel that
+        # may be a plain fixed-refresh display — the exact harm the old
+        # maxHz > 60 guess did to a 75 Hz office monitor.
+        from fpstune.settings import registry as registry_mod
+
+        class UnknownPanel:
+            supports_vrr = None
+            is_primary = True
+            is_active = True
+            max_refresh_rate_hz = 240
+            native_refresh_rate_hz = 0
+
+        reg = registry_mod.SettingsRegistry(discover_dynamic=False)
+        monkeypatch.setattr(
+            "fpstune.utils.hardware_manager.hardware_manager.detect_monitors",
+            lambda *_a, **_k: [UnknownPanel()],
+        )
+        assert discover_vrr_dependent_settings(reg, reg._probes) == 0
+        # The static uncapped default stays — a drift guard, not a VRR cap.
+        cap = reg.get("gpu-nvidia:fps_limit")
+        assert cap is not None and cap.recommended_value == 0
         cap = reg.get("gpu-nvidia:fps_limit")
         assert cap is not None and cap.recommended_value == 0
 

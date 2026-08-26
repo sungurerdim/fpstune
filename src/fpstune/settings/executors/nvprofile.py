@@ -122,14 +122,14 @@ class NvProfileExecutor(BaseExecutor):
     # Class-level cache - shared across all instances
     _cache_file_path = get_config_dir() / "nvidia" / "settings_cache.json"
     _cache: dict[str, Any] | None = None
-    _primary_monitor_info: tuple[int, bool] | None = None  # (refresh_rate, supports_vrr)
+    _primary_monitor_info: tuple[int, bool | None] | None = None  # (refresh_rate, supports_vrr)
 
     def __init__(self) -> None:
         """Initialize NvProfile executor."""
         # Ensure directory exists
         NvProfileExecutor._cache_file_path.parent.mkdir(parents=True, exist_ok=True)
 
-    def _get_primary_monitor_info(self) -> tuple[int, bool]:
+    def _get_primary_monitor_info(self) -> tuple[int, bool | None]:
         """Get primary monitor's native refresh rate and VRR support.
 
         Uses native refresh rate (not current) to avoid issues with
@@ -147,10 +147,11 @@ class NvProfileExecutor(BaseExecutor):
             monitors = hardware_manager.detect_monitors()
             for monitor in monitors:
                 if monitor.is_primary:
-                    # Use native refresh rate (preferred), then max, then current as last resort
+                    # The ceiling: mode-list max first, EDID preferred rate as
+                    # fallback — a high-refresh panel's EDID often prefers 60.
                     refresh = (
-                        monitor.native_refresh_rate_hz
-                        or monitor.max_refresh_rate_hz
+                        monitor.max_refresh_rate_hz
+                        or monitor.native_refresh_rate_hz
                         or monitor.refresh_rate_hz
                     )
                     if refresh > 0:
@@ -170,8 +171,8 @@ class NvProfileExecutor(BaseExecutor):
             if monitors:
                 monitor = monitors[0]
                 refresh = (
-                    monitor.native_refresh_rate_hz
-                    or monitor.max_refresh_rate_hz
+                    monitor.max_refresh_rate_hz
+                    or monitor.native_refresh_rate_hz
                     or monitor.refresh_rate_hz
                 )
                 if refresh > 0:
@@ -186,13 +187,15 @@ class NvProfileExecutor(BaseExecutor):
         return NvProfileExecutor._primary_monitor_info
 
     def get_vrr_optimization_info_for_monitor(
-        self, refresh_rate: int, supports_vrr: bool
+        self, refresh_rate: int, supports_vrr: bool | None
     ) -> dict[str, Any]:
         """Get VRR optimization info for a specific monitor.
 
         Args:
             refresh_rate: Monitor's native/max refresh rate in Hz.
-            supports_vrr: Whether the monitor supports G-Sync/FreeSync.
+            supports_vrr: The EDID's declaration — None when it could not be
+                read. Unknown recommends nothing VRR-shaped, same as False;
+                the caller owns saying "unknown" rather than "unsupported".
 
         Returns:
             Dict with recommended VRR settings for the monitor.

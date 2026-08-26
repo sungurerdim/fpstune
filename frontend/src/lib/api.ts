@@ -91,8 +91,8 @@ export interface MonitorInfo {
   // Optimal status (only trust if corresponding _known is true)
   is_resolution_optimal?: boolean;
   is_refresh_optimal?: boolean;
-  // VRR (G-Sync/FreeSync) support
-  supports_vrr?: boolean;
+  // VRR (G-Sync/FreeSync) support — the EDID's declaration; null = unknown
+  supports_vrr?: boolean | null;
   // Is display active (attached to desktop) or disconnected via Windows settings
   is_active?: boolean;
   // Hardware ID for matching (e.g., "DEL4265", "SAM0F75")

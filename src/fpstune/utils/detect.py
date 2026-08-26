@@ -735,6 +735,80 @@ $cpu = Get-CimInstance -ClassName Win32_Processor | Select-Object -First 1
         return _cpu_detailed_cache
 
 
+# The EnumDisplayDevices loop lives inside the C# class. Calling the API from
+# PowerShell with [ref] is the proven failure: the identical call returned every
+# adapter from a loop inside C# and returned False with an empty name when the
+# method was invoked from PowerShell with [ref] (declared cb=840, ret=False) —
+# same session, same API, only the binder differs. So the struct never crosses
+# that boundary. Each record is "deviceName|stateFlags|monitorInterfacePath";
+# StateFlags rides along because bit 0 (ATTACHED_TO_DESKTOP) is the attachment
+# answer WMI cannot give (WMI reports Active=True for a panel not on the desktop).
+_DISPLAY_DEVICES_CSHARP = r"""
+Add-Type @'
+using System;
+using System.Runtime.InteropServices;
+public class DisplayDevices {
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool EnumDisplayDevices(
+        string lpDevice, uint iDevNum,
+        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
+    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+    private struct DISPLAY_DEVICE {
+        public int cb;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
+        public string DeviceName;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceString;
+        public int StateFlags;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceID;
+        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
+        public string DeviceKey;
+    }
+    private const uint EDD_GET_DEVICE_INTERFACE_NAME = 1;
+    public static string[] EnumerateAdapters() {
+        var results = new System.Collections.Generic.List<string>();
+        for (uint i = 0; ; i++) {
+            DISPLAY_DEVICE ad = new DISPLAY_DEVICE();
+            ad.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            if (!EnumDisplayDevices(null, i, ref ad, 0)) { break; }
+            DISPLAY_DEVICE mon = new DISPLAY_DEVICE();
+            mon.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
+            string monId = "";
+            if (EnumDisplayDevices(ad.DeviceName, 0, ref mon, EDD_GET_DEVICE_INTERFACE_NAME)) {
+                monId = mon.DeviceID;
+            }
+            results.Add(ad.DeviceName.TrimEnd('\0', ' ') + "|" + ad.StateFlags + "|" + monId);
+        }
+        return results.ToArray();
+    }
+}
+'@
+"""
+
+# Correlation is a pure function so the contract tests can run the shipped text
+# against a described host. The join is by UID — the interface path's UID
+# segment is the same number WmiMonitorID.InstanceName carries — never by
+# position. There is deliberately no order-based fallback: zipping two
+# independently sorted lists handed a panel its neighbour's mode table the
+# moment a laptop's internal panel sorted first, and a wrong map is worse than
+# an empty one — empty means "could not correlate", which is visible and
+# reportable, where a plausible wrong map reports success.
+_CORRELATE_MONITORS_PS = r"""
+function Build-DeviceHwIdMap {
+    param([string[]]$adapterRecords, [hashtable]$uidToHwId)
+    $map = @{}
+    foreach ($rec in $adapterRecords) {
+        $f = $rec -split '\|', 3
+        if ($f.Count -ge 3 -and $f[2] -match 'UID(\d+)' -and $uidToHwId.ContainsKey($Matches[1])) {
+            $map[$f[0]] = $uidToHwId[$Matches[1]]
+        }
+    }
+    return $map
+}
+"""
+
+
 def get_monitors() -> list[MonitorInfo]:
     """Get connected monitors using WMI for actual monitor capabilities.
 
@@ -757,11 +831,11 @@ def get_monitors() -> list[MonitorInfo]:
 
     monitors: list[MonitorInfo] = []
 
-    # Monitor detection using [System.Windows.Forms.Screen]::AllScreens + EnumDisplaySettings
-    # EnumDisplayDevices is unreliable in non-interactive subprocess contexts on some systems.
-    # AllScreens enumerates active displays reliably; EnumDisplaySettings reads refresh rates
-    # given the device name (e.g., \\.\DISPLAY1) that AllScreens provides.
-    ps_script = r"""
+    # Monitor detection: AllScreens enumerates the desktop, EnumDisplaySettings
+    # reads modes for the device names AllScreens provides, and the C# constant
+    # above correlates each \\.\DISPLAYn to its monitor hardware id by UID.
+    ps_script = (
+        r"""
 $ErrorActionPreference = 'SilentlyContinue'
 
 # Load Windows Forms for reliable screen enumeration
@@ -811,49 +885,24 @@ public class DisplaySettings {
         public int dmPanningHeight;
     }
 }
-public class DisplayDevices {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    public static extern bool EnumDisplayDevices(
-        string lpDevice, uint iDevNum,
-        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    public struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceKey;
-    }
-}
 '@
-
+"""
+        + _DISPLAY_DEVICES_CSHARP
+        + r"""
 # Build WMI lookup tables (keyed by hardware ID like "DEL4265", "SAM0F75")
-# Single pass: collect names, UID→hwId map, and ordered hwId list simultaneously.
 $wmiNames = @{}
 $wmiNative = @{}
 $uidToHwId = @{}   # UID number string → hwId (e.g. "12345" → "DEL4265")
-$wmiHwIds = @(
-    Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null |
-    Sort-Object @{Expression={
-        if ($_.InstanceName -match 'UID(\d+)') { [int]$Matches[1] } else { 999999 }
-    }} |
-    ForEach-Object {
-        $parts = $_.InstanceName -split '\\'
-        if ($parts.Count -ge 2) {
-            $hwId = $parts[1]
-            $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
-            $name = if ($chars) { -join [char[]]$chars } else { "" }
-            $wmiNames[$hwId] = $name
-            if ($_.InstanceName -match 'UID(\d+)') { $uidToHwId[$Matches[1]] = $hwId }
-            $hwId  # emit for $wmiHwIds array
-        }
+Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Object {
+    $parts = $_.InstanceName -split '\\'
+    if ($parts.Count -ge 2) {
+        $hwId = $parts[1]
+        $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
+        $name = if ($chars) { -join [char[]]$chars } else { "" }
+        $wmiNames[$hwId] = $name
+        if ($_.InstanceName -match 'UID(\d+)') { $uidToHwId[$Matches[1]] = $hwId }
     }
-)
+}
 
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceModes 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
@@ -872,48 +921,13 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceMo
     }
 }
 
-# === Build DeviceName → hwId correlation map ===
-# Must be index-order independent: the output loop sorts Primary-first which
-# breaks any assumption about position matching WMI order.
-$deviceHwIdMap = @{}
-
-# Method 1: EnumDisplayDevices with EDD_GET_DEVICE_INTERFACE_NAME (flag=1).
-# Returns \\?\DISPLAY#DEL4265#4&1a2b3c4d&0&UID12345#{GUID} — the UID segment
-# matches WmiMonitorID.InstanceName directly, giving hardware-stable correlation
-# that is completely independent of display enumeration order.
-try {
-    $adIdx = [uint32]0
-    while ($true) {
-        $ad = New-Object DisplayDevices+DISPLAY_DEVICE
-        $ad.cb = [System.Runtime.InteropServices.Marshal]::SizeOf($ad)
-        if (-not [DisplayDevices]::EnumDisplayDevices($null, $adIdx, [ref]$ad, 0)) { break }
-        $adName = $ad.DeviceName.TrimEnd([char]0, ' ')
-        $mo = New-Object DisplayDevices+DISPLAY_DEVICE
-        $mo.cb = [System.Runtime.InteropServices.Marshal]::SizeOf($mo)
-        # Flag 1 = EDD_GET_DEVICE_INTERFACE_NAME: full interface path with UID
-        if ([DisplayDevices]::EnumDisplayDevices($adName, [uint32]0, [ref]$mo, 1)) {
-            # Extract UID from path (e.g. UID12345) and look up hwId from WMI map
-            if ($mo.DeviceID -match 'UID(\d+)' -and $uidToHwId.ContainsKey($Matches[1])) {
-                $deviceHwIdMap[$adName] = $uidToHwId[$Matches[1]]
-            }
-        }
-        $adIdx++
-    }
-} catch { }
-
-# Method 2: Index-based fallback for screens still missing from the map.
-# Sort by DISPLAY number (NOT Primary-first) to match UID ascending order.
-# Primary-first sorting would swap entries when primary monitor != DISPLAY1.
-$screensByNum = @([System.Windows.Forms.Screen]::AllScreens |
-    Sort-Object @{Expression={
-        if ($_.DeviceName -match 'DISPLAY(\d+)') { [int]$Matches[1] } else { 0 }
-    }})
-for ($i = 0; $i -lt $screensByNum.Count -and $i -lt $wmiHwIds.Count; $i++) {
-    $sDevName = $screensByNum[$i].DeviceName.TrimEnd([char]0, ' ')
-    if (-not $deviceHwIdMap.ContainsKey($sDevName)) {
-        $deviceHwIdMap[$sDevName] = $wmiHwIds[$i]
-    }
-}
+"""
+        + _CORRELATE_MONITORS_PS
+        + r"""
+# DeviceName → hwId, joined by UID inside Build-DeviceHwIdMap. A screen the
+# join cannot place keeps hwId "" — reported as uncorrelated, never guessed.
+$deviceHwIdMap = Build-DeviceHwIdMap `
+    -adapterRecords ([DisplayDevices]::EnumerateAdapters()) -uidToHwId $uidToHwId
 
 # Helper: current display mode (physical pixels, not DPI-scaled logical pixels)
 function Get-CurrentMode {
@@ -986,6 +1000,7 @@ foreach ($screen in $screens) {
     Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=$maxHz|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|SupportsVRR=$supportsVRR|IsActive=True"
 }
 """
+    )
 
     try:
         from fpstune.utils.debug import debug_context, debug_log

@@ -427,3 +427,61 @@ class TestF4CopyRegister:
             f"the register improved ({missing} unnamed) — lower "
             "_MISSING_SHORT_NAME_CEILING so the shrink is on the record"
         )
+
+
+class TestC10VendorSymmetry:
+    """C10's escape hatch, made mechanical (H9).
+
+    "A vendor-specific concept ships for all vendors or is named as a gap."
+    The gap below is named: fpstune ships 18 NVIDIA driver settings and 7 AMD
+    ones, and zero Intel — no Arc hardware has ever been available to derive
+    or verify them against, and C1 forbids shipping writes no machine of ours
+    has confirmed (issue #64 tracks the debt). The counts are frozen so the
+    asymmetry can only move toward symmetry: an 8th AMD or a 1st Intel
+    setting must lower/raise these numbers here, on the record, and a new
+    NVIDIA-only setting may not widen the gap silently.
+    """
+
+    _VENDOR_CEILING = {"gpu-nvidia": 18}
+    _VENDOR_FLOOR = {"gpu-amd": 7, "gpu-intel": 0}
+
+    def _counts(self) -> dict[str, int]:
+        from collections import Counter
+
+        from fpstune.settings.definitions import get_all_static_settings
+
+        counts = Counter(
+            setting.module
+            for setting in get_all_static_settings()
+            if setting.module.startswith("gpu-") and setting.module != "gpu-hardware"
+        )
+        return {
+            "gpu-nvidia": counts.get("gpu-nvidia", 0),
+            "gpu-amd": counts.get("gpu-amd", 0),
+            "gpu-intel": counts.get("gpu-intel", 0),
+        }
+
+    def test_the_gap_cannot_widen_silently(self) -> None:
+        counts = self._counts()
+        for module, ceiling in self._VENDOR_CEILING.items():
+            assert counts[module] <= ceiling, (
+                f"{module} grew past its recorded {ceiling} — a new "
+                "vendor-specific setting needs its siblings, or this ceiling "
+                "raised here with the AMD/Intel story told in the same change"
+            )
+        for module, floor in self._VENDOR_FLOOR.items():
+            assert counts[module] >= floor, (
+                f"{module} shrank below its recorded {floor} — deleting a "
+                "vendor's setting without recording why widens the gap"
+            )
+
+    def test_the_record_is_not_stale(self) -> None:
+        counts = self._counts()
+        assert counts == {
+            "gpu-nvidia": self._VENDOR_CEILING["gpu-nvidia"],
+            "gpu-amd": self._VENDOR_FLOOR["gpu-amd"],
+            "gpu-intel": self._VENDOR_FLOOR["gpu-intel"],
+        }, (
+            f"the vendor counts moved ({counts}) — update the recorded gap "
+            "here so C10's escape hatch stays truthful"
+        )

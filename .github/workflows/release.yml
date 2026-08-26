@@ -213,7 +213,7 @@ jobs:
       # maintainer downloads, runs `winget validate` against, and commits back
       # to this repository before opening the winget-pkgs pull request by hand.
       - name: Keep the winget manifest
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: winget-manifest
           path: winget/manifests/s/sungurerdim/fpstune/
@@ -223,7 +223,7 @@ jobs:
       # the first dispatch run built a working exe and then handed back nothing.
       - name: Keep the build even when nothing is published
         if: ${{ !startsWith(github.ref, 'refs/tags/') }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fpstune-exe
           path: |

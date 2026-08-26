@@ -138,16 +138,16 @@ def live_markers(registry: Any = None) -> set[str]:
     and a setting that carried only one would otherwise look orphaned.
     """
     if registry is None:
-        # Reuse the API's warm registry singleton when one exists: it is the
+        # Reuse the warm registry singleton when one exists: it is the
         # authoritative set (it includes dynamically discovered settings, so a
         # dynamic setting that ever gains a marker is counted live rather than
-        # swept). Peeked rather than built — `_get_registry()` would trigger the
+        # swept). Peeked rather than built — `get_registry()` would trigger the
         # full hardware discovery in contexts that have no warm registry, and
         # every marker-carrying setting today is static, so the cheap build
         # below is a correct fallback.
-        from fpstune.api.routes import settings as settings_routes
+        import fpstune.settings.registry_cache as registry_cache
 
-        registry = settings_routes._registry
+        registry = registry_cache._registry
     if registry is None:
         from fpstune.settings.registry import SettingsRegistry
 

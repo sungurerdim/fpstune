@@ -140,7 +140,11 @@ skip_covered = false
 # was a number this suite could not cross, so it reported green on every run and
 # diagnosed nothing; 70 leaves room for ordinary work while a real regression —
 # a module that stops being exercised — lands below it.
-fail_under = 70
+# Ratcheted, never lowered (H4): measured 80.15% on 2026-08-26 after the CLI
+# benchmark tree, the power-profile routes and the result loaders gained
+# their tests. Raise it as further uncovered areas gain tests; a change that
+# drops coverage below this is a change that removed a guard.
+fail_under = 80
 
 [tool.coverage.html]
 directory = "htmlcov"

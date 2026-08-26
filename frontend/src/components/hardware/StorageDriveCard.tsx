@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMutation } from "@tanstack/react-query";
 import { CheckCircle2, RefreshCw, Sparkles, XCircle } from "lucide-react";
 import { useState } from "react";
@@ -17,6 +18,7 @@ const log = createLogger("StorageDriveCard");
  * an error.
  */
 export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
+  const { t } = useT();
   const usedPercent =
     drive.free_gb !== undefined && drive.size_gb > 0
       ? Math.round(((drive.size_gb - drive.free_gb) / drive.size_gb) * 100)
@@ -36,7 +38,8 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
     },
   });
 
-  const actionLabel = drive.media_type === "SSD" ? "Retrim" : "Defrag";
+  const actionLabel =
+    drive.media_type === "SSD" ? t("storage.retrim") : t("storage.defrag");
   const canOptimize =
     drive.media_type === "SSD" || drive.media_type === "HDD";
 
@@ -98,7 +101,9 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
             ) : (
               <Sparkles className="w-3 h-3" />
             )}
-            {optimizeMutation.isPending ? `${actionLabel} running…` : actionLabel}
+            {optimizeMutation.isPending
+              ? t("storage.running", { action: actionLabel })
+              : actionLabel}
           </button>
           {lastResult && (
             <span

@@ -145,6 +145,7 @@ AUDIO_ENHANCEMENTS = SettingExecutor(
     id="audio:enhancements",
     category=SettingCategory.AUDIO,
     display_name="Audio Enhancements",
+    short_name="Audio enhancements",
     description="Windows audio DSP effects (equalizer, reverb, loudness equalisation). Processing "
     "sits between the game and the speakers and smears the positional cues it is meant to sharpen.",
     value_type=SettingValueType.CHOICE,
@@ -221,6 +222,7 @@ AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     id="audio:endpoint_enhancements",
     category=SettingCategory.AUDIO,
     display_name="Per-Output Audio Effects",
+    short_name="Per-output audio effects",
     description="Whether any active output still has Windows enhancements switched on for that "
     "device specifically. The global switch does not cover these.",
     value_type=SettingValueType.CHOICE,
@@ -287,6 +289,7 @@ EXCLUSIVE_MODE = SettingExecutor(
     id="audio:exclusive_mode",
     category=SettingCategory.AUDIO,
     display_name="Exclusive Audio Mode",
+    short_name="Exclusive audio mode",
     description="Allow apps exclusive audio access. Lower latency but blocks other audio.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -442,6 +445,7 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
     id="audio:device_format",
     category=SettingCategory.AUDIO,
     display_name="Device Sample Rate (48 kHz)",
+    short_name="Audio sample rate",
     description="The rate each input and output runs at. Anything that does not match is "
     "resampled by the Windows mixer on every buffer, which costs CPU for nothing.",
     value_type=SettingValueType.CHOICE,

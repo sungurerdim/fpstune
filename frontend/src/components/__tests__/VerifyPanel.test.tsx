@@ -324,6 +324,25 @@ describe("VerifyPanel verdicts", () => {
     expect(await screen.findByText(/noise 0.4/i)).toBeInTheDocument();
   });
 
+  it("draws the change and the noise floor on one axis (E5)", async () => {
+    // Two bars, same scale: a change whose bar does not clear the noise bar
+    // is not a finding, and now looks like one.
+    await judgeWithBothSides();
+
+    const change = await screen.findByRole("meter", {
+      name: /Measured change: 20.00 ms/,
+    });
+    const noise = screen.getByRole("meter", {
+      name: /own variation \(noise floor\): 0.40 ms/,
+    });
+    expect(change).toHaveAttribute("aria-valuenow", "20");
+    expect(noise).toHaveAttribute("aria-valuenow", "0.4");
+    // Same scale is the whole point — the two bars must share their max.
+    expect(change.getAttribute("aria-valuemax")).toBe(
+      noise.getAttribute("aria-valuemax"),
+    );
+  });
+
   it("keeps a metric measured on only one side visible", async () => {
     await judgeWithBothSides();
 

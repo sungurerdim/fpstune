@@ -25,6 +25,7 @@ NVIDIA_LOW_LATENCY = SettingExecutor(
     id="gpu-nvidia:low_latency",
     category=SettingCategory.GPU,
     display_name="Low Latency Mode",
+    short_name="Low latency mode",
     description="NVIDIA Reflex / Ultra Low Latency mode. Controls pre-rendered frames.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "ultra"),
@@ -38,6 +39,14 @@ NVIDIA_LOW_LATENCY = SettingExecutor(
     ],
     current_impact="Off: GPU pre-renders 2-3 frames → 33-50ms input delay",
     recommended_impact="On: 1 frame buffer → 15-20% lower input lag, safe for all games",
+    # The one anti-cheat fact this product knows, carried where the user
+    # reads it rather than in a checker nothing called (H8): 'ultra' hooks
+    # deeper into the driver than some anti-cheat likes; 'on' — the
+    # recommended value — is safe everywhere.
+    risk_warning=(
+        "The 'ultra' tier may conflict with some anti-cheat software "
+        "(BattlEye FAQ); the recommended 'on' is safe in every game."
+    ),
     scope=SettingScope.ESSENTIAL,  # High impact on input latency
     category_order=1,  # Primary latency setting
     effect="Reduces GPU pre-rendered frames for lower input delay",
@@ -60,6 +69,7 @@ NVIDIA_POWER_MODE = SettingExecutor(
     id="gpu-nvidia:power_mode",
     category=SettingCategory.GPU,
     display_name="Power Management Mode",
+    short_name="GPU power mode",
     description="Decides when the GPU is allowed to leave its highest clock state. Optimal "
     "already runs full clocks whenever a game is running, so forcing maximum only changes what "
     "the card does at an idle desktop.",
@@ -102,6 +112,7 @@ NVIDIA_THREADED_OPT = SettingExecutor(
     id="gpu-nvidia:threaded_opt",
     category=SettingCategory.GPU,
     display_name="Threaded Optimization",
+    short_name="Driver multi-threading",
     description="GPU driver multi-threading. Auto lets driver decide (safest). On can cause stutter in OpenGL.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "auto"),
@@ -145,6 +156,7 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
             id="gpu-nvidia:vsync",
             category=SettingCategory.GPU,
             display_name="Vertical Sync",
+            short_name="V-Sync",
             description="Frame synchronisation in the driver. With a VRR panel and a frame cap "
             "below the refresh rate, V-Sync never engages during play and acts only as the "
             "safety net that keeps tearing away if the cap is briefly overshot.",
@@ -177,6 +189,7 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
         id="gpu-nvidia:vsync",
         category=SettingCategory.GPU,
         display_name="Vertical Sync",
+        short_name="V-Sync",
         description="Frame synchronisation in the driver. On a fixed-refresh panel V-Sync holds "
         "finished frames back until the next refresh, which is a direct addition to input lag.",
         value_type=SettingValueType.CHOICE,
@@ -217,6 +230,7 @@ NVIDIA_SHADER_CACHE = SettingExecutor(
     id="gpu-nvidia:shader_cache",
     category=SettingCategory.GPU,
     display_name="Shader Cache",
+    short_name="Shader cache",
     description="Saves compiled shaders to disk. Speeds up game loading.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
@@ -244,6 +258,7 @@ NVIDIA_TEXTURE_QUALITY = SettingExecutor(
     id="gpu-nvidia:texture_quality",
     category=SettingCategory.GPU,
     display_name="Texture Filtering Quality",
+    short_name="Texture filtering quality",
     description="Texture filtering quality. Quality is visually identical to High Quality in most games.",
     value_type=SettingValueType.CHOICE,
     choices=("high_quality", "quality", "performance", "high_performance"),
@@ -291,6 +306,7 @@ def create_nvidia_fps_limiter_setting(vrr_available: bool, max_hz: int = 0) -> S
             id="gpu-nvidia:fps_limit",
             category=SettingCategory.GPU,
             display_name="Frame Rate Limiter",
+            short_name="Frame rate cap",
             description=f"Driver-level frame cap. Held just below this panel's {max_hz} Hz so "
             "the frame rate stays inside the G-Sync window, where the display governs "
             "presentation and V-Sync never engages.",
@@ -339,6 +355,7 @@ def create_nvidia_fps_limiter_setting(vrr_available: bool, max_hz: int = 0) -> S
         id="gpu-nvidia:fps_limit",
         category=SettingCategory.GPU,
         display_name="Frame Rate Limiter",
+        short_name="Frame rate cap",
         description="Driver-level frame cap. On a fixed-refresh panel there is no variable "
         "refresh window to stay inside, so a cap here only removes frames the machine was "
         "able to produce.",
@@ -377,6 +394,7 @@ NVIDIA_VRR_MODE = SettingExecutor(
     id="gpu-nvidia:vrr_mode",
     category=SettingCategory.GPU,
     display_name="G-Sync / VRR Mode",
+    short_name="G-Sync",
     description="Variable Refresh Rate mode, mirroring NVIDIA Control Panel's G-SYNC scope. "
     "'on' covers windowed and borderless as well as exclusive fullscreen. Requires a "
     "G-Sync/FreeSync compatible monitor.",
@@ -411,6 +429,7 @@ NVIDIA_BG_APP_FPS = SettingExecutor(
     id="gpu-nvidia:bg_app_fps",
     category=SettingCategory.GPU,
     display_name="Background App Max FPS",
+    short_name="Background app frame cap",
     description="NVIDIA's frame cap for unfocused windows, which the driver also applies to "
     "focused games whose overlays confuse its foreground detection. Keep it off.",
     value_type=SettingValueType.INT,
@@ -459,6 +478,7 @@ NVIDIA_ANISO_SAMPLE_OPT = SettingExecutor(
     id="gpu-nvidia:aniso_sample_opt",
     category=SettingCategory.GPU,
     display_name="Anisotropic Sample Optimization",
+    short_name="Anisotropic shortcut",
     description="Optimizes anisotropic filtering samples for minor performance gain.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
@@ -489,6 +509,7 @@ NVIDIA_TEXTURE_LOD_BIAS = SettingExecutor(
     id="gpu-nvidia:texture_lod_bias",
     category=SettingCategory.GPU,
     display_name="Texture LOD Bias",
+    short_name="Texture sharpness bias",
     description="Controls negative LOD bias for texture filtering. Clamp prevents blurry textures.",
     value_type=SettingValueType.CHOICE,
     choices=("allow", "clamp"),
@@ -516,6 +537,7 @@ NVIDIA_OGL_THREAD_OPT = SettingExecutor(
     id="gpu-nvidia:ogl_thread_opt",
     category=SettingCategory.GPU,
     display_name="OpenGL Threading Optimization",
+    short_name="OpenGL threading",
     description="Multi-threaded OpenGL. Auto lets driver decide (safest). Most games use DirectX, not OpenGL.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "auto"),
@@ -543,6 +565,7 @@ NVIDIA_CUDA_FORCE_P2 = SettingExecutor(
     id="gpu-nvidia:cuda_force_p2",
     category=SettingCategory.GPU,
     display_name="CUDA Force P2 State",
+    short_name="CUDA memory clock cap",
     description="Forces higher GPU power state for CUDA applications. Useful for GPU compute.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
@@ -574,6 +597,7 @@ NVIDIA_MAX_PRERENDERED = SettingExecutor(
     id="gpu-nvidia:max_prerendered",
     category=SettingCategory.GPU,
     display_name="Maximum Pre-rendered Frames",
+    short_name="Frames queued ahead",
     description="CPU pre-render queue depth. Lower values reduce "
     "input latency but may lower throughput. Works alongside "
     "Low Latency Mode for fine-grained control.",
@@ -613,6 +637,7 @@ NVIDIA_TRIPLE_BUFFER = SettingExecutor(
     id="gpu-nvidia:triple_buffer",
     category=SettingCategory.GPU,
     display_name="Triple Buffering",
+    short_name="Triple buffering",
     description="Adds a third frame buffer for VSync. Can improve "
     "VSync-on smoothness but adds latency. Keep off for "
     "competitive gaming.",
@@ -647,6 +672,7 @@ NVIDIA_VRR_APP_OVERRIDE = SettingExecutor(
     id="gpu-nvidia:vrr_app_override",
     category=SettingCategory.GPU,
     display_name="G-Sync Application Override",
+    short_name="G-Sync per-app override",
     description="Per-application G-Sync/VRR override. "
     "Driver default lets the global setting apply. "
     "Force on ensures G-Sync for borderless windowed games.",
@@ -684,6 +710,7 @@ NVIDIA_FAN_CURVE = SettingExecutor(
     id="gpu-nvidia:fan_curve",
     category=SettingCategory.GPU,
     display_name="GPU Thermal / Fan Curve",
+    short_name="GPU fan curve",
     description="Checks GPU core vs memory hotspot temp. "
     "If hotspot exceeds core by >20C, fan curve may be "
     "too passive. Adjust in MSI Afterburner.",
@@ -757,6 +784,7 @@ GPU_RESIZABLE_BAR = SettingExecutor(
     id="gpu-hardware:resizable_bar",
     category=SettingCategory.GPU,
     display_name="Resizable BAR / Smart Access Memory",
+    short_name="Resizable BAR",
     description="PCIe feature allowing CPU to access full GPU "
     "VRAM. Enable in BIOS (Resizable BAR + Above 4G "
     "Decoding). NVIDIA may silently disable at driver level.",
@@ -842,6 +870,7 @@ GPU_LAPTOP_ASSIGNMENT = SettingExecutor(
     id="gpu-hardware:gpu_assignment",
     category=SettingCategory.GPU,
     display_name="GPU Assignment (Hybrid Graphics)",
+    short_name="Which GPU runs games",
     description="Which GPU your games run on when the machine has both an integrated and a "
     "discrete one. Landing on the integrated chip costs most of the frame rate the machine has.",
     value_type=SettingValueType.CHOICE,
@@ -936,6 +965,7 @@ AMD_ANTI_LAG = SettingExecutor(
     id="gpu-amd:anti_lag",
     category=SettingCategory.GPU,
     display_name="Anti-Lag",
+    short_name="Anti-Lag",
     description="AMD Anti-Lag reduces input latency by synchronizing CPU and GPU workloads.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -974,6 +1004,7 @@ AMD_SHADER_CACHE = SettingExecutor(
     id="gpu-amd:shader_cache",
     category=SettingCategory.GPU,
     display_name="Shader Cache",
+    short_name="Shader cache",
     description="Cache compiled shaders to disk for faster game loading.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -1010,6 +1041,7 @@ AMD_VSYNC = SettingExecutor(
     id="gpu-amd:vsync",
     category=SettingCategory.GPU,
     display_name="Vertical Sync",
+    short_name="V-Sync",
     description="Syncs frames to monitor refresh rate. Prevents tearing but adds input lag.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
@@ -1049,6 +1081,7 @@ AMD_RADEON_BOOST = SettingExecutor(
     id="gpu-amd:radeon_boost",
     category=SettingCategory.GPU,
     display_name="Radeon Boost",
+    short_name="Radeon Boost",
     description="Dynamically lowers resolution during fast motion for FPS gains (5-15%). Visual quality impact minimal due to motion blur.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -1087,6 +1120,7 @@ AMD_ENHANCED_SYNC = SettingExecutor(
     id="gpu-amd:enhanced_sync",
     category=SettingCategory.GPU,
     display_name="Enhanced Sync",
+    short_name="Enhanced Sync",
     description="VSync alternative that reduces tearing without adding input lag. Best for FPS > refresh rate.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
@@ -1131,6 +1165,7 @@ NVIDIA_BATTERY_BOOST = SettingExecutor(
     id="gpu-nvidia:battery_boost",
     category=SettingCategory.GPU,
     display_name="Battery Boost Frame Cap",
+    short_name="Battery frame cap",
     description="Whether the NVIDIA App can hold your games near 30 FPS while the laptop runs "
     "on battery. The cap is a feature, not a fault, but it is a ceiling nobody asked for in the "
     "middle of a match.",
@@ -1197,6 +1232,7 @@ AMD_CHILL = SettingExecutor(
     id="gpu-amd:chill",
     category=SettingCategory.GPU,
     display_name="Radeon Chill",
+    short_name="Radeon Chill",
     description="Lowers the frame rate whenever on-screen motion drops, including in the middle "
     "of a match. The cap lifts again once you move, but it lifts after the frame you needed it "
     "for.",
@@ -1261,6 +1297,7 @@ AMD_FRTC = SettingExecutor(
     id="gpu-amd:frtc",
     category=SettingCategory.GPU,
     display_name="Frame Rate Target Control (FRTC)",
+    short_name="Frame rate cap (FRTC)",
     description="Global FPS cap for AMD GPUs. When enabled, limits "
     "maximum FPS regardless of game settings. Disable for "
     "uncapped performance.",
@@ -1316,6 +1353,7 @@ GPU_MSI_MODE = SettingExecutor(
     id="gpu-hardware:msi_mode",
     category=SettingCategory.GPU,
     display_name="GPU Message-Signaled Interrupts",
+    short_name="GPU interrupt mode",
     description="Delivers GPU interrupts per-device via MSI instead of a shared legacy IRQ line. "
     "RTX 40-series ships with MSI already on, but 30-series and older cards frequently default to "
     "line-based interrupts, where a shared line adds DPC latency.",

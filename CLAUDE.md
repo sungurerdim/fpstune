@@ -114,10 +114,16 @@ Gate: `assert any(k != "stability" for k in setting.impact_scores)`
 - `effect`: short active-voice phrase, no trailing period
 Forbidden: fragment descriptions, descriptions not ending with `.`
 
-### C4 — English Only
-All strings (UI, comments, errors, docs) in English.
+### C4 — English in code; the UI ships en + tr
+Code, comments, identifiers, errors and docs in English. User-facing strings
+live in the i18n layer (`frontend/src/i18n/`) with an English and a Turkish
+form — the Turkish catalogue is typed against the English one, so the locales
+cannot drift apart silently. This is a deliberate amendment (F1, 2026-08-26):
+the product ships to Turkish users, and a UI they cannot read is a worse
+defect than a second catalogue. Turkish is *only* legal inside
+`frontend/src/i18n/`; anywhere else it is still a C4 violation.
 
-One carve-out, and it is about evidence rather than language: a comment quoting
+One more carve-out, and it is about evidence rather than language: a comment quoting
 what Windows *printed back* keeps the quote verbatim. `ping.exe`,
 `ValidDisplayValues` and `netsh wlan show interfaces` answer in the system
 language, and those quoted strings are the entire reason each code path reads a

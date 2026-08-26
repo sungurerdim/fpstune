@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { RefreshCw, ShieldAlert } from "lucide-react";
+import { useT } from "../i18n";
 import { api } from "../lib/api";
 
 /**
@@ -12,6 +13,7 @@ import { api } from "../lib/api";
  * permanent "all good" banner would train the eye to skip this spot.
  */
 export function SelfCheckNotice() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const { data: report } = useQuery({
     queryKey: ["self-check"],
@@ -36,9 +38,11 @@ export function SelfCheckNotice() {
       <div className="flex items-center gap-2">
         <ShieldAlert className="w-4 h-4 text-warning" aria-hidden="true" />
         <p className="text-sm font-medium text-warning">
-          Detection self-check found {disagreements.length}{" "}
-          {disagreements.length === 1 ? "disagreement" : "disagreements"} — the
-          values below may be wrong on this machine.
+          {disagreements.length === 1
+            ? t("selfCheck.disagreementsOne")
+            : t("selfCheck.disagreementsMany", {
+                count: disagreements.length,
+              })}
         </p>
         <button
           onClick={() => recheck.mutate()}
@@ -51,7 +55,7 @@ export function SelfCheckNotice() {
             }
             aria-hidden="true"
           />
-          {recheck.isPending ? "Checking…" : "Re-check"}
+          {recheck.isPending ? t("selfCheck.checking") : t("selfCheck.recheck")}
         </button>
       </div>
       <ul className="list-disc pl-6 space-y-0.5 text-xs text-muted-foreground">

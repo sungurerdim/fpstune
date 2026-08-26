@@ -226,7 +226,9 @@ class TestDiagnoseSettings:
 
     def test_diagnose_settings_returns_registry_info(self, client_debug_on: TestClient) -> None:
         with (
-            patch("fpstune.api.routes.settings._get_registry", return_value=self._mock_registry()),
+            patch(
+                "fpstune.settings.registry_cache.get_registry", return_value=self._mock_registry()
+            ),
             patch("fpstune.settings.detection.DetectionEngine", return_value=self._mock_engine()),
         ):
             response = client_debug_on.get("/api/debug/diagnose/settings")
@@ -249,7 +251,7 @@ class TestDiagnoseSettings:
         """
         with (
             patch(
-                "fpstune.api.routes.settings._get_registry", return_value=self._mock_registry()
+                "fpstune.settings.registry_cache.get_registry", return_value=self._mock_registry()
             ) as singleton,
             patch("fpstune.settings.registry.SettingsRegistry") as constructed,
             patch("fpstune.settings.detection.DetectionEngine", return_value=self._mock_engine()),
@@ -265,7 +267,9 @@ class TestDiagnoseSettings:
         """Twenty synchronous ``detect_one`` calls inside an ``async def`` block
         every other request for as long as they run (issue #21)."""
         with (
-            patch("fpstune.api.routes.settings._get_registry", return_value=self._mock_registry()),
+            patch(
+                "fpstune.settings.registry_cache.get_registry", return_value=self._mock_registry()
+            ),
             patch("fpstune.settings.detection.DetectionEngine", return_value=self._mock_engine()),
             patch(
                 "fpstune.api.routes.debug.asyncio.to_thread", wraps=asyncio.to_thread
@@ -277,7 +281,7 @@ class TestDiagnoseSettings:
 
     def test_a_failing_scan_is_reported_not_raised(self, client_debug_on: TestClient) -> None:
         with patch(
-            "fpstune.api.routes.settings._get_registry", side_effect=RuntimeError("no registry")
+            "fpstune.settings.registry_cache.get_registry", side_effect=RuntimeError("no registry")
         ):
             response = client_debug_on.get("/api/debug/diagnose/settings")
 

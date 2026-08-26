@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 import { AlertTriangle, ChevronDown, ChevronRight, EyeOff } from "lucide-react";
+import { useT } from "../i18n";
+import { localizedName } from "../i18n/settings";
 import { useStore } from "../store";
 import type { Setting } from "../types/setting";
 
@@ -20,6 +22,7 @@ export function DetectionNotice({
   /** Which settings this surface owns; the notice reports only those. */
   owns?: (setting: Setting) => boolean;
 }) {
+  const { t } = useT();
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const [failuresOpen, setFailuresOpen] = useState(false);
@@ -53,8 +56,8 @@ export function DetectionNotice({
           >
             <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
             {failures.length === 1
-              ? "1 setting could not be checked on this machine"
-              : `${failures.length} settings could not be checked on this machine`}
+              ? t("detection.failedOne")
+              : t("detection.failedMany", { count: failures.length })}
             {failuresOpen ? (
               <ChevronDown className="ml-auto h-3 w-3" />
             ) : (
@@ -65,7 +68,7 @@ export function DetectionNotice({
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {failures.map((setting) => (
                 <li key={setting.id}>
-                  <span className="text-foreground">{setting.displayName}</span>
+                  <span className="text-foreground">{localizedName(setting)}</span>
                   {" — "}
                   {setting.detectionError}
                 </li>
@@ -83,8 +86,8 @@ export function DetectionNotice({
           >
             <EyeOff className="h-3 w-3 flex-shrink-0" />
             {absent.length === 1
-              ? "1 setting doesn't apply to this hardware"
-              : `${absent.length} settings don't apply to this hardware`}
+              ? t("detection.absentOne")
+              : t("detection.absentMany", { count: absent.length })}
             {absentOpen ? (
               <ChevronDown className="ml-auto h-3 w-3" />
             ) : (
@@ -95,9 +98,9 @@ export function DetectionNotice({
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {absent.map((setting) => (
                 <li key={setting.id}>
-                  <span className="text-foreground/80">{setting.displayName}</span>
+                  <span className="text-foreground/80">{localizedName(setting)}</span>
                   {" — "}
-                  {setting.applicableReason || "Not applicable to this system"}
+                  {setting.applicableReason || t("detection.absentFallback")}
                 </li>
               ))}
             </ul>

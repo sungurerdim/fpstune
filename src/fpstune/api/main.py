@@ -104,9 +104,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # is 1.80 s on the first /settings/definitions and 0.01 s after — an
     # endpoint documented as instant, paying for hardware discovery on the first
     # screen a user ever sees. The browser is still fetching its bundle here.
-    from fpstune.api.routes.settings import warm_registry
+    import fpstune.settings.registry_cache as registry_cache
 
-    threading.Thread(target=warm_registry, daemon=True, name="registry-warmup").start()
+    threading.Thread(
+        target=registry_cache.warm_registry, daemon=True, name="registry-warmup"
+    ).start()
     # Start monitor hot-plug polling (15s interval, daemon thread)
     from fpstune.utils.hardware_manager import hardware_manager as _hw_mgr
 

@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -21,6 +22,7 @@ export function SettingValueState({
   setting: Setting;
   className?: string;
 }) {
+  const { t } = useT();
   // Actions (cleanup, shader cache) have no "current vs ideal" — they run or
   // they do not, and rendering an arrow between two booleans would be noise.
   if (setting.isAction) return null;
@@ -38,7 +40,7 @@ export function SettingValueState({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 text-[11px] font-medium text-success",
+          "inline-flex items-center gap-1 text-xs font-medium text-success",
           className,
         )}
         data-testid="setting-value-state"
@@ -51,7 +53,7 @@ export function SettingValueState({
           screen reader as the bare number "5", and reached a red/green
           colour-blind user as nothing distinguishable either.
         */}
-        <span className="sr-only">Already at the recommended value: </span>
+        <span className="sr-only">{t("sr.optimal")}</span>
         <span className="truncate">{label(setting.currentValue)}</span>
       </span>
     );
@@ -59,19 +61,19 @@ export function SettingValueState({
 
   return (
     <span
-      className={cn("inline-flex items-center gap-1 text-[11px]", className)}
+      className={cn("inline-flex items-center gap-1 text-xs", className)}
       data-testid="setting-value-state"
       data-state="drifted"
     >
       {/* "100→5" read aloud is "one hundred five". */}
-      <span className="sr-only">Currently </span>
+      <span className="sr-only">{t("sr.currently")}</span>
       <span className="font-medium text-destructive truncate">
         {label(setting.currentValue)}
       </span>
       <span className="text-muted-foreground/70 shrink-0" aria-hidden>
         →
       </span>
-      <span className="sr-only">, recommended value is </span>
+      <span className="sr-only">{t("sr.recommendedIs")}</span>
       <span className="font-medium text-success truncate">
         {label(setting.recommendedValue)}
       </span>
@@ -92,6 +94,7 @@ export function ImpactCategoryTags({
   className?: string;
   max?: number;
 }) {
+  const { t } = useT();
   const categories = setting.impactCategories ?? [];
   if (categories.length === 0) return null;
 
@@ -108,15 +111,15 @@ export function ImpactCategoryTags({
           key={c}
           data-category={c}
           className={cn(
-            "text-[9px] leading-none px-1.5 py-0.5 rounded border font-medium",
+            "text-xs leading-none px-1.5 py-0.5 rounded border font-medium",
             IMPACT_CATEGORY_META[c].className,
           )}
         >
-          {IMPACT_CATEGORY_META[c].label}
+          {t(IMPACT_CATEGORY_META[c].labelKey)}
         </span>
       ))}
       {hidden > 0 && (
-        <span className="text-[9px] text-muted-foreground/70">+{hidden}</span>
+        <span className="text-xs text-muted-foreground/70">+{hidden}</span>
       )}
     </span>
   );
@@ -137,6 +140,7 @@ export function RiskWarningBadge({
   setting: Setting;
   className?: string;
 }) {
+  const { t } = useT();
   if (!setting.riskWarning) return null;
 
   const isAdvanced = setting.riskLevel === "advanced";
@@ -147,14 +151,14 @@ export function RiskWarningBadge({
       data-testid="risk-warning-badge"
       data-risk={setting.riskLevel}
       className={cn(
-        "text-[10px] px-1 rounded border shrink-0 cursor-default",
+        "text-xs px-1 rounded border shrink-0 cursor-default",
         isAdvanced
-          ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+          ? "bg-warning/20 text-warning border-warning/30"
           : "bg-muted/60 text-muted-foreground border-border",
         className,
       )}
     >
-      {isAdvanced ? "RISK" : "NOTE"}
+      {isAdvanced ? t("badge.risk") : t("badge.note")}
     </span>
   );
 }

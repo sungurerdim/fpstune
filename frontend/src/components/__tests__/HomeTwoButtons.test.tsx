@@ -16,6 +16,18 @@ import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
 const applySpy = vi.fn();
+// Home mounts the whole product now (D1); the device/maintenance surfaces
+// have their own tests, and their live fetches only add teardown noise here.
+vi.mock("../HardwarePanel", () => ({
+  HardwarePanel: () => null,
+}));
+vi.mock("../MaintenancePanel", () => ({
+  MaintenancePanel: () => null,
+}));
+vi.mock("../SelfCheckNotice", () => ({
+  SelfCheckNotice: () => null,
+}));
+
 vi.mock("../../hooks/useBulkApply", () => ({
   useBulkApply: () => ({ apply: applySpy, isApplying: false }),
 }));

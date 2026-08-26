@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { BatteryCharging, CheckCircle2, RefreshCw, Zap } from "lucide-react";
 import { api } from "../../lib/api";
@@ -17,6 +18,7 @@ const log = createLogger("PowerProfileCard");
  * Windows' own Balanced plan.
  */
 export function PowerProfileCard() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const { data: status } = useQuery({
     queryKey: ["power-profile"],
@@ -54,7 +56,7 @@ export function PowerProfileCard() {
     <>
       <HardwareSection
         icon={<BatteryCharging className="w-4 h-4" />}
-        title="Power plan"
+        title={t("hw.powerPlan")}
       >
         <div className="pl-3 border-l-2 border-primary/30 space-y-1">
           <p className="text-sm font-medium flex items-center gap-1.5">
@@ -65,8 +67,8 @@ export function PowerProfileCard() {
           </p>
           <p className="text-xs text-muted-foreground">
             {status.fps_balanced_active
-              ? "FPS Balanced is active — full power when a game asks, idle cores allowed to clock down."
-              : "FPS Balanced gives full power under load and lets idle cores clock down — less heat for the same frames."}
+              ? t("power.activeHint")
+              : t("power.inactiveHint")}
           </p>
           <div className="flex items-center gap-2 pt-0.5">
             {status.fps_balanced_active ? (
@@ -76,8 +78,8 @@ export function PowerProfileCard() {
                 className="px-2 py-1 rounded text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:cursor-wait"
               >
                 {revertMutation.isPending
-                  ? "Reverting…"
-                  : "Revert to Windows Balanced"}
+                  ? t("power.reverting")
+                  : t("power.revert")}
               </button>
             ) : (
               <button
@@ -95,7 +97,7 @@ export function PowerProfileCard() {
                 ) : (
                   <Zap className="w-3 h-3" />
                 )}
-                Activate FPS Balanced
+                {t("power.activate")}
               </button>
             )}
           </div>

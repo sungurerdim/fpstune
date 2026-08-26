@@ -60,29 +60,6 @@ def absent_reason(setting: SettingExecutor | None = None) -> str:
     return "Feature not available on this system"
 
 
-# Settings that may conflict with anti-cheat software (BattlEye, EasyAntiCheat).
-# Based on the BattlEye FAQ and community reports.
-#
-# One table, keyed by setting id, because there were two and they could disagree:
-# a risky-id set and a warnings dict, each spelling the same four ids by hand. An
-# id present in one and absent from the other produced either a generic warning
-# with no specifics or a specific warning that never fired.
-#
-# These ids are not checked here — this module sits below the registry in the
-# import graph (executors import it while the registry is still being built), so
-# an import-time cross-check would be a cycle. The check lives in
-# tests/test_settings/test_applicability.py instead, and it is not optional: a
-# renamed setting silently drops its anti-cheat warning, and the user who is
-# never warned is the one who gets banned. Three ids were already stale when that
-# test was written (`system:kernel_debugging`, `system:test_signing`,
-# `system:driver_verifier`) — settings this product no longer ships.
-ANTICHEAT_WARNINGS: dict[str, str] = {
-    "gpu-nvidia:low_latency": "Ultra Low Latency may conflict with some anti-cheat (use 'on' instead)",
-}
-
-ANTICHEAT_RISKY_SETTINGS: frozenset[str] = frozenset(ANTICHEAT_WARNINGS)
-
-
 @dataclass
 class HardwareContext:
     """Detected hardware context for applicability checks.
@@ -116,9 +93,6 @@ class HardwareContext:
     # different applicability reasons.
     has_vrr_monitor: bool | None = None
 
-    # Anti-cheat game detection (populated during runtime)
-    has_anticheat_games: bool = False  # True if BattlEye/EAC games detected
-
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -132,7 +106,6 @@ class HardwareContext:
             "is_admin": self.is_admin,
             "features": list(self.features),
             "has_vrr_monitor": self.has_vrr_monitor,
-            "has_anticheat_games": self.has_anticheat_games,
         }
 
 
@@ -272,42 +245,6 @@ class ApplicabilityChecker:
             List of settings that apply to the current hardware.
         """
         return [s for s in settings if self.is_applicable(s)[0]]
-
-    def check_anticheat_compatibility(
-        self, setting: SettingExecutor, target_value: str | None = None
-    ) -> tuple[bool, str]:
-        """Check if a setting may conflict with anti-cheat software.
-
-        Based on BattlEye FAQ (T1 source) and community reports.
-
-        Args:
-            setting: The setting to check.
-            target_value: The value being applied (for value-specific warnings).
-
-        Returns:
-            Tuple of (is_safe, warning_message). Warning is empty if safe.
-        """
-        setting_id = setting.id
-
-        # Check if setting is in risky list
-        if setting_id not in ANTICHEAT_RISKY_SETTINGS:
-            return True, ""
-
-        # Special case: NVIDIA Low Latency - only "ultra" is risky
-        if setting_id == "gpu-nvidia:low_latency":
-            if target_value and target_value.lower() == "ultra":
-                return False, ANTICHEAT_WARNINGS.get(setting_id, "May conflict with anti-cheat")
-            return True, ""  # "on" or "off" is fine
-
-        # General risky setting
-        warning = ANTICHEAT_WARNINGS.get(setting_id, "May conflict with anti-cheat software")
-
-        # If user has anti-cheat games, this is a hard warning
-        if self.context.has_anticheat_games:
-            return False, f"[BLOCKED] {warning} - anti-cheat games detected on system"
-
-        # Otherwise, soft warning
-        return True, f"[WARNING] {warning}"
 
 
 def _coerce_scalar(v: Any) -> Any:

@@ -120,6 +120,55 @@ describe("useApplySingle", () => {
     expect(result.current.isPending("timer:hpet")).toBe(false);
   });
 
+  it("a successful apply produces a visible confirmation (E8)", async () => {
+    // The defect: applying a tweak from Home changed the machine with no
+    // on-screen acknowledgement at all — the only trace was the row's badge.
+    useStore.setState({ notifications: [] } as never);
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.applySingle(makeSetting(), "disabled");
+    });
+
+    const notifications = useStore.getState().notifications;
+    expect(
+      notifications.some(
+        (n) => n.type === "success" && n.message === "Applied HPET",
+      ),
+    ).toBe(true);
+  });
+
+  it("a failed apply says so, with the backend's reason (E8)", async () => {
+    useStore.setState({ notifications: [] } as never);
+    server.use(
+      http.post("/api/settings/:id/apply", () =>
+        HttpResponse.json({
+          setting_id: "timer:hpet",
+          success: false,
+          error: "registry key is access-denied",
+          new_value: null,
+          requires_reboot: false,
+        }),
+      ),
+    );
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.applySingle(makeSetting(), "disabled");
+    });
+
+    const notifications = useStore.getState().notifications;
+    expect(
+      notifications.some(
+        (n) =>
+          n.type === "error" &&
+          n.message.includes("registry key is access-denied"),
+      ),
+    ).toBe(true);
+  });
+
   it("updates store with new_value on successful apply", async () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });

@@ -104,6 +104,40 @@ export const en = {
   "impact.storage": "Storage",
   "impact.privacy": "Privacy",
   "impact.visual": "Visual",
+
+  // Home
+  "home.hardwareTweaks": "Hardware tweaks",
+  "home.hardwareSubtitle": "GPU, display, adapters, storage, audio",
+  "home.softwareTweaks": "Software tweaks",
+  "home.softwareSubtitle": "Windows, services, launchers",
+  "home.gameTweaks": "Game tweaks",
+  "home.gameSubtitle": "Settings inside a game's own config file",
+  "home.applyAll": "Apply all {count}",
+  "home.readingSettings": "Reading your current settings…",
+  "home.allOptimized": "Everything applicable is already optimized.",
+  "home.cleanupTitle": "Available disk cleanup actions",
+  "home.measuringReclaim": "Measuring what can be reclaimed…",
+  "home.nothingToReclaim": "Nothing to reclaim right now.",
+  "home.rowMeasuring": "— measuring what can be reclaimed…",
+  "home.advisories": "Advisories",
+  "home.advisoriesHint": "findings fpstune can detect but only you can change",
+  "home.alreadyOptimized": "Already optimized",
+  "home.detecting":
+    "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",
+  "home.detectingProgress": "Detection progress across setting categories",
+  "home.statIdeal": "settings at their ideal value",
+  "home.statIdealHint":
+    "{changed} fpstune changed · {stock} were already correct",
+  "home.statGuards": " · {count} drift guards standing watch",
+  "home.measured": "Measured",
+  "home.noMeasurement":
+    "no frame rate measured yet — start a game, or open Benchmarks",
+  "home.ofTarget": "{pct}% of the {target} fps this display can show",
+  "home.noTarget": "no display target — panel refresh unknown",
+  "home.claimed": "Claimed by settings not yet applied",
+  "home.latencyTweaks": "latency tweaks",
+  "home.memoryTweaks": "memory tweaks",
+  "home.diskToReclaim": "disk to reclaim",
 } as const;
 
 export type MessageKey = keyof typeof en;

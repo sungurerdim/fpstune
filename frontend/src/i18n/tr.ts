@@ -98,4 +98,38 @@ export const tr: Record<keyof typeof en, string> = {
   "impact.storage": "Depolama",
   "impact.privacy": "Gizlilik",
   "impact.visual": "Görsel",
+  // Home
+  "home.hardwareTweaks": "Donanım ince ayarları",
+  "home.hardwareSubtitle": "GPU, ekran, ağ bağdaştırıcıları, depolama, ses",
+  "home.softwareTweaks": "Yazılım ince ayarları",
+  "home.softwareSubtitle": "Windows, hizmetler, oyun başlatıcıları",
+  "home.gameTweaks": "Oyun ince ayarları",
+  "home.gameSubtitle": "Oyunun kendi yapılandırma dosyasındaki ayarlar",
+  "home.applyAll": "Tümünü uygula ({count})",
+  "home.readingSettings": "Mevcut ayarlarınız okunuyor…",
+  "home.allOptimized": "Uygulanabilir her şey zaten en iyi durumda.",
+  "home.cleanupTitle": "Kullanılabilir disk temizliği eylemleri",
+  "home.measuringReclaim": "Geri kazanılabilecek alan ölçülüyor…",
+  "home.nothingToReclaim": "Şu an geri kazanılacak bir şey yok.",
+  "home.rowMeasuring": "— geri kazanılabilecek alan ölçülüyor…",
+  "home.advisories": "Bilgilendirmeler",
+  "home.advisoriesHint":
+    "fpstune'un algılayabildiği ama yalnızca sizin değiştirebileceğiniz bulgular",
+  "home.alreadyOptimized": "Zaten en iyi durumda",
+  "home.detecting":
+    "Ayarlarınız algılanıyor — {done}/{total} kategori okundu; listeler ve toplamlar sonuçlar geldikçe dolar…",
+  "home.detectingProgress": "Ayar kategorilerinde algılama ilerlemesi",
+  "home.statIdeal": "ayar ideal değerinde",
+  "home.statIdealHint":
+    "{changed} tanesini fpstune değiştirdi · {stock} tanesi zaten doğruydu",
+  "home.statGuards": " · {count} sapma bekçisi nöbette",
+  "home.measured": "Ölçüldü",
+  "home.noMeasurement":
+    "henüz kare hızı ölçülmedi — bir oyun başlatın ya da Ölçümler'i açın",
+  "home.ofTarget": "bu ekranın gösterebildiği {target} fps'in %{pct}'i",
+  "home.noTarget": "ekran hedefi yok — panel yenileme hızı bilinmiyor",
+  "home.claimed": "Henüz uygulanmamış ayarların vaadi",
+  "home.latencyTweaks": "gecikme ayarı",
+  "home.memoryTweaks": "bellek ayarı",
+  "home.diskToReclaim": "geri kazanılabilir disk",
 };

@@ -335,19 +335,24 @@ export function HomeTab() {
             <Stat
               icon={<CheckCircle2 className="w-4 h-4 text-success" />}
               value={`${summary.score.optimized}/${summary.score.total}`}
-              label="settings at their ideal value"
+              label={t("home.statIdeal")}
               hint={
                 summary.score.optimized > 0
-                  ? `${changed} fpstune changed · ${alreadyStock} were already correct` +
+                  ? t("home.statIdealHint", {
+                      changed,
+                      stock: alreadyStock,
+                    }) +
                     (summary.score.guardsStanding > 0
-                      ? ` · ${summary.score.guardsStanding} drift guards standing watch`
+                      ? t("home.statGuards", {
+                          count: summary.score.guardsStanding,
+                        })
                       : "")
                   : undefined
               }
             />
 
             {measured.length > 0 ? (
-              <Group label="Measured" tone="success">
+              <Group label={t("home.measured")} tone="success">
                 {measured.map((game) => {
                   // The one number on this screen an instrument produced. It is
                   // written as a sentence rather than a ratio because "57/297"
@@ -365,8 +370,11 @@ export function HomeTab() {
                       label={game.label}
                       hint={
                         pct !== null
-                          ? `${pct}% of the ${game.target_fps} fps this display can show`
-                          : "no display target — panel refresh unknown"
+                          ? t("home.ofTarget", {
+                              pct,
+                              target: game.target_fps ?? 0,
+                            })
+                          : t("home.noTarget")
                       }
                     />
                   );
@@ -376,29 +384,29 @@ export function HomeTab() {
               /* Not a zero and not an estimate. Nothing has measured a frame
                  rate on this machine yet, and saying so is the honest headline
                  — with where to go to change that. */
-              <Group label="Measured" tone="muted">
+              <Group label={t("home.measured")} tone="muted">
                 <Stat
                   icon={<Gauge className="w-4 h-4 text-muted-foreground" />}
                   value="—"
-                  label="no frame rate measured yet — start a game, or open Benchmarks"
+                  label={t("home.noMeasurement")}
                 />
               </Group>
             )}
 
             {hasPotential && (
-              <Group label="Claimed by settings not yet applied" tone="warning">
+              <Group label={t("home.claimed")} tone="warning">
                 {summary.potential.latencyTweaks > 0 && (
                   <Stat
                     icon={<Timer className="w-4 h-4 text-warning" />}
                     value={`${summary.potential.latencyTweaks}`}
-                    label="latency tweaks"
+                    label={t("home.latencyTweaks")}
                   />
                 )}
                 {summary.potential.ramTweaks > 0 && (
                   <Stat
                     icon={<MemoryStick className="w-4 h-4 text-purple-500" />}
                     value={`${summary.potential.ramTweaks}`}
-                    label="memory tweaks"
+                    label={t("home.memoryTweaks")}
                   />
                 )}
                 {/* This one does add up, and is the exception that shows the
@@ -407,7 +415,7 @@ export function HomeTab() {
                   <Stat
                     icon={<HardDrive className="w-4 h-4 text-primary" />}
                     value={fmtMB(reclaimableMB)}
-                    label="disk to reclaim"
+                    label={t("home.diskToReclaim")}
                   />
                 )}
               </Group>
@@ -425,8 +433,10 @@ export function HomeTab() {
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin text-primary" />
             <span>
-              Detecting your settings — {categoriesDone}/{categoriesTotal}{" "}
-              categories read, the lists and totals fill in as results arrive…
+              {t("home.detecting", {
+                done: categoriesDone,
+                total: categoriesTotal,
+              })}
             </span>
           </div>
           <Progress
@@ -434,7 +444,7 @@ export function HomeTab() {
             value={
               categoriesTotal > 0 ? (categoriesDone / categoriesTotal) * 100 : 0
             }
-            label="Detection progress across setting categories"
+            label={t("home.detectingProgress")}
           />
         </div>
       )}
@@ -454,8 +464,8 @@ export function HomeTab() {
             to know what a button is about before pressing it. */}
         <div className="space-y-4">
           <TweakGroup
-            title="Hardware tweaks"
-            subtitle="GPU, display, adapters, storage, audio"
+            title={t("home.hardwareTweaks")}
+            subtitle={t("home.hardwareSubtitle")}
             icon={<Cpu className="w-4 h-4 text-warning" />}
             settings={hardwareSuboptimal}
             detecting={detecting}
@@ -464,8 +474,8 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
-            title="Software tweaks"
-            subtitle="Windows, services, launchers"
+            title={t("home.softwareTweaks")}
+            subtitle={t("home.softwareSubtitle")}
             icon={<Zap className="w-4 h-4 text-warning" />}
             settings={softwareSuboptimal}
             detecting={detecting}
@@ -474,8 +484,8 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
-            title="Game tweaks"
-            subtitle="Settings inside a game's own config file"
+            title={t("home.gameTweaks")}
+            subtitle={t("home.gameSubtitle")}
             icon={<Gamepad2 className="w-4 h-4 text-warning" />}
             settings={gameSuboptimal}
             detecting={detecting}
@@ -491,7 +501,7 @@ export function HomeTab() {
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-sm">
-                Available disk cleanup actions
+                {t("home.cleanupTitle")}
               </h2>
               <span className="text-xs text-muted-foreground">
                 {cleanups.length}
@@ -518,8 +528,8 @@ export function HomeTab() {
               // `sizesCalculating` knew all along.
               <p className="text-xs text-muted-foreground text-center py-2">
                 {sizesCalculating
-                  ? "Measuring what can be reclaimed…"
-                  : "Nothing to reclaim right now."}
+                  ? t("home.measuringReclaim")
+                  : t("home.nothingToReclaim")}
               </p>
             ) : (
               <>
@@ -539,7 +549,7 @@ export function HomeTab() {
                   >
                     <Loader2 className="w-3 h-3 animate-spin shrink-0" />
                     <span className="font-medium">{s.displayName}</span>
-                    <span>— measuring what can be reclaimed…</span>
+                    <span>{t("home.rowMeasuring")}</span>
                   </div>
                 ))}
               </>
@@ -554,12 +564,12 @@ export function HomeTab() {
         <Card>
           <div className="flex items-center gap-2 p-3 border-b border-border">
             <Info className="w-4 h-4 text-warning" />
-            <h2 className="font-semibold text-sm">Advisories</h2>
+            <h2 className="font-semibold text-sm">{t("home.advisories")}</h2>
             <span className="text-xs text-muted-foreground">
               {advisories.length}
             </span>
             <span className="text-xs text-muted-foreground hidden sm:inline">
-              findings fpstune can detect but only you can change
+              {t("home.advisoriesHint")}
             </span>
           </div>
           <div className="p-3 space-y-2">
@@ -599,7 +609,9 @@ export function HomeTab() {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
             )}
             <CheckCircle2 className="w-4 h-4 text-success" />
-            <h2 className="font-semibold text-sm">Already optimized</h2>
+            <h2 className="font-semibold text-sm">
+              {t("home.alreadyOptimized")}
+            </h2>
             <span className="text-xs text-muted-foreground">
               {optimized.length}
             </span>
@@ -703,6 +715,7 @@ function TweakGroup({
   onApplyAll: () => void;
   categoryLabel: (id: string) => string;
 }) {
+  const { t } = useT();
   return (
     <Card className="flex flex-col">
       <div className="flex items-center justify-between p-3 border-b border-border">
@@ -724,7 +737,7 @@ function TweakGroup({
             icon={<Zap className="w-3.5 h-3.5" />}
             onClick={onApplyAll}
           >
-            Apply all {settings.length}
+            {t("home.applyAll", { count: settings.length })}
           </Button>
         )}
       </div>
@@ -734,8 +747,8 @@ function TweakGroup({
         // optimized" would assert a result the app does not have.
         <p className="text-xs text-muted-foreground px-3 py-2">
           {detecting
-            ? "Reading your current settings…"
-            : "Everything applicable is already optimized."}
+            ? t("home.readingSettings")
+            : t("home.allOptimized")}
         </p>
       ) : (
         <div className="p-3 space-y-2">

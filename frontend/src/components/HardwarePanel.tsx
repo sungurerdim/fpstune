@@ -51,6 +51,10 @@ function useHardware(): { hardware: HardwareInfo | null; isLoading: boolean } {
     const fetchData = async () => {
       try {
         await hardwareManager.getHardware();
+      } catch {
+        // A failed probe leaves the cached (possibly null) inventory standing;
+        // the sections render their own NotDetected. Uncaught, this rejection
+        // is unhandled — fetchData is fired without an awaiter.
       } finally {
         if (mounted) {
           setIsLoading(false);

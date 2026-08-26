@@ -12,6 +12,9 @@ import {
   Cpu,
   Gamepad2,
   Flame,
+  ChevronDown,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
@@ -27,6 +30,10 @@ import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
+import { MaintenancePanel } from "./MaintenancePanel";
+import { HardwarePanel } from "./HardwarePanel";
+import { SettingInfoTooltip } from "./SettingInfoTooltip";
+import { SettingValueState } from "./SettingStateDisplay";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 import type { Setting } from "../types/setting";
 
@@ -104,6 +111,53 @@ export function HomeTab() {
         (parseSizeToMB(b.currentValue) ?? 0) -
         (parseSizeToMB(a.currentValue) ?? 0),
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+  }, [settings, settingsVersion]);
+
+  // Cleanups whose size scan has not finished. Dropping them entirely made a
+  // cleanup that was still measuring indistinguishable from one that does not
+  // exist (D6): the row is on screen, named, and says it is not ready.
+  const measuringCleanups = useMemo(() => {
+    const rows: Setting[] = [];
+    for (const s of settings.values()) {
+      if (!s.isAction || !s.isApplicable) continue;
+      if (s.module !== "cleanup" && s.module !== "game_cleanup") continue;
+      if (parseSizeToMB(s.currentValue) !== null) continue;
+      rows.push(s);
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+  }, [settings, settingsVersion]);
+
+  // Advisory findings: things fpstune can detect but only the user can change
+  // (BIOS toggles, physical facts). is_readonly kept them out of every Home
+  // list — XMP off, the largest hardware finding the product makes, was
+  // invisible from the landing page.
+  const advisories = useMemo(() => {
+    const rows: Setting[] = [];
+    for (const s of settings.values()) {
+      if (s.isApplicable && !s.isAction && s.isReadonly) rows.push(s);
+    }
+    return rows;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+  }, [settings, settingsVersion]);
+
+  // The settings already at their ideal value, behind a fold: Home's headline
+  // counts them, and a count whose members cannot be seen is a claim.
+  const [showOptimized, setShowOptimized] = useState(false);
+  const optimized = useMemo(() => {
+    const rows: Setting[] = [];
+    for (const s of settings.values()) {
+      if (
+        s.isApplicable &&
+        !s.isAction &&
+        !s.isReadonly &&
+        s.status === "optimal"
+      ) {
+        rows.push(s);
+      }
+    }
+    return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settings, settingsVersion]);
 
@@ -449,7 +503,7 @@ export function HomeTab() {
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}
           <div className="p-3 space-y-2">
-            {cleanups.length === 0 ? (
+            {cleanups.length === 0 && measuringCleanups.length === 0 ? (
               // The old copy said "Calculating… or nothing to reclaim", admitting in
               // one sentence that it did not know which state it was in — while
               // `sizesCalculating` knew all along.
@@ -459,13 +513,109 @@ export function HomeTab() {
                   : "Nothing to reclaim right now."}
               </p>
             ) : (
-              cleanups.map((s) => (
-                <CleanupListRow key={s.id} setting={s} runner={cleanupRunner} />
-              ))
+              <>
+                {cleanups.map((s) => (
+                  <CleanupListRow
+                    key={s.id}
+                    setting={s}
+                    runner={cleanupRunner}
+                  />
+                ))}
+                {/* Named while still measuring: a scan in progress is a
+                    different fact from nothing to reclaim. */}
+                {measuringCleanups.map((s) => (
+                  <div
+                    key={s.id}
+                    className="flex items-center gap-2 p-2 rounded-md border border-border/50 text-xs text-muted-foreground"
+                  >
+                    <Loader2 className="w-3 h-3 animate-spin shrink-0" />
+                    <span className="font-medium">{s.displayName}</span>
+                    <span>— measuring what can be reclaimed…</span>
+                  </div>
+                ))}
+              </>
             )}
           </div>
         </section>
       </div>
+
+      {/* Advisories: findings only the user can act on — a BIOS toggle, a
+          physical fact. No Apply button, because fpstune cannot press it. */}
+      {advisories.length > 0 && (
+        <section className="bg-card rounded-lg border border-border">
+          <div className="flex items-center gap-2 p-3 border-b border-border">
+            <Info className="w-4 h-4 text-warning" />
+            <h2 className="font-semibold text-sm">Advisories</h2>
+            <span className="text-xs text-muted-foreground">
+              {advisories.length}
+            </span>
+            <span className="text-[10px] text-muted-foreground hidden sm:inline">
+              findings fpstune can detect but only you can change
+            </span>
+          </div>
+          <div className="p-3 space-y-2">
+            {advisories.map((s) => (
+              <div
+                key={s.id}
+                className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">{s.displayName}</span>
+                  <SettingInfoTooltip setting={s} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {s.description}
+                </p>
+                <div className="mt-1">
+                  <SettingValueState setting={s} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* The already-optimal settings, behind a fold Home owns: the headline
+          counts them, and a count whose members cannot be listed is a claim. */}
+      {optimized.length > 0 && (
+        <section className="bg-card rounded-lg border border-border">
+          <button
+            onClick={() => setShowOptimized((open) => !open)}
+            aria-expanded={showOptimized}
+            className="w-full flex items-center gap-2 p-3 text-left hover:bg-muted/30 transition-colors"
+          >
+            {showOptimized ? (
+              <ChevronDown className="w-4 h-4 text-muted-foreground" />
+            ) : (
+              <ChevronRight className="w-4 h-4 text-muted-foreground" />
+            )}
+            <CheckCircle2 className="w-4 h-4 text-success" />
+            <h2 className="font-semibold text-sm">Already optimized</h2>
+            <span className="text-xs text-muted-foreground">
+              {optimized.length}
+            </span>
+          </button>
+          {showOptimized && (
+            <div className="p-3 pt-0 space-y-2">
+              {optimized.map((s) => (
+                <TweakListRow
+                  key={s.id}
+                  setting={s}
+                  categoryLabel={categoryLabel(s.category)}
+                />
+              ))}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* Repair actions (SFC, DISM) — the panel renders nothing when the
+          registry holds no maintenance action. */}
+      <MaintenancePanel />
+
+      {/* The device inventory and its eleven mutations. The Hardware tab
+          remains the focused view; Home is the door that always opens. */}
+      <HardwarePanel />
 
       <DockerConfirmModal
         open={cleanupRunner.confirmIds !== null}

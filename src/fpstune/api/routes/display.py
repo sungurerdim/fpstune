@@ -14,6 +14,7 @@ from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel
 
 from fpstune.api.schemas import MonitorInfo
+from fpstune.settings.panel import primary_monitor, refresh_ceiling_hz
 from fpstune.utils.hardware_manager import hardware_manager
 
 router = APIRouter(prefix="/display", tags=["display"])
@@ -505,10 +506,16 @@ async def get_vrr_optimization_info(
     # sleep-polls up to 15 s for an in-flight detection, so it runs off the loop.
     gpu, _ = await asyncio.to_thread(hardware_manager.get_gpu_info, wait=True)
     if not gpu or gpu.vendor.lower() != "nvidia":
+        # The panel's own VRR answer is vendor-neutral (EDID), so it is still
+        # reported. What is missing is fpstune's driver-side tuning for this
+        # vendor — a product gap (C10, tracked), never a verdict about the
+        # hardware: "not built yet" and "not supported" are different claims.
+        monitors = await asyncio.to_thread(hardware_manager.detect_monitors)
+        primary = primary_monitor(monitors)
         return VrrOptimizationInfo(
-            monitor_name="N/A",
-            monitor_refresh_hz=0,
-            supports_vrr=False,
+            monitor_name=(primary.friendly_name or primary.name) if primary else "N/A",
+            monitor_refresh_hz=refresh_ceiling_hz(primary) if primary else 0,
+            supports_vrr=primary.supports_vrr if primary else None,
             recommended_fps_limit=0,
             recommended_vrr_mode="off",
             recommended_vsync="off",
@@ -516,8 +523,16 @@ async def get_vrr_optimization_info(
             current_vrr_mode="off",
             current_vsync="off",
             is_optimized=False,
-            explanation="VRR optimization is only available for NVIDIA GPUs.",
-            warning="Non-NVIDIA GPU detected. G-Sync features not available.",
+            explanation=(
+                "fpstune's driver-level VRR tuning is built for NVIDIA today; "
+                "the AMD and Intel driver paths are not built yet. That is a "
+                "gap in fpstune, not a fact about this panel — its own "
+                "FreeSync/Adaptive-Sync support is reported above either way."
+            ),
+            warning=(
+                "Driver-level VRR tuning for this GPU vendor is not built yet "
+                "(a tracked product gap)."
+            ),
         )
 
     # Get monitors
@@ -525,7 +540,7 @@ async def get_vrr_optimization_info(
     if not monitors:
         return VrrOptimizationInfo(
             monitor_name="No monitor",
-            monitor_refresh_hz=60,
+            monitor_refresh_hz=0,
             supports_vrr=False,
             recommended_fps_limit=0,
             recommended_vrr_mode="off",
@@ -622,7 +637,10 @@ async def apply_vrr_optimization(
     if not gpu or gpu.vendor.lower() != "nvidia":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="VRR optimization is only available for NVIDIA GPUs",
+            detail=(
+                "fpstune's driver-level VRR tuning for this GPU vendor is not "
+                "built yet — a tracked product gap, not a fact about the panel."
+            ),
         )
 
     # Validate inputs

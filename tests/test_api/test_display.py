@@ -249,27 +249,44 @@ class TestSetDisplayAuto:
 class TestVrrOptimizationInfo:
     """Tests for GET /api/display/vrr-optimization."""
 
-    def test_non_nvidia_returns_unavailable(self, client: TestClient) -> None:
+    def test_non_nvidia_reports_a_product_gap_never_a_hardware_verdict(
+        self, client: TestClient
+    ) -> None:
+        """A6 / C10: "not built yet" and "not supported" are different claims.
+
+        The old copy told AMD and Intel owners "G-Sync features not available"
+        as a fact about their machine, while the panel's VRR answer (EDID) is
+        vendor-neutral and was known all along.
+        """
         mock_gpu = MagicMock()
         mock_gpu.vendor = MagicMock()
         mock_gpu.vendor.lower.return_value = "amd"
+        freesync_panel = _make_monitor(supports_vrr=True, max_refresh_rate_hz=165)
         with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
             mock_hw.get_gpu_info.return_value = (mock_gpu, False)
+            mock_hw.detect_monitors.return_value = [freesync_panel]
             response = client.get("/api/display/vrr-optimization")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["supports_vrr"] is False
-        assert "NVIDIA" in data["explanation"] or "nvidia" in data["explanation"].lower()
+        # The panel's own answer survives the vendor gap.
+        assert data["supports_vrr"] is True
+        assert data["monitor_refresh_hz"] == 165
+        # The gap is named as fpstune's, not the hardware's.
+        assert "not built yet" in data["explanation"]
+        assert "product gap" in data["warning"]
+        assert "not available" not in data["warning"]
 
     def test_no_gpu_returns_unavailable(self, client: TestClient) -> None:
         with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
             mock_hw.get_gpu_info.return_value = (None, False)
+            mock_hw.detect_monitors.return_value = []
             response = client.get("/api/display/vrr-optimization")
 
         assert response.status_code == 200
         data = response.json()
-        assert data["supports_vrr"] is False
+        # No GPU info and no panel probed: VRR support is unknown, not "no".
+        assert data["supports_vrr"] is None
 
     def test_nvidia_no_monitors_returns_no_monitor(self, client: TestClient) -> None:
         mock_gpu = MagicMock()
@@ -331,7 +348,7 @@ class TestVrrOptimizationInfo:
 class TestApplyVrrOptimization:
     """Tests for POST /api/display/vrr-optimization/apply."""
 
-    def test_non_nvidia_returns_400(self, client: TestClient) -> None:
+    def test_non_nvidia_returns_400_naming_the_gap(self, client: TestClient) -> None:
         mock_gpu = MagicMock()
         mock_gpu.vendor = MagicMock()
         mock_gpu.vendor.lower.return_value = "amd"
@@ -343,6 +360,7 @@ class TestApplyVrrOptimization:
             )
 
         assert response.status_code == 400
+        assert "product gap" in response.json()["detail"]
 
     def test_invalid_vrr_mode_returns_400(self, client: TestClient) -> None:
         mock_gpu = MagicMock()

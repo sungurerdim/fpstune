@@ -28,25 +28,21 @@ const COMPONENTS = import.meta.glob("../**/*.tsx", {
 // Shrink-only. FirstRunNotice, HomeTab and TabNavigation are absent because
 // they migrated with the infrastructure.
 const _UNTRANSLATED_BASELINE = new Set([
-  "App.tsx",
-  "components/ActivityLog.tsx",
-  "components/CleanupRunnerProvider.tsx",
-  "components/GameTweaksTab.tsx",
+  "App.tsx", // string-free or prop-fed — nothing to migrate
+  "components/CleanupRunnerProvider.tsx", // string-free or prop-fed — nothing to migrate
   // string-free (renders HardwarePanel only) — nothing to migrate:
   "components/HardwareTab.tsx",
-  "components/SettingInfoTooltip.tsx",
-  "components/TweakRows.tsx",
-  "components/ui/Badge.tsx",
-  "components/ui/Button.tsx",
-  "components/ui/Card.tsx",
-  "components/ui/Feedback.tsx",
-  "components/ui/LoadingSpinner.tsx",
-  "components/ui/NotificationToasts.tsx",
-  "components/ui/PillSelector.tsx",
-  "components/ui/StatusChip.tsx",
-  "components/ui/ToggleSwitch.tsx",
-  "components/ui/tooltip.tsx",
-  "main.tsx",
+  "components/TweakRows.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/Badge.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/Button.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/Card.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/Feedback.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/LoadingSpinner.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/PillSelector.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/StatusChip.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/ToggleSwitch.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/tooltip.tsx", // string-free or prop-fed — nothing to migrate
+  "main.tsx", // string-free or prop-fed — nothing to migrate
 ]);
 
 function speaksThroughI18n(source: string): boolean {

@@ -360,4 +360,51 @@ export const tr: Record<keyof typeof en, string> = {
   "verify.statusNoise": "Gürültüde kayboldu",
   "verify.statusUnmeasured": "Ölçülmedi",
   "verify.statusUnattributable": "Atfedilemez",
+  // Activity log
+  "activity.short": "Etkinlik",
+  "activity.title": "Etkinlik Günlüğü",
+  "activity.open": "Etkinlik günlüğünü aç",
+  "activity.close": "Etkinlik günlüğünü kapat",
+
+  // Software Tweaks tab
+  "settings.searchPlaceholder": "Ayarlarda ara...",
+  "settings.searchLabel": "Ayarlarda ara",
+  "settings.filterCategory": "Kategoriye göre süz",
+  "settings.filterImpact": "Etkiye göre süz",
+  "settings.allCategories": "Tüm kategoriler",
+  "settings.allImpacts": "Tüm etkiler",
+  "settings.optimized": "En iyi durumda",
+  "settings.noOptimizedYet": "Henüz en iyi duruma getirilen ayar yok.",
+  "settings.needsOptimization": "İyileştirme bekleyenler",
+  "settings.nothingNeeds": "İyileştirme bekleyen bir şey yok.",
+  "settings.fixAll": "Tümünü düzelt ({count})",
+  "settings.appliedCount": "{count} uygulandı",
+  "settings.failedCount": " · {count} başarısız",
+
+  // Game Tweaks tab
+  "games.searchPlaceholder": "Oyun ayarlarında ara...",
+  "games.searchLabel": "Oyun ayarlarında ara",
+  "games.filterGame": "Oyuna göre süz",
+  "games.allGames": "Tüm oyunlar",
+  "games.reading": "Oyun yapılandırmalarınız okunuyor…",
+  "games.noMatch": "Bu aramayla eşleşen oyun ayarı yok.",
+  "games.noneFound":
+    "Bu makinede desteklenen bir oyun yapılandırması bulunamadı. fpstune bir oyunun yapılandırmasını yalnızca oyun kuruluysa okur.",
+
+  // Setting tooltip
+  "tooltip.current": "Mevcut:",
+  "tooltip.recommended": "Önerilen:",
+  "tooltip.effect": "Etkisi:",
+  "tooltip.howToChange": "Nasıl değiştirilir:",
+  "tooltip.proven": "Kanıtlı",
+  "tooltip.experimental": "Deneysel",
+  "tooltip.likely": "Olası",
+
+  // Notifications
+  "toast.errorsRegion": "Hatalar ve uyarılar",
+  "toast.region": "Bildirimler",
+  "toast.error": "Hata",
+  "toast.warning": "Uyarı",
+  "toast.success": "Başarılı",
+  "toast.info": "Bilgi",
 };

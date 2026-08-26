@@ -5,6 +5,7 @@
  * Shows description, current/recommended impact, and applicability status.
  */
 
+import { useT } from "../i18n";
 import { Info, Eye } from "lucide-react";
 import { cn } from "../lib/utils";
 import {
@@ -32,6 +33,7 @@ export function SettingInfoTooltip({
   className = "",
   variant = "info",
 }: SettingInfoTooltipProps) {
+  const { t } = useT();
   return (
     <TooltipProvider>
       <Tooltip delayDuration={200}>
@@ -62,10 +64,10 @@ export function SettingInfoTooltip({
                 )}
               >
                 {setting.evidenceLevel === "proven"
-                  ? "Proven"
+                  ? t("tooltip.proven")
                   : setting.evidenceLevel === "experimental"
-                    ? "Experimental"
-                    : "Likely"}
+                    ? t("tooltip.experimental")
+                    : t("tooltip.likely")}
               </span>
             </div>
           </div>
@@ -96,7 +98,7 @@ export function SettingInfoTooltip({
               {setting.currentImpact && (
                 <div className="text-xs space-y-0.5">
                   <span className="font-medium text-muted-foreground">
-                    Current:
+                    {t("tooltip.current")}
                   </span>
                   <p className="text-muted-foreground/80">
                     {setting.currentImpact}
@@ -134,7 +136,7 @@ export function SettingInfoTooltip({
                   setting.isReadonly ? "text-warning" : "text-primary",
                 )}
               >
-                {setting.isReadonly ? "How to change:" : "Effect:"}
+                {setting.isReadonly ? t("tooltip.howToChange") : t("tooltip.effect")}
               </span>
               <p className="text-muted-foreground">{setting.effect}</p>
               {setting.impactScores &&
@@ -199,7 +201,7 @@ export function SettingInfoTooltip({
           {!setting.isApplicable && (
             <div className="text-xs text-destructive flex items-center gap-1 pt-1 border-t border-destructive/20">
               <span className="inline-block w-1.5 h-1.5 rounded-full bg-destructive" />
-              {setting.applicableReason || "Not applicable to this system"}
+              {setting.applicableReason || t("detection.absentFallback")}
             </div>
           )}
         </TooltipContent>

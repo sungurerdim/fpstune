@@ -274,7 +274,7 @@ export function SettingsTab({
             {showOptimized &&
               (optimized.length === 0 ? (
                 <p className="text-sm text-muted-foreground">
-                  No optimized tweaks yet.
+                  {t("settings.noOptimizedYet")}
                 </p>
               ) : (
                 <TweakRows rows={optimized} />
@@ -294,6 +294,7 @@ export function SettingsTab({
  * button too, and its count is never a number the user cannot see.
  */
 function NeedsBand({ rows }: { rows: TweakRow[] }) {
+  const { t } = useT();
   const { apply, isApplying, lastResult } = useBulkApply();
 
   // Advisory rows are reported, never applied: fpstune can read the state and
@@ -311,14 +312,14 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
       <div className="flex items-center gap-2">
         <AlertCircle className="w-4 h-4 text-warning" />
         <h2 className="text-sm font-bold uppercase tracking-wider text-warning">
-          Needs optimization
+          {t("settings.needsOptimization")}
         </h2>
         <span className="text-xs text-muted-foreground/60">({rows.length})</span>
         {lastResult && (
           <span className="text-xs text-muted-foreground">
-            {lastResult.success} applied
+            {t("settings.appliedCount", { count: lastResult.success })}
             {lastResult.error > 0 && (
-              <span className="text-destructive"> · {lastResult.error} failed</span>
+              <span className="text-destructive">{t("settings.failedCount", { count: lastResult.error })}</span>
             )}
           </span>
         )}
@@ -334,14 +335,14 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
             ) : (
               <Zap className="w-3.5 h-3.5" />
             )}
-            Fix all {fixable.length}
+            {t("settings.fixAll", { count: fixable.length })}
           </button>
         )}
       </div>
 
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">
-          Nothing needs optimization.
+          {t("settings.nothingNeeds")}
         </p>
       ) : (
         <TweakRows rows={rows} />

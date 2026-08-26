@@ -367,6 +367,54 @@ export const en = {
   "verify.statusNoise": "Lost in the noise",
   "verify.statusUnmeasured": "Not measured",
   "verify.statusUnattributable": "Not attributable",
+
+  // Activity log
+  "activity.short": "Activity",
+  "activity.title": "Activity Log",
+  "activity.open": "Open activity log",
+  "activity.close": "Close activity log",
+
+  // Software Tweaks tab
+  "settings.searchPlaceholder": "Search settings...",
+  "settings.searchLabel": "Search settings",
+  "settings.filterCategory": "Filter by category",
+  "settings.filterImpact": "Filter by impact",
+  "settings.allCategories": "All categories",
+  "settings.allImpacts": "All impacts",
+  "settings.optimized": "Optimized",
+  "settings.noOptimizedYet": "No optimized tweaks yet.",
+  "settings.needsOptimization": "Needs optimization",
+  "settings.nothingNeeds": "Nothing needs optimization.",
+  "settings.fixAll": "Fix all {count}",
+  "settings.appliedCount": "{count} applied",
+  "settings.failedCount": " · {count} failed",
+
+  // Game Tweaks tab
+  "games.searchPlaceholder": "Search game settings...",
+  "games.searchLabel": "Search game settings",
+  "games.filterGame": "Filter by game",
+  "games.allGames": "All games",
+  "games.reading": "Reading your game configs…",
+  "games.noMatch": "No game setting matches that search.",
+  "games.noneFound":
+    "No supported game config was found on this machine. fpstune reads a game's config only where the game is installed.",
+
+  // Setting tooltip
+  "tooltip.current": "Current:",
+  "tooltip.recommended": "Recommended:",
+  "tooltip.effect": "Effect:",
+  "tooltip.howToChange": "How to change:",
+  "tooltip.proven": "Proven",
+  "tooltip.experimental": "Experimental",
+  "tooltip.likely": "Likely",
+
+  // Notifications
+  "toast.errorsRegion": "Errors and warnings",
+  "toast.region": "Notifications",
+  "toast.error": "Error",
+  "toast.warning": "Warning",
+  "toast.success": "Success",
+  "toast.info": "Information",
 } as const;
 
 export type MessageKey = keyof typeof en;

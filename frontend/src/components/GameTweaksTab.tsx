@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { useMemo, useState } from "react";
 import {
   AlertCircle,
@@ -44,6 +45,7 @@ interface GameSection {
  * write two files for one press.
  */
 export function GameTweaksTab() {
+  const { t } = useT();
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const detecting = useStore((state) => state.isAnyCategoryLoading());
@@ -123,8 +125,8 @@ export function GameTweaksTab() {
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground" />
           <input
             type="search"
-            placeholder="Search game settings..."
-            aria-label="Search game settings"
+            placeholder={t("games.searchPlaceholder")}
+            aria-label={t("games.searchLabel")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md text-foreground placeholder:text-muted-foreground"
@@ -133,10 +135,10 @@ export function GameTweaksTab() {
         <select
           value={gameFilter}
           onChange={(e) => setGameFilter(e.target.value)}
-          aria-label="Filter by game"
+          aria-label={t("games.filterGame")}
           className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md text-foreground"
         >
-          <option value="all">All games</option>
+          <option value="all">{t("games.allGames")}</option>
           {gameOptions.map((game) => (
             <option key={game.id} value={game.id}>
               {game.label}
@@ -156,10 +158,10 @@ export function GameTweaksTab() {
         // reading, filtered to nothing, or no supported game installed.
         <p className="text-sm text-muted-foreground">
           {detecting
-            ? "Reading your game configs…"
+            ? t("games.reading")
             : hiddenBySearch > 0
-              ? "No game setting matches that search."
-              : "No supported game config was found on this machine. fpstune reads a game's config only where the game is installed."}
+              ? t("games.noMatch")
+              : t("games.noneFound")}
         </p>
       ) : (
         sections.map((section) => (

@@ -1,4 +1,5 @@
 import { Check } from "lucide-react";
+import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -21,6 +22,7 @@ export function SettingValueState({
   setting: Setting;
   className?: string;
 }) {
+  const { t } = useT();
   // Actions (cleanup, shader cache) have no "current vs ideal" — they run or
   // they do not, and rendering an arrow between two booleans would be noise.
   if (setting.isAction) return null;
@@ -51,7 +53,7 @@ export function SettingValueState({
           screen reader as the bare number "5", and reached a red/green
           colour-blind user as nothing distinguishable either.
         */}
-        <span className="sr-only">Already at the recommended value: </span>
+        <span className="sr-only">{t("sr.optimal")}</span>
         <span className="truncate">{label(setting.currentValue)}</span>
       </span>
     );
@@ -64,14 +66,14 @@ export function SettingValueState({
       data-state="drifted"
     >
       {/* "100→5" read aloud is "one hundred five". */}
-      <span className="sr-only">Currently </span>
+      <span className="sr-only">{t("sr.currently")}</span>
       <span className="font-medium text-destructive truncate">
         {label(setting.currentValue)}
       </span>
       <span className="text-muted-foreground/70 shrink-0" aria-hidden>
         →
       </span>
-      <span className="sr-only">, recommended value is </span>
+      <span className="sr-only">{t("sr.recommendedIs")}</span>
       <span className="font-medium text-success truncate">
         {label(setting.recommendedValue)}
       </span>
@@ -92,6 +94,7 @@ export function ImpactCategoryTags({
   className?: string;
   max?: number;
 }) {
+  const { t } = useT();
   const categories = setting.impactCategories ?? [];
   if (categories.length === 0) return null;
 
@@ -112,7 +115,7 @@ export function ImpactCategoryTags({
             IMPACT_CATEGORY_META[c].className,
           )}
         >
-          {IMPACT_CATEGORY_META[c].label}
+          {t(IMPACT_CATEGORY_META[c].labelKey)}
         </span>
       ))}
       {hidden > 0 && (
@@ -137,6 +140,7 @@ export function RiskWarningBadge({
   setting: Setting;
   className?: string;
 }) {
+  const { t } = useT();
   if (!setting.riskWarning) return null;
 
   const isAdvanced = setting.riskLevel === "advanced";
@@ -154,7 +158,7 @@ export function RiskWarningBadge({
         className,
       )}
     >
-      {isAdvanced ? "RISK" : "NOTE"}
+      {isAdvanced ? t("badge.risk") : t("badge.note")}
     </span>
   );
 }

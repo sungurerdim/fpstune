@@ -76,6 +76,34 @@ export const en = {
   "action.reset": "Reset",
   "action.verify": "Verify",
   "action.keep": "Keep",
+
+  // Row surface
+  "row.ok": "OK",
+  "row.advisory": "Advisory",
+  "row.verify": "Verify current value",
+  "row.undo": "Undo fpstune's change, back to {value}",
+  "row.undoNamed": "Undo fpstune's change to {name}, back to {value}",
+  "row.undoTooltip":
+    "Undo fpstune's change — back to {value}, what this machine had before",
+  "row.resetDefault": "Restore the Windows default",
+  "row.target": "Target",
+  "row.applyNamed": "Apply {name}",
+  "sr.optimal": "Already at the recommended value: ",
+  "sr.currently": "Currently ",
+  "sr.recommendedIs": ", recommended value is ",
+  "badge.risk": "RISK",
+  "badge.note": "NOTE",
+
+  // Impact categories ("Heat & wear", not "Thermal": what it buys is a frame
+  // rate that still holds in minute forty)
+  "impact.latency": "Latency",
+  "impact.fps": "FPS",
+  "impact.thermal": "Heat & wear",
+  "impact.network": "Network",
+  "impact.resources": "Resources",
+  "impact.storage": "Storage",
+  "impact.privacy": "Privacy",
+  "impact.visual": "Visual",
 } as const;
 
 export type MessageKey = keyof typeof en;

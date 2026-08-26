@@ -71,4 +71,31 @@ export const tr: Record<keyof typeof en, string> = {
   "action.reset": "Sıfırla",
   "action.verify": "Doğrula",
   "action.keep": "Koru",
+  // Row surface
+  "row.ok": "Tamam",
+  "row.advisory": "Bilgilendirme",
+  "row.verify": "Mevcut değeri doğrula",
+  "row.undo": "fpstune'un değişikliğini geri al, {value} değerine dön",
+  "row.undoNamed":
+    "{name} için fpstune'un değişikliğini geri al, {value} değerine dön",
+  "row.undoTooltip":
+    "fpstune'un değişikliğini geri al — bu makinenin önceki değeri olan {value} geri gelir",
+  "row.resetDefault": "Windows varsayılanına döndür",
+  "row.target": "Hedef",
+  "row.applyNamed": "Uygula: {name}",
+  "sr.optimal": "Zaten önerilen değerde: ",
+  "sr.currently": "Şu an ",
+  "sr.recommendedIs": ", önerilen değer ",
+  "badge.risk": "RİSK",
+  "badge.note": "NOT",
+
+  // Impact categories
+  "impact.latency": "Gecikme",
+  "impact.fps": "FPS",
+  "impact.thermal": "Isı ve aşınma",
+  "impact.network": "Ağ",
+  "impact.resources": "Kaynaklar",
+  "impact.storage": "Depolama",
+  "impact.privacy": "Gizlilik",
+  "impact.visual": "Görsel",
 };

@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { useState, useMemo } from "react";
 import {
   Loader2,
@@ -60,6 +61,7 @@ export function SettingsTab({
   hasGpuSettings,
   getIconByName,
 }: SettingsTabProps) {
+  const { t } = useT();
   const [searchQuery, setSearchQuery] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
   // Filters by the kind of gain rather than the subsystem. "Which of these are
@@ -231,7 +233,7 @@ export function SettingsTab({
                     : "text-muted-foreground border-border hover:border-muted-foreground/50",
                 )}
               >
-                {IMPACT_CATEGORY_META[c].label}
+                {t(IMPACT_CATEGORY_META[c].labelKey)}
                 <span className="ml-1 opacity-60">{impactCounts.get(c)}</span>
               </button>
             ) : null,

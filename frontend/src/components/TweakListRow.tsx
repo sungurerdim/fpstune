@@ -1,5 +1,6 @@
 import { Button } from "./ui/Button";
 import { Zap, Undo2 } from "lucide-react";
+import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { formatBenefit } from "../lib/impact";
 import { useApplySingle } from "../hooks/useApplySingle";
@@ -24,6 +25,7 @@ export function TweakListRow({
   setting: Setting;
   categoryLabel?: string;
 }) {
+  const { t } = useT();
   const { applySingle, undoSingle, isPending } = useApplySingle();
   const pending = isPending(setting.id);
   const benefit = formatBenefit(setting);
@@ -76,8 +78,8 @@ export function TweakListRow({
         <button
           onClick={() => undoSingle(setting)}
           disabled={pending}
-          aria-label={`Undo fpstune's change to ${setting.displayName}, back to ${String(setting.originalValue)}`}
-          title={`Back to ${String(setting.originalValue)} — what this machine had before fpstune`}
+          aria-label={t("row.undoNamed", { name: setting.displayName, value: String(setting.originalValue) })}
+          title={t("row.undoTooltip", { value: String(setting.originalValue) })}
           className={cn(
             "shrink-0 flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-md font-medium transition-colors",
             "border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
@@ -85,7 +87,7 @@ export function TweakListRow({
           )}
         >
           <Undo2 className="w-3.5 h-3.5" aria-hidden />
-          Undo
+          {t("action.undo")}
         </button>
       )}
       {/* Home renders one of these per setting that needs changing — thirty on
@@ -96,10 +98,10 @@ export function TweakListRow({
         className="shrink-0"
         busy={pending}
         icon={<Zap className="w-3.5 h-3.5" />}
-        aria-label={`Apply ${setting.displayName}`}
+        aria-label={t("row.applyNamed", { name: setting.displayName })}
         onClick={() => applySingle(setting, setting.recommendedValue)}
       >
-        Apply
+        {t("action.apply")}
       </Button>
     </div>
   );

@@ -11,6 +11,7 @@
  * Row background: green = at recommended target, red = not at target.
  */
 
+import { useT } from "../i18n";
 import { Loader2, RotateCcw, ShieldCheck, CheckCircle2, XCircle, Undo2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
@@ -67,6 +68,7 @@ export function TweakSetting({
   contextLabel,
   contextIcon,
 }: TweakSettingProps) {
+  const { t } = useT();
   // Only show loading if never detected (initial load). Re-detect keeps previous value visible.
   const isInitialLoading =
     setting.status === "loading" && setting.currentValue === null;
@@ -220,7 +222,7 @@ export function TweakSetting({
                   : "text-warning border-warning/30 bg-warning/10",
               )}
             >
-              {isOptimal ? "OK" : "Advisory"}
+              {isOptimal ? t("row.ok") : t("row.advisory")}
             </span>
           ) : (
             <>
@@ -243,13 +245,13 @@ export function TweakSetting({
                         onClick={onVerify}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label="Verify current value"
+                        aria-label={t("row.verify")}
                       >
                         <ShieldCheck className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Verify current value
+                      {t("row.verify")}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -263,14 +265,15 @@ export function TweakSetting({
                         onClick={onUndo}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label={`Undo fpstune's change, back to ${String(setting.originalValue)}`}
+                        aria-label={t("row.undo", { value: String(setting.originalValue) })}
                       >
                         <Undo2 className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Undo fpstune's change — back to {String(setting.originalValue)}, what this
-                      machine had before
+                      {t("row.undoTooltip", {
+                        value: String(setting.originalValue),
+                      })}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -284,13 +287,13 @@ export function TweakSetting({
                         onClick={onReset}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label="Restore the Windows default"
+                        aria-label={t("row.resetDefault")}
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     </TooltipTrigger>
                     <TooltipContent side="top">
-                      Restore the Windows default
+                      {t("row.resetDefault")}
                       {setting.defaultValue !== undefined && ` (${String(setting.defaultValue)})`}
                     </TooltipContent>
                   </Tooltip>
@@ -334,7 +337,7 @@ export function TweakSetting({
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-xs shrink-0">Target</span>
+            <span className="text-muted-foreground/50 text-xs shrink-0">{t("row.target")}</span>
             <span className="text-primary font-medium break-words min-w-0">
               {setting.valueHints?.[String(profileTarget)] ?? formatSettingValue(profileTarget)}
             </span>

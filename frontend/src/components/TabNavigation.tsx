@@ -1,3 +1,6 @@
+import { setLocale, useT } from "../i18n";
+import { en } from "../i18n/en";
+import { tr } from "../i18n/tr";
 import { useMemo, useRef, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -42,6 +45,7 @@ export function TabNavigation() {
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
 
+  const { locale } = useT();
   const { data: systemInfo } = useQuery({
     queryKey: ["system"],
     queryFn: api.getSystemInfo,
@@ -192,6 +196,16 @@ export function TabNavigation() {
             {systemInfo?.os_display_version &&
               ` ${systemInfo.os_display_version}`}
           </span>
+          {/* The locale switch (F1). Two locales, one button: it names the
+              language it would switch TO, in that language, so a user who
+              cannot read the current one can still find their way home. */}
+          <button
+            onClick={() => setLocale(locale === "en" ? "tr" : "en")}
+            className="text-xs px-1.5 py-0.5 rounded border border-border text-muted-foreground hover:bg-muted transition-colors"
+            aria-label={locale === "en" ? tr["locale.switch"] : en["locale.switch"]}
+          >
+            {locale === "en" ? "TR" : "EN"}
+          </button>
         </div>
       </div>
     </div>

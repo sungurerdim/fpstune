@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Rocket } from "lucide-react";
+import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 
@@ -15,6 +16,7 @@ const STORAGE_KEY = "fpstune-welcomed";
  * persisted, and a returning user is not re-welcomed.
  */
 export function FirstRunNotice() {
+  const { t } = useT();
   const [dismissed, setDismissed] = useState(() => {
     try {
       return localStorage.getItem(STORAGE_KEY) === "true";
@@ -39,29 +41,19 @@ export function FirstRunNotice() {
     <Card className="p-4 space-y-2 border-primary/40">
       <p className="flex items-center gap-2 text-sm font-semibold">
         <Rocket className="w-4 h-4 text-primary" aria-hidden="true" />
-        Welcome to fpstune
+        {t("firstRun.title")}
       </p>
       <div className="text-sm text-muted-foreground space-y-1.5">
-        <p>
-          fpstune tunes this machine for the best gaming experience it is
-          capable of — frame rate first, derived from your own hardware, never
-          from a generic preset.
-        </p>
+        <p>{t("firstRun.what")}</p>
         <p>
           <strong className="text-foreground">
-            Nothing has been changed yet.
+            {t("firstRun.nothingChanged")}
           </strong>{" "}
-          Opening the app only reads your current settings. Every change waits
-          for your click, every change can be undone from the same row, and
-          the bulk buttons offer a System Restore point first.
+          {t("firstRun.nothingChangedBody")}
         </p>
-        <p>
-          The shield in the top corner shows whether fpstune is running as
-          Administrator. Windows requires it for most tweaks — without it you
-          can look at everything, but most Apply buttons will not work.
-        </p>
+        <p>{t("firstRun.admin")}</p>
       </div>
-      <Button onClick={dismiss}>Got it — show me the machine</Button>
+      <Button onClick={dismiss}>{t("firstRun.dismiss")}</Button>
     </Card>
   );
 }

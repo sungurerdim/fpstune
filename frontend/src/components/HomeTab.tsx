@@ -23,6 +23,7 @@ import { useBulkApply } from "../hooks/useBulkApply";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
+import { useT } from "../i18n";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
@@ -47,6 +48,7 @@ import type { Setting } from "../types/setting";
  * headline of total potential and one-click Apply All / Run All.
  */
 export function HomeTab() {
+  const { t } = useT();
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
   const categories = useStore((s) => s.categories);
@@ -251,7 +253,7 @@ export function HomeTab() {
         checked={restoreFirst}
         onChange={(event) => setRestoreFirst(event.target.checked)}
       />
-      Create a System Restore point first (recommended)
+      {t("scope.restoreFirst")}
     </label>
   );
 
@@ -279,13 +281,13 @@ export function HomeTab() {
             onClick={() => setPendingButton("competitive")}
             disabled={isApplying || competitiveTargets.length === 0}
           >
-            Competitive Max
+            {t("scope.competitive")}
             <span className="font-normal opacity-80">
               · {competitiveTargets.length}
             </span>
           </Button>
           <span className="text-xs text-muted-foreground">
-            The most frames without touching what you can see or hear.
+            {t("scope.competitiveHint")}
           </span>
           <Button
             size="md"
@@ -295,14 +297,13 @@ export function HomeTab() {
             onClick={() => setPendingButton("absolute")}
             disabled={isApplying || absoluteTargets.length === 0}
           >
-            Absolute Max
+            {t("scope.absolute")}
             <span className="font-normal opacity-80">
               · {absoluteTargets.length}
             </span>
           </Button>
           <span className="text-xs text-muted-foreground">
-            Every setting to its frame-rate extreme — quality is spent, and the
-            cost is listed before anything runs.
+            {t("scope.absoluteHint")}
           </span>
         </Card>
       )}
@@ -633,33 +634,32 @@ export function HomeTab() {
 
       <ConfirmDialog
         open={pendingButton === "competitive"}
-        title={`Apply Competitive Max? (${competitiveTargets.length} settings)`}
-        confirmLabel="Apply"
+        title={t("scope.competitiveConfirmTitle", {
+          count: competitiveTargets.length,
+        })}
+        confirmLabel={t("scope.apply")}
         onConfirm={() => void runScope(competitiveTargets)}
         onCancel={() => setPendingButton(null)}
       >
         <div className="space-y-2">
-          <p>
-            Applies every essential and recommended tweak — the most frames this
-            machine can reach without changing anything you can see or hear
-            in-game. Settings that spend visual or audio quality are left alone.
-          </p>
+          <p>{t("scope.competitiveConfirmBody")}</p>
           {restoreFirstCheckbox}
         </div>
       </ConfirmDialog>
 
       <ConfirmDialog
         open={pendingButton === "absolute"}
-        title={`Apply Absolute Max? (${absoluteTargets.length} settings)`}
-        confirmLabel="Spend it"
+        title={t("scope.absoluteConfirmTitle", {
+          count: absoluteTargets.length,
+        })}
+        confirmLabel={t("scope.spendIt")}
         onConfirm={() => void runScope(absoluteTargets)}
         onCancel={() => setPendingButton(null)}
       >
         <div className="space-y-2">
           <p>
-            Pushes every setting to its frame-rate extreme, including the ones
-            that spend picture and sound quality.
-            {absoluteCosts.length > 0 && " What you give up:"}
+            {t("scope.absoluteConfirmBody")}
+            {absoluteCosts.length > 0 && ` ${t("scope.whatYouGiveUp")}`}
           </p>
           {/* Each sentence is the setting's own perceptible_cost — the cost is
               on screen before anything runs, never discovered afterwards. */}

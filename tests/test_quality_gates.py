@@ -184,6 +184,11 @@ class TestC4EnglishOnly:
         offenders: list[str] = []
         for path in _shipped_sources():
             relative = path.relative_to(ROOT).as_posix()
+            # The i18n layer is where Turkish is *supposed* to live (F1: the
+            # UI ships en + tr). Code, comments and identifiers elsewhere stay
+            # English — this carve-out is one directory, not a licence.
+            if relative.startswith("frontend/src/i18n/"):
+                continue
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), start=1):
                 if not _TURKISH_LETTERS & set(line):
                     continue
@@ -383,3 +388,42 @@ class TestB6NoAssumedDeviceCapability:
                     )
 
         assert not problems, "\n".join(problems)
+
+
+class TestF4CopyRegister:
+    """The backend half of F4: setting copy carries the plain-language register.
+
+    ``short_name`` is the plain name a row leads with; at the F1 audit 375 of
+    395 settings had none — the row led with Windows-internals prose. The
+    count below is the frozen ceiling and may only shrink: a new setting must
+    ship a ``short_name``, and every F2 rewrite lowers the number here in the
+    same change, so the migration is on the record.
+    """
+
+    # Frozen at the F1 landing (2026-08-26): 375 of 395 settings unnamed.
+    _MISSING_SHORT_NAME_CEILING = 375
+
+    def test_the_unnamed_count_only_shrinks(self) -> None:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        missing = [
+            setting.id
+            for setting in get_all_static_settings()
+            if not getattr(setting, "short_name", None)
+        ]
+        assert len(missing) <= self._MISSING_SHORT_NAME_CEILING, (
+            "a new setting shipped without a short_name — the plain name a row "
+            f"leads with is not optional (F4): {len(missing)} unnamed, ceiling "
+            f"is {self._MISSING_SHORT_NAME_CEILING}"
+        )
+
+    def test_the_ceiling_is_not_stale(self) -> None:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        missing = sum(
+            1 for setting in get_all_static_settings() if not getattr(setting, "short_name", None)
+        )
+        assert missing == self._MISSING_SHORT_NAME_CEILING, (
+            f"the register improved ({missing} unnamed) — lower "
+            "_MISSING_SHORT_NAME_CEILING so the shrink is on the record"
+        )

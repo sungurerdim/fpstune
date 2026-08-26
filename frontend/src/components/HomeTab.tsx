@@ -29,6 +29,7 @@ import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
+import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
@@ -260,6 +261,8 @@ export function HomeTab() {
 
   return (
     <div className="space-y-4 pb-8">
+      {/* What this is and that nothing has been touched — once, first. */}
+      <FirstRunNotice />
       {/* Home owns the whole product, so its notice owns every setting. */}
       <DetectionNotice />
       {/* And its self-check owns every detector (A12): a disagreement between

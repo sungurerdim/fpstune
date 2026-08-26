@@ -270,8 +270,9 @@ class TestB6NoAssumedDeviceCapability:
             re.compile(r"NumericParameterMinValue,\s*256"),
             "the driver publishes its stock buffer count as "
             "DefaultRegistryValue; writing 256 makes reset write a value that "
-            "was never this driver's default (B1)",
-            {"src/fpstune/settings/definitions/network.py": 2},
+            "was never this driver's default (B1, fixed — the baseline entry "
+            "is gone)",
+            {},
         ),
         (
             "rss_base_core_constant",

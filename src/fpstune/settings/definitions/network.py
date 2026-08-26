@@ -2539,11 +2539,17 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*ReceiveBuffers' -ErrorAction Stop; "
             "$max = [int]$prop.NumericParameterMaxValue; "
+            # The stock value is the driver's own DefaultRegistryValue, never a
+            # constant: 256 was a third thing — neither this driver's default nor
+            # its maximum — so reset wrote a value the machine never held (C6).
+            # A driver that publishes no default fails loudly rather than letting
+            # an invented stock value pass as a reset.
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
-            "[Math]::Max([int]$prop.NumericParameterMinValue, 256) }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "[int]$prop.DefaultRegistryValue }; "
+            "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*ReceiveBuffers' -RegistryValue $val -ErrorAction Stop; "
-            "'ok' "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -2612,11 +2618,17 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
             "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*TransmitBuffers' -ErrorAction Stop; "
             "$max = [int]$prop.NumericParameterMaxValue; "
+            # The stock value is the driver's own DefaultRegistryValue, never a
+            # constant: 256 was a third thing — neither this driver's default nor
+            # its maximum — so reset wrote a value the machine never held (C6).
+            # A driver that publishes no default fails loudly rather than letting
+            # an invented stock value pass as a reset.
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
-            "[Math]::Max([int]$prop.NumericParameterMinValue, 256) }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "[int]$prop.DefaultRegistryValue }; "
+            "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
             "-RegistryKeyword '*TransmitBuffers' -RegistryValue $val -ErrorAction Stop; "
-            "'ok' "
+            "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},

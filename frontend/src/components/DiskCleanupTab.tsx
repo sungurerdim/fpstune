@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { Gamepad2, Trash2 } from "lucide-react";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
@@ -17,6 +18,7 @@ import { DockerConfirmModal } from "./DockerConfirmModal";
  * label promises disk space.
  */
 export function DiskCleanupTab() {
+  const { t } = useT();
   const runner = useCleanupRunner({ modules: ["cleanup", "game_cleanup"] });
 
   return (
@@ -34,8 +36,10 @@ export function DiskCleanupTab() {
           onClick={() => runner.run()}
         >
           {runner.isRunning
-            ? "Running..."
-            : `Run Cleanup${runner.hasSelection ? ` (${runner.selectedCount})` : ""}`}
+            ? t("maintenance.running")
+            : runner.hasSelection
+              ? t("cleanup.runCleanupCount", { count: runner.selectedCount })
+              : t("cleanup.runCleanup")}
         </Button>
       </div>
 
@@ -44,9 +48,9 @@ export function DiskCleanupTab() {
         <CleanupPanel
           initialCollapsed={false}
           module="game_cleanup"
-          title="Game Maintenance"
+          title={t("cleanup.gameTitle")}
           icon={Gamepad2}
-          description="Clear game, GPU shader, and launcher caches. Deleted files cannot be recovered; games and drivers rebuild caches on next launch."
+          description={t("cleanup.gameDescription")}
         />
       </div>
 

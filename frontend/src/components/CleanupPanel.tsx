@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { Card } from "./ui/Card";
 import { useState, useMemo } from "react";
 import {
@@ -37,9 +38,9 @@ interface CleanupGroup {
 export function CleanupPanel({
   initialCollapsed = true,
   module = "cleanup",
-  title = "System Cleanup",
+  title,
   icon: HeaderIcon = Trash2,
-  description = "Select which items to clean. Deleted files cannot be recovered.",
+  description,
 }: {
   initialCollapsed?: boolean;
   module?: string;
@@ -47,6 +48,9 @@ export function CleanupPanel({
   icon?: LucideIcon;
   description?: string;
 }) {
+  const { t } = useT();
+  const resolvedTitle = title ?? t("cleanup.systemTitle");
+  const resolvedDescription = description ?? t("cleanup.systemDescription");
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
@@ -131,7 +135,7 @@ export function CleanupPanel({
       >
         <div className="flex items-center gap-2">
           <HeaderIcon className="w-5 h-5 text-primary" />
-          <h3 className="font-semibold">{title}</h3>
+          <h3 className="font-semibold">{resolvedTitle}</h3>
         </div>
         {isCollapsed ? (
           <ChevronRight className="w-5 h-5 text-muted-foreground" />
@@ -143,7 +147,7 @@ export function CleanupPanel({
       {/* Collapsible Content */}
       {!isCollapsed && (
         <div className="px-4 pb-4 flex flex-col max-h-[calc(100vh-12rem)]">
-          <p className="text-sm text-muted-foreground mb-4">{description}</p>
+          <p className="text-sm text-muted-foreground mb-4">{resolvedDescription}</p>
 
           <div className="space-y-4 overflow-y-auto flex-1 pr-1">
             {groups.map((group) => (
@@ -176,7 +180,7 @@ export function CleanupPanel({
                           if (size === "unavailable") {
                             return (
                               <span
-                                title="Service not running and could not be started. Start it, then reopen this tab."
+                                title={t("cleanup.serviceDown")}
                                 className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
                               >
                                 <AlertTriangle className="w-3 h-3" />

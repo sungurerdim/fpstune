@@ -132,4 +132,45 @@ export const tr: Record<keyof typeof en, string> = {
   "home.latencyTweaks": "gecikme ayarı",
   "home.memoryTweaks": "bellek ayarı",
   "home.diskToReclaim": "geri kazanılabilir disk",
+  // Cleanup & maintenance surfaces
+  "cleanup.systemTitle": "Sistem Temizliği",
+  "cleanup.systemDescription":
+    "Temizlenecek öğeleri seçin. Silinen dosyalar geri getirilemez.",
+  "cleanup.gameTitle": "Oyun Bakımı",
+  "cleanup.gameDescription":
+    "Oyun, GPU shader ve başlatıcı önbelleklerini temizler. Silinen dosyalar geri getirilemez; oyunlar ve sürücüler önbellekleri bir sonraki açılışta yeniden oluşturur.",
+  "cleanup.results": "Temizlik Sonuçları",
+  "cleanup.resultsEmpty":
+    "Aşağıdan öğeleri seçip temizliği çalıştırın; boşalan alan burada görünür.",
+  "cleanup.calculating": "Hesaplanıyor…",
+  "cleanup.freed": "{amount} boşaltıldı",
+  "cleanup.failedCount": "{count} başarısız",
+  "cleanup.failed": "Başarısız",
+  "cleanup.done": "Tamamlandı",
+  "cleanup.serviceDown":
+    "Hizmet çalışmıyor ve başlatılamadı. Hizmeti başlatıp bu sekmeyi yeniden açın.",
+  "cleanup.runCleanup": "Temizliği Çalıştır",
+  "cleanup.runCleanupCount": "Temizliği Çalıştır ({count})",
+  "maintenance.title": "Sistem Bakımı",
+  "maintenance.description": "Windows sistem sorunlarını onarır ve giderir.",
+  "maintenance.running": "Çalışıyor...",
+  "maintenance.run": "Çalıştır",
+  "maintenance.runCount": "Çalıştır ({count})",
+  "docker.title": "Docker ve WSL yeniden başlatılsın mı?",
+  "docker.confirm": "Buda ve sıkıştır",
+  "docker.body":
+    "Docker Desktop ve tüm WSL dağıtımları kapatılıp yeniden başlatılacak; böylece sanal diskleri sıkıştırılır ve alan gerçekten geri kazanılır. Bu birkaç dakika sürebilir. Önce çalışmanızı kaydedin.",
+
+  // Selection toolbar
+  "toolbar.advancedTitle": "Gelişmiş ince ayarlar seçili",
+  "toolbar.applyAnyway": "Yine de uygula",
+  "toolbar.advancedBody":
+    "Seçiminizde Gelişmiş olarak işaretli ayarlar var. Bunlar deneyseldir ve donanımınıza göre farklı davranabilir. Devam edilsin mi?",
+  "toolbar.selected": "{count} seçili",
+  "toolbar.clear": "Temizle",
+  "toolbar.processing": "İşleniyor…",
+  "toolbar.stop": "Durdur",
+  "toolbar.resetSelected": "Seçilenleri Sıfırla",
+  "toolbar.applySelected": "Seçilenleri Uygula",
+  "toolbar.resetToDefaults": "Varsayılanlara Sıfırla ({count})",
 };

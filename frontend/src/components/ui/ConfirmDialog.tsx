@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
+import { useT } from "../../i18n";
 import { Button } from "./Button";
 
 /**
@@ -33,7 +34,7 @@ export interface ConfirmDialogProps {
   title: string;
   /** The explanation, pointed at by `aria-describedby`. */
   children: ReactNode;
-  /** The affirmative button's words. Cancel is always "Cancel". */
+  /** The affirmative button's words. Cancel is always the catalogue's cancel. */
   confirmLabel: string;
   onConfirm: () => void;
   onCancel: () => void;
@@ -47,6 +48,7 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
+  const { t } = useT();
   const titleId = useId();
   const descriptionId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
@@ -139,7 +141,7 @@ export function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>
-            Cancel
+            {t("action.cancel")}
           </Button>
           <Button variant="confirm" onClick={onConfirm}>
             {confirmLabel}

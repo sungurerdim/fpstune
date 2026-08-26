@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { useMemo } from "react";
@@ -22,6 +23,7 @@ import type { Setting } from "../types/setting";
  * the same sentence.
  */
 export function MaintenancePanel() {
+  const { t } = useT();
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const selection = useStore((state) => state.maintenanceSelection);
@@ -52,9 +54,9 @@ export function MaintenancePanel() {
       <div className="flex items-center gap-3 p-4 border-b border-border flex-wrap">
         <Wrench className="w-5 h-5 text-warning shrink-0" />
         <div className="min-w-0">
-          <h3 className="font-semibold">System Maintenance</h3>
+          <h3 className="font-semibold">{t("maintenance.title")}</h3>
           <p className="text-xs text-muted-foreground">
-            Repair and troubleshoot Windows system issues.
+            {t("maintenance.description")}
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3 min-w-0">
@@ -70,8 +72,10 @@ export function MaintenancePanel() {
             onClick={() => runner.run()}
           >
             {runner.isRunning
-              ? "Running..."
-              : `Run${runner.hasSelection ? ` (${runner.selectedCount})` : ""}`}
+              ? t("maintenance.running")
+              : runner.hasSelection
+                ? t("maintenance.runCount", { count: runner.selectedCount })
+                : t("maintenance.run")}
           </Button>
         </div>
       </div>

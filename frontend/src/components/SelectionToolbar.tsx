@@ -3,6 +3,7 @@
  * Appears when ≥1 setting is selected; tracks per-setting operation status in store.
  */
 
+import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { useState } from "react";
 import { X, Zap, RotateCcw, Loader2, AlertTriangle } from "lucide-react";
@@ -14,6 +15,7 @@ import { valuesEqual } from "../types/setting";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 export function SelectionToolbar() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const selectedSettingIds = useStore((s) => s.selectedSettingIds);
   const clearSelection = useStore((s) => s.clearSelection);
@@ -103,17 +105,15 @@ export function SelectionToolbar() {
       {/* Advanced warning confirmation */}
       <ConfirmDialog
         open={pendingAction !== null}
-        title="Advanced tweaks selected"
-        confirmLabel="Apply anyway"
+        title={t("toolbar.advancedTitle")}
+        confirmLabel={t("toolbar.applyAnyway")}
         onConfirm={() => {
           if (pendingAction) runBulk(pendingAction);
           setPendingAction(null);
         }}
         onCancel={() => setPendingAction(null)}
       >
-        Your selection includes settings marked <strong>Advanced</strong>. These
-        are experimental and may behave differently depending on your hardware.
-        Proceed?
+        {t("toolbar.advancedBody")}
       </ConfirmDialog>
 
       {/* Sticky toolbar */}
@@ -125,7 +125,7 @@ export function SelectionToolbar() {
         )}
       >
         <span className="text-sm font-medium text-foreground">
-          {selectedSettingIds.size} selected
+          {t("toolbar.selected", { count: selectedSettingIds.size })}
         </span>
 
         <button
@@ -134,13 +134,13 @@ export function SelectionToolbar() {
           className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
         >
           <X className="w-3.5 h-3.5" />
-          Clear
+          {t("toolbar.clear")}
         </button>
 
         {isRunning && (
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Processing…
+            {t("toolbar.processing")}
           </span>
         )}
 
@@ -150,7 +150,7 @@ export function SelectionToolbar() {
               onClick={handleCancel}
               className="px-3 py-1.5 text-xs rounded border border-border hover:bg-muted transition-colors"
             >
-              Stop
+              {t("toolbar.stop")}
             </button>
           ) : (
             <>
@@ -159,14 +159,14 @@ export function SelectionToolbar() {
                 className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border border-border hover:bg-muted text-foreground transition-colors"
               >
                 <RotateCcw className="w-3.5 h-3.5" />
-                Reset Selected
+                {t("toolbar.resetSelected")}
               </button>
               <Button
                 variant={hasAdvanced ? "confirm" : "primary"}
                 icon={<Zap className="w-3.5 h-3.5" />}
                 onClick={() => handleAction("apply")}
               >
-                Apply Selected
+                {t("toolbar.applySelected")}
                 {hasAdvanced && (
                   <AlertTriangle className="w-3 h-3 ml-0.5" />
                 )}

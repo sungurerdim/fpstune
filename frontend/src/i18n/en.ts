@@ -138,6 +138,48 @@ export const en = {
   "home.latencyTweaks": "latency tweaks",
   "home.memoryTweaks": "memory tweaks",
   "home.diskToReclaim": "disk to reclaim",
+
+  // Cleanup & maintenance surfaces
+  "cleanup.systemTitle": "System Cleanup",
+  "cleanup.systemDescription":
+    "Select which items to clean. Deleted files cannot be recovered.",
+  "cleanup.gameTitle": "Game Maintenance",
+  "cleanup.gameDescription":
+    "Clear game, GPU shader, and launcher caches. Deleted files cannot be recovered; games and drivers rebuild caches on next launch.",
+  "cleanup.results": "Cleanup Results",
+  "cleanup.resultsEmpty":
+    "Select items below and run a cleanup to see freed space here.",
+  "cleanup.calculating": "Calculating…",
+  "cleanup.freed": "Freed {amount}",
+  "cleanup.failedCount": "{count} failed",
+  "cleanup.failed": "Failed",
+  "cleanup.done": "Done",
+  "cleanup.serviceDown":
+    "Service not running and could not be started. Start it, then reopen this tab.",
+  "cleanup.runCleanup": "Run Cleanup",
+  "cleanup.runCleanupCount": "Run Cleanup ({count})",
+  "maintenance.title": "System Maintenance",
+  "maintenance.description": "Repair and troubleshoot Windows system issues.",
+  "maintenance.running": "Running...",
+  "maintenance.run": "Run",
+  "maintenance.runCount": "Run ({count})",
+  "docker.title": "Restart Docker & WSL?",
+  "docker.confirm": "Prune & compact",
+  "docker.body":
+    "Docker Desktop and all WSL distributions will be shut down and restarted so their virtual disk can be compacted and the space truly returned. This can take several minutes. Save your work first.",
+
+  // Selection toolbar
+  "toolbar.advancedTitle": "Advanced tweaks selected",
+  "toolbar.applyAnyway": "Apply anyway",
+  "toolbar.advancedBody":
+    "Your selection includes settings marked Advanced. These are experimental and may behave differently depending on your hardware. Proceed?",
+  "toolbar.selected": "{count} selected",
+  "toolbar.clear": "Clear",
+  "toolbar.processing": "Processing…",
+  "toolbar.stop": "Stop",
+  "toolbar.resetSelected": "Reset Selected",
+  "toolbar.applySelected": "Apply Selected",
+  "toolbar.resetToDefaults": "Reset to Defaults ({count})",
 } as const;
 
 export type MessageKey = keyof typeof en;

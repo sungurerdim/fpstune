@@ -1,3 +1,4 @@
+import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import {
   Trash2,
@@ -24,6 +25,7 @@ export function CleanupListRow({
   setting: Setting;
   runner: CleanupRunner;
 }) {
+  const { t } = useT();
   const result = useStore((s) => s.cleanupResults[setting.id]);
   const size = parseCleanupSize(setting.currentValue);
 
@@ -39,7 +41,7 @@ export function CleanupListRow({
     if (size === "unavailable") {
       return (
         <span
-          title="Service not running and could not be started. Start it, then reopen this tab."
+          title={t("cleanup.serviceDown")}
           className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
         >
           <AlertTriangle className="w-3 h-3" />
@@ -112,7 +114,7 @@ export function CleanupListRow({
         icon={<Trash2 className="w-3.5 h-3.5" />}
         onClick={() => runner.run([setting.id])}
       >
-        Run
+        {t("action.run")}
       </Button>
     </div>
   );

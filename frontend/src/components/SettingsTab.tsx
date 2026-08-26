@@ -167,14 +167,14 @@ export function SettingsTab({
             aria-label="Search settings"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <select
           value={categoryFilter}
           onChange={(e) => setCategoryFilter(e.target.value)}
           aria-label="Filter by category"
-          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md text-foreground"
         >
           <option value="all">All categories</option>
           {categoryOptions.map((c) => (

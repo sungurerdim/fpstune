@@ -91,7 +91,7 @@ export function MaintenancePanel() {
               type="checkbox"
               checked={selection[setting.id] ?? false}
               onChange={() => toggleSelection(setting.id)}
-              className="mt-1 h-4 w-4 rounded border-border text-warning focus:ring-warning"
+              className="mt-1 h-4 w-4 rounded border-border text-warning"
             />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">

@@ -127,14 +127,14 @@ export function GameTweaksTab() {
             aria-label="Search game settings"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground placeholder:text-muted-foreground"
+            className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md text-foreground placeholder:text-muted-foreground"
           />
         </div>
         <select
           value={gameFilter}
           onChange={(e) => setGameFilter(e.target.value)}
           aria-label="Filter by game"
-          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md focus:outline-none focus:ring-1 focus:ring-primary text-foreground"
+          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md text-foreground"
         >
           <option value="all">All games</option>
           {gameOptions.map((game) => (

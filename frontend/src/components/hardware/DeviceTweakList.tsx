@@ -87,7 +87,7 @@ export function DeviceTweakList({
           aria-label={
             showAll ? "Hide tweaks already ideal" : "Show tweaks already ideal"
           }
-          className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground"
           disabled={listable.length === 0}
         >
           {showAll ? (
@@ -120,7 +120,7 @@ export function DeviceTweakList({
             onClick={applyAll}
             disabled={isApplying}
             className={cn(
-              "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
               isApplying
                 ? "cursor-wait bg-muted text-muted-foreground"
                 : "bg-warning/20 text-warning hover:bg-warning/30",
@@ -190,7 +190,7 @@ function TweakRow({
             onClick={onApply}
             disabled={pending}
             aria-label={`Apply ${setting.displayName}`}
-            className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
           >
             {pending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Fix"}
           </button>

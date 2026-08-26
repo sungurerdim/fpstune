@@ -163,7 +163,7 @@ export function CleanupPanel({
                       type="checkbox"
                       checked={selection[setting.id] ?? false}
                       onChange={() => toggleSelection(setting.id)}
-                      className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary"
+                      className="mt-1 h-4 w-4 rounded border-border text-primary"
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
@@ -310,7 +310,7 @@ function GroupHeader({ group }: { group: CleanupGroup }) {
         }}
         onChange={() => setSelection(ids, !allSelected)}
         aria-label={`Select all in ${group.label}`}
-        className="h-3.5 w-3.5 rounded border-border text-primary focus:ring-primary"
+        className="h-3.5 w-3.5 rounded border-border text-primary"
       />
       <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
         {group.label}

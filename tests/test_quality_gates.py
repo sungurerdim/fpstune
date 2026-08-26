@@ -485,3 +485,113 @@ class TestC10VendorSymmetry:
             f"the vendor counts moved ({counts}) — update the recorded gap "
             "here so C10's escape hatch stays truthful"
         )
+
+
+class TestFunctionLengthCeiling:
+    """H3's KISS gate: the twelve functions over 140 lines are the ceiling.
+
+    Length is a proxy, and an honest one here: every function on this list
+    interleaves at least two jobs (get_monitors parses three PowerShell
+    outputs and correlates them; toggle_loudness_eq mixes device lookup,
+    registry writes and service restarts). The frozen set may only shrink —
+    a NEW function over the floor fails immediately, and splitting one of
+    these must remove its entry in the same change, so every simplification
+    is on the record. The tested ones (toggle_loudness_eq,
+    toggle_network_adapter) are the safe ones to split first.
+    """
+
+    _FLOOR = 140
+
+    # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
+    _CEILING = {
+        ("src/fpstune/utils/detect.py", "get_monitors"): 355,
+        ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
+        ("src/fpstune/settings/executors/powershell.py", "detect"): 251,
+        ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
+        ("src/fpstune/api/routes/settings_stream.py", "_stream_grouped"): 214,
+        ("src/fpstune/api/main.py", "create_app"): 197,
+        ("src/fpstune/api/routes/debug.py", "diagnose_monitors"): 182,
+        ("src/fpstune/settings/detection.py", "detect_all"): 165,
+        ("src/fpstune/settings/executors/bcdedit.py", "_get_all_values_wmi"): 152,
+        ("src/fpstune/core/nv_profile.py", "read_applied_settings"): 146,
+        ("src/fpstune/api/routes/display.py", "set_display_to_auto"): 144,
+        ("src/fpstune/core/nv_profile.py", "to_settings_dict"): 143,
+    }
+
+    def _long_functions(self) -> dict[tuple[str, str], int]:
+        import ast
+
+        found: dict[tuple[str, str], int] = {}
+        for path in (ROOT / "src" / "fpstune").rglob("*.py"):
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            relative = path.relative_to(ROOT).as_posix()
+            for node in ast.walk(tree):
+                if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    length = (node.end_lineno or node.lineno) - node.lineno + 1
+                    if length > self._FLOOR:
+                        found[(relative, node.name)] = length
+        return found
+
+    def test_no_function_grows_past_its_ceiling(self) -> None:
+        offenders = []
+        for key, length in self._long_functions().items():
+            allowed = self._CEILING.get(key)
+            if allowed is None or length > allowed:
+                offenders.append(f"{key[0]}::{key[1]} is {length} lines (ceiling {allowed})")
+        assert not offenders, (
+            "functions past the KISS ceiling — split them, or shrink an "
+            "existing entry instead of growing it: " + "; ".join(offenders)
+        )
+
+    def test_the_ceiling_only_shrinks(self) -> None:
+        found = self._long_functions()
+        stale = [
+            f"{key[0]}::{key[1]}: now {found.get(key, 0)} lines, ceiling says {allowed}"
+            for key, allowed in self._CEILING.items()
+            if found.get(key, 0) < allowed
+        ]
+        assert not stale, (
+            "functions that shrank — lower their ceiling entries so the "
+            "simplification is on the record: " + "; ".join(stale)
+        )
+
+
+class TestRouteModuleCeiling:
+    """H1's SoC gate: route modules stop growing.
+
+    routes/settings.py peaked at ~1800 lines before the D4 deletions;
+    the ceilings below freeze today's sizes so a module can only shrink —
+    new surface area goes into a sibling module (settings_stream.py and the
+    system_* splits are the precedent), never onto the largest file.
+    """
+
+    # Frozen at the H1 audit (2026-08-26), in lines.
+    _CEILING = {
+        "src/fpstune/api/routes/settings.py": 1296,
+        "src/fpstune/api/routes/display.py": 721,
+        "src/fpstune/api/routes/debug.py": 555,
+    }
+
+    def test_no_route_module_grows_past_its_ceiling(self) -> None:
+        offenders = []
+        for path in (ROOT / "src" / "fpstune" / "api" / "routes").glob("*.py"):
+            relative = path.relative_to(ROOT).as_posix()
+            lines = len(path.read_text(encoding="utf-8").splitlines())
+            allowed = self._CEILING.get(relative, 500)
+            if lines > allowed:
+                offenders.append(f"{relative}: {lines} lines (ceiling {allowed})")
+        assert not offenders, (
+            "route modules past their SoC ceiling — new surface goes in a "
+            "sibling module: " + "; ".join(offenders)
+        )
+
+    def test_the_ceilings_are_not_stale(self) -> None:
+        stale = []
+        for relative, allowed in self._CEILING.items():
+            lines = len((ROOT / relative).read_text(encoding="utf-8").splitlines())
+            if lines < allowed - 50:
+                stale.append(f"{relative}: now {lines}, ceiling says {allowed}")
+        assert not stale, (
+            "modules that shrank well below their ceiling — lower the entries "
+            "so the improvement is on the record: " + "; ".join(stale)
+        )

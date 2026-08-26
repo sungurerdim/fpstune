@@ -1,0 +1,37 @@
+# TEMPLATE — NOT PUBLISHABLE AS CHECKED IN. The InstallerSha256 below is a
+# zeroed placeholder and the InstallerUrl points at a release tag that has not
+# been published. `scripts/update_winget_manifest.py` rewrites the version, the
+# URL and the checksum from the published release's own bytes; nothing may be
+# submitted to winget-pkgs until that script has run against a real release.
+# The release workflow now runs that script against the binary it just built and
+# uploads the result as the `winget-manifest` artifact; submission to
+# winget-pkgs stays a human step, and no workflow pushes to that repository.
+PackageIdentifier: sungurerdim.fpstune
+PackageVersion: 0.1.0
+InstallerType: portable
+# One file, nothing to unpack, no uninstaller to leave behind. `portable` is the
+# honest type for that; calling it an installer would have winget promise an
+# Add/Remove Programs entry that does not exist.
+Commands:
+  - fpstune
+# fpstune writes to HKLM, service start types and power schemes, so the binary
+# carries an elevation manifest and Windows prompts on launch. Declaring it here
+# means winget knows the install itself needs elevation too, rather than failing
+# halfway through.
+ElevationRequirement: elevatesSelf
+InstallModes:
+  - interactive
+  - silent
+# No ReleaseDate here on purpose, still: the script inserts it directly under
+# PackageVersion from the day the release is published. Typing one in would put
+# a date nobody released on into every future version, which is the whole reason
+# the field moved into the script.
+Installers:
+  - Architecture: x64
+    InstallerUrl: https://github.com/sungurerdim/fpstune/releases/download/v0.1.0/fpstune.exe
+    # Filled in by scripts/update_winget_manifest.py from the published
+    # fpstune.exe.sha256, never typed by hand — a checksum copied by a person is
+    # a checksum nobody verified.
+    InstallerSha256: 0000000000000000000000000000000000000000000000000000000000000000
+ManifestType: installer
+ManifestVersion: 1.6.0

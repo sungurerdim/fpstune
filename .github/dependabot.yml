@@ -1,0 +1,81 @@
+# Two lockfiles were being watched by nobody. `uv.lock` pins the Python side and
+# `frontend/package-lock.json` pins 40+ npm packages, and the last sweep of
+# either was done by hand — which is a sweep that happens when someone
+# remembers, on a repo that is about to be public and ships an unsigned,
+# self-elevating executable.
+#
+# The schedule is the part that decides whether this survives. A solo project
+# that wakes up to twenty pull requests turns Dependabot off, so everything that
+# is not a major version is batched into one pull request per ecosystem per
+# week, and the Actions themselves — which move a handful of times a year — are
+# checked monthly. Majors are deliberately left ungrouped: those are the ones
+# that need reading.
+version: 2
+
+updates:
+  # Python runtime and dev dependencies, resolved through uv.lock rather than
+  # requirements.txt. `uv` is the native ecosystem (GA 2025-03-13); the `pip`
+  # ecosystem would edit the exported file and leave the lock it came from
+  # untouched, which is the exact drift ci.yml now gates against.
+  #
+  # Known rough edge, worth expecting rather than being surprised by: Dependabot
+  # updates uv.lock without re-exporting requirements.txt, so its pull requests
+  # can trip the "requirements.txt matches uv.lock" job. `task lock` on the
+  # branch is the fix, and the job says so.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      # UTC, not a local zone: a repository schedule that follows whoever
+      # configured it is a schedule that shifts twice a year for no reason.
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+      prefix-development: "build"
+      include: "scope"
+    groups:
+      python-non-major:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The React/Vite/vitest tree. `npm ci` in both workflows installs from this
+  # lockfile, so this is the file that decides what a release is built against.
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 3
+    commit-message:
+      prefix: "build"
+      prefix-development: "build"
+      include: "scope"
+    groups:
+      frontend-non-major:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
+  # The workflows pin actions by major tag (`@v4`, `@v2`), which floats within a
+  # major and never across one. That covers patches and leaves the major bump —
+  # the one that breaks a build — invisible, so it is watched here.
+  #
+  # `ci` rather than `build`: an Action version is part of the pipeline, not of
+  # what ships.
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "monthly"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 2
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    groups:
+      actions-non-major:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

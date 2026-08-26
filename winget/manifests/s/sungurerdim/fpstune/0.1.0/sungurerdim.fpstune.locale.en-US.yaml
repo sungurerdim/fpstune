@@ -1,0 +1,37 @@
+PackageIdentifier: sungurerdim.fpstune
+PackageVersion: 0.1.0
+PackageLocale: en-US
+Publisher: sungurerdim
+PublisherUrl: https://github.com/sungurerdim
+PublisherSupportUrl: https://github.com/sungurerdim/fpstune/issues
+PackageName: fpstune
+PackageUrl: https://github.com/sungurerdim/fpstune
+License: MIT
+LicenseUrl: https://github.com/sungurerdim/fpstune/blob/main/LICENSE
+ShortDescription: Tunes Windows 11 to the ceiling the machine and the connection can actually reach.
+Description: |-
+  fpstune reads what your hardware reports it can do and tunes to that, rather
+  than applying a preset. The panel's own maximum refresh, the network adapter's
+  own accepted values, the card's own VRAM: a setting whose correct value depends
+  on the machine is derived from the machine, and one that cannot be derived is
+  not offered.
+
+  Every change is applied, read back and verified, so a write that silently
+  failed is reported rather than assumed. Every change has two ways back: restore
+  the Windows default, or undo to what this machine held before fpstune first saw
+  it. A System Restore point is created before anything is written.
+
+  Requires Administrator. It edits HKLM values, service start types, power
+  schemes and network adapter driver keywords, none of which are writable
+  otherwise. No telemetry, no account, no bundled software.
+Moniker: fpstune
+Tags:
+  - gaming
+  - performance
+  - optimization
+  - windows
+  - fps
+  - latency
+ReleaseNotesUrl: https://github.com/sungurerdim/fpstune/releases/tag/v0.1.0
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

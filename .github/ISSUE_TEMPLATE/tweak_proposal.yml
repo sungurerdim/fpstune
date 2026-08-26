@@ -1,0 +1,81 @@
+name: Tweak proposal
+description: Propose a new setting, or argue that an existing one is wrong
+labels: ["tweak"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        fpstune's bar is not "does this exist in a guide" — plenty of popular
+        tweaks are placebo, and at least two shipped here and had to be removed
+        because they lowered the ceiling they claimed to raise. The questions
+        below are the bar. A proposal that cannot answer them is still welcome;
+        it just becomes a research question rather than a change.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What does it change, and where?
+      description: The registry key, the driver keyword, the powercfg GUID, the config file line.
+      placeholder: |
+        HKLM\SYSTEM\CurrentControlSet\Services\Tcpip\Parameters\SomeValue
+    validations:
+      required: true
+
+  - type: textarea
+    id: why
+    attributes:
+      label: What does it gain, and how do you know?
+      description: |
+        A number and where it came from. "It felt smoother" is honest and worth
+        saying — say it that way rather than inventing a percentage.
+      placeholder: |
+        Measured on my 5800X/3070: 1% low went from 94 to 103 fps over three
+        PresentMon captures of the same 60s replay. Raw captures attached.
+    validations:
+      required: true
+
+  - type: textarea
+    id: cost
+    attributes:
+      label: What does it cost?
+      description: |
+        Every tweak trades something. Battery, security posture, compatibility,
+        stability under a different workload, or nothing measurable. Say which.
+      placeholder: |
+        Costs nothing on desktop; on a laptop it holds a higher package state
+        and I would expect it to shorten battery life, unmeasured.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: ceiling
+    attributes:
+      label: Can this ever lower the machine's ceiling?
+      description: |
+        Forcing a link speed breaks auto-negotiation. A background frame cap can
+        cap the foreground game. If the answer is yes, fpstune will not ship it
+        as a recommendation — but it may still ship as a guard that undoes it.
+      options:
+        - "No — it cannot make anything worse"
+        - "Yes, in some configuration"
+        - "Not sure"
+    validations:
+      required: true
+
+  - type: textarea
+    id: derivation
+    attributes:
+      label: Is the right value the same on every machine?
+      description: |
+        If not, say what it should be derived from — the panel's refresh rate,
+        the adapter's `ValidRegistryValues`, the amount of RAM. fpstune does not
+        ship hardcoded constants where the hardware can be asked.
+      placeholder: |
+        No — the ceiling is the adapter's own NumericParameterMaxValue, which is
+        512 on mine and 4096 on the transmit side.
+
+  - type: textarea
+    id: sources
+    attributes:
+      label: Sources
+      description: Vendor documentation, a benchmark, a driver INF. Links.

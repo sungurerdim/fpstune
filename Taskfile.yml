@@ -1,0 +1,124 @@
+# Taskfile for fpstune. Install go-task once: https://taskfile.dev/installation/
+# Then run: task <name>. Run `task` with no args to list everything.
+version: "3"
+
+vars:
+  PYTEST_ARGS: "-v --tb=short"
+
+tasks:
+  default:
+    desc: List available tasks
+    cmds:
+      - task --list-all
+    silent: true
+
+  install:
+    desc: Install Python deps from uv.lock + frontend node_modules
+    cmds:
+      - uv sync --frozen --extra dev
+      - cd frontend && npm install
+
+  install-uv:
+    desc: Install Python deps from pyproject.toml without lockfile
+    cmds:
+      - uv pip install -e .[dev]
+
+  lock:
+    desc: Regenerate uv.lock and requirements.txt from pyproject.toml
+    cmds:
+      - uv lock
+      - uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
+
+  lock-check:
+    desc: Fail if uv.lock or requirements.txt has drifted (same gate CI runs)
+    cmds:
+      - uv lock --check
+      # Byte-for-byte the `lock` task's export, so this can only fail on real
+      # drift and never on a flag difference.
+      - uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
+      - git diff --exit-code -- requirements.txt
+
+  winget:
+    desc: Point the winget manifests at a built exe (submission stays manual)
+    cmds:
+      # The release workflow runs this same script against its own build. Doing
+      # it locally is for rehearsing, or for filling in a manifest after a
+      # release that was published before this wiring existed.
+      #
+      # Nothing here submits: it writes winget/manifests/... and prints the
+      # `winget validate` command. Opening the microsoft/winget-pkgs pull
+      # request is a deliberate human step, because the binary is unsigned and
+      # every submission of it goes to human review anyway.
+      - python scripts/update_winget_manifest.py --exe dist/fpstune.exe
+
+  lint:
+    desc: Run ruff + mypy on src/
+    cmds:
+      - ruff check src tests
+      - ruff format --check src tests
+      - mypy src
+
+  fmt:
+    desc: Auto-format Python with ruff
+    cmds:
+      - ruff format src tests
+      - ruff check --fix src tests
+
+  test:
+    desc: Run Python pytest suite (with coverage + fail_under gate)
+    cmds:
+      - pytest {{.PYTEST_ARGS}} --cov=src/fpstune --cov-report=term-missing
+
+  test-fast:
+    desc: Python pytest without coverage instrumentation
+    cmds:
+      - pytest --no-cov {{.PYTEST_ARGS}}
+
+  test-frontend:
+    desc: Run vitest suite
+    dir: frontend
+    cmds:
+      - npm test -- --run
+
+  test-all:
+    desc: Backend + frontend tests
+    deps: [test-fast, test-frontend]
+
+  serve:
+    desc: Run the FastAPI dev server (auto-reload)
+    cmds:
+      - uvicorn fpstune.api.main:app --reload --host 127.0.0.1 --port 8000
+
+  dev:
+    desc: Run backend (uvicorn) + frontend (vite) in parallel via two terminals
+    cmds:
+      - cmd: echo "Run in two terminals - task serve, task dev-frontend"
+
+  dev-frontend:
+    desc: Run the Vite dev server
+    dir: frontend
+    cmds:
+      - npm run dev
+
+  build-frontend:
+    desc: Production build of the React UI
+    dir: frontend
+    cmds:
+      - npm run build
+
+  build:
+    desc: Build the PyInstaller exe (uses fpstune.spec)
+    cmds:
+      - python -m PyInstaller fpstune.spec
+
+  clean:
+    desc: Remove build / cache artifacts
+    cmds:
+      - cmd: rm -rf build dist .pytest_cache .ruff_cache .mypy_cache htmlcov .audit
+        ignore_error: true
+
+  audit:
+    desc: Run the full ds-blueprint analysis (Claude Code skill)
+    cmds:
+      - cmd: echo "Open in Claude Code and run /ds-blueprint"
+        silent: true

@@ -1,0 +1,9 @@
+# Every path, one owner. This repository ships an unsigned executable that
+# requests Administrator and writes to HKLM, so the review question on an
+# outside pull request is not "is this good code" but "is this something I am
+# willing to sign my name to and hand a user's machine to". One catch-all rule
+# answers that for every file, including files nobody has thought of yet.
+#
+# Kept as a single line on purpose. Per-directory owners on a solo project only
+# create paths that fall through the cracks when a directory is renamed.
+* @sungurerdim

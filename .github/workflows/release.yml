@@ -1,0 +1,279 @@
+name: Release
+
+# A tag is a promise, and this is the only place it gets checked before the
+# promise is public. Everything here exists because a release is the worst
+# possible time to discover any of it:
+#
+#   * a tag that disagrees with the version the binary reports
+#   * a suite that was never run against the exact commit being published
+#   * an executable that starts and shows a blank page because the UI was not
+#     bundled — which looks like a runtime bug days later, not a build error
+#   * a download nobody can verify, since the binary is unsigned
+on:
+  push:
+    tags: ["v*"]
+  # Buildable on demand without publishing, so the packaging path is testable
+  # without spending a tag on finding out it is broken.
+  workflow_dispatch:
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  # Both are required by attest-build-provenance: the OIDC token identifies the
+  # workflow, the attestations scope lets it record the result.
+  id-token: write
+  attestations: write
+
+env:
+  # A single-file PyInstaller build of this project lands around 40 MB. The
+  # ceiling is deliberately close: a build that suddenly doubles has pulled in
+  # something it should not, and finding that out at 120 MB is finding it out
+  # too late.
+  MAX_SIZE_MB: 60
+
+jobs:
+  release:
+    name: Verify, build, publish
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install 3.12
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Python dependencies
+        run: uv sync --frozen --extra dev
+
+      # `working-directory` rather than `npm --prefix`: this is the form CI
+      # already proves on every push, and a release is not the place to find out
+      # whether a different invocation behaves the same.
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      # ---------------------------------------------------------------------
+      # The tag has to mean what the binary will say
+      # ---------------------------------------------------------------------
+      - name: Tag must match the project version
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}" -replace '^v', ''
+          $version = (uv run python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])").Trim()
+          if ($tag -ne $version) {
+            Write-Error "tag $tag does not match pyproject version $version — run scripts/sync_version.py"
+            exit 1
+          }
+          Write-Host "tag $tag matches pyproject version $version"
+
+      # ---------------------------------------------------------------------
+      # A release must not be the first place a check runs
+      # ---------------------------------------------------------------------
+      - name: Ruff
+        run: uv run ruff check src tests
+
+      - name: Mypy
+        run: uv run mypy src
+
+      - name: Pytest
+        run: uv run pytest -q
+
+      - name: Frontend type-check and build
+        working-directory: frontend
+        run: npm run build
+
+      - name: Frontend tests
+        working-directory: frontend
+        run: npm run test:run
+
+      # ---------------------------------------------------------------------
+      # Build
+      # ---------------------------------------------------------------------
+      - name: The UI has to be there before it can be bundled
+        shell: pwsh
+        run: |
+          if (-not (Test-Path "frontend/dist/index.html")) {
+            Write-Error "Bundled UI is missing: frontend/dist/index.html was not produced, and a build without it starts and shows a blank page"
+            exit 1
+          }
+
+      - name: PyInstaller
+        run: uv run pyinstaller fpstune.spec --noconfirm
+
+      - name: The binary has to start
+        shell: pwsh
+        run: |
+          # `--version` is an eager click option, so it answers before the group
+          # callback asks for elevation. Anything that broke the import graph —
+          # a hidden import the spec missed — fails right here instead of on a
+          # user's machine.
+          $reported = (& ".\dist\fpstune.exe" --version) -join ""
+          Write-Host "binary reports: $reported"
+          if (-not $reported) { Write-Error "the built executable produced no output"; exit 1 }
+
+      - name: Size ceiling
+        shell: pwsh
+        run: |
+          $mb = [math]::Round((Get-Item ".\dist\fpstune.exe").Length / 1MB, 1)
+          Write-Host "fpstune.exe is $mb MB"
+          if ($mb -gt ${{ env.MAX_SIZE_MB }}) {
+            Write-Error "fpstune.exe is $mb MB, over the ${{ env.MAX_SIZE_MB }} MB ceiling"
+            exit 1
+          }
+
+      # ---------------------------------------------------------------------
+      # Make it checkable, since it is not signed
+      # ---------------------------------------------------------------------
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash ".\dist\fpstune.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  fpstune.exe" | Out-File -FilePath "dist/fpstune.exe.sha256" -Encoding ascii -NoNewline
+          Write-Host "sha256 $hash"
+
+      # ---------------------------------------------------------------------
+      # winget: produce a correct manifest, submit nothing
+      # ---------------------------------------------------------------------
+      # THIS WORKFLOW DOES NOT PUSH TO ANY REPOSITORY OTHER THAN THIS ONE. It
+      # opens no pull request against microsoft/winget-pkgs, and it holds no
+      # token that could. Submission stays a deliberate human step, for three
+      # reasons that all point the same way:
+      #
+      #   * automating it would mean storing a personal access token with write
+      #     access to a fork of a third-party repository, in a repository that
+      #     is about to be public and whose entire threat model is "this binary
+      #     asks for Administrator"
+      #   * the binary is unsigned, so a winget-pkgs submission goes to human
+      #     moderation regardless; automation would buy nothing and could
+      #     submit something nobody looked at
+      #   * fpstune has never been in winget-pkgs, so the first submission is a
+      #     new-package review that a person has to shepherd anyway
+      #
+      # What is automated is the part a person gets wrong: the version, the
+      # download URL, the release date, and above all the checksum — a checksum
+      # copied by hand is a checksum nobody verified. The manifest comes out of
+      # this run describing the exact bytes this run built, and is uploaded for
+      # the maintainer to validate and submit.
+      - name: Winget manifest, pointed at the binary just built
+        shell: pwsh
+        run: |
+          uv run python scripts/update_winget_manifest.py --exe dist/fpstune.exe
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "the winget manifest could not be updated"
+            exit 1
+          }
+
+      - name: The manifest has to describe that binary and parse as YAML
+        shell: pwsh
+        run: |
+          $version = (uv run python -c "import tomllib,pathlib; print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])").Trim()
+          $dir = "winget/manifests/s/sungurerdim/fpstune/$version"
+          $installer = "$dir/sungurerdim.fpstune.installer.yaml"
+          if (-not (Test-Path $installer)) {
+            Write-Error "no installer manifest at $installer"
+            exit 1
+          }
+
+          # A manifest that does not parse is a manifest winget rejects after
+          # the submission, not before it.
+          uv run python -c "import pathlib,sys,yaml; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in pathlib.Path(sys.argv[1]).glob('*.yaml')]" $dir
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "a manifest in $dir is not valid YAML"
+            exit 1
+          }
+
+          $expected = (Get-FileHash ".\dist\fpstune.exe" -Algorithm SHA256).Hash.ToLower()
+          $text = Get-Content $installer -Raw
+          if ($text -notmatch "InstallerSha256:\s*$expected") {
+            Write-Error "the manifest checksum is not the checksum of dist/fpstune.exe ($expected)"
+            exit 1
+          }
+          if ($text -notmatch "ReleaseDate:\s*\d{4}-\d{2}-\d{2}") {
+            Write-Error "the manifest carries no ReleaseDate"
+            exit 1
+          }
+          Write-Host "manifest for $version describes this build, released $(Select-String -Path $installer -Pattern 'ReleaseDate:' | ForEach-Object { $_.Line.Trim() })"
+
+      # Uploaded on every run, tag or dispatch. On a tag this is what the
+      # maintainer downloads, runs `winget validate` against, and commits back
+      # to this repository before opening the winget-pkgs pull request by hand.
+      - name: Keep the winget manifest
+        uses: actions/upload-artifact@v4
+        with:
+          name: winget-manifest
+          path: winget/manifests/s/sungurerdim/fpstune/
+
+      # Uploaded before provenance, not after: this is the only copy of the build
+      # a non-tag run produces, and hanging it behind a step that can fail meant
+      # the first dispatch run built a working exe and then handed back nothing.
+      - name: Keep the build even when nothing is published
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: fpstune-exe
+          path: |
+            dist/fpstune.exe
+            dist/fpstune.exe.sha256
+
+      - name: Build provenance
+        # Stronger than the checksum: a checksum only proves the file matches
+        # the one published beside it and says nothing about what it was built
+        # from. This ties the binary to this commit and this workflow.
+        #
+        # Tag-only, for two reasons that point the same way. Provenance is a
+        # claim about something published, and a dispatch run publishes nothing.
+        # And GitHub refuses to store attestations for user-owned private
+        # repositories at all, so on this repo today the step cannot succeed —
+        # which is how the packaging rehearsal it exists to protect ended up
+        # failing on the one step that was not packaging.
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/fpstune.exe
+
+      - name: Publish
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/fpstune.exe
+            dist/fpstune.exe.sha256
+          generate_release_notes: true
+          body: |
+            ## Verify what you downloaded
+
+            The binary is **not code-signed**, so SmartScreen will warn. Verify it
+            instead of trusting it:
+
+            ```powershell
+            Get-FileHash .\fpstune.exe -Algorithm SHA256
+            # compare against fpstune.exe.sha256 below
+            ```
+
+            Stronger, and specific to this build:
+
+            ```bash
+            gh attestation verify fpstune.exe --repo ${{ github.repository }}
+            ```
+
+            That names the commit and workflow this exact file came from.
+
+            fpstune needs Administrator — it reads and writes HKLM, power scheme
+            values and network adapter driver properties, none of which a normal
+            user token can reach. It requests elevation at launch; declining
+            changes nothing.

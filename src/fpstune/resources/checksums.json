@@ -1,0 +1,6 @@
+{
+  "_comment": "SHA-256 hashes of downloaded binaries keyed by version. A version with no entry is refused, never trusted. v3.0.2.1 measured 2026-08-25 from two independent downloads of the official GitHub release asset (Orbmu2k/nvidiaProfileInspector). Updated by CI on each release.",
+  "nvidiaProfileInspector": {
+    "v3.0.2.1": "88dcf3514111e8de630688467c03c36d8c2a8ad9ebc8073f27c069f82b75bb40"
+  }
+}

@@ -1,0 +1,96 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+/lib/
+/lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Testing
+.coverage
+.pytest_cache/
+htmlcov/
+.tox/
+.nox/
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# ruff
+.ruff_cache/
+
+# Node.js (frontend)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/.vite/
+
+# Logs
+*.log
+logs/
+
+# fpstune specific
+.fpstune/
+backups/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Debug files
+debug.CSV
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Claude Code
+.claude/
+
+# Audit artifacts (ds-blueprint, ds-review, etc.)
+.audit/
+
+# dev-skills transient state
+ds/audit/
+
+# Plan artifacts and one-off probe scripts. These are the progress ledger for
+# work in flight, not part of the product: they are deleted when the work lands.
+tasks.md
+_*_probe.py
+
+# One-off elevated sweep runner, generated per session
+run_apply_sweep.ps1
+apply_sweep_result.txt
+
+# Build output
+dist/

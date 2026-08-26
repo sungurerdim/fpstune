@@ -1,0 +1,134 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    # Every Python version this project claims to support runs here, and no
+    # version that does not run here is claimed anywhere. `pyproject.toml`
+    # declared `>=3.11` for a year while CI only ever ran 3.12, so 3.11 was a
+    # promise nobody could have falsified — and development happens on 3.13,
+    # which was not claimed at all. This matrix is now the definition: the
+    # classifiers, `requires-python`, ruff's target-version and mypy's
+    # python_version are all read off it.
+    name: Backend ${{ matrix.python-version }} (lint + type + test)
+    runs-on: windows-latest
+    strategy:
+      # Both legs report. A failure on the floor and a failure on the newest
+      # version are different findings, and cancelling one to save a minute
+      # throws away half the answer.
+      fail-fast: false
+      matrix:
+        python-version: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      # `--python` explicitly, rather than trusting uv to pick: the runner ships
+      # its own interpreters, and a matrix leg that silently resolves to the
+      # wrong one tests the same version twice and reports green for a version
+      # it never ran.
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
+
+      - name: Say which interpreter this leg actually got
+        run: uv run python -c "import sys; print(sys.version)"
+
+      - name: Ruff lint
+        run: uv run ruff check src tests
+
+      - name: Ruff format check
+        run: uv run ruff format --check src tests
+
+      - name: Mypy
+        run: uv run mypy src
+
+      - name: Pytest (coverage gate)
+        run: uv run pytest --cov=src/fpstune --cov-report=term-missing
+
+  lockfiles:
+    # `requirements.txt` is generated from `uv.lock` by `task lock` and then
+    # committed by hand, so the two can disagree and nothing notices —
+    # `uv sync --frozen` above only proves the lock matches `pyproject.toml`.
+    # Anyone installing from `requirements.txt` instead of the lock would get a
+    # different dependency set than the one every check here ran against.
+    #
+    # windows-latest like everything else: this is a Windows-only project, and
+    # matching the platform the committed file was generated on removes any
+    # question of whether the export could differ.
+    name: requirements.txt still matches uv.lock
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: The lock must match pyproject.toml
+        run: uv lock --check
+
+      # Byte-for-byte the invocation in Taskfile.yml's `lock` task. A different
+      # flag here would make this gate fail over formatting rather than drift,
+      # which is the fastest way to get a gate ignored.
+      - name: Re-export and compare
+        shell: pwsh
+        run: |
+          # pwsh does not abort on a non-zero external exit code mid-script, so
+          # both are checked. Skipping the first one would let a failed export
+          # leave the committed file untouched and the comparison pass.
+          uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "uv export failed, so nothing was compared"
+            exit 1
+          }
+          git diff --exit-code -- requirements.txt
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "requirements.txt no longer matches uv.lock - run 'task lock' and commit the result"
+            exit 1
+          }
+          Write-Host "requirements.txt is what uv.lock exports"
+
+  frontend:
+    name: Frontend (type + build + test)
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Type-check + build
+        run: npm run build
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Test
+        run: npm run test:run

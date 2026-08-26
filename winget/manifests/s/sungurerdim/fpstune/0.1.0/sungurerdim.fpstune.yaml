@@ -1,0 +1,7 @@
+# Version manifest. Package identity and version, nothing else — the locale and
+# installer manifests beside this file carry the rest.
+PackageIdentifier: sungurerdim.fpstune
+PackageVersion: 0.1.0
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0

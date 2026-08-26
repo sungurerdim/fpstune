@@ -1,0 +1,34 @@
+pre-commit:
+  parallel: true
+  commands:
+    py-lint:
+      glob: "*.py"
+      run: ruff check src tests
+    py-format:
+      glob: "*.py"
+      run: ruff format --check src tests
+    py-types:
+      glob: "*.py"
+      run: mypy src
+    py-test:
+      glob: "*.py"
+      run: pytest --no-cov -x -q --tb=short
+    fe-lint:
+      glob: "frontend/*"
+      run: cd frontend && npm run lint
+    fe-types:
+      glob: "frontend/*"
+      run: cd frontend && npx tsc --noEmit
+    fe-test:
+      glob: "frontend/*"
+      run: cd frontend && npm run test:run
+
+commit-msg:
+  commands:
+    # Checks the subject line only. Reading the file with grep rather than
+    # interpolating it into the shell keeps a message containing quotes,
+    # backticks or newlines from being re-parsed as script.
+    conventional:
+      fail_text: Conventional commit required. Subject must start with feat, fix, docs, style, refactor, perf, test, build, ci, chore or revert.
+      run: |
+        grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+' {1}

@@ -235,3 +235,85 @@ class TestC9MachineNeutral:
                     )
 
         assert not offenders, "C9: shipped source names this machine:\n" + "\n".join(offenders)
+
+
+class TestB6NoAssumedDeviceCapability:
+    """C9's sibling for capabilities: no constant where the device publishes the value.
+
+    C9 keeps the developer's *machine* out of the source; this gate keeps the
+    developer's *assumptions about hardware* out. Every pattern below is a value
+    some device publishes about itself — VRAM size, a driver's stock buffer
+    count, the CPU's core topology, the panel's refresh rate — that shipped as
+    a constant instead, and each constant was wrong on real hardware.
+
+    The known offenders are frozen as a baseline of exact per-file counts. A
+    new occurrence anywhere is red immediately. Fixing one leaves its baseline
+    entry stale, which is also red — the entry must be deleted in the same
+    change, so the shrink is visible in the diff and the baseline can never
+    grow back silently (the C4 carve-out's does-not-outlive discipline).
+    """
+
+    # (name, pattern, why the device's own answer is required, {file: count})
+    # Issue codes refer to the tracker's epic map (B6 is the gate itself).
+    _ASSUMED: tuple[tuple[str, re.Pattern[str], str, dict[str, int]], ...] = (
+        (
+            "adapter_ram_as_vram",
+            re.compile(r"AdapterRAM"),
+            "Win32_VideoController.AdapterRAM is a 32-bit field that clamps at "
+            "4 GB; VRAM comes from HardwareInformation.qwMemorySize or DXGI "
+            "DedicatedVideoMemory (A7)",
+            {"src/fpstune/utils/detect.py": 3},
+        ),
+        (
+            "buffer_default_constant",
+            re.compile(r"NumericParameterMinValue,\s*256"),
+            "the driver publishes its stock buffer count as "
+            "DefaultRegistryValue; writing 256 makes reset write a value that "
+            "was never this driver's default (B1)",
+            {"src/fpstune/settings/definitions/network.py": 2},
+        ),
+        (
+            "rss_base_core_constant",
+            re.compile(r"'optimized'\) \{ 2 \}"),
+            "the driver publishes *RssBaseProcNumber min/max/default and "
+            "Get-NetAdapterRSS publishes MaxProcessorNumber; on a hybrid CPU "
+            "logical processor 2 may be an E-core (B2)",
+            {"src/fpstune/settings/definitions/network.py": 1},
+        ),
+        (
+            "panel_refresh_fallback",
+            re.compile(r"\(60, False\)"),
+            "settings/panel.py is the one panel derivation and its rule is "
+            "that an unknown rate stays 0 and never becomes 60 (B5)",
+            {"src/fpstune/settings/executors/nvprofile.py": 2},
+        ),
+    )
+
+    def test_assumed_capability_baseline_only_shrinks(self) -> None:
+        problems: list[str] = []
+        for name, pattern, why, baseline in self._ASSUMED:
+            observed: dict[str, int] = {}
+            for path in _shipped_sources():
+                count = sum(
+                    len(pattern.findall(line))
+                    for line in path.read_text(encoding="utf-8").splitlines()
+                    if not _is_comment(line)
+                )
+                if count:
+                    observed[path.relative_to(ROOT).as_posix()] = count
+            for file, count in sorted(observed.items()):
+                allowed = baseline.get(file, 0)
+                if count > allowed:
+                    problems.append(
+                        f"B6 [{name}]: {file} has {count} occurrence(s), baseline "
+                        f"allows {allowed} — {why}"
+                    )
+            for file, allowed in sorted(baseline.items()):
+                if observed.get(file, 0) < allowed:
+                    problems.append(
+                        f"B6 [{name}]: baseline grants {file} {allowed} "
+                        f"occurrence(s) but only {observed.get(file, 0)} remain — "
+                        "the fix landed, delete the stale entry"
+                    )
+
+        assert not problems, "\n".join(problems)

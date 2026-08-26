@@ -238,6 +238,27 @@ class TestC9MachineNeutral:
         assert not offenders, "C9: shipped source names this machine:\n" + "\n".join(offenders)
 
 
+class TestC2NumericImpact:
+    """Every setting claims at least one numeric or range impact metric.
+
+    CLAUDE.md has carried this gate as prose ("Gate: assert any(k != ...")
+    since C2 was written, and nothing ran it — the C1 audit found zero
+    violations, and this test is what keeps that zero.
+    """
+
+    def test_every_setting_claims_more_than_stability(self) -> None:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        offenders = sorted(
+            setting.id
+            for setting in get_all_static_settings()
+            if not any(key != "stability" for key in setting.impact_scores)
+        )
+        assert not offenders, "C2: settings with no performance/resource metric: " + ", ".join(
+            offenders
+        )
+
+
 class TestScopeImpactCoherence:
     """The two buttons mean what they say (programme gate C4).
 

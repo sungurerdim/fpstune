@@ -89,6 +89,7 @@ def _make_mw4_setting(
     scope: SettingScope = SettingScope.RECOMMENDED,
     min_value: int | float | None = None,
     max_value: int | float | None = None,
+    perceptible_cost: str | None = None,
 ) -> SettingExecutor:
     """Build one MW4 setting.
 
@@ -124,6 +125,7 @@ def _make_mw4_setting(
         current_impact=current_impact,
         recommended_impact=recommended_impact,
         scope=scope,
+        perceptible_cost=perceptible_cost,
         category_order=category_order,
         effect=effect,
         impact_scores=impact_scores,
@@ -195,6 +197,9 @@ MW4_DLSS_PERF_MODE = _make_mw4_setting(
     effect="Moves DLSS to the tier that buys frames without softening a target",
     impact_scores={"fps": "+10-18%", "stability": "high"},
     category_order=11,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -256,6 +261,7 @@ MW4_TEXTURE_QUALITY = _make_mw4_setting(
     # the stutter that comes from streaming a set that does not fit.
     impact_scores={"fps_1_percent_low": "+2-6%", "vram_mb": "-300-800"},
     category_order=13,
+    perceptible_cost=("Textures render a tier lower — surfaces read softer up close."),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -908,6 +914,9 @@ MW4_MARKS_PLAYER_ONLY = _make_mw4_setting(
     effect="Draws bullet marks on characters from your shots only",
     impact_scores={"fps": "+1-2%", "visual_quality": "reduced"},
     category_order=57,
+    perceptible_cost=(
+        "Other players' bullet marks stop appearing on characters — a signal about who has been firing, and from where, goes away."
+    ),
     # COMPLETE, and stated plainly: unlike the rest of B2 this one can remove
     # information, so it is offered with that written down rather than applied by
     # default. Wall impacts (`BulletImpacts`) are a separate guard and stay on.
@@ -1085,6 +1094,9 @@ MW4_MODEL_QUALITY = _make_mw4_setting(
     # the wrong direction — that is where the channel actually starts to go.
     impact_scores={"fps": "+3-6%", "target_visibility": "preserved"},
     category_order=70,
+    perceptible_cost=(
+        "Characters and objects render at reduced model detail; at long range, identification takes a beat longer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -1418,6 +1430,9 @@ MW4_MUSIC_VOLUME = _make_mw4_setting(
     effect="Silences the soundtrack so positional audio is unmasked",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=90,
+    perceptible_cost=(
+        "In-game music goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1440,6 +1455,9 @@ MW4_WARTRACKS_VOLUME = _make_mw4_setting(
     effect="Silences vehicle music tracks",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=91,
+    perceptible_cost=(
+        "War tracks go silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1462,6 +1480,9 @@ MW4_TELESCOPE_VOLUME = _make_mw4_setting(
     effect="Silences the menu message feed",
     impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
     category_order=92,
+    perceptible_cost=(
+        "Telescope ambience goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1484,6 +1505,9 @@ MW4_CINEMATIC_VOLUME = _make_mw4_setting(
     effect="Silences cinematic audio",
     impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
     category_order=93,
+    perceptible_cost=(
+        "Cinematic audio goes silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1525,6 +1549,9 @@ MW4_MUTE_LICENSED_MUSIC = _make_mw4_setting(
     effect="Mutes licensed music tracks",
     impact_scores={"footstep_clarity": "improved", "fps": "0%"},
     category_order=95,
+    perceptible_cost=(
+        "Licensed music tracks go silent — nothing tactical is lost, but the soundscape is barer."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -1783,6 +1810,9 @@ MW4_FOV = _make_mw4_setting(
     # setting like that is offered, never assumed.
     impact_scores={"target_visibility": "preserved", "fps": "0%"},
     category_order=107,
+    perceptible_cost=(
+        "A wider view renders more of the world — targets appear smaller at the same distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
 )
@@ -2298,6 +2328,9 @@ MW4_AMD_FSR_QUALITY = _make_mw4_setting(
     effect="Moves FSR to the tier that buys frames without softening a target",
     impact_scores={"fps": "+10-18%", "target_clarity": "preserved"},
     category_order=132,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "amd"},
@@ -2321,6 +2354,9 @@ MW4_AMD_FSR1_QUALITY = _make_mw4_setting(
     # go soft faster. `Maximum Performance` is where a distant player goes.
     impact_scores={"fps": "+3-9%", "target_clarity": "preserved"},
     category_order=133,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "amd"},
@@ -2433,6 +2469,9 @@ MW4_XESS_QUALITY = _make_mw4_setting(
     effect="Moves XeSS to the tier that buys frames without softening a target",
     impact_scores={"fps": "+8-15%", "target_clarity": "preserved"},
     category_order=138,
+    perceptible_cost=(
+        "The image is rendered below native resolution and upscaled — fine detail softens, most visibly in motion and at distance."
+    ),
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "intel"},

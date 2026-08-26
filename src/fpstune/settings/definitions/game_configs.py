@@ -95,6 +95,7 @@ def _make_cs2_cvar_setting(
     evidence_level: str = "likely",
     sources: list[str] | None = None,
     scope: SettingScope = SettingScope.RECOMMENDED,
+    perceptible_cost: str | None = None,
 ) -> SettingExecutor:
     """Build a CS2 SettingExecutor that writes one cvar/value pair to autoexec.cfg."""
     detect_cmd = (
@@ -121,6 +122,7 @@ def _make_cs2_cvar_setting(
         # documents: hardcoding RECOMMENDED put every CS2 setting in one bucket, so
         # the Essential/Recommended/Complete selector did nothing for them.
         scope=scope,
+        perceptible_cost=perceptible_cost,
         category_order=category_order,
         effect=effect,
         impact_scores=impact_scores,
@@ -293,6 +295,9 @@ MW3_TEXTURE_STREAMING = SettingExecutor(
     recommended_impact="0 MB: No mid-match texture download → the connection carries only the match",
     scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=10,
+    perceptible_cost=(
+        "Some textures can stay at lower detail until they arrive with the next content update rather than mid-match."
+    ),
     effect="Stops mid-match texture downloads competing with the match's own traffic",
     # Scored as network, not FPS. It was `{"fps_1_percent_low": "+5-15%"}` with
     # copy about texture pop-in, which put the single most-cited packet-burst fix
@@ -548,6 +553,7 @@ CS2_VIOLENCE_HBLOOD = _make_cs2_cvar_setting(
     effect="Removes blood decals, and with them the hit confirmation they carry",
     impact_scores={"fps_1_percent_low": "+0-1%", "stability": "high"},
     category_order=17,
+    perceptible_cost=("Blood effects are reduced — hit feedback is less visible on screen."),
     evidence_level="proven",
     # COMPLETE, by consequence 5, and the product was already arguing this case
     # against itself. game_config:mw3:persistent_effects locks MW3's bullet decals
@@ -591,6 +597,7 @@ CS2_DRAW_PARTICLES = _make_cs2_cvar_setting(
     effect="Turns off the particle draw pass, including impact sparks and molotov fire",
     impact_scores={"fps_1_percent_low": "+0-1%", "fps_gpu_bound": "+0-1%"},
     category_order=19,
+    perceptible_cost=("Fewer particles are drawn — some effect cues render smaller than stock."),
     evidence_level="proven",
     # COMPLETE, by consequence 5. Two things had to change here. The copy claimed
     # "smoke grenades use a separate renderer and are unaffected", which nothing
@@ -658,6 +665,7 @@ def _make_hots_setting(
     value_type: SettingValueType = SettingValueType.CHOICE,
     risk_level: Literal["safe", "low", "moderate", "advanced"] = "low",
     risk_warning: str | None = None,
+    perceptible_cost: str | None = None,
 ) -> SettingExecutor:
     """Build a Heroes of the Storm setting backed by one Variables.txt key."""
     return SettingExecutor(
@@ -677,6 +685,7 @@ def _make_hots_setting(
         current_impact=current_impact,
         recommended_impact=recommended_impact,
         scope=scope,
+        perceptible_cost=perceptible_cost,
         category_order=category_order,
         effect=effect,
         impact_scores=impact_scores,
@@ -1037,6 +1046,7 @@ MW3_WORLD_STREAMING = SettingExecutor(
     # packet-burst fix is still applied without spending what the player sees.
     scope=SettingScope.COMPLETE,
     category_order=12,
+    perceptible_cost=("Distant scenery streams in later — brief pop-in when the view swings."),
     effect="Downloads only essential textures so the line stays free for the match",
     # Network first, frames second — the hitches are downstream of the download,
     # not of the rendering. See the note on game_config:mw3:texture_streaming.
@@ -1089,6 +1099,9 @@ MW3_LOCAL_TEXTURE_QUALITY = SettingExecutor(
     # is not this change; until then the trade is offered, not made for the user.
     scope=SettingScope.COMPLETE,
     category_order=13,
+    perceptible_cost=(
+        "Fewer textures stay cached — occasional softer surfaces while they restream."
+    ),
     effect="Reducing local texture slots lowers VRAM pressure for stable frametimes",
     impact_scores={"fps_1_percent_low": "+2-8%", "vram_mb": -500, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
@@ -1158,6 +1171,7 @@ def _make_mw3_cst_setting(
     scope: SettingScope = SettingScope.RECOMMENDED,
     min_value: int | None = None,
     max_value: int | None = None,
+    perceptible_cost: str | None = None,
 ) -> SettingExecutor:
     """Build a SettingExecutor that reads/writes a single options.4.cod23.cst key.
 
@@ -1186,6 +1200,7 @@ def _make_mw3_cst_setting(
         current_impact=current_impact,
         recommended_impact=recommended_impact,
         scope=scope,
+        perceptible_cost=perceptible_cost,
         category_order=category_order,
         effect=effect,
         impact_scores=impact_scores,
@@ -2149,6 +2164,7 @@ MW3_SUN_SHADOW_CASCADE = _make_mw3_cst_setting(
     effect="Draws sun shadows only near the player, which is where the GPU cost is worth paying",
     impact_scores={"fps_gpu_bound": "+3-8%"},
     category_order=57,
+    perceptible_cost=("Sun shadows render in a single cascade — distant shadows lose definition."),
     evidence_level="proven",
     # COMPLETE rather than RECOMMENDED, and this is consequence 5 applied to a
     # shooter. In an isometric MOBA a shadow reveals nothing the camera does not
@@ -2467,6 +2483,9 @@ MW3_VRS = _make_mw3_cst_setting(
     effect="Enables variable rate shading — largest gains when GPU-limited",
     impact_scores={"fps_gpu_bound": "+0-10%"},
     category_order=44,
+    perceptible_cost=(
+        "Peripheral screen regions shade at a reduced rate — the edges of the view soften slightly."
+    ),
     # COMPLETE, by consequence 5. VRS spends shading rate exactly where a flanker
     # appears — the periphery — and its own warning already says so ("blocky or
     # shimmering shading in peripheral areas and on fast-moving textures"). It was

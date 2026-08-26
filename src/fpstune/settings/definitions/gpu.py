@@ -468,7 +468,10 @@ NVIDIA_ANISO_SAMPLE_OPT = SettingExecutor(
     current_impact="Off: Full anisotropic filtering samples",
     recommended_impact="On: Optimized samples → 1-2% FPS gain, minimal visual difference",
     scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=10,  # Texture optimization
+    category_order=10,
+    perceptible_cost=(
+        "Anisotropic samples are trimmed — oblique surfaces sharpen slightly less than stock filtering."
+    ),  # Texture optimization
     effect="Reduces anisotropic filtering samples for slight performance boost",
     impact_scores={"fps": "+0-1%", "latency_ms": 0, "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia"},  # NVIDIA only
@@ -1093,7 +1096,10 @@ AMD_ENHANCED_SYNC = SettingExecutor(
     current_impact="Disabled: No tear reduction (unless VSync is on)",
     recommended_impact="Enable if your FPS exceeds monitor refresh rate and you want tear reduction",
     scope=SettingScope.COMPLETE,  # Situational benefit
-    category_order=5,  # After Radeon Boost
+    category_order=5,
+    perceptible_cost=(
+        "Without a sync method, tearing can appear in the moments frames overrun the refresh rate."
+    ),  # After Radeon Boost
     effect="Reduces screen tearing when FPS exceeds refresh rate without VSync lag",
     impact_scores={"fps": "0%", "latency_ms": -8, "visual_quality": "reduced tearing"},
     applicable_conditions={"gpu_vendor": "amd"},  # AMD only

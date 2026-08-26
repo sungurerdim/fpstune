@@ -149,7 +149,7 @@ export function RiskWarningBadge({
       className={cn(
         "text-[10px] px-1 rounded border shrink-0 cursor-default",
         isAdvanced
-          ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+          ? "bg-warning/20 text-warning border-warning/30"
           : "bg-muted/60 text-muted-foreground border-border",
         className,
       )}

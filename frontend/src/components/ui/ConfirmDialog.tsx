@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
+import { Button } from "./Button";
 
 /**
  * The parts of a confirmation that a `position: fixed` div does not supply.
@@ -124,7 +125,7 @@ export function ConfirmDialog({
         aria-describedby={descriptionId}
         className="bg-card border border-border rounded-lg p-5 max-w-sm mx-4 space-y-3"
       >
-        <div className="flex items-center gap-2 text-amber-400">
+        <div className="flex items-center gap-2 text-warning">
           <AlertTriangle className="w-5 h-5 shrink-0" aria-hidden="true" />
           <h2 id={titleId} className="font-semibold text-sm">
             {title}
@@ -137,20 +138,12 @@ export function ConfirmDialog({
           {children}
         </div>
         <div className="flex justify-end gap-2">
-          <button
-            type="button"
-            onClick={onCancel}
-            className="px-3 py-1.5 text-xs rounded border border-border hover:bg-muted transition-colors"
-          >
+          <Button variant="outline" onClick={onCancel}>
             Cancel
-          </button>
-          <button
-            type="button"
-            onClick={onConfirm}
-            className="px-3 py-1.5 text-xs rounded bg-amber-500 text-black font-medium hover:bg-amber-400 transition-colors"
-          >
+          </Button>
+          <Button variant="confirm" onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

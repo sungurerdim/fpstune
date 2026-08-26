@@ -165,7 +165,7 @@ export function SelectionToolbar() {
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 text-xs rounded font-medium transition-colors",
                   hasAdvanced
-                    ? "bg-amber-500 text-black hover:bg-amber-400"
+                    ? "bg-warning text-warning-foreground hover:bg-warning/80"
                     : "bg-primary text-primary-foreground hover:bg-primary/90",
                 )}
               >

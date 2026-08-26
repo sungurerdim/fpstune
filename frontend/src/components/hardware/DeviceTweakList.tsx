@@ -181,7 +181,7 @@ function TweakRow({
           {setting.riskLevel === "advanced" && (
             <span
               title={setting.riskWarning}
-              className="cursor-default rounded border border-amber-500/30 bg-amber-500/20 px-1 text-xs font-medium text-amber-400"
+              className="cursor-default rounded border border-warning/30 bg-warning/20 px-1 text-xs font-medium text-warning"
             >
               ADV
             </span>

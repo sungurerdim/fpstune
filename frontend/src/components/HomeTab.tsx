@@ -283,7 +283,7 @@ export function HomeTab() {
             disabled={isApplying || absoluteTargets.length === 0}
             className={cn(
               "flex items-center gap-1.5 px-4 py-2 text-sm rounded-md font-semibold transition-colors",
-              "border border-amber-500/60 text-amber-400 hover:bg-amber-500/10 disabled:opacity-50",
+              "border border-warning/60 text-warning hover:bg-warning/10 disabled:opacity-50",
             )}
           >
             <Flame className="w-4 h-4" aria-hidden="true" />

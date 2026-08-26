@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Loader2, Zap, CircleCheck, Wrench } from "lucide-react";
 import { useStore } from "../../store";
@@ -43,6 +44,7 @@ export function DeviceTweakList({
   /** Shown when the device has tweaks and all of them are already ideal. */
   emptyLabel?: string;
 }) {
+  const { t } = useT();
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
   const detecting = useStore((s) => s.isAnyCategoryLoading());
@@ -67,7 +69,7 @@ export function DeviceTweakList({
   // Nothing detected for this device yet: say so rather than implying it is clean.
   if (listable.length === 0 && advisories.length === 0) {
     if (!detecting) return null;
-    return <p className="pl-4 pt-1 text-xs text-muted-foreground">Reading tweaks…</p>;
+    return <p className="pl-4 pt-1 text-xs text-muted-foreground">{t("devices.reading")}</p>;
   }
 
   const rows = showAll ? listable : suboptimal;
@@ -85,7 +87,7 @@ export function DeviceTweakList({
           onClick={() => setShowAll(!showAll)}
           aria-expanded={showAll}
           aria-label={
-            showAll ? "Hide tweaks already ideal" : "Show tweaks already ideal"
+            showAll ? t("devices.hideIdeal") : t("devices.showIdeal")
           }
           className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground"
           disabled={listable.length === 0}
@@ -109,7 +111,7 @@ export function DeviceTweakList({
         {advisories.length > 0 && (
           <StatusChip
             tone="advisory"
-            title="fpstune cannot change these — each row says where to."
+            title={t("devices.advisoryHint")}
           >
             {advisories.length} need you
           </StatusChip>

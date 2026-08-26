@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ScreenShare, CheckCircle2, RefreshCw, Zap, Gauge } from "lucide-react";
 import { useState } from "react";
@@ -31,6 +32,7 @@ function formatMonitorDeviceName(name: string): string {
  * layout nobody asked for.
  */
 export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] }) {
+  const { t } = useT();
   const targets = monitors
     .map((monitor, index) => ({ monitor, index }))
     .filter(({ monitor }) => isDisplaySuboptimal(monitor));
@@ -107,18 +109,17 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
           <Zap className="w-3 h-3" />
         )}
         {mutation.isPending
-          ? "Applying…"
-          : `Use native mode on all ${targets.length} displays`}
+          ? t("monitor.applying")
+          : t("monitor.useNativeAll", { count: targets.length })}
       </button>
       <ConfirmDialog
         open={confirmOpen}
-        title="Keep these display modes?"
-        confirmLabel="Keep"
+        title={t("monitor.keepAllTitle")}
+        confirmLabel={t("action.keep")}
         onConfirm={() => void keepAll()}
         onCancel={letRevert}
       >
-        Every changed display goes back to its previous mode in {revertS} seconds
-        unless you keep it — so a mode your screen cannot show fixes itself.
+        {t("monitor.revertAllBody", { seconds: revertS })}
       </ConfirmDialog>
     </>
   );
@@ -133,6 +134,7 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
  * global: one driver profile, so one control, on the panel it is derived from.
  */
 function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const { data: vrr } = useQuery({
     queryKey: ["vrr-optimization", displayIndex],
@@ -185,17 +187,20 @@ function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
             <CheckCircle2 className="w-3 h-3" />
             {vrr.current_vrr_mode} · VSync {vrr.current_vsync} ·{" "}
             {vrr.current_fps_limit > 0
-              ? `${vrr.current_fps_limit} fps cap`
-              : "no cap"}
+              ? t("monitor.fpsCap", { count: vrr.current_fps_limit })
+              : t("monitor.noCap")}
           </span>
         ) : hasRecommendation ? (
           <span className="text-warning font-medium">
-            recommended: {vrr.recommended_vrr_mode} · VSync{" "}
-            {vrr.recommended_vsync} · {vrr.recommended_fps_limit} fps cap
+            {t("monitor.recommendedPrefix")} {vrr.recommended_vrr_mode} · VSync{" "}
+            {vrr.recommended_vsync} ·{" "}
+            {t("monitor.fpsCap", { count: vrr.recommended_fps_limit })}
           </span>
         ) : (
           <span className="text-muted-foreground italic">
-            {vrr.supports_vrr === null ? "unknown" : "not applicable"}
+            {vrr.supports_vrr === null
+              ? t("monitor.unknown")
+              : t("monitor.notApplicable")}
           </span>
         )}
       </div>
@@ -219,7 +224,7 @@ function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
             ) : (
               <Zap className="w-3 h-3" />
             )}
-            Optimize G-Sync
+            {t("monitor.optimizeGsync")}
           </button>
         )}
         {vrr.is_optimized && (
@@ -228,7 +233,9 @@ function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
             disabled={pending}
             className="px-2 py-1 rounded text-xs font-medium border border-border text-muted-foreground hover:bg-muted transition-colors disabled:cursor-wait"
           >
-            {resetMutation.isPending ? "Resetting…" : "Reset to driver defaults"}
+            {resetMutation.isPending
+              ? t("monitor.resetting")
+              : t("monitor.resetDriver")}
           </button>
         )}
       </div>
@@ -243,6 +250,7 @@ export function MonitorCard({
   monitor: MonitorInfo;
   displayIndex: number;
 }) {
+  const { t } = useT();
   // Handle disconnected displays (width/height might be 0)
   const isActive = monitor.is_active ?? true;
   const currentRes =
@@ -368,12 +376,12 @@ export function MonitorCard({
         </span>
         {!isActive && (
           <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium flex-shrink-0">
-            Disconnected
+            {t("monitor.disconnected")}
           </span>
         )}
         {monitor.is_primary && (
           <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium flex-shrink-0">
-            Primary
+            {t("monitor.primary")}
           </span>
         )}
         {monitor.supports_vrr && (
@@ -397,7 +405,7 @@ export function MonitorCard({
 
       {/* Resolution row */}
       <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">Resolution:</span>
+        <span className="text-muted-foreground w-14">{t("monitor.resolution")}</span>
         <span
           className={cn(
             "font-medium",
@@ -428,7 +436,7 @@ export function MonitorCard({
 
       {/* Refresh rate row */}
       <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">Refresh:</span>
+        <span className="text-muted-foreground w-14">{t("monitor.refresh")}</span>
         <span
           className={cn(
             "font-medium",
@@ -474,7 +482,7 @@ export function MonitorCard({
             ) : (
               <Zap className="w-3 h-3" />
             )}
-            {autoMutation.isPending ? "Applying…" : "Use native mode"}
+            {autoMutation.isPending ? t("monitor.applying") : t("monitor.useNative")}
           </button>
         </div>
       )}
@@ -485,13 +493,12 @@ export function MonitorCard({
       )}
       <ConfirmDialog
         open={confirmOpen}
-        title="Keep this display mode?"
-        confirmLabel="Keep"
+        title={t("monitor.keepTitle")}
+        confirmLabel={t("action.keep")}
         onConfirm={() => void keepMode()}
         onCancel={letModeRevert}
       >
-        This display goes back to its previous mode in {revertS} seconds unless
-        you keep it — so a mode your screen cannot show fixes itself.
+        {t("monitor.revertBody", { seconds: revertS })}
       </ConfirmDialog>
     </div>
   );

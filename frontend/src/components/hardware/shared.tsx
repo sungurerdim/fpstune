@@ -1,3 +1,4 @@
+import { useT } from "../../i18n";
 import { useState } from "react";
 import { Copy, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -49,9 +50,10 @@ export function HardwareSection({
  * Not detected placeholder
  */
 export function NotDetected() {
+  const { t } = useT();
   return (
     <div className="border-l-2 border-border pl-3 text-xs text-muted-foreground">
-      Not detected
+      {t("hw.notDetected")}
     </div>
   );
 }
@@ -66,6 +68,7 @@ export function CopyableText({
   value: string;
   className?: string;
 }) {
+  const { t } = useT();
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -92,7 +95,7 @@ export function CopyableText({
       <button
         onClick={handleCopy}
         className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-muted rounded"
-        title="Copy to clipboard"
+        title={t("hw.copy")}
       >
         {copied ? (
           <Check className="w-3 h-3 text-success" />

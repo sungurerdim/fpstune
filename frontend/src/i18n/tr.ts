@@ -173,4 +173,74 @@ export const tr: Record<keyof typeof en, string> = {
   "toolbar.resetSelected": "Seçilenleri Sıfırla",
   "toolbar.applySelected": "Seçilenleri Uygula",
   "toolbar.resetToDefaults": "Varsayılanlara Sıfırla ({count})",
+  // Hardware surfaces
+  "hw.title": "Donanım",
+  "hw.admin": "Yönetici",
+  "hw.notAdmin": "Yönetici Değil",
+  "hw.cpu": "İşlemci",
+  "hw.memory": "Bellek",
+  "hw.gpu": "Ekran Kartı",
+  "hw.displays": "Ekranlar",
+  "hw.storage": "Depolama",
+  "hw.network": "Ağ",
+  "hw.powerPlan": "Güç planı",
+  "hw.audioOutput": "Ses Çıkışı",
+  "hw.audioInput": "Ses Girişi",
+  "hw.loudnessEq": "Ses Dengeleme",
+  "hw.loudnessNotSupported": "Bu cihaz ses dengelemeyi desteklemiyor",
+  "hw.notDetected": "Algılanamadı",
+  "hw.copy": "Panoya kopyala",
+  "devices.reading": "İnce ayarlar okunuyor…",
+  "devices.showIdeal": "Zaten ideal olan ayarları göster",
+  "devices.hideIdeal": "Zaten ideal olan ayarları gizle",
+  "devices.advisoryHint":
+    "fpstune bunları değiştiremez — her satır nereden değişeceğini söyler.",
+
+  // Monitor card
+  "monitor.applying": "Uygulanıyor…",
+  "monitor.useNative": "Doğal modu kullan",
+  "monitor.useNativeAll": "{count} ekranın tümünde doğal modu kullan",
+  "monitor.keepTitle": "Bu ekran modu korunsun mu?",
+  "monitor.keepAllTitle": "Bu ekran modları korunsun mu?",
+  "monitor.revertBody":
+    "Korumazsanız bu ekran {seconds} saniye içinde önceki moduna döner — böylece ekranınızın gösteremediği bir mod kendini düzeltir.",
+  "monitor.revertAllBody":
+    "Korumazsanız değişen her ekran {seconds} saniye içinde önceki moduna döner — böylece ekranınızın gösteremediği bir mod kendini düzeltir.",
+  "monitor.resolution": "Çözünürlük:",
+  "monitor.refresh": "Yenileme:",
+  "monitor.primary": "Birincil",
+  "monitor.disconnected": "Bağlı değil",
+  "monitor.noCap": "sınır yok",
+  "monitor.fpsCap": "{count} fps sınırı",
+  "monitor.recommendedPrefix": "önerilen:",
+  "monitor.unknown": "bilinmiyor",
+  "monitor.notApplicable": "uygulanamaz",
+  "monitor.optimizeGsync": "G-Sync'i Optimize Et",
+  "monitor.resetDriver": "Sürücü varsayılanlarına döndür",
+  "monitor.resetting": "Sıfırlanıyor…",
+
+  // Network adapter card
+  "adapter.connect": "Bağlan",
+  "adapter.disconnect": "Bağlantıyı kes",
+  "adapter.connectTitle": "Ağa bağlan",
+  "adapter.disconnectTitle": "Ağ bağlantısını kes",
+  "adapter.on": "Aç",
+  "adapter.off": "Kapat",
+  "adapter.connected": "Bağlı",
+  "adapter.disconnected": "Bağlı değil",
+  "adapter.notConnected": "Bağlantı Yok",
+
+  // Power plan card
+  "power.activeHint":
+    "FPS Balanced etkin — oyun istediğinde tam güç, boştaki çekirdekler yavaşlayabilir.",
+  "power.inactiveHint":
+    "FPS Balanced yük altında tam güç verir, boştaki çekirdeklerin yavaşlamasına izin verir — aynı kare hızına daha az ısı.",
+  "power.activate": "FPS Balanced'ı Etkinleştir",
+  "power.revert": "Windows Balanced'a Dön",
+  "power.reverting": "Geri dönülüyor…",
+
+  // Storage card
+  "storage.retrim": "Retrim",
+  "storage.defrag": "Birleştir",
+  "storage.running": "{action} çalışıyor…",
 };

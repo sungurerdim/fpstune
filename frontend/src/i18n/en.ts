@@ -180,6 +180,76 @@ export const en = {
   "toolbar.resetSelected": "Reset Selected",
   "toolbar.applySelected": "Apply Selected",
   "toolbar.resetToDefaults": "Reset to Defaults ({count})",
+
+  // Hardware surfaces
+  "hw.title": "Hardware",
+  "hw.admin": "Admin",
+  "hw.notAdmin": "Not Admin",
+  "hw.cpu": "CPU",
+  "hw.memory": "Memory",
+  "hw.gpu": "GPU",
+  "hw.displays": "Displays",
+  "hw.storage": "Storage",
+  "hw.network": "Network",
+  "hw.powerPlan": "Power plan",
+  "hw.audioOutput": "Audio Output",
+  "hw.audioInput": "Audio Input",
+  "hw.loudnessEq": "Loudness EQ",
+  "hw.loudnessNotSupported": "Loudness EQ not supported by this device",
+  "hw.notDetected": "Not detected",
+  "hw.copy": "Copy to clipboard",
+  "devices.reading": "Reading tweaks…",
+  "devices.showIdeal": "Show tweaks already ideal",
+  "devices.hideIdeal": "Hide tweaks already ideal",
+  "devices.advisoryHint": "fpstune cannot change these — each row says where to.",
+
+  // Monitor card
+  "monitor.applying": "Applying…",
+  "monitor.useNative": "Use native mode",
+  "monitor.useNativeAll": "Use native mode on all {count} displays",
+  "monitor.keepTitle": "Keep this display mode?",
+  "monitor.keepAllTitle": "Keep these display modes?",
+  "monitor.revertBody":
+    "This display goes back to its previous mode in {seconds} seconds unless you keep it — so a mode your screen cannot show fixes itself.",
+  "monitor.revertAllBody":
+    "Every changed display goes back to its previous mode in {seconds} seconds unless you keep it — so a mode your screen cannot show fixes itself.",
+  "monitor.resolution": "Resolution:",
+  "monitor.refresh": "Refresh:",
+  "monitor.primary": "Primary",
+  "monitor.disconnected": "Disconnected",
+  "monitor.noCap": "no cap",
+  "monitor.fpsCap": "{count} fps cap",
+  "monitor.recommendedPrefix": "recommended:",
+  "monitor.unknown": "unknown",
+  "monitor.notApplicable": "not applicable",
+  "monitor.optimizeGsync": "Optimize G-Sync",
+  "monitor.resetDriver": "Reset to driver defaults",
+  "monitor.resetting": "Resetting…",
+
+  // Network adapter card
+  "adapter.connect": "Connect",
+  "adapter.disconnect": "Disconnect",
+  "adapter.connectTitle": "Connect to network",
+  "adapter.disconnectTitle": "Disconnect from network",
+  "adapter.on": "On",
+  "adapter.off": "Off",
+  "adapter.connected": "Connected",
+  "adapter.disconnected": "Disconnected",
+  "adapter.notConnected": "Not Connected",
+
+  // Power plan card
+  "power.activeHint":
+    "FPS Balanced is active — full power when a game asks, idle cores allowed to clock down.",
+  "power.inactiveHint":
+    "FPS Balanced gives full power under load and lets idle cores clock down — less heat for the same frames.",
+  "power.activate": "Activate FPS Balanced",
+  "power.revert": "Revert to Windows Balanced",
+  "power.reverting": "Reverting…",
+
+  // Storage card
+  "storage.retrim": "Retrim",
+  "storage.defrag": "Defrag",
+  "storage.running": "{action} running…",
 } as const;
 
 export type MessageKey = keyof typeof en;

@@ -288,6 +288,7 @@ class TestDriverVsyncFollowsThePanel:
             # A real monitor always reports these; a fake without them tested a
             # shape the product never sees.
             is_primary = True
+            is_active = True
             max_refresh_rate_hz = 300
             native_refresh_rate_hz = 300
 
@@ -527,6 +528,7 @@ class TestDiscoveryDegradesSafely:
 
         class FakeMonitor:
             is_primary = True
+            is_active = True
             name = "FAKE"
             friendly_name = "Fake Panel"
             max_refresh_rate_hz = 0

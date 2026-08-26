@@ -145,6 +145,7 @@ class TestDiscoveryRegistersTheDerivedCap:
         class VrrPanel:
             supports_vrr = True
             is_primary = True
+            is_active = True
             max_refresh_rate_hz = 300
             native_refresh_rate_hz = 300
 
@@ -166,6 +167,7 @@ class TestDiscoveryRegistersTheDerivedCap:
         class VrrPanelNoRate:
             supports_vrr = True
             is_primary = True
+            is_active = True
             max_refresh_rate_hz = 0
             native_refresh_rate_hz = 0
 
@@ -186,6 +188,7 @@ class TestDiscoveryRegistersTheDerivedCap:
         class FixedRefresh:
             supports_vrr = False
             is_primary = True
+            is_active = True
             max_refresh_rate_hz = 144
             native_refresh_rate_hz = 144
 

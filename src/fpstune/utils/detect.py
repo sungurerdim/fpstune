@@ -806,6 +806,53 @@ function Build-DeviceHwIdMap {
     }
     return $map
 }
+
+# Presence is decided by StateFlags, not by WMI: WMI reports Active=True for a
+# panel that is not on the desktop, so it cannot answer attachment. Bit 0
+# (ATTACHED_TO_DESKTOP) is the desktop; bit 2 (PRIMARY_DEVICE) is the primary;
+# bit 3 (MIRRORING_DRIVER) is a pseudo device that renders nothing a user sees.
+# A panel WMI knows that no attached head carries is present-but-inactive —
+# reported, never silently dropped.
+function Split-MonitorPresence {
+    param([string[]]$adapterRecords, [hashtable]$uidToHwId, [string[]]$wmiAllHwIds)
+    $map = Build-DeviceHwIdMap -adapterRecords $adapterRecords -uidToHwId $uidToHwId
+    $parsed = @()
+    foreach ($rec in $adapterRecords) {
+        $f = $rec -split '\|', 3
+        if ($f.Count -lt 3) { continue }
+        $flags = [int]$f[1]
+        if ($flags -band 8) { continue }
+        $hwId = if ($map.ContainsKey($f[0])) { $map[$f[0]] } else { '' }
+        $parsed += @{ Name = $f[0]; Flags = $flags; HwId = $hwId }
+    }
+    # Attached first, so a detached head still carrying the last-known path of
+    # a panel that is live on another head cannot demote that panel to
+    # inactive. A detached head is only evidence of a panel no attached head
+    # accounts for — and several detached heads carrying the same panel are
+    # one panel, not three (measured: an internal panel's UID shows up on
+    # every unused GPU head at once).
+    $attached = @()
+    $inactive = @()
+    $seen = @{}
+    foreach ($entry in $parsed) {
+        if ($entry.Flags -band 1) {
+            $attached += @{ Name = $entry.Name; HwId = $entry.HwId; Primary = [bool]($entry.Flags -band 4) }
+            if ($entry.HwId) { $seen[$entry.HwId] = $true }
+        }
+    }
+    foreach ($entry in $parsed) {
+        if (-not ($entry.Flags -band 1) -and $entry.HwId -and -not $seen.ContainsKey($entry.HwId)) {
+            $inactive += @{ Name = $entry.Name; HwId = $entry.HwId }
+            $seen[$entry.HwId] = $true
+        }
+    }
+    foreach ($hwId in $wmiAllHwIds) {
+        if (-not $seen.ContainsKey($hwId)) {
+            $inactive += @{ Name = $hwId; HwId = $hwId }
+        }
+    }
+    return @{ Attached = $attached; Inactive = $inactive }
+}
 """
 
 
@@ -924,10 +971,12 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceMo
 """
         + _CORRELATE_MONITORS_PS
         + r"""
-# DeviceName → hwId, joined by UID inside Build-DeviceHwIdMap. A screen the
-# join cannot place keeps hwId "" — reported as uncorrelated, never guessed.
-$deviceHwIdMap = Build-DeviceHwIdMap `
-    -adapterRecords ([DisplayDevices]::EnumerateAdapters()) -uidToHwId $uidToHwId
+# Presence and identity in one pass: attachment from StateFlags bit 0, primary
+# from bit 2, hwId from the UID join. A screen the join cannot place keeps
+# hwId "" — reported as uncorrelated, never guessed.
+$presence = Split-MonitorPresence `
+    -adapterRecords ([DisplayDevices]::EnumerateAdapters()) `
+    -uidToHwId $uidToHwId -wmiAllHwIds ([string[]]$wmiNames.Keys)
 
 # Helper: current display mode (physical pixels, not DPI-scaled logical pixels)
 function Get-CurrentMode {
@@ -956,23 +1005,27 @@ function Get-MaxHz {
     return $maxHz
 }
 
-# Enumerate active displays via AllScreens (primary first, then sorted by device name)
-$screens = [System.Windows.Forms.Screen]::AllScreens |
-    Sort-Object @{Expression={if ($_.Primary) {0} else {1}}}, DeviceName
+# AllScreens survives only as a bounds fallback for when EnumDisplaySettings
+# cannot answer; which screens exist is StateFlags' answer, not AllScreens'.
+$screenBounds = @{}
+[System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
+    $screenBounds[$_.DeviceName.TrimEnd([char]0, ' ')] = @{W = $_.Bounds.Width; H = $_.Bounds.Height}
+}
 
-foreach ($screen in $screens) {
-    $deviceName = $screen.DeviceName   # e.g., \\.\DISPLAY1
-    $isPrimary = $screen.Primary
+# Attached displays, primary first then by device name
+$sortedAttached = @($presence.Attached |
+    Sort-Object @{Expression={if ($_.Primary) {0} else {1}}}, @{Expression={$_.Name}})
+foreach ($entry in $sortedAttached) {
+    $deviceName = $entry.Name   # e.g., \\.\DISPLAY1
+    $isPrimary = $entry.Primary
+    $hwId = $entry.HwId
 
     # Physical resolution + refresh rate via EnumDisplaySettings (avoids DPI-scaled Bounds)
     $mode = Get-CurrentMode -dev $deviceName
-    $curW = if ($mode.W -gt 0) { $mode.W } else { $screen.Bounds.Width }
-    $curH = if ($mode.H -gt 0) { $mode.H } else { $screen.Bounds.Height }
+    $bounds = if ($screenBounds.ContainsKey($deviceName)) { $screenBounds[$deviceName] } else { @{W = 0; H = 0} }
+    $curW = if ($mode.W -gt 0) { $mode.W } else { $bounds.W }
+    $curH = if ($mode.H -gt 0) { $mode.H } else { $bounds.H }
     $curHz = $mode.Hz
-
-    # Look up hardware ID from pre-built correlation map (index-independent)
-    $cleanDevName = $deviceName.TrimEnd([char]0, ' ')
-    $hwId = if ($deviceHwIdMap.ContainsKey($cleanDevName)) { $deviceHwIdMap[$cleanDevName] } else { "" }
 
     # Native resolution from WMI; fallback to current resolution
     $nativeW = 0; $nativeH = 0
@@ -998,6 +1051,20 @@ foreach ($screen in $screens) {
     $supportsVRR = ($maxHz -gt 60)
 
     Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=$maxHz|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|SupportsVRR=$supportsVRR|IsActive=True"
+}
+
+# Present-but-inactive: panels WMI knows that no attached head carries. No mode
+# data is read for a panel that is not on the desktop — 0 means "the panel did
+# not say" and must stay 0 (settings/panel.py's rule).
+foreach ($entry in $presence.Inactive) {
+    $nativeW = 0; $nativeH = 0
+    if ($entry.HwId -and $wmiNative.ContainsKey($entry.HwId)) {
+        $nativeW = $wmiNative[$entry.HwId].W
+        $nativeH = $wmiNative[$entry.HwId].H
+    }
+    $friendlyName = if ($entry.HwId -and $wmiNames.ContainsKey($entry.HwId)) { $wmiNames[$entry.HwId] } else { '' }
+    if (-not $friendlyName) { $friendlyName = $entry.Name }
+    Write-Output "Monitor=$($entry.Name)|Width=0|Height=0|Refresh=0|Primary=False|NativeW=$nativeW|NativeH=$nativeH|NativeRefresh=0|MaxRefresh=0|FriendlyName=$friendlyName|MonitorId=$($entry.HwId)|SupportsVRR=False|IsActive=False"
 }
 """
     )
@@ -1076,11 +1143,13 @@ foreach ($screen in $screens) {
 
             # Include monitor if:
             # - Active with resolution, OR
-            # - Disconnected with native resolution (from EnumDisplaySettings)
+            # - Present-but-inactive with a native resolution from WMI, OR
+            # - Present-but-inactive with only an identity — a panel WMI names
+            #   is a fact worth reporting even when it reports no modes
             has_resolution = width > 0 and height > 0
             has_native = native_width > 0 and native_height > 0
 
-            if has_resolution or has_native:
+            if has_resolution or has_native or hardware_id:
                 mon_info = MonitorInfo(
                     name=name,
                     width=width if width > 0 else native_width,

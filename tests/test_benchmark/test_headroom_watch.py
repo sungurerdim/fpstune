@@ -322,3 +322,4 @@ class _FakeMonitor:
         self.max_refresh_rate_hz = max_refresh_rate_hz
         self.native_refresh_rate_hz = native_refresh_rate_hz
         self.is_primary = is_primary
+        self.is_active = True

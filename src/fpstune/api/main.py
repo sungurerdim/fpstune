@@ -24,7 +24,6 @@ from fpstune.api.routes import (
     benchmark_router,
     benchmark_suite_router,
     display_router,
-    gpu_router,
     safety_router,
     settings_router,
     settings_stream_router,
@@ -254,7 +253,6 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(settings_stream_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(display_router, prefix="/api", tags=["Display"])
-    app.include_router(gpu_router, prefix="/api/gpu", tags=["GPU"])
     app.include_router(safety_router, prefix="/api", tags=["Safety"])
     app.include_router(benchmark_router, prefix="/api/benchmark", tags=["Benchmark"])
     app.include_router(benchmark_suite_router, prefix="/api/benchmark", tags=["Benchmark"])

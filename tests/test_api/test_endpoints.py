@@ -221,15 +221,6 @@ class TestModuleMetadataIsConsistent:
         registry.get_all.return_value = [setting]
         return patch("fpstune.api.routes.settings._get_registry", return_value=registry)
 
-    def test_an_undeclared_active_module_gets_the_same_answer_from_both(self, client):
-        with self._registry_shipping("undeclared_module"):
-            from_list = client.get("/api/settings/modules/metadata").json()
-            by_id = client.get("/api/settings/modules/undeclared_module/metadata")
-
-        assert by_id.status_code == 200
-        assert from_list == [by_id.json()]
-        assert by_id.json()["display_name"] == "Undeclared Module"
-
     def test_a_module_that_ships_nothing_is_still_404(self, client):
         with self._registry_shipping("undeclared_module"):
             response = client.get("/api/settings/modules/no_such_module/metadata")
@@ -260,14 +251,3 @@ class TestModuleMetadataIsConsistent:
 
 class TestBenchmarkEndpoints:
     """Tests for benchmark endpoints."""
-
-    def test_benchmark_status(self, client):
-        """Test benchmark status endpoint."""
-        with patch("fpstune.api.routes.benchmark.BenchmarkRunner") as mock:
-            mock.return_value.list_results.return_value = []
-
-            response = client.get("/api/benchmark/status")
-
-            assert response.status_code == 200
-            data = response.json()
-            assert "saved_results" in data

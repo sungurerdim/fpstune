@@ -75,17 +75,6 @@ class TestSettingsApply:
 class TestBulkOperations:
     """Tests for bulk settings operations."""
 
-    def test_bulk_reset_empty(self, client):
-        """Test bulk reset with empty list."""
-        response = client.post(
-            "/api/settings/bulk/reset",
-            json={"setting_ids": []},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success_count"] == 0
-        assert data["error_count"] == 0
-
     def test_bulk_optimize_empty(self, client):
         """Test bulk optimize with empty list."""
         response = client.post(

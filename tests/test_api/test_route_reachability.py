@@ -26,40 +26,25 @@ ROOT = Path(__file__).resolve().parents[2]
 # Frozen at the D7 audit. Entries leave this set by gaining a caller or by
 # being deleted — never by growing the set.
 _UNCALLED_BASELINE = {
-    "GET /api/benchmark/compare",
-    "GET /api/benchmark/results",
-    "GET /api/benchmark/results/{result_name}",
-    "GET /api/display/monitors",
+    # Awaiting D3's device-surface wiring (MonitorCard G-Sync panel, power plan card):
     "GET /api/display/vrr-optimization",
-    "GET /api/gpu",
-    "GET /api/gpu/detect",
-    "GET /api/gpu/settings",
-    "GET /api/hardware/context",
-    "GET /api/network/adapter/{adapter_name}/status",
-    "GET /api/power-profile/status",
-    "GET /api/self-check",
-    "GET /api/settings/categories/{category_id}/metadata",
-    "GET /api/settings/count",
-    "GET /api/settings/definitions/category/{category}",
-    "GET /api/settings/detect/{setting_id}",
-    "GET /api/settings/modules/{module_id}/metadata",
-    "POST /api/benchmark/baseline",
-    "POST /api/benchmark/start",
     "POST /api/display/vrr-optimization/apply",
     "POST /api/display/vrr-optimization/reset",
-    "POST /api/elevate",
-    "POST /api/gpu/amd/apply",
-    "POST /api/gpu/apply",
-    "POST /api/gpu/nvidia/apply",
+    "GET /api/power-profile/status",
     "POST /api/power-profile/activate",
     "POST /api/power-profile/revert",
+    # Awaiting D2's two buttons (restore point offered before Absolute Max):
     "POST /api/restore-point",
     "POST /api/settings/bulk/optimize",
-    "POST /api/settings/bulk/reset",
-    "POST /api/settings/game-configs/sweep",
+    # Awaiting the C6-true row wiring (reset endpoint instead of apply+default):
     "POST /api/settings/{setting_id}/reset",
-    "POST /api/settings/{setting_id}/revert",
     "POST /api/settings/{setting_id}/verify",
+    # Awaiting a Home surface for the detection self-check (A12):
+    "GET /api/self-check",
+    # Fate decided by H1's status_cache verdict:
+    "GET /api/status",
+    # Documented non-UI consumer: supervisors and uptime checks (api/main.py).
+    "GET /health",
 }
 
 
@@ -70,6 +55,9 @@ def _frontend_source() -> str:
             path.suffix in (".ts", ".tsx")
             and ".test." not in path.name
             and "__tests__" not in path.parts
+            # msw mock handlers register every route they fake; a mock caller
+            # is not a caller
+            and "test" not in path.parts
         ):
             chunks.append(path.read_text(encoding="utf-8", errors="replace"))
     return "\n".join(chunks)

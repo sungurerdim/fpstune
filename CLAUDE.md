@@ -154,7 +154,6 @@ Single-setting endpoints:
   409 when nothing was recorded (never falls back to reset)
 - `POST /settings/{id}/verify` — detect only → `VerifyResponse{matches, current_value, expected_value, target}`;
   `target` ∈ `recommended` (default) | `default` | `original` names which question was asked
-- `POST /settings/{id}/revert` — deprecated alias of reset (`Deprecation: true` header)
 
 Reset and undo are different promises and must never collapse into one: reset
 writes the curated stock value, undo writes what this machine held. They agree

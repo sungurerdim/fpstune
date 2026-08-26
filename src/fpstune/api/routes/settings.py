@@ -27,7 +27,6 @@ from fpstune.api.schemas import (
     BulkApplyRequest,
     BulkApplyResponse,
     BulkOptimizeRequest,
-    BulkResetRequest,
     CategoryMetadataResponse,
     DetectionResultResponse,
     DetectRequest,
@@ -322,21 +321,6 @@ async def get_definitions() -> list[SettingDefinitionResponse]:
     return [_setting_to_response(s) for s in registry.get_all()]
 
 
-@router.get(
-    "/definitions/category/{category}",
-    response_model=list[SettingDefinitionResponse],
-)
-async def get_category_definitions(category: str) -> list[SettingDefinitionResponse]:
-    """Get setting definitions for a specific category."""
-    registry = await _get_registry_async()
-    settings = registry.get_by_category(category)
-
-    if not settings:
-        raise HTTPException(404, f"No settings found for category: {category}")
-
-    return [_setting_to_response(s) for s in settings]
-
-
 @router.get("/cleanup-sizes")
 async def get_cleanup_sizes() -> dict[str, Any]:
     """Return cached cleanup sizes for all background-detected cleanup settings.
@@ -350,35 +334,6 @@ async def get_cleanup_sizes() -> dict[str, Any]:
         k: {"bytes": v["bytes"], "status": v["status"]}
         for k, v in cleanup_size_cache.all_entries().items()
     }
-
-
-@router.post("/game-configs/sweep")
-async def sweep_game_configs(apply: bool = False) -> dict[str, Any]:
-    """Remove the blocks fpstune wrote for settings it no longer ships.
-
-    Deleting a setting deletes the only thing that knew its marker, so whatever
-    it already wrote into a game config stays there — orphaned, invisible to
-    detection, and impossible to undo through the product. Twelve such blocks
-    were found in one CS2 autoexec.cfg on 2026-08-23, the oldest from August.
-
-    Reports by default and writes only when asked, because this edits a file the
-    user may also have edited by hand. Which markers are live comes from the
-    registry, so a setting's removal is all it takes to make its leftovers
-    sweepable — a hand-written list would go stale on the next removal, which is
-    the defect itself.
-    """
-    from fpstune.settings.executors.config_sweep import sweep_cs2_autoexec
-
-    # File reads and a write: off the event loop, like every other blocking
-    # filesystem path in this API.
-    result: dict[str, Any] = await asyncio.to_thread(sweep_cs2_autoexec, dry_run=not apply)
-    if result["removed"]:
-        log_activity(
-            f"Swept {len(result['removed'])} orphaned game-config blocks: "
-            f"{', '.join(result['removed'])}",
-            "info",
-        )
-    return result
 
 
 # =============================================================================
@@ -464,38 +419,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
         total_time_ms=total_time_ms,
         success_count=success_count,
         error_count=error_count,
-    )
-
-
-@router.get("/detect/{setting_id}", response_model=DetectionResultResponse)
-async def detect_single_setting(setting_id: str) -> DetectionResultResponse:
-    """Detect current value of a single setting."""
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    hardware_context = _get_hardware_context()
-    engine = DetectionEngine(hardware_context=hardware_context)
-    result = await asyncio.to_thread(engine.detect_one, setting)
-
-    # Deliberately does NOT record an original. A single re-detect is almost
-    # always the read that follows an apply, so recording here would capture the
-    # value fpstune had just written and "undo" would put the tweak back.
-    # Originals come from the full scan, which runs before the user can apply
-    # anything. It reads the store, it does not write to it.
-    return DetectionResultResponse(
-        setting_id=result.setting_id,
-        value=result.value,
-        error=result.error,
-        time_ms=result.time_ms,
-        success=result.success,
-        is_optimized=result.is_optimized,
-        is_applicable=result.is_applicable,
-        applicable_reason=result.applicable_reason,
-        recommended_value=setting.recommended_value,
-        original_value=get_original_values().get(setting_id),
     )
 
 
@@ -1027,32 +950,6 @@ async def get_categories_metadata() -> list[CategoryMetadataResponse]:
     return result
 
 
-@router.get("/categories/{category_id}/metadata", response_model=CategoryMetadataResponse)
-async def get_category_metadata_by_id(category_id: str) -> CategoryMetadataResponse:
-    """Get metadata for a specific category.
-
-    Three-way, matching the list endpoint for the same reason ``/modules`` does:
-    declared → the declaration, active but undeclared → the same generated
-    stand-in, neither → 404.
-    """
-    meta = CATEGORY_METADATA.get(category_id)
-    if not meta:
-        registry = await _get_registry_async()
-        if category_id in set(registry.get_categories()):
-            return _fallback_category_metadata(category_id)
-        raise HTTPException(404, f"Unknown category: {category_id}")
-
-    return CategoryMetadataResponse(
-        id=meta.id,
-        display_name=meta.display_name,
-        description=meta.description,
-        icon=meta.icon,
-        color=meta.color,
-        order=meta.order,
-        is_action_only=meta.is_action_only,
-    )
-
-
 def modules_missing_metadata(active_modules: set[str]) -> list[str]:
     """Active modules that ``MODULE_METADATA`` never declared.
 
@@ -1105,41 +1002,6 @@ async def get_modules_metadata() -> list[ModuleMetadataResponse]:
         )
     result.extend(_fallback_module_metadata(module_id) for module_id in missing)
     return result
-
-
-@router.get("/modules/{module_id}/metadata", response_model=ModuleMetadataResponse)
-async def get_module_metadata_by_id(module_id: str) -> ModuleMetadataResponse:
-    """Get metadata for a specific module.
-
-    Same three-way answer as the list endpoint, because one condition may not
-    have two answers: declared → the declaration, active but undeclared → the
-    same generated stand-in the list returns, neither → 404. This used to 404
-    for an active module the list happily rendered.
-    """
-    meta = MODULE_METADATA.get(module_id)
-    if meta:
-        return ModuleMetadataResponse(
-            id=meta.id,
-            display_name=meta.display_name,
-            description=meta.description,
-            order=meta.order,
-        )
-
-    registry = await _get_registry_async()
-    if any(s.module == module_id for s in registry.get_all()):
-        return _fallback_module_metadata(module_id)
-
-    raise HTTPException(404, f"Unknown module: {module_id}")
-
-
-@router.get("/count")
-async def get_setting_count() -> dict[str, Any]:
-    """Get count of settings by category."""
-    registry = await _get_registry_async()
-    return {
-        "total": registry.count(),
-        "by_category": registry.count_by_category(),
-    }
 
 
 # =============================================================================
@@ -1219,23 +1081,6 @@ def _run_bulk_op(
         success_count=success_count,
         error_count=error_count,
         requires_reboot=any_requires_reboot,
-    )
-
-
-@router.post("/bulk/reset", response_model=BulkApplyResponse)
-async def bulk_reset_settings(request: BulkResetRequest) -> BulkApplyResponse:
-    """Reset multiple settings to their default values with verification.
-
-    Uses ThreadPoolExecutor for true parallel subprocess execution; the
-    synchronous drain runs on a worker thread so the event loop stays free
-    for its duration (PERF-14).
-    """
-    return await asyncio.to_thread(
-        _run_bulk_op,
-        request.setting_ids,
-        _reset_single_setting,
-        lambda n: f"Reset {n} setting(s) to default OK",
-        lambda n: f"Failed to reset {n} setting(s)",
     )
 
 
@@ -1476,23 +1321,6 @@ async def verify_setting(setting_id: str, request: VerifyRequest | None = None) 
         current_value=result.value,
         expected_value=expected,
         target=target,
-    )
-
-
-@router.post("/{setting_id}/revert", response_model=ApplyResponse)
-async def revert_setting(setting_id: str) -> ApplyResponse:
-    """Revert a specific setting to its default value.
-
-    Deprecated: use POST /{setting_id}/reset instead.
-    """
-    from fastapi.responses import JSONResponse
-
-    response = await reset_setting(setting_id)
-    # Return with deprecation header — FastAPI doesn't support header injection
-    # on plain Pydantic responses, so we rebuild as JSONResponse.
-    return JSONResponse(  # type: ignore[return-value]
-        content=response.model_dump(),
-        headers={"Deprecation": "true", "Link": f'</{setting_id}/reset>; rel="successor-version"'},
     )
 
 

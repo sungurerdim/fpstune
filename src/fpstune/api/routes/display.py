@@ -430,17 +430,6 @@ async def refresh_displays() -> RefreshDisplaysResponse:
     )
 
 
-@router.get("/monitors")
-async def get_all_monitors() -> list[MonitorInfo]:
-    """Get all connected monitors with current and native settings.
-
-    Returns:
-        List of monitor information payloads.
-    """
-    monitors = await asyncio.to_thread(hardware_manager.detect_monitors)
-    return [MonitorInfo.from_detected(m) for m in monitors]
-
-
 # =============================================================================
 # VRR / G-Sync Optimization
 # =============================================================================

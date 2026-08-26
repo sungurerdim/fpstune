@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 from typing import Any
 
@@ -20,8 +19,6 @@ from fpstune.api.schemas import (
     AudioDeviceInfo,
     CpuInfo,
     GpuDeviceInfo,
-    GpuInfoResponse,
-    HardwareContextResponse,
     HardwareInfo,
     ModuleSettingResponse,
     ModuleStatusResponse,
@@ -111,24 +108,6 @@ async def get_system_info() -> SystemInfo:
         gpu_driver=gpu_info.driver_version if gpu_info else None,
         gpu_vram_mb=gpu_info.vram_mb if gpu_info else None,
         gpu_detecting=detecting,
-    )
-
-
-@router.get("/gpu", response_model=GpuInfoResponse)
-async def get_gpu_info_endpoint() -> GpuInfoResponse:
-    """Get GPU information.
-
-    Returns cached GPU info if available, or detecting=True if detection
-    is in progress. Poll this endpoint until detecting=False.
-    """
-    gpu_info, detecting = get_gpu_info_cached()
-
-    return GpuInfoResponse(
-        vendor=gpu_info.vendor.value if gpu_info else GpuVendor.UNKNOWN.value,
-        name=gpu_info.name if gpu_info else None,
-        driver=gpu_info.driver_version if gpu_info else None,
-        vram_mb=gpu_info.vram_mb if gpu_info else None,
-        detecting=detecting,
     )
 
 
@@ -292,45 +271,6 @@ async def get_self_check(refresh: bool = False) -> dict[str, Any]:
             return persisted
     report = await asyncio.to_thread(run_self_check)
     return report.to_dict()
-
-
-@router.get("/hardware/context", response_model=HardwareContextResponse)
-async def get_hardware_context() -> HardwareContextResponse:
-    """Get hardware context for setting applicability checks.
-
-    This endpoint returns the hardware context that determines
-    which settings are applicable to the current system.
-    """
-    os_info = hardware_manager.detect_os()
-    gpu_info, _ = get_gpu_info_cached()
-
-    # Determine GPU vendors
-    gpu_vendor = None
-    gpu_vendors: list[str] = []
-    gpu_name = None
-    if gpu_info:
-        gpu_vendor = gpu_info.vendor.value
-        gpu_vendors = [gpu_info.vendor.value]
-        gpu_name = gpu_info.name
-
-    # Parse Windows build number
-    windows_build = 0
-    if os_info:
-        with contextlib.suppress(ValueError, TypeError):
-            windows_build = int(os_info.build)
-
-    # Determine if Windows 11 (build >= 22000)
-    is_windows_11 = windows_build >= 22000
-
-    return HardwareContextResponse(
-        gpu_vendor=gpu_vendor,
-        gpu_vendors=gpu_vendors,
-        gpu_name=gpu_name,
-        windows_build=windows_build,
-        windows_version=os_info.display_version if os_info else "Unknown",
-        is_windows_11=is_windows_11,
-        is_admin=is_admin(),
-    )
 
 
 # =============================================================================

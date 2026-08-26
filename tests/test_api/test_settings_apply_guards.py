@@ -34,7 +34,6 @@ from fpstune.api.routes.settings import (
     _verify_setting_applied,
     bulk_apply_settings,
     bulk_optimize_settings,
-    bulk_reset_settings,
     get_definitions,
 )
 from fpstune.api.schemas import (
@@ -42,7 +41,6 @@ from fpstune.api.schemas import (
     BulkApplyRequest,
     BulkApplyResponse,
     BulkOptimizeRequest,
-    BulkResetRequest,
 )
 from fpstune.settings.base import (
     DetectType,
@@ -274,20 +272,6 @@ class TestBulkWorkRunsOffTheEventLoop:
 
         assert seen and seen[0] != threading.get_ident(), (
             "the ThreadPoolExecutor drain ran inline on the event loop"
-        )
-
-    def test_bulk_reset_core_runs_on_a_worker_thread(self) -> None:
-        seen: list[int] = []
-        empty = BulkApplyResponse(results={}, success_count=0, error_count=0, requires_reboot=False)
-
-        with patch(
-            "fpstune.api.routes.settings._run_bulk_op",
-            side_effect=self._record_thread(seen, empty),
-        ):
-            asyncio.run(bulk_reset_settings(BulkResetRequest(setting_ids=[])))
-
-        assert seen and seen[0] != threading.get_ident(), (
-            "_run_bulk_op ran inline on the event loop"
         )
 
     def test_bulk_optimize_core_runs_on_a_worker_thread(self) -> None:

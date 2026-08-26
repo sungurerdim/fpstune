@@ -80,56 +80,6 @@ def _make_monitor(
 # ---------------------------------------------------------------------------
 
 
-class TestGetAllMonitors:
-    """Tests for GET /api/display/monitors."""
-
-    def test_returns_list_of_monitors(self, client: TestClient) -> None:
-        monitor = _make_monitor()
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.detect_monitors.return_value = [monitor]
-            response = client.get("/api/display/monitors")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) == 1
-        assert data[0]["name"] == "DISPLAY1"
-        assert data[0]["width"] == 2560
-        assert data[0]["height"] == 1440
-        assert data[0]["refresh_rate_hz"] == 165
-        assert data[0]["is_primary"] is True
-
-    def test_returns_empty_list_when_no_monitors(self, client: TestClient) -> None:
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.detect_monitors.return_value = []
-            response = client.get("/api/display/monitors")
-
-        assert response.status_code == 200
-        assert response.json() == []
-
-    def test_multiple_monitors(self, client: TestClient) -> None:
-        m1 = _make_monitor(name="DISPLAY1", is_primary=True)
-        m2 = _make_monitor(
-            name="DISPLAY2",
-            width=1920,
-            height=1080,
-            refresh_rate_hz=60,
-            is_primary=False,
-        )
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.detect_monitors.return_value = [m1, m2]
-            response = client.get("/api/display/monitors")
-
-        assert response.status_code == 200
-        data = response.json()
-        assert len(data) == 2
-
-
-# ---------------------------------------------------------------------------
-# POST /api/display/refresh
-# ---------------------------------------------------------------------------
-
-
 class TestRefreshDisplays:
     """Tests for POST /api/display/refresh."""
 

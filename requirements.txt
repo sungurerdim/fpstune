@@ -9,7 +9,7 @@ anyio==4.14.2
     # via
     #   sse-starlette
     #   starlette
-click==8.4.2
+click==8.5.0
     # via
     #   fpstune
     #   uvicorn

@@ -40,6 +40,13 @@
     --score-low: 0 62.8% 45%;
     --score-mid: 35 92% 33%;
     --score-high: 142 76% 30%;
+    /* Where a tweak lives — Home's three groups. Teal, indigo and fuchsia sit
+       apart from each other and from every outcome colour (success green,
+       warning amber, destructive red, primary blue), so a group is told by hue
+       before its heading is read. Same contrast floor as --warning. */
+    --domain-hardware: 175 70% 28%;
+    --domain-software: 250 60% 48%;
+    --domain-game: 305 65% 40%;
     --scrollbar-track: 210 40% 94%;
     --scrollbar-thumb: 215 20% 75%;
     --scrollbar-thumb-hover: 215 20% 60%;
@@ -72,6 +79,9 @@
     --score-low: 0 62.8% 50%;
     --score-mid: 38 92% 50%;
     --score-high: 142 76% 36%;
+    --domain-hardware: 175 65% 52%;
+    --domain-software: 250 85% 74%;
+    --domain-game: 305 75% 70%;
     --scrollbar-track: 217.2 32.6% 10%;
     --scrollbar-thumb: 217.2 32.6% 25%;
     --scrollbar-thumb-hover: 217.2 32.6% 35%;
@@ -82,7 +92,9 @@
   }
   body {
     @apply bg-background text-foreground;
-    font-feature-settings: "rlig" 1, "calt" 1;
+    font-feature-settings:
+      "rlig" 1,
+      "calt" 1;
   }
 
   /* The one focus convention (E7). Three ring recipes existed, on 8 of 48

@@ -126,6 +126,7 @@ export const tr: Record<keyof typeof en, string> = {
   "home.advisoriesClear": "Denetlendi, değişiklik gerekmiyor",
   "home.advisoriesClearHint":
     "fpstune'un denetleyip zaten doğru bulduğu donanım ayarları",
+  "home.whatToDo": "Ne yapabilirsiniz:",
   "home.alreadyOptimized": "Zaten en iyi durumda",
   "home.detecting":
     "Ayarlarınız algılanıyor — {done}/{total} kategori okundu; listeler ve toplamlar sonuçlar geldikçe dolar…",

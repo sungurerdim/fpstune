@@ -9,7 +9,7 @@
  */
 export const settingsTr: Record<
   string,
-  { name: string; description: string }
+  { name: string; description: string; effect?: string }
 > = {
   "power:cpu_min_parking": {
     name: "Uyanık tutulan çekirdekler",
@@ -513,8 +513,7 @@ export const settingsTr: Record<
   },
   "services:NvTelemetryContainer": {
     name: "NVIDIA telemetrisi",
-    description:
-      "NVIDIA kullanım verisi toplama. Kapatmak CPU/RAM kazandırır.",
+    description: "NVIDIA kullanım verisi toplama. Kapatmak CPU/RAM kazandırır.",
   },
   "services:NahimicService": {
     name: "Nahimic ses hizmeti",
@@ -523,8 +522,7 @@ export const settingsTr: Record<
   },
   "services:Fax": {
     name: "Faks hizmeti",
-    description:
-      "Faks iletimini yönetir. Modern sistemlerde gerekmez.",
+    description: "Faks iletimini yönetir. Modern sistemlerde gerekmez.",
   },
   "services:WerSvc": {
     name: "Hata raporlama hizmeti",
@@ -2068,6 +2066,15 @@ export const settingsTr: Record<
     name: "Hat hızı denetimi",
     description:
       "Bu bağlantının pazarlıkla vardığı hızı bağdaştırıcının desteklediği en yüksek hızla karşılaştırır. Fark; kablo, anahtar portu veya karşı uç sınırıdır — Windows ayarı değildir.",
+    effect:
+      "Kabloyu kontrol edin (1 Gbps için Cat 5e ve üstü, 2,5 Gbps ve üzeri için Cat 6), başka bir anahtar portu deneyin ve karşı ucun yüksek hızı desteklediğini doğrulayın.",
+  },
+  "network:*:wifi_link_quality": {
+    name: "Wi-Fi sinyal denetimi",
+    description:
+      "Wi-Fi bağlantısının ne kadar güçlü olduğu ve hangi bantta çalıştığı. Zayıf sinyal ya da 2,4 GHz bandı, hiçbir bağdaştırıcı ayarının kaldıramayacağı gecikme sıçramaları ekler ve hızı sınırlar.",
+    effect:
+      "Erişim noktasına yaklaşın ya da aradaki engeli kaldırın; yönlendirici sunuyorsa 5 GHz veya 6 GHz ağına bağlanın; kablo ikisini de geçer.",
   },
   "network:*:roaming_aggressiveness": {
     name: "Wi-Fi gezinme hevesi",

@@ -15,6 +15,7 @@ import {
   ChevronDown,
   ChevronRight,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
@@ -24,7 +25,11 @@ import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
 import { useT } from "../i18n";
-import { localizedDescription, localizedName } from "../i18n/settings";
+import {
+  localizedDescription,
+  localizedEffect,
+  localizedName,
+} from "../i18n/settings";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
@@ -374,7 +379,9 @@ export function HomeTab() {
                   // what this panel can display.
                   const fps = Math.round(game.measured_fps ?? 0);
                   const pct = game.target_fps
-                    ? Math.round(((game.measured_fps ?? 0) / game.target_fps) * 100)
+                    ? Math.round(
+                        ((game.measured_fps ?? 0) / game.target_fps) * 100,
+                      )
                     : null;
                   return (
                     <Stat
@@ -434,7 +441,6 @@ export function HomeTab() {
                 )}
               </Group>
             )}
-
           </div>
         );
       })()}
@@ -471,11 +477,16 @@ export function HomeTab() {
           loss than every registry tweak above it combined, and it was the sixth
           section down. */}
       {actionableAdvisories.length > 0 && (
-        <Card>
-          <div className="flex items-center gap-2 p-3 border-b border-border">
-            <Info className="w-4 h-4 text-warning" />
-            <h2 className="font-semibold text-sm">{t("home.advisories")}</h2>
-            <span className="text-xs text-muted-foreground">
+        <Card className="border-warning/40" data-testid="home-advisories">
+          <div className="flex items-center gap-2 p-3 border-b border-warning/30 bg-warning/10">
+            <AlertTriangle
+              className="w-4 h-4 text-warning"
+              aria-hidden="true"
+            />
+            <h2 className="font-semibold text-sm text-warning">
+              {t("home.advisories")}
+            </h2>
+            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-warning/15 text-warning">
               {actionableAdvisories.length}
             </span>
             <span className="text-xs text-muted-foreground hidden sm:inline">
@@ -486,10 +497,12 @@ export function HomeTab() {
             {actionableAdvisories.map((s) => (
               <div
                 key={s.id}
-                className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
+                className="p-3 rounded-md border border-warning/30 border-l-4 border-l-warning bg-warning/[0.06]"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{localizedName(s)}</span>
+                  <span className="font-medium text-sm">
+                    {localizedName(s)}
+                  </span>
                   <SettingInfoTooltip setting={s} />
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -498,6 +511,16 @@ export function HomeTab() {
                 <div className="mt-1">
                   <SettingValueState setting={s} />
                 </div>
+                {/* The finding names a problem; this names the move. A cable to
+                    change, a band to switch to — the one line the user came for. */}
+                {localizedEffect(s) && (
+                  <p className="text-xs mt-1.5">
+                    <span className="font-semibold text-warning">
+                      {t("home.whatToDo")}
+                    </span>{" "}
+                    {localizedEffect(s)}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -510,7 +533,9 @@ export function HomeTab() {
       <div
         className={cn(
           "grid gap-4 items-start",
-          suboptimal.length > 0 && cleanups.length > 0 && "lg:grid-cols-2 2xl:grid-cols-[2fr,1fr]",
+          suboptimal.length > 0 &&
+            cleanups.length > 0 &&
+            "lg:grid-cols-2 2xl:grid-cols-[2fr,1fr]",
         )}
       >
         {/* LEFT: what still needs applying, split by where it lives.
@@ -519,9 +544,15 @@ export function HomeTab() {
             to know what a button is about before pressing it. */}
         <div className="space-y-4">
           <TweakGroup
+            accent="hardware"
             title={t("home.hardwareTweaks")}
             subtitle={t("home.hardwareSubtitle")}
-            icon={<Cpu className="w-4 h-4 text-warning" />}
+            icon={
+              <Cpu
+                className="w-4 h-4 text-domain-hardware"
+                aria-hidden="true"
+              />
+            }
             settings={hardwareSuboptimal}
             detecting={detecting}
             isApplying={isApplying}
@@ -529,9 +560,15 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
+            accent="software"
             title={t("home.softwareTweaks")}
             subtitle={t("home.softwareSubtitle")}
-            icon={<Zap className="w-4 h-4 text-warning" />}
+            icon={
+              <Zap
+                className="w-4 h-4 text-domain-software"
+                aria-hidden="true"
+              />
+            }
             settings={softwareSuboptimal}
             detecting={detecting}
             isApplying={isApplying}
@@ -539,9 +576,15 @@ export function HomeTab() {
             categoryLabel={categoryLabel}
           />
           <TweakGroup
+            accent="game"
             title={t("home.gameTweaks")}
             subtitle={t("home.gameSubtitle")}
-            icon={<Gamepad2 className="w-4 h-4 text-warning" />}
+            icon={
+              <Gamepad2
+                className="w-4 h-4 text-domain-game"
+                aria-hidden="true"
+              />
+            }
             settings={gameSuboptimal}
             detecting={detecting}
             isApplying={isApplying}
@@ -639,7 +682,9 @@ export function HomeTab() {
                 className="p-3 rounded-md border border-border border-l-2 border-l-success/60"
               >
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">{localizedName(s)}</span>
+                  <span className="font-medium text-sm">
+                    {localizedName(s)}
+                  </span>
                   <SettingInfoTooltip setting={s} />
                 </div>
                 <div className="mt-1">
@@ -746,14 +791,47 @@ export function HomeTab() {
   );
 }
 
+/** The three places a tweak can live. Each has a colour, and the colour is the
+ *  first thing that separates the groups — before the heading is read. */
+type DomainAccent = "hardware" | "software" | "game";
+
+const DOMAIN_STYLE: Record<
+  DomainAccent,
+  { card: string; header: string; title: string; count: string }
+> = {
+  hardware: {
+    card: "border-l-4 border-l-domain-hardware",
+    header: "bg-domain-hardware/10 border-domain-hardware/20",
+    title: "text-domain-hardware",
+    count: "bg-domain-hardware/15 text-domain-hardware",
+  },
+  software: {
+    card: "border-l-4 border-l-domain-software",
+    header: "bg-domain-software/10 border-domain-software/20",
+    title: "text-domain-software",
+    count: "bg-domain-software/15 text-domain-software",
+  },
+  game: {
+    card: "border-l-4 border-l-domain-game",
+    header: "bg-domain-game/10 border-domain-game/20",
+    title: "text-domain-game",
+    count: "bg-domain-game/15 text-domain-game",
+  },
+};
+
 /**
  * One domain's outstanding tweaks: a count, a bulk apply scoped to that domain, and
  * the rows themselves.
  *
  * A group with nothing outstanding collapses to a single line instead of an empty
  * card, so a fully optimized machine does not show two large boxes saying nothing.
+ *
+ * The three groups used to differ by heading text alone, in the same grey as
+ * everything else; the owner read them as one list. The accent — a coloured left
+ * edge, a tinted header, a coloured count — is what makes them three.
  */
 function TweakGroup({
+  accent,
   title,
   subtitle,
   icon,
@@ -763,6 +841,7 @@ function TweakGroup({
   onApplyAll,
   categoryLabel,
 }: {
+  accent: DomainAccent;
   title: string;
   subtitle: string;
   icon: React.ReactNode;
@@ -773,13 +852,26 @@ function TweakGroup({
   categoryLabel: (id: string) => string;
 }) {
   const { t } = useT();
+  const style = DOMAIN_STYLE[accent];
   return (
-    <Card className="flex flex-col">
-      <div className="flex items-center justify-between p-3 border-b border-border">
+    <Card className={cn("flex flex-col", style.card)} data-domain={accent}>
+      <div
+        className={cn(
+          "flex items-center justify-between p-3 border-b border-border",
+          style.header,
+        )}
+      >
         <div className="flex items-center gap-2 min-w-0">
           {icon}
-          <h2 className="font-semibold text-sm">{title}</h2>
-          <span className="text-xs text-muted-foreground">{settings.length}</span>
+          <h2 className={cn("font-semibold text-sm", style.title)}>{title}</h2>
+          <span
+            className={cn(
+              "text-xs font-semibold px-1.5 py-0.5 rounded",
+              style.count,
+            )}
+          >
+            {settings.length}
+          </span>
           {detecting && (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           )}
@@ -803,9 +895,7 @@ function TweakGroup({
         // false claim: while detection runs nothing has been read yet, so "already
         // optimized" would assert a result the app does not have.
         <p className="text-xs text-muted-foreground px-3 py-2">
-          {detecting
-            ? t("home.readingSettings")
-            : t("home.allOptimized")}
+          {detecting ? t("home.readingSettings") : t("home.allOptimized")}
         </p>
       ) : (
         <div className="p-3 space-y-2">
@@ -853,9 +943,7 @@ function Group({
         border,
       )}
     >
-      <span
-        className={cn("text-xs font-bold uppercase tracking-wider", text)}
-      >
+      <span className={cn("text-xs font-bold uppercase tracking-wider", text)}>
         {label}
       </span>
       {children}

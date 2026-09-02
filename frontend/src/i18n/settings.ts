@@ -16,7 +16,9 @@ import type { Setting } from "../types/setting";
 
 const PER_ADAPTER = /^network:\d+:(.+)$/;
 
-function entryFor(id: string): { name?: string; description?: string } | undefined {
+function entryFor(
+  id: string,
+): { name?: string; description?: string; effect?: string } | undefined {
   const direct = settingsTr[id];
   if (direct) return direct;
   const adapter = PER_ADAPTER.exec(id);
@@ -42,4 +44,17 @@ export function localizedName(setting: Setting): string {
 export function localizedDescription(setting: Setting): string {
   if (getLocale() !== "tr") return setting.description;
   return entryFor(setting.id)?.description || setting.description;
+}
+
+/**
+ * The advisory's "what you can do" sentence, in the active locale.
+ *
+ * `effect` is the one line a finding fpstune cannot fix exists for — the cable
+ * to change, the band to join. English falls through when the catalogue has no
+ * Turkish form, the same way the description does.
+ */
+export function localizedEffect(setting: Setting): string {
+  const english = setting.effect ?? "";
+  if (getLocale() !== "tr") return english;
+  return entryFor(setting.id)?.effect || english;
 }

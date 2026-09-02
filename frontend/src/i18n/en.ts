@@ -132,6 +132,7 @@ export const en = {
   "home.advisoriesClear": "Checked, nothing to change",
   "home.advisoriesClearHint":
     "hardware fpstune checked and found already correct",
+  "home.whatToDo": "What you can do:",
   "home.alreadyOptimized": "Already optimized",
   "home.detecting":
     "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",

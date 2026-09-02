@@ -1,10 +1,7 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   darkMode: ["class"],
-  content: [
-    "./index.html",
-    "./src/**/*.{js,ts,jsx,tsx}",
-  ],
+  content: ["./index.html", "./src/**/*.{js,ts,jsx,tsx}"],
   theme: {
     extend: {
       // Every colour goes through a CSS custom property (declared per theme
@@ -38,6 +35,9 @@ export default {
         "score-low": "hsl(var(--score-low))",
         "score-mid": "hsl(var(--score-mid))",
         "score-high": "hsl(var(--score-high))",
+        "domain-hardware": "hsl(var(--domain-hardware))",
+        "domain-software": "hsl(var(--domain-software))",
+        "domain-game": "hsl(var(--domain-game))",
       },
       borderRadius: {
         lg: "0.5rem",
@@ -68,4 +68,4 @@ export default {
     },
   },
   plugins: [],
-}
+};

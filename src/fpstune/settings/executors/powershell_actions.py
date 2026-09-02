@@ -540,22 +540,11 @@ __MW4_SHADER_SIZE__
 # Special action commands mapped to actual PowerShell scripts
 # Uses %key% placeholder syntax to avoid conflicts with PowerShell {} braces
 ACTION_COMMANDS: dict[str, str] = {
-    # Memory actions
-    "purge_standby": """
-        $code = @'
-        using System;
-        using System.Runtime.InteropServices;
-        public class MemoryAPI {
-            [DllImport("ntdll.dll")]
-            public static extern int NtSetSystemInformation(int InfoClass, IntPtr Info, int Length);
-        }
-'@
-        Add-Type -TypeDefinition $code -Language CSharp
-        $SystemMemoryListInfo = 80
-        $MemoryPurgeStandbyList = New-Object System.IntPtr 4
-        [MemoryAPI]::NtSetSystemInformation($SystemMemoryListInfo, $MemoryPurgeStandbyList, [System.IntPtr]::Size)
-        Write-Output 'Standby list purged'
-    """,
+    # Memory: purge_standby is a Python action (executors/python_actions.py). It
+    # needs ntdll, and reaching that from a script meant compiling a C# class with
+    # Add-Type — the pattern Windows Defender flagged as trojan behaviour on
+    # 2026-09-02. The script also passed the command value as the buffer pointer,
+    # so it never purged anything and always printed success.
     # Service management - with existence check and graceful handling
     # Uses Manual StartType when enabling (most services are on-demand)
     # Verification checks StartType (2=Auto, 3=Manual, 4=Disabled)

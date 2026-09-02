@@ -488,6 +488,16 @@ class PowerShellExecutor(BaseExecutor):
         # Check for special action commands
         cmd_key = setting.apply_command.strip()
         args = {**setting.apply_args, "value": raw_value}
+
+        # Some actions are Python functions, not scripts: the standby-list purge
+        # needs ntdll, and reaching it from PowerShell means compiling a C# class
+        # with Add-Type, the pattern Windows Defender flags. No process starts.
+        from fpstune.settings.executors.python_actions import PYTHON_ACTIONS
+
+        if cmd_key in PYTHON_ACTIONS:
+            ok, message = PYTHON_ACTIONS[cmd_key](args)
+            debug_log("powershell", f"APPLY PYTHON {setting.id}: {cmd_key} ok={ok}")
+            return ok, message
         template = ACTION_COMMANDS.get(cmd_key, setting.apply_command)
         # A value the escaping layer cannot place safely is refused, not written.
         # Returning the executor's own failure shape keeps that a rejection the

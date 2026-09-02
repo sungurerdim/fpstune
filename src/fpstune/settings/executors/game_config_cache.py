@@ -125,17 +125,46 @@ def _steam_library_paths() -> list[Path]:
     return roots
 
 
-def _newest(candidates: Iterable[Path]) -> Path | None:
-    """Pick the most recently written match, or None when there is none.
+# The schema version MW4 stamps into its own filenames. Both files carry one,
+# in different places, which is why this reads every number group rather than a
+# fixed position:
+#
+#     s.1.1.bt.cod26.txt          -> (1, 1, 26)
+#     g.bt.cod26.1.0.l.txt        -> (26, 1, 0)
+#
+# Comparing the tuples orders builds of the same file correctly, and comparing
+# across the two shapes never happens — each glob returns one shape.
+_VERSION_NUMBERS = re.compile(r"\d+")
 
-    A re-install or a build change leaves the previous file in place, so a glob
-    can legitimately return several. Modification time picks the live one
-    without the caller having to know which build tag is current.
+
+def _schema_version(path: Path) -> tuple[int, ...]:
+    return tuple(int(n) for n in _VERSION_NUMBERS.findall(path.name))
+
+
+def _newest(candidates: Iterable[Path]) -> Path | None:
+    """Pick the live config among the builds left lying beside it, or None.
+
+    **Schema version first, modification time only to break a tie.** A re-install
+    or a build change leaves the previous file in place, and MW4's beta did
+    exactly that: ``s.1.0.bt.cod26.txt`` and ``s.1.1.bt.cod26.txt`` sit in the
+    same directory, and the game reads the higher one.
+
+    Ordering on mtime alone was the whole bug. Anything that touches the retired
+    file — fpstune's own earlier write, a restored backup, another "optimizer" —
+    makes it the newest, and from then on every apply lands in a file the game
+    does not read. Apply reports success, verify reports success (it re-reads
+    what fpstune just wrote), and nothing changes in the game. That is the exact
+    shape of the failure `game_processes` guards against from the other
+    direction, and the same reason it cannot be caught downstream.
+
+    Measured on a beta install 2026-08-30: ``s.1.0`` held the tuned values
+    (MotionBlur Off, DoF Low, CorpseLimit 8) and ``s.1.1`` held the game's
+    defaults, because the schema bump did not migrate them.
     """
     files = [p for p in candidates if p.is_file()]
     if not files:
         return None
-    return max(files, key=lambda p: p.stat().st_mtime)
+    return max(files, key=lambda p: (_schema_version(p), p.stat().st_mtime))
 
 
 def mw4_config_paths() -> tuple[Path | None, Path | None]:

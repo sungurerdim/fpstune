@@ -103,6 +103,63 @@ class TestCs2Markers:
         assert gcc.get_cs2_marker("dynamic_lighting", "disabled", "enabled") == "enabled"
 
 
+class TestLiveConfigIsChosenBySchemaVersion:
+    """Which of the builds lying in one directory the game actually reads.
+
+    MW4's beta left ``s.1.0.bt.cod26.txt`` and ``s.1.1.bt.cod26.txt`` side by
+    side and read the higher one. Picking by modification time alone meant any
+    write to the retired file — fpstune's own earlier apply, a restored backup,
+    another tool — pinned every later apply to a file the game ignores, with
+    apply and verify both reporting success.
+    """
+
+    def _touch(self, path, mtime):
+        import os
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("x", encoding="utf-8")
+        os.utime(path, (mtime, mtime))
+        return path
+
+    def test_higher_schema_wins_over_newer_mtime(self, tmp_path):
+        """The regression: the retired file is newer on disk and must still lose."""
+        old_schema = self._touch(tmp_path / "s.1.0.bt.cod26.txt", 2_000_000_000)
+        new_schema = self._touch(tmp_path / "s.1.1.bt.cod26.txt", 1_000_000_000)
+
+        assert gcc._newest([old_schema, new_schema]) == new_schema
+
+    def test_mtime_breaks_a_tie_within_one_schema(self, tmp_path):
+        """Same version twice — a re-install — still falls back to what was written last."""
+        a = self._touch(tmp_path / "players" / "s.1.1.bt.cod26.txt", 1_000_000_000)
+        b = self._touch(tmp_path / "playersBeta" / "s.1.1.bt.cod26.txt", 2_000_000_000)
+
+        assert gcc._newest([a, b]) == b
+
+    def test_double_digit_build_is_not_ordered_as_text(self, tmp_path):
+        """String ordering would put ``s.1.9`` above ``s.1.10``; the game would not."""
+        nine = self._touch(tmp_path / "s.1.9.bt.cod26.txt", 2_000_000_000)
+        ten = self._touch(tmp_path / "s.1.10.bt.cod26.txt", 1_000_000_000)
+
+        assert gcc._newest([nine, ten]) == ten
+
+    def test_profile_file_shape_orders_too(self, tmp_path):
+        """The profile file carries its version after the build tag, not before it."""
+        old = self._touch(tmp_path / "g.bt.cod26.1.0.l.txt", 2_000_000_000)
+        new = self._touch(tmp_path / "g.bt.cod26.1.1.l.txt", 1_000_000_000)
+
+        assert gcc._newest([old, new]) == new
+
+    def test_no_candidates_is_none_not_an_error(self):
+        assert gcc._newest([]) is None
+
+    def test_a_directory_matching_the_glob_is_skipped(self, tmp_path):
+        """Only files are configs; a directory that happens to match is not one."""
+        (tmp_path / "s.1.1.bt.cod26.txt").mkdir()
+        real = self._touch(tmp_path / "s.1.0.bt.cod26.txt", 1_000_000_000)
+
+        assert gcc._newest(tmp_path.glob("s.*.cod26*.txt")) == real
+
+
 @pytest.mark.usefixtures("scan_cache")
 class TestSnapshotIsReadOncePerScan:
     def test_file_is_loaded_only_once_within_a_scan(self, monkeypatch):

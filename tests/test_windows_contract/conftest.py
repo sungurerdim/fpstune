@@ -27,12 +27,13 @@ from typing import Any
 HARNESS_ERROR = "HARNESS_ERROR"
 
 
-def run_shipped_script(script: str, payload: dict[str, Any]) -> str:
+def run_shipped_script(script: str, payload: dict[str, Any], *, expect_exit: int = 0) -> str:
     """Run `script` with `payload` exposed as JSON via $env:FPSTUNE_FAKE_HOST.
 
     Returns the whole of stdout. Use this for a script whose answer is a document
     (ConvertTo-Json output, a table); `run_shipped_command` is the one-line form
-    executors read.
+    executors read. A script that reports failure with `exit 1` on purpose is
+    checked against `expect_exit`, so the exit code is part of the contract too.
     """
     with tempfile.TemporaryDirectory() as tmp:
         payload_path = Path(tmp) / "host.json"
@@ -59,7 +60,9 @@ def run_shipped_script(script: str, payload: dict[str, Any]) -> str:
             check=False,
         )
 
-    assert result.returncode == 0, f"harness failed: {result.stderr[:1500]}"
+    assert result.returncode == expect_exit, (
+        f"exit {result.returncode}, expected {expect_exit}: {result.stdout[:500]} {result.stderr[:1500]}"
+    )
     assert result.stdout.strip(), f"script produced no output. stderr: {result.stderr[:500]}"
     return result.stdout
 

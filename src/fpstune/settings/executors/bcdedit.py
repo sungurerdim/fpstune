@@ -1,7 +1,9 @@
 """BcdEdit executor for boot configuration detection and application.
 
-Uses WMI BcdStore for localization-independent detection.
-Falls back to bcdedit commands for apply operations (which are locale-safe).
+Detection reads the BCD store through CIM (``Invoke-CimMethod`` on the WMI
+``BcdStore`` provider), which answers with typed values no Windows language
+changes. Apply goes through ``bcdedit /set {current}``, which accepts English
+keywords on every language. The two address the same entry by construction.
 """
 
 from __future__ import annotations
@@ -36,6 +38,114 @@ TSC_SYNC_VALUES: dict[int, str] = {
     2: "enhanced",
 }
 
+_BOOLEAN_ELEMENTS = ("useplatformclock", "useplatformtick", "disabledynamictick")
+
+# The well-known identifier of the entry Windows booted from. It is the entry
+# `bcdedit /set {current}` writes, so detect and apply cannot disagree about which
+# one they mean. The boot manager's *default* entry is deliberately not consulted:
+# on a dual-boot machine it can be another OS entirely.
+_CURRENT_ENTRY = "{fa926493-6f1c-4193-a414-58f0b2456d1e}"
+
+
+def _bcd_store_script() -> str:
+    """The PowerShell that reads the four elements from the BCD store, via CIM.
+
+    Why CIM and not ``Get-WmiObject``: ``Get-WmiObject -Class BcdStore`` enumerates
+    *instances* of the class, and BcdStore has none, so the old form threw on
+    every machine and detection quietly fell back to ``bcdedit /enum`` text —
+    whose value words are localized ("Yes" is "Evet" here). ``Invoke-CimMethod``
+    calls the static ``OpenStore`` and then the instance methods on the objects
+    it returns, and the results are typed (booleans, integers), not text.
+
+    Every element type comes from ``BCD_ELEMENT_TYPES`` so there is one table.
+    Output is one ``name=value`` line per element, ``notset`` when the entry has
+    no such element, or one ``ERROR:`` line when the store could not be opened.
+    """
+    boolean_reads = "\n".join(
+        f"    Write-Output ('{name}=' + (Read-BcdBoolean 0x{BCD_ELEMENT_TYPES[name]:08X}))"
+        for name in _BOOLEAN_ELEMENTS
+    )
+    tsc_read = (
+        "    Write-Output ('tscsyncpolicy=' + "
+        f"(Read-BcdInteger 0x{BCD_ELEMENT_TYPES['tscsyncpolicy']:08X}))"
+    )
+    return f"""
+$ErrorActionPreference = 'Stop'
+try {{
+    $opened = Invoke-CimMethod -Namespace root\\WMI -ClassName BcdStore -MethodName OpenStore -Arguments @{{ File = '' }}
+    if (-not $opened.ReturnValue -or $null -eq $opened.Store) {{
+        Write-Output 'ERROR:Cannot open the BCD store'
+        exit 1
+    }}
+    $loaderResult = Invoke-CimMethod -InputObject $opened.Store -MethodName OpenObject -Arguments @{{ Id = '{_CURRENT_ENTRY}' }}
+    if (-not $loaderResult.ReturnValue -or $null -eq $loaderResult.Object) {{
+        Write-Output 'ERROR:Cannot open boot entry'
+        exit 1
+    }}
+    $loader = $loaderResult.Object
+
+    function Read-BcdElement([uint32]$type) {{
+        # An element the entry never had is a method that answers false — or, on
+        # some builds, a CIM error. Both mean "not set"; neither is a failure.
+        try {{
+            $elem = Invoke-CimMethod -InputObject $loader -MethodName GetElement -Arguments @{{ Type = $type }} -ErrorAction Stop
+            if ($elem.ReturnValue -and $null -ne $elem.Element) {{ return $elem.Element }}
+        }} catch {{ }}
+        return $null
+    }}
+    function Read-BcdBoolean([uint32]$type) {{
+        $elem = Read-BcdElement $type
+        if ($null -eq $elem) {{ return 'notset' }}
+        if ([bool]$elem.Boolean) {{ return 'true' }} else {{ return 'false' }}
+    }}
+    function Read-BcdInteger([uint32]$type) {{
+        $elem = Read-BcdElement $type
+        if ($null -eq $elem) {{ return 'notset' }}
+        return [string][uint64]$elem.Integer
+    }}
+
+{boolean_reads}
+{tsc_read}
+}} catch {{
+    Write-Output "ERROR:$($_.Exception.Message)"
+    exit 1
+}}
+"""
+
+
+def parse_store_lines(lines: list[str]) -> dict[str, str | None] | None:
+    """Turn the script's ``name=value`` lines into the executor's vocabulary.
+
+    Returns None on an ``ERROR:`` line — the store could not be read, and a
+    partial answer would be a wrong one. Booleans become ``yes``/``no`` (the words
+    bcdedit accepts), ``notset`` becomes None, and the TSC policy's integer is
+    named through ``TSC_SYNC_VALUES``.
+    """
+    values: dict[str, str | None] = {}
+    for raw in lines:
+        line = raw.strip()
+        if line.startswith("ERROR:"):
+            return None
+        if "=" not in line:
+            continue
+        name, val = line.split("=", 1)
+        name = name.lower().strip()
+        val = val.lower().strip()
+        if val == "notset":
+            values[name] = None
+        elif val == "true":
+            values[name] = "yes"
+        elif val == "false":
+            values[name] = "no"
+        elif name == "tscsyncpolicy" and val.isdigit():
+            values[name] = TSC_SYNC_VALUES.get(int(val), "default")
+        else:
+            values[name] = val
+    return values
+
+
+_BCD_STORE_SCRIPT = _bcd_store_script()
+
 # The command line is later tokenized with args.split() in _run, so a value or
 # value name containing whitespace would append extra bcdedit arguments (e.g.
 # "testsigning on"). BCD names and the values bcdedit accepts for them are all
@@ -50,12 +160,10 @@ class BcdEditExecutor(BaseExecutor):
 
     Handles HPET, dynamic tick, platform tick, etc.
 
-    IMPORTANT: Uses WMI BcdStore for LOCALIZATION-INDEPENDENT detection.
-    The old approach of parsing "Yes/No/Evet/Ja" from bcdedit text output
-    was locale-dependent and unreliable on non-English Windows.
-
-    Detection is done via WMI BcdStore (returns binary values, not localized text).
-    Apply operations still use bcdedit commands (which accept English keywords).
+    Detection is done through the BcdStore provider via CIM, which returns
+    typed values rather than the localized "Yes/No/Evet/Ja" of bcdedit's text;
+    that text is only the fallback for an unelevated process. Apply uses
+    bcdedit commands, which accept English keywords on every language.
     """
 
     _cache: dict[str, str | None] | None = None
@@ -153,101 +261,27 @@ class BcdEditExecutor(BaseExecutor):
         return True, None
 
     def _get_all_values_wmi(self) -> dict[str, str | None]:
-        """Get all BCD values using WMI BcdStore (locale-independent).
+        """Read every BCD value fpstune manages from the store, via CIM.
 
-        This method uses PowerShell with WMI to query the BCD store directly.
-        Returns binary/numeric values that are NOT affected by Windows locale.
-
-        The WMI namespace is root\\WMI with BcdStore class.
+        Typed values, not localized text. When the store cannot be read — most
+        often because the process is not elevated — the answer comes from
+        ``bcdedit /enum {current}`` instead, and the debug log says why.
         """
-        values: dict[str, str | None] = {}
-
         if sys.platform != "win32":
-            return values
+            return {}
 
-        # PowerShell script to query BCD via WMI
-        # This returns numeric values (True/False for booleans, integers for others)
-        # which are locale-independent
-        ps_script = r"""
-try {
-    # Open BCD store via WMI
-    $bcdStore = Get-WmiObject -Namespace root\WMI -Class BcdStore -ErrorAction Stop
-    $result = $bcdStore.OpenStore("")
-    $store = [WMI]"$($result.Store)"
+        from fpstune.utils.debug import debug_log
 
-    # Get current boot entry GUID
-    # {current} maps to the actual GUID of the current boot entry
-    $currentGuid = "{fa926493-6f1c-4193-a414-58f0b2456d1e}"  # Default Windows Boot Manager
-
-    # Try to get the actual current OS loader entry
-    $bootMgrResult = $store.OpenObject("{9dea862c-5cdd-4e70-acc1-f32b344d4795}")
-    if ($bootMgrResult.ReturnValue -eq 0) {
-        $bootMgr = [WMI]"$($bootMgrResult.Object)"
-        $defaultResult = $bootMgr.GetElement(0x23000003)  # BcdBootMgrObject_DefaultObject
-        if ($defaultResult.ReturnValue -eq 0) {
-            $currentGuid = $defaultResult.Element.Id
-        }
-    }
-
-    # Open the current OS loader entry
-    $loaderResult = $store.OpenObject($currentGuid)
-    if ($loaderResult.ReturnValue -ne 0) {
-        Write-Output "ERROR:Cannot open boot entry"
-        exit 1
-    }
-    $loader = [WMI]"$($loaderResult.Object)"
-
-    # Query each element we care about
-    # Element types: 0x26000081=useplatformclock, 0x26000082=useplatformtick,
-    #                0x26000083=disabledynamictick, 0x25000084=tscsyncpolicy
-
-    # useplatformclock (boolean)
-    $elem = $loader.GetElement(0x26000081)
-    if ($elem.ReturnValue -eq 0 -and $elem.Element -ne $null) {
-        $val = $elem.Element.Boolean
-        Write-Output "useplatformclock=$($val.ToString().ToLower())"
-    } else {
-        Write-Output "useplatformclock=notset"
-    }
-
-    # useplatformtick (boolean)
-    $elem = $loader.GetElement(0x26000082)
-    if ($elem.ReturnValue -eq 0 -and $elem.Element -ne $null) {
-        $val = $elem.Element.Boolean
-        Write-Output "useplatformtick=$($val.ToString().ToLower())"
-    } else {
-        Write-Output "useplatformtick=notset"
-    }
-
-    # disabledynamictick (boolean)
-    $elem = $loader.GetElement(0x26000083)
-    if ($elem.ReturnValue -eq 0 -and $elem.Element -ne $null) {
-        $val = $elem.Element.Boolean
-        Write-Output "disabledynamictick=$($val.ToString().ToLower())"
-    } else {
-        Write-Output "disabledynamictick=notset"
-    }
-
-    # tscsyncpolicy (integer: 0=default, 1=legacy, 2=enhanced)
-    $elem = $loader.GetElement(0x25000084)
-    if ($elem.ReturnValue -eq 0 -and $elem.Element -ne $null) {
-        $val = $elem.Element.Integer
-        switch ($val) {
-            1 { Write-Output "tscsyncpolicy=legacy" }
-            2 { Write-Output "tscsyncpolicy=enhanced" }
-            default { Write-Output "tscsyncpolicy=default" }
-        }
-    } else {
-        Write-Output "tscsyncpolicy=notset"
-    }
-
-} catch {
-    Write-Output "ERROR:$($_.Exception.Message)"
-}
-"""
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    _BCD_STORE_SCRIPT,
+                ],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -255,54 +289,21 @@ try {
                 encoding="utf-8",
                 errors="replace",
             )
-
-            for line in result.stdout.splitlines():
-                line = line.strip()
-                if line.startswith("ERROR:"):
-                    # WMI failed (likely not admin) - don't return partial results
-                    from fpstune.utils.debug import debug_log
-
-                    debug_log("bcdedit", f"WMI BcdStore error: {line}")
-                    return self._get_all_values_bcdedit()
-                if "=" not in line:
-                    continue
-
-                name, val = line.split("=", 1)
-                name = name.lower().strip()
-                val = val.lower().strip()
-
-                if val == "notset":
-                    values[name] = None
-                elif val == "true":
-                    values[name] = "yes"
-                elif val == "false":
-                    values[name] = "no"
-                else:
-                    # For tscsyncpolicy: legacy, enhanced, default
-                    values[name] = val
-
-            # If WMI failed, fall back to bcdedit
-            if not values and result.returncode != 0:
-                from fpstune.utils.debug import debug_log
-
-                debug_log(
-                    "bcdedit",
-                    f"WMI failed (returncode={result.returncode}), falling back to bcdedit",
-                )
-                return self._get_all_values_bcdedit()
-
         except Exception as e:
-            # Fall back to bcdedit if PowerShell fails - but log the error
-            from fpstune.utils.debug import debug_log
-
-            debug_log("bcdedit", f"WMI exception: {e}, falling back to bcdedit")
+            debug_log("bcdedit", f"BCD store read exception: {e}, falling back to bcdedit")
             return self._get_all_values_bcdedit()
 
-        # Ensure all expected names are in dict (with None if not found)
-        for name in ["useplatformclock", "useplatformtick", "disabledynamictick", "tscsyncpolicy"]:
-            if name not in values:
-                values[name] = None
+        values = parse_store_lines(result.stdout.splitlines())
+        if values is None or (not values and result.returncode != 0):
+            debug_log(
+                "bcdedit",
+                f"BCD store read failed (returncode={result.returncode}): "
+                f"{result.stdout.strip()[:200]} {result.stderr.strip()[:200]}",
+            )
+            return self._get_all_values_bcdedit()
 
+        for name in (*_BOOLEAN_ELEMENTS, "tscsyncpolicy"):
+            values.setdefault(name, None)
         return values
 
     def _get_all_values_bcdedit(self) -> dict[str, str | None]:

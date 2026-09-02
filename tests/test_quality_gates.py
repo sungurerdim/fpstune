@@ -512,7 +512,6 @@ class TestFunctionLengthCeiling:
         ("src/fpstune/api/routes/settings_stream.py", "_stream_grouped"): 214,
         ("src/fpstune/api/main.py", "create_app"): 197,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
-        ("src/fpstune/settings/executors/bcdedit.py", "_get_all_values_wmi"): 152,
         ("src/fpstune/core/nv_profile.py", "read_applied_settings"): 146,
         ("src/fpstune/core/nv_profile.py", "to_settings_dict"): 143,
     }
@@ -817,9 +816,6 @@ class TestNoLocalizedTextParsing:
             "AMD's plan name, installed verbatim by the chipset driver"
         ),
         ("src/fpstune/settings/discovery/probes.py", "-notlike '*"): _ADAPTER_STRINGS,
-        ("src/fpstune/settings/executors/bcdedit.py", ".ToString().ToLower()"): (
-            "a boolean rendered lower-case"
-        ),
         ("src/fpstune/settings/executors/powershell_actions.py", '-match "`r`n"'): (
             "line-ending probe on fpstune's own file content"
         ),

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import re
-import subprocess
 import sys
 import threading
 from typing import Any
@@ -16,6 +14,8 @@ from pydantic import BaseModel
 from fpstune.api.schemas import MonitorInfo
 from fpstune.settings.panel import primary_monitor, refresh_ceiling_hz
 from fpstune.utils.hardware_manager import hardware_manager
+from fpstune.utils.winapi import display as winapi_display
+from fpstune.utils.winapi.display import DISP_CHANGE_SUCCESSFUL
 
 router = APIRouter(prefix="/display", tags=["display"])
 logger = logging.getLogger(__name__)
@@ -33,139 +33,36 @@ _REVERT_TIMEOUT_S = 15.0
 _pending_lock = threading.Lock()
 _pending_reverts: dict[str, dict[str, Any]] = {}
 
-_MODE_CHANGE_SCRIPT = """
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-
-public class DisplaySettings {{
-    [DllImport("user32.dll")]
-    public static extern int ChangeDisplaySettingsEx(
-        string lpszDeviceName,
-        ref DEVMODE lpDevMode,
-        IntPtr hwnd,
-        int dwflags,
-        IntPtr lParam);
-
-    [DllImport("user32.dll")]
-    public static extern bool EnumDisplaySettings(
-        string lpszDeviceName,
-        int iModeNum,
-        ref DEVMODE lpDevMode);
-
-    public const int CDS_UPDATEREGISTRY = 0x01;
-    public const int CDS_TEST = 0x02;
-    public const int CDS_GLOBAL = 0x08;
-    public const int DISP_CHANGE_SUCCESSFUL = 0;
-    public const int ENUM_CURRENT_SETTINGS = -1;
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-    public struct DEVMODE {{
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string dmDeviceName;
-        public short dmSpecVersion;
-        public short dmDriverVersion;
-        public short dmSize;
-        public short dmDriverExtra;
-        public int dmFields;
-        public int dmPositionX;
-        public int dmPositionY;
-        public int dmDisplayOrientation;
-        public int dmDisplayFixedOutput;
-        public short dmColor;
-        public short dmDuplex;
-        public short dmYResolution;
-        public short dmTTOption;
-        public short dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string dmFormName;
-        public short dmLogPixels;
-        public int dmBitsPerPel;
-        public int dmPelsWidth;
-        public int dmPelsHeight;
-        public int dmDisplayFlags;
-        public int dmDisplayFrequency;
-        public int dmICMMethod;
-        public int dmICMIntent;
-        public int dmMediaType;
-        public int dmDitherType;
-        public int dmReserved1;
-        public int dmReserved2;
-        public int dmPanningWidth;
-        public int dmPanningHeight;
-    }}
-}}
-'@
-
-$device = "{device_name}"
-
-# The mode the machine holds right now, read back before anything changes —
-# this is what the revert timer restores. A machine whose current mode cannot
-# be read gets no write at all.
-$dm = New-Object DisplaySettings+DEVMODE
-$dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($dm)
-$null = [DisplaySettings]::EnumDisplaySettings($device, [DisplaySettings]::ENUM_CURRENT_SETTINGS, [ref]$dm)
-if ($dm.dmPelsWidth -le 0 -or $dm.dmPelsHeight -le 0 -or $dm.dmDisplayFrequency -le 0) {{
-    "NOPRIOR"
-}} else {{
-    "PRIOR=$($dm.dmPelsWidth)x$($dm.dmPelsHeight)@$($dm.dmDisplayFrequency)"
-
-    # Set new values
-    $dm.dmPelsWidth = {target_width}
-    $dm.dmPelsHeight = {target_height}
-    $dm.dmDisplayFrequency = {target_refresh}
-    $dm.dmFields = {fields}  # only the fields that were actually suboptimal
-
-    # CDS_TEST: the driver validates without touching anything. A mode that
-    # fails here is never written.
-    $test = [DisplaySettings]::ChangeDisplaySettingsEx(
-        $device, [ref]$dm, [IntPtr]::Zero, [DisplaySettings]::CDS_TEST, [IntPtr]::Zero)
-    if ($test -ne [DisplaySettings]::DISP_CHANGE_SUCCESSFUL) {{
-        "TESTFAIL:$test"
-    }} else {{
-        $result = [DisplaySettings]::ChangeDisplaySettingsEx(
-            $device, [ref]$dm, [IntPtr]::Zero, [DisplaySettings]::CDS_UPDATEREGISTRY, [IntPtr]::Zero)
-        if ($result -eq [DisplaySettings]::DISP_CHANGE_SUCCESSFUL) {{
-            "SUCCESS"
-        }} else {{
-            "ERROR:$result"
-        }}
-    }}
-}}
-"""
-
 
 def _run_mode_change(
     device_name: str, width: int, height: int, refresh: int, fields: int
 ) -> tuple[str, tuple[int, int, int] | None]:
-    """Run the mode-change script; return (status line, prior mode or None)."""
-    script = _MODE_CHANGE_SCRIPT.format(
-        device_name=device_name,
-        target_width=width,
-        target_height=height,
-        target_refresh=refresh,
-        fields=fields,
+    """Test, then write, one display mode; return (status line, prior mode or None).
+
+    The status words are the ones the PowerShell script used to print — NOPRIOR,
+    TESTFAIL:<code>, SUCCESS, ERROR:<code> — so the route and the revert timer
+    read exactly what they always did. user32 is reached through ctypes
+    (``winapi.display``) rather than a C# class compiled at run time.
+    """
+    prior_mode = winapi_display.current_mode(device_name)
+    if (
+        prior_mode is None
+        or prior_mode.width <= 0
+        or prior_mode.height <= 0
+        or prior_mode.refresh_hz <= 0
+    ):
+        return "NOPRIOR", None
+    prior = (prior_mode.width, prior_mode.height, prior_mode.refresh_hz)
+
+    # CDS_TEST: the driver validates without touching anything. A mode that
+    # fails here is never written.
+    test = winapi_display.change_mode(device_name, width, height, refresh, fields, test_only=True)
+    if test != DISP_CHANGE_SUCCESSFUL:
+        return f"TESTFAIL:{test}", prior
+    result = winapi_display.change_mode(
+        device_name, width, height, refresh, fields, test_only=False
     )
-    result = subprocess.run(  # noqa: S603 - fixed argv, script built from detected values
-        ["powershell", "-NoProfile", "-Command", script],
-        capture_output=True,
-        text=True,
-        timeout=15,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        encoding="utf-8",
-        errors="replace",
-    )
-    prior: tuple[int, int, int] | None = None
-    status_line = ""
-    for line in result.stdout.splitlines():
-        line = line.strip()
-        if line.startswith("PRIOR="):
-            match = re.match(r"PRIOR=(\d+)x(\d+)@(\d+)", line)
-            if match:
-                prior = (int(match.group(1)), int(match.group(2)), int(match.group(3)))
-        elif line:
-            status_line = line
-    return status_line, prior
+    return ("SUCCESS" if result == DISP_CHANGE_SUCCESSFUL else f"ERROR:{result}"), prior
 
 
 def _schedule_revert(device_name: str, prior: tuple[int, int, int], fields: int) -> None:
@@ -367,11 +264,6 @@ async def set_display_to_auto(display_index: int = Path(ge=0, le=10)) -> Display
             revert_timeout_s=_REVERT_TIMEOUT_S,
         )
 
-    except subprocess.TimeoutExpired as e:
-        raise HTTPException(
-            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
-            detail="Display settings change timed out",
-        ) from e
     except HTTPException:
         # The branches above already raised specific errors carrying the
         # DISP_CHANGE code. Letting the catch-all below swallow them turned

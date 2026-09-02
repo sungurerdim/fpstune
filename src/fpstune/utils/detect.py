@@ -14,6 +14,12 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from fpstune.utils.edid import parse_edid
+from fpstune.utils.monitor_topology import (
+    MonitorRow,
+    build_monitor_rows,
+    parse_wmi_monitor_lines,
+)
+from fpstune.utils.winapi import display as winapi_display
 from fpstune.utils.winapi.cpu_topology import core_split
 
 # GPU cache with TTL
@@ -804,238 +810,41 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
         return _cpu_detailed_cache
 
 
-# The EnumDisplayDevices loop lives inside the C# class. Calling the API from
-# PowerShell with [ref] is the proven failure: the identical call returned every
-# adapter from a loop inside C# and returned False with an empty name when the
-# method was invoked from PowerShell with [ref] (declared cb=840, ret=False) —
-# same session, same API, only the binder differs. So the struct never crosses
-# that boundary. Each record is "deviceName|stateFlags|monitorInterfacePath";
-# StateFlags rides along because bit 0 (ATTACHED_TO_DESKTOP) is the attachment
-# answer WMI cannot give (WMI reports Active=True for a panel not on the desktop).
-_DISPLAY_DEVICES_CSHARP = r"""
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class DisplayDevices {
-    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-    private static extern bool EnumDisplayDevices(
-        string lpDevice, uint iDevNum,
-        ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceString;
-        public int StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceKey;
-    }
-    private const uint EDD_GET_DEVICE_INTERFACE_NAME = 1;
-    public static string[] EnumerateAdapters() {
-        var results = new System.Collections.Generic.List<string>();
-        for (uint i = 0; ; i++) {
-            DISPLAY_DEVICE ad = new DISPLAY_DEVICE();
-            ad.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
-            if (!EnumDisplayDevices(null, i, ref ad, 0)) { break; }
-            DISPLAY_DEVICE mon = new DISPLAY_DEVICE();
-            mon.cb = Marshal.SizeOf(typeof(DISPLAY_DEVICE));
-            string monId = "";
-            if (EnumDisplayDevices(ad.DeviceName, 0, ref mon, EDD_GET_DEVICE_INTERFACE_NAME)) {
-                monId = mon.DeviceID;
-            }
-            results.Add(ad.DeviceName.TrimEnd('\0', ' ') + "|" + ad.StateFlags + "|" + monId);
-        }
-        return results.ToArray();
-    }
-}
-'@
-"""
-
-# Correlation is a pure function so the contract tests can run the shipped text
-# against a described host. The join is by UID — the interface path's UID
-# segment is the same number WmiMonitorID.InstanceName carries — never by
-# position. There is deliberately no order-based fallback: zipping two
-# independently sorted lists handed a panel its neighbour's mode table the
-# moment a laptop's internal panel sorted first, and a wrong map is worse than
-# an empty one — empty means "could not correlate", which is visible and
-# reportable, where a plausible wrong map reports success.
-_CORRELATE_MONITORS_PS = r"""
-function Build-DeviceHwIdMap {
-    param([string[]]$adapterRecords, [hashtable]$uidToHwId)
-    $map = @{}
-    foreach ($rec in $adapterRecords) {
-        $f = $rec -split '\|', 3
-        if ($f.Count -ge 3 -and $f[2] -match 'UID(\d+)' -and $uidToHwId.ContainsKey($Matches[1])) {
-            $map[$f[0]] = $uidToHwId[$Matches[1]]
-        }
-    }
-    return $map
-}
-
-# Presence is decided by StateFlags, not by WMI: WMI reports Active=True for a
-# panel that is not on the desktop, so it cannot answer attachment. Bit 0
-# (ATTACHED_TO_DESKTOP) is the desktop; bit 2 (PRIMARY_DEVICE) is the primary;
-# bit 3 (MIRRORING_DRIVER) is a pseudo device that renders nothing a user sees.
-# A panel WMI knows that no attached head carries is present-but-inactive —
-# reported, never silently dropped.
-function Split-MonitorPresence {
-    param([string[]]$adapterRecords, [hashtable]$uidToHwId, [string[]]$wmiAllHwIds)
-    $map = Build-DeviceHwIdMap -adapterRecords $adapterRecords -uidToHwId $uidToHwId
-    $parsed = @()
-    foreach ($rec in $adapterRecords) {
-        $f = $rec -split '\|', 3
-        if ($f.Count -lt 3) { continue }
-        $flags = [int]$f[1]
-        if ($flags -band 8) { continue }
-        $hwId = if ($map.ContainsKey($f[0])) { $map[$f[0]] } else { '' }
-        $uid = if ($f[2] -match 'UID(\d+)') { $Matches[1] } else { '' }
-        $parsed += @{ Name = $f[0]; Flags = $flags; HwId = $hwId; Uid = $uid }
-    }
-    # Attached first, so a detached head still carrying the last-known path of
-    # a panel that is live on another head cannot demote that panel to
-    # inactive. A detached head is only evidence of a panel no attached head
-    # accounts for — and several detached heads carrying the same panel are
-    # one panel, not three (measured: an internal panel's UID shows up on
-    # every unused GPU head at once).
-    $attached = @()
-    $inactive = @()
-    $seen = @{}
-    foreach ($entry in $parsed) {
-        if ($entry.Flags -band 1) {
-            $attached += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid; Primary = [bool]($entry.Flags -band 4) }
-            if ($entry.HwId) { $seen[$entry.HwId] = $true }
-        }
-    }
-    foreach ($entry in $parsed) {
-        if (-not ($entry.Flags -band 1) -and $entry.HwId -and -not $seen.ContainsKey($entry.HwId)) {
-            $inactive += @{ Name = $entry.Name; HwId = $entry.HwId; Uid = $entry.Uid }
-            $seen[$entry.HwId] = $true
-        }
-    }
-    foreach ($hwId in $wmiAllHwIds) {
-        if (-not $seen.ContainsKey($hwId)) {
-            $inactive += @{ Name = $hwId; HwId = $hwId }
-        }
-    }
-    return @{ Attached = $attached; Inactive = $inactive }
-}
-"""
-
-
-def get_monitors() -> list[MonitorInfo]:
-    """Get connected monitors using WMI for actual monitor capabilities.
-
-    Uses WmiMonitorListedSupportedSourceModes for real monitor-supported modes
-    (not GPU capabilities). This gives accurate native resolution per monitor.
-
-    Returns:
-        List of MonitorInfo for each connected display.
-    """
-    import logging
-
-    from fpstune.utils.debug import debug_log
-
-    logger = logging.getLogger("fpstune.detect")
-    debug_log("hardware", "get_monitors() called")
-
-    if sys.platform != "win32":
-        debug_log("hardware", "Not on Windows, returning empty list")
-        return []
-
-    monitors: list[MonitorInfo] = []
-
-    # Monitor detection: AllScreens enumerates the desktop, EnumDisplaySettings
-    # reads modes for the device names AllScreens provides, and the C# constant
-    # above correlates each \\.\DISPLAYn to its monitor hardware id by UID.
-    ps_script = (
-        r"""
+# WMI answers identity: which panels exist (hardware id, the UID Windows gave the
+# instance, the friendly name, the EDID the panel handed the OS) and the modes
+# the panel itself lists. Everything about the desktop — which adapter head is
+# attached, which is primary, what mode it runs — comes from user32 through
+# `utils/winapi/display.py`, in Python, and the join lives in
+# `utils/monitor_topology.py`. The two used to share one PowerShell script that
+# compiled two C# classes with Add-Type: the pattern Windows Defender flagged as
+# trojan behaviour on 2026-09-02, and a compile per scan. The records here are
+# positional and locale-free — numbers and base64 only, the friendly name last
+# because a name may contain the separator.
+_MONITOR_WMI_PS = r"""
 $ErrorActionPreference = 'SilentlyContinue'
-
-# Load Windows Forms for reliable screen enumeration
-Add-Type -AssemblyName System.Windows.Forms 2>$null
-
-# Add EnumDisplaySettings via P/Invoke for refresh rate and mode enumeration
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class DisplaySettings {
-    [DllImport("user32.dll", CharSet = CharSet.Ansi)]
-    public static extern bool EnumDisplaySettings(string lpszDeviceName, int iModeNum, ref DEVMODE lpDevMode);
-    public const int ENUM_CURRENT_SETTINGS = -1;
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
-    public struct DEVMODE {
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string dmDeviceName;
-        public short dmSpecVersion;
-        public short dmDriverVersion;
-        public short dmSize;
-        public short dmDriverExtra;
-        public int dmFields;
-        public int dmPositionX;
-        public int dmPositionY;
-        public int dmDisplayOrientation;
-        public int dmDisplayFixedOutput;
-        public short dmColor;
-        public short dmDuplex;
-        public short dmYResolution;
-        public short dmTTOption;
-        public short dmCollate;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string dmFormName;
-        public short dmLogPixels;
-        public int dmBitsPerPel;
-        public int dmPelsWidth;
-        public int dmPelsHeight;
-        public int dmDisplayFlags;
-        public int dmDisplayFrequency;
-        public int dmICMMethod;
-        public int dmICMIntent;
-        public int dmMediaType;
-        public int dmDitherType;
-        public int dmReserved1;
-        public int dmReserved2;
-        public int dmPanningWidth;
-        public int dmPanningHeight;
-    }
-}
-'@
-"""
-        + _DISPLAY_DEVICES_CSHARP
-        + r"""
-# Build WMI lookup tables (keyed by hardware ID like "DEL4265", "SAM0F75")
-$wmiNames = @{}
-$wmiNative = @{}
-$uidToHwId = @{}   # UID number string → hwId (e.g. "12345" → "DEL4265")
-$uidToEdid = @{}   # UID number string → base64 EDID from the device's own key
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
     if ($parts.Count -ge 2) {
         $hwId = $parts[1]
         $chars = $_.UserFriendlyName | Where-Object { $_ -gt 0 }
         $name = if ($chars) { -join [char[]]$chars } else { "" }
-        $wmiNames[$hwId] = $name
-        if ($_.InstanceName -match 'UID(\d+)') {
-            $uid = $Matches[1]
-            $uidToHwId[$uid] = $hwId
+        $uid = if ($_.InstanceName -match 'UID(\d+)') { $Matches[1] } else { '' }
+        $edidB64 = ''
+        if ($uid) {
             # The instance name doubles as the device's registry path: the EDID
             # the panel handed the OS sits under its Device Parameters key.
             $inst = $_.InstanceName -replace '_\d+$', ''
             $edid = (Get-ItemProperty `
                 -Path "HKLM:\SYSTEM\CurrentControlSet\Enum\$inst\Device Parameters" `
                 -Name EDID -ErrorAction SilentlyContinue).EDID
-            if ($edid) { $uidToEdid[$uid] = [Convert]::ToBase64String([byte[]]$edid) }
+            if ($edid) { $edidB64 = [Convert]::ToBase64String([byte[]]$edid) }
         }
+        "WMI|$hwId|$uid|$edidB64|$name"
     }
 }
-
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceModes 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
     if ($parts.Count -ge 2) {
-        $hwId = $parts[1]
         $nW = 0; $nH = 0; $maxPx = 0
         foreach ($mode in $_.MonitorSourceModes) {
             $px = $mode.HorizontalActivePixels * $mode.VerticalActivePixels
@@ -1045,222 +854,110 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorListedSupportedSourceMo
                 $nH = $mode.VerticalActivePixels
             }
         }
-        if ($nW -gt 0) { $wmiNative[$hwId] = @{W = $nW; H = $nH} }
+        if ($nW -gt 0) { "NATIVE|$($parts[1])|$nW|$nH" }
     }
-}
-
-"""
-        + _CORRELATE_MONITORS_PS
-        + r"""
-# Presence and identity in one pass: attachment from StateFlags bit 0, primary
-# from bit 2, hwId from the UID join. A screen the join cannot place keeps
-# hwId "" — reported as uncorrelated, never guessed.
-$presence = Split-MonitorPresence `
-    -adapterRecords ([DisplayDevices]::EnumerateAdapters()) `
-    -uidToHwId $uidToHwId -wmiAllHwIds ([string[]]$wmiNames.Keys)
-
-# Helper: current display mode (physical pixels, not DPI-scaled logical pixels)
-function Get-CurrentMode {
-    param([string]$dev)
-    $dm = New-Object DisplaySettings+DEVMODE
-    $dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($dm)
-    if ([DisplaySettings]::EnumDisplaySettings($dev, [DisplaySettings]::ENUM_CURRENT_SETTINGS, [ref]$dm)) {
-        return @{ Hz = $dm.dmDisplayFrequency; W = $dm.dmPelsWidth; H = $dm.dmPelsHeight }
-    }
-    return @{ Hz = 0; W = 0; H = 0 }
-}
-
-# Helper: max refresh rate at a specific resolution
-function Get-MaxHz {
-    param([string]$dev, [int]$w, [int]$h)
-    $maxHz = 0
-    $dm = New-Object DisplaySettings+DEVMODE
-    $dm.dmSize = [System.Runtime.InteropServices.Marshal]::SizeOf($dm)
-    $n = 0
-    while ([DisplaySettings]::EnumDisplaySettings($dev, $n, [ref]$dm)) {
-        if ($dm.dmPelsWidth -eq $w -and $dm.dmPelsHeight -eq $h -and $dm.dmDisplayFrequency -gt $maxHz) {
-            $maxHz = $dm.dmDisplayFrequency
-        }
-        $n++
-    }
-    return $maxHz
-}
-
-# AllScreens survives only as a bounds fallback for when EnumDisplaySettings
-# cannot answer; which screens exist is StateFlags' answer, not AllScreens'.
-$screenBounds = @{}
-[System.Windows.Forms.Screen]::AllScreens | ForEach-Object {
-    $screenBounds[$_.DeviceName.TrimEnd([char]0, ' ')] = @{W = $_.Bounds.Width; H = $_.Bounds.Height}
-}
-
-# Attached displays, primary first then by device name
-$sortedAttached = @($presence.Attached |
-    Sort-Object @{Expression={if ($_.Primary) {0} else {1}}}, @{Expression={$_.Name}})
-foreach ($entry in $sortedAttached) {
-    $deviceName = $entry.Name   # e.g., \\.\DISPLAY1
-    $isPrimary = $entry.Primary
-    $hwId = $entry.HwId
-
-    # Physical resolution + refresh rate via EnumDisplaySettings (avoids DPI-scaled Bounds)
-    $mode = Get-CurrentMode -dev $deviceName
-    $bounds = if ($screenBounds.ContainsKey($deviceName)) { $screenBounds[$deviceName] } else { @{W = 0; H = 0} }
-    $curW = if ($mode.W -gt 0) { $mode.W } else { $bounds.W }
-    $curH = if ($mode.H -gt 0) { $mode.H } else { $bounds.H }
-    $curHz = $mode.Hz
-
-    # Native resolution from WMI; fallback to current resolution
-    $nativeW = 0; $nativeH = 0
-    if ($hwId -and $wmiNative.ContainsKey($hwId)) {
-        $nativeW = $wmiNative[$hwId].W
-        $nativeH = $wmiNative[$hwId].H
-    }
-    if ($nativeW -eq 0) { $nativeW = $curW }
-    if ($nativeH -eq 0) { $nativeH = $curH }
-
-    # Max refresh rate at native resolution
-    $maxHz = Get-MaxHz -dev $deviceName -w $nativeW -h $nativeH
-    if ($maxHz -le 0) { $maxHz = $curHz }
-
-    # Friendly name from WMI; fallback to display number
-    $friendlyName = ""
-    if ($hwId -and $wmiNames.ContainsKey($hwId)) { $friendlyName = $wmiNames[$hwId] }
-    if (-not $friendlyName) {
-        $dispNum = if ($deviceName -match 'DISPLAY(\d+)') { $Matches[1] } else { "?" }
-        $friendlyName = "Display $dispNum"
-    }
-
-    # The native refresh rate and VRR support are the EDID's answers, parsed on
-    # the Python side; nothing here manufactures either from the mode list.
-    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
-
-    Write-Output "Monitor=$deviceName|Width=$curW|Height=$curH|Refresh=$curHz|Primary=$isPrimary|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=$maxHz|FriendlyName=$friendlyName|MonitorId=$hwId|IsActive=True|Edid=$edidB64"
-}
-
-# Present-but-inactive: panels WMI knows that no attached head carries. No mode
-# data is read for a panel that is not on the desktop — 0 means "the panel did
-# not say" and must stay 0 (settings/panel.py's rule).
-foreach ($entry in $presence.Inactive) {
-    $nativeW = 0; $nativeH = 0
-    if ($entry.HwId -and $wmiNative.ContainsKey($entry.HwId)) {
-        $nativeW = $wmiNative[$entry.HwId].W
-        $nativeH = $wmiNative[$entry.HwId].H
-    }
-    $friendlyName = if ($entry.HwId -and $wmiNames.ContainsKey($entry.HwId)) { $wmiNames[$entry.HwId] } else { '' }
-    if (-not $friendlyName) { $friendlyName = $entry.Name }
-    $edidB64 = if ($entry.Uid -and $uidToEdid.ContainsKey($entry.Uid)) { $uidToEdid[$entry.Uid] } else { '' }
-    Write-Output "Monitor=$($entry.Name)|Width=0|Height=0|Refresh=0|Primary=False|NativeW=$nativeW|NativeH=$nativeH|MaxRefresh=0|FriendlyName=$friendlyName|MonitorId=$($entry.HwId)|IsActive=False|Edid=$edidB64"
 }
 """
+
+
+def _monitor_from_row(row: MonitorRow) -> MonitorInfo | None:
+    """One report row to a MonitorInfo, or None when there is nothing to report.
+
+    The native refresh rate and VRR support are the EDID's answers. No EDID, or
+    one that fails its own checksum, means both stay unknown — 0 and None —
+    never a guess from the mode list.
+    """
+    edid_info = None
+    if row.edid_b64:
+        try:
+            edid_info = parse_edid(base64.b64decode(row.edid_b64))
+        except Exception:
+            edid_info = None
+    native_refresh = (edid_info.native_refresh_hz or 0) if edid_info else 0
+    supports_vrr = edid_info.supports_vrr if edid_info else None
+
+    # A row is reported when it is active with a resolution, present-but-inactive
+    # with a native resolution from WMI, or carries an identity at all — a panel
+    # WMI names is a fact worth reporting even when it reports no modes.
+    has_resolution = row.width > 0 and row.height > 0
+    has_native = row.native_width > 0 and row.native_height > 0
+    if not (has_resolution or has_native or row.hardware_id):
+        return None
+    return MonitorInfo(
+        name=row.name,
+        width=row.width if row.width > 0 else row.native_width,
+        height=row.height if row.height > 0 else row.native_height,
+        refresh_rate_hz=row.refresh_hz,
+        is_primary=row.primary,
+        friendly_name=row.friendly_name,
+        native_width=row.native_width if row.native_width > 0 else row.width,
+        native_height=row.native_height if row.native_height > 0 else row.height,
+        native_refresh_rate_hz=native_refresh,
+        max_refresh_rate_hz=row.max_refresh_hz if row.max_refresh_hz > 0 else row.refresh_hz,
+        supports_vrr=supports_vrr,
+        is_active=row.is_active,
+        hardware_id=row.hardware_id,
     )
 
+
+def get_monitors() -> list[MonitorInfo]:
+    """Connected monitors: identity from WMI, desktop state and modes from user32.
+
+    Returns:
+        List of MonitorInfo for each present display, attached heads first.
+    """
+    import logging
+
+    from fpstune.utils.debug import debug_context, debug_log
+
+    logger = logging.getLogger("fpstune.detect")
+    debug_log("hardware", "get_monitors() called")
+
+    if sys.platform != "win32":
+        debug_log("hardware", "Not on Windows, returning empty list")
+        return []
+
+    monitors: list[MonitorInfo] = []
     try:
-        from fpstune.utils.debug import debug_context, debug_log
-
-        debug_log("hardware", "Starting PowerShell monitor detection")
-
         with debug_context("get_monitors", "hardware") as dbg:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", ps_script],
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-ExecutionPolicy",
+                    "Bypass",
+                    "-Command",
+                    _MONITOR_WMI_PS,
+                ],
                 capture_output=True,
                 text=True,
-                timeout=60,  # Complex script: WMI + EnumDisplaySettings P/Invoke
+                timeout=60,
                 creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,  # type: ignore[unused-ignore]
                 encoding="utf-8",
                 errors="replace",
             )
-
             dbg.set_detail("exit_code", result.returncode)
-            dbg.set_detail("stdout_length", len(result.stdout))
-            dbg.set_detail("stderr_length", len(result.stderr))
             dbg.set_detail("stdout_preview", result.stdout[:1000] if result.stdout else "(empty)")
-            dbg.set_detail("stderr_preview", result.stderr[:500] if result.stderr else "(empty)")
-
-            # Always log regardless of DEBUG_ENABLED (stored in entries)
-            debug_log("hardware", f"Monitor PS exit_code={result.returncode}")
-            debug_log("hardware", f"Monitor PS stdout_len={len(result.stdout)}")
-            debug_log("hardware", f"Monitor PS stdout: {result.stdout[:800]}")
             if result.stderr:
-                debug_log("hardware", f"Monitor PS stderr: {result.stderr[:500]}")
-
-            logger.debug(f"Monitor detection: exit={result.returncode}")
-            if result.stderr:
-                logger.debug(f"Monitor stderr: {result.stderr[:200]}")
+                logger.debug(f"Monitor WMI stderr: {result.stderr[:200]}")
                 dbg.add_warning(f"stderr: {result.stderr[:200]}")
-
-            # Log raw output for debugging
             if not result.stdout.strip():
-                dbg.add_error("Empty stdout from PowerShell")
-                logger.warning("Monitor detection returned empty output")
-                debug_log("hardware", "PROBLEM: Empty stdout from monitor detection!")
+                dbg.add_error("Empty stdout from the WMI monitor query")
+                logger.warning("Monitor WMI query returned empty output")
 
-        lines_found = 0
-        monitor_lines = []
-        for line in result.stdout.splitlines():
-            line = line.strip()
-            lines_found += 1
-            if not line.startswith("Monitor="):
-                continue
-            monitor_lines.append(line)
+            facts = parse_wmi_monitor_lines(result.stdout)
+            records = winapi_display.enumerate_adapters()
+            dbg.set_detail("wmi_panels", len(facts.names))
+            dbg.set_detail("adapter_records", len(records))
+            debug_log("hardware", f"Monitor WMI panels={len(facts.names)} heads={len(records)}")
+            rows = build_monitor_rows(
+                facts, records, winapi_display.current_mode, winapi_display.max_refresh_at
+            )
 
-        debug_log(
-            "hardware",
-            f"Total lines in output: {lines_found}, Monitor= lines: {len(monitor_lines)}",
-        )
-        for ml in monitor_lines:
-            debug_log("hardware", f"Monitor line: {ml[:200]}")
-
-        for line in monitor_lines:
-            parts = dict(p.split("=", 1) for p in line.split("|") if "=" in p)
-            name = parts.get("Monitor", "Display")
-            width = int(parts.get("Width", 0) or 0)
-            height = int(parts.get("Height", 0) or 0)
-            is_primary = parts.get("Primary", "False").lower() == "true"
-            refresh_rate = int(parts.get("Refresh", 0) or 0)
-            native_width = int(parts.get("NativeW", 0) or 0)
-            native_height = int(parts.get("NativeH", 0) or 0)
-            max_refresh = int(parts.get("MaxRefresh", 0) or 0)
-            friendly_name = parts.get("FriendlyName", "").strip()
-            is_active = parts.get("IsActive", "True").lower() == "true"
-            hardware_id = parts.get("MonitorId", "").strip()
-
-            # The native refresh rate and VRR support are the EDID's answers.
-            # No EDID, or one that fails its own checksum, means both stay
-            # unknown — 0 and None — never a guess from the mode list.
-            edid_info = None
-            edid_b64 = parts.get("Edid", "").strip()
-            if edid_b64:
-                try:
-                    edid_info = parse_edid(base64.b64decode(edid_b64))
-                except Exception:
-                    edid_info = None
-            native_refresh = (edid_info.native_refresh_hz or 0) if edid_info else 0
-            supports_vrr = edid_info.supports_vrr if edid_info else None
-
-            # Include monitor if:
-            # - Active with resolution, OR
-            # - Present-but-inactive with a native resolution from WMI, OR
-            # - Present-but-inactive with only an identity — a panel WMI names
-            #   is a fact worth reporting even when it reports no modes
-            has_resolution = width > 0 and height > 0
-            has_native = native_width > 0 and native_height > 0
-
-            if has_resolution or has_native or hardware_id:
-                mon_info = MonitorInfo(
-                    name=name,
-                    width=width if width > 0 else native_width,
-                    height=height if height > 0 else native_height,
-                    refresh_rate_hz=refresh_rate,
-                    is_primary=is_primary,
-                    friendly_name=friendly_name,
-                    native_width=native_width if native_width > 0 else width,
-                    native_height=native_height if native_height > 0 else height,
-                    native_refresh_rate_hz=native_refresh,
-                    max_refresh_rate_hz=max_refresh if max_refresh > 0 else refresh_rate,
-                    supports_vrr=supports_vrr,
-                    is_active=is_active,
-                    hardware_id=hardware_id,
-                )
-                monitors.append(mon_info)
+        for row in rows:
+            info = _monitor_from_row(row)
+            if info is not None:
+                monitors.append(info)
 
     except Exception as e:
         logger.warning("Failed to get monitor info: %s", e)

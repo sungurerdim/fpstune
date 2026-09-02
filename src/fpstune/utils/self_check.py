@@ -229,19 +229,20 @@ def check_gpu_sources(gpu: GpuInfo | None, registry_vram_mb: int | None) -> list
 
 
 def _raw_monitor_sources() -> tuple[list[str], list[str]]:
-    """The two raw enumerations, read independently of the report pipeline."""
-    from fpstune.utils.detect import _DISPLAY_DEVICES_CSHARP
+    """The two raw enumerations, read independently of the report pipeline.
 
-    script = (
-        _DISPLAY_DEVICES_CSHARP
-        + r"""
+    WMI is asked for the panel ids in its own process; the adapter heads come
+    from user32 through ``winapi.display`` in this one. Neither goes through
+    ``monitor_topology``, which is the point of a cross-check.
+    """
+    from fpstune.utils.winapi.display import enumerate_adapters
+
+    script = r"""
 Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Object {
     $parts = $_.InstanceName -split '\\'
     if ($parts.Count -ge 2) { "WMI=$($parts[1])" }
 }
-foreach ($rec in [DisplayDevices]::EnumerateAdapters()) { "REC=$rec" }
 """
-    )
     result = subprocess.run(  # noqa: S603 - fixed argv, constant script
         ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
         capture_output=True,
@@ -252,13 +253,11 @@ foreach ($rec in [DisplayDevices]::EnumerateAdapters()) { "REC=$rec" }
         errors="replace",
     )
     wmi_ids: list[str] = []
-    records: list[str] = []
     for line in result.stdout.splitlines():
         line = line.strip()
         if line.startswith("WMI="):
             wmi_ids.append(line[4:])
-        elif line.startswith("REC="):
-            records.append(line[4:])
+    records = [record.as_record() for record in enumerate_adapters()]
     return wmi_ids, records
 
 

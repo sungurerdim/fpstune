@@ -492,9 +492,10 @@ class TestFunctionLengthCeiling:
     """H3's KISS gate: the twelve functions over 140 lines are the ceiling.
 
     Length is a proxy, and an honest one here: every function on this list
-    interleaves at least two jobs (get_monitors parses three PowerShell
-    outputs and correlates them; toggle_loudness_eq mixes device lookup,
+    interleaves at least two jobs (toggle_loudness_eq mixes device lookup,
     registry writes and service restarts). The frozen set may only shrink —
+    get_monitors left it on 2026-09-02 when the P/Invoke half moved to
+    winapi.display and the join to monitor_topology (355 -> 78 lines) —
     a NEW function over the floor fails immediately, and splitting one of
     these must remove its entry in the same change, so every simplification
     is on the record. The tested ones (toggle_loudness_eq,
@@ -505,17 +506,14 @@ class TestFunctionLengthCeiling:
 
     # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
     _CEILING = {
-        ("src/fpstune/utils/detect.py", "get_monitors"): 355,
         ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
         ("src/fpstune/settings/executors/powershell.py", "detect"): 251,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/routes/settings_stream.py", "_stream_grouped"): 214,
         ("src/fpstune/api/main.py", "create_app"): 197,
-        ("src/fpstune/api/routes/debug.py", "diagnose_monitors"): 182,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
         ("src/fpstune/settings/executors/bcdedit.py", "_get_all_values_wmi"): 152,
         ("src/fpstune/core/nv_profile.py", "read_applied_settings"): 146,
-        ("src/fpstune/api/routes/display.py", "set_display_to_auto"): 144,
         ("src/fpstune/core/nv_profile.py", "to_settings_dict"): 143,
     }
 
@@ -569,8 +567,8 @@ class TestRouteModuleCeiling:
     # Frozen at the H1 audit (2026-08-26), in lines; lowered as modules shrink.
     _CEILING = {
         "src/fpstune/api/routes/settings.py": 1190,
-        "src/fpstune/api/routes/display.py": 721,
-        "src/fpstune/api/routes/debug.py": 555,
+        "src/fpstune/api/routes/display.py": 613,
+        "src/fpstune/api/routes/debug.py": 501,
     }
 
     def test_no_route_module_grows_past_its_ceiling(self) -> None:
@@ -637,18 +635,20 @@ class TestDuplicationCeiling:
     """H2's DRY gate: the known copy-paste sites can only shrink.
 
     The Steam install-path registry read is spelled 24 times across five
-    files (each file grew its own helper constant around the same core), and
-    the DEVMODE C# struct exists twice (detect.py enumerates with it,
-    display.py changes modes with it). Consolidating them changes command
-    strings byte-for-byte and therefore needs windows-contract evidence per
-    site — so the gate freezes the counts first: a 25th Steam-path spelling
-    or a 3rd DEVMODE is red on arrival, and every consolidation lowers its
-    ceiling here in the same change.
+    files (each file grew its own helper constant around the same core).
+    Consolidating them changes command strings byte-for-byte and therefore
+    needs windows-contract evidence per site — so the gate freezes the count
+    first: a 25th Steam-path spelling is red on arrival, and every
+    consolidation lowers its ceiling here in the same change. The DEVMODE
+    C# struct used to exist twice (detect.py enumerated with it, display.py
+    changed modes with it); both moved to one ctypes struct in
+    winapi.display on 2026-09-02, so its ceiling is 0 and a C# DEVMODE
+    anywhere is red on arrival.
     """
 
     _STEAM_PATTERN = r"Valve.{1,4}Steam"
     _STEAM_CEILING = 24
-    _DEVMODE_CEILING = 2
+    _DEVMODE_CEILING = 0
 
     def _counts(self) -> tuple[int, int]:
         steam = devmode = 0

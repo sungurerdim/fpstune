@@ -7,6 +7,7 @@ Enable debug mode by setting FPSTUNE_DEBUG=1 environment variable.
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import re
 import sys
@@ -21,6 +22,7 @@ from fpstune.utils.debug import (
     is_debug_enabled,
 )
 from fpstune.utils.powershell import run_powershell
+from fpstune.utils.winapi import display as winapi_display
 
 router = APIRouter(prefix="/api/debug", tags=["debug"])
 logger = logging.getLogger(__name__)
@@ -139,87 +141,31 @@ async def diagnose_monitors() -> dict[str, Any]:
         }
     )
 
-    # Step 3: EnumDisplayDevices via C# interop
-    step3_cmd = r"""
-    Add-Type -TypeDefinition @"
-using System;
-using System.Runtime.InteropServices;
-using System.Collections.Generic;
-
-public class DisplayDiag {
-    [DllImport("user32.dll", CharSet = CharSet.Auto)]
-    public static extern bool EnumDisplayDevices(string lpDevice, uint iDevNum, ref DISPLAY_DEVICE lpDisplayDevice, uint dwFlags);
-
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Auto)]
-    public struct DISPLAY_DEVICE {
-        public int cb;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
-        public string DeviceName;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceString;
-        public uint StateFlags;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceID;
-        [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)]
-        public string DeviceKey;
-    }
-
-    public const uint DISPLAY_DEVICE_ACTIVE = 0x00000001;
-    public const uint DISPLAY_DEVICE_ATTACHED_TO_DESKTOP = 0x00000002;
-    public const uint DISPLAY_DEVICE_PRIMARY_DEVICE = 0x00000004;
-
-    public static List<object> GetDisplayDevices() {
-        var devices = new List<object>();
-        DISPLAY_DEVICE dd = new DISPLAY_DEVICE();
-        dd.cb = Marshal.SizeOf(dd);
-
-        uint i = 0;
-        while (EnumDisplayDevices(null, i, ref dd, 0)) {
-            DISPLAY_DEVICE monitor = new DISPLAY_DEVICE();
-            monitor.cb = Marshal.SizeOf(monitor);
-            uint j = 0;
-            var monitors = new List<object>();
-            while (EnumDisplayDevices(dd.DeviceName, j, ref monitor, 0)) {
-                monitors.Add(new {
-                    MonitorName = monitor.DeviceName,
-                    MonitorString = monitor.DeviceString,
-                    MonitorID = monitor.DeviceID,
-                    MonitorFlags = monitor.StateFlags
-                });
-                j++;
+    # Step 3: EnumDisplayDevices through winapi.display (ctypes; nothing compiled)
+    try:
+        records = await asyncio.to_thread(winapi_display.enumerate_adapters)
+        devices = [
+            {
+                "AdapterName": record.device_name,
+                "Flags": record.state_flags,
+                "IsAttached": record.attached,
+                "IsPrimary": record.primary,
+                "IsMirroring": record.mirroring,
+                "MonitorInterfacePath": record.monitor_interface_path,
             }
-            devices.Add(new {
-                AdapterName = dd.DeviceName,
-                AdapterString = dd.DeviceString,
-                AdapterID = dd.DeviceID,
-                Flags = dd.StateFlags,
-                IsActive = (dd.StateFlags & DISPLAY_DEVICE_ACTIVE) != 0,
-                IsAttached = (dd.StateFlags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0,
-                IsPrimary = (dd.StateFlags & DISPLAY_DEVICE_PRIMARY_DEVICE) != 0,
-                Monitors = monitors
-            });
-            i++;
-        }
-        return devices;
-    }
-}
-"@ -ErrorAction SilentlyContinue
-
-try {
-    $devices = [DisplayDiag]::GetDisplayDevices()
-    $devices | ConvertTo-Json -Depth 4
-} catch {
-    Write-Output "ERROR: $($_.Exception.Message)"
-}
-    """
-    success, output = await asyncio.to_thread(run_powershell, step3_cmd, timeout=30)
-    results["steps"].append(
-        {
-            "name": "EnumDisplayDevices",
-            "success": success,
-            "output": output[:3000],
-        }
-    )
+            for record in records
+        ]
+        results["steps"].append(
+            {
+                "name": "EnumDisplayDevices",
+                "success": True,
+                "output": json.dumps(devices, indent=2)[:3000],
+            }
+        )
+    except Exception as exc:
+        results["steps"].append(
+            {"name": "EnumDisplayDevices", "success": False, "output": f"ERROR: {exc}"}
+        )
 
     # Step 4: Check for NVIDIA GPU (for G-Sync detection)
     step4_cmd = """

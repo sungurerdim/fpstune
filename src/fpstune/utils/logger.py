@@ -48,6 +48,8 @@ class _Colors:
     BRIGHT_GREEN = "\033[92m"
     BRIGHT_YELLOW = "\033[93m"
     BRIGHT_CYAN = "\033[96m"
+    BRIGHT_BLUE = "\033[94m"
+    BRIGHT_MAGENTA = "\033[95m"
 
 
 # Palette cycled per setting_id for consistent per-tweak coloring
@@ -61,6 +63,51 @@ _TWEAK_COLORS = [
     _Colors.BRIGHT_GREEN,
     _Colors.BRIGHT_YELLOW,
 ]
+
+
+# What the message is *about* and how it *went*, each with a colour of its own.
+#
+# A log line reads as prose until something goes wrong, and then it is scanned:
+# the eye looks for the operation (was this an apply or a verify?) and the
+# outcome (did it fail?). Both used to arrive in the message's default colour,
+# so `APPLY ERROR` and `DETECT MAP` were the same grey. The palette is applied
+# by the console formatter on the way out — call sites write plain words — and
+# the file formatter never sees it. Operations are plain hues; outcomes are bold
+# — green for done, red for failed, yellow for warned or skipped — so the two
+# families never share a rendering even where they share a hue.
+_OPERATION_COLORS: dict[str, str] = {
+    "APPLY": _Colors.BRIGHT_MAGENTA,
+    "VERIFY": _Colors.BRIGHT_CYAN,
+    "DETECT": _Colors.BRIGHT_BLUE,
+    "RESET": _Colors.YELLOW,
+    "UNDO": _Colors.BRIGHT_YELLOW,
+    "SCAN": _Colors.CYAN,
+    "CLEANUP": _Colors.GREEN,
+}
+_STATUS_COLORS: dict[str, str] = {
+    "OK": _Colors.BOLD + _Colors.BRIGHT_GREEN,
+    "SUCCESS": _Colors.BOLD + _Colors.BRIGHT_GREEN,
+    "APPLIED": _Colors.BOLD + _Colors.BRIGHT_GREEN,
+    "VERIFIED": _Colors.BOLD + _Colors.BRIGHT_GREEN,
+    "FAIL": _Colors.BOLD + _Colors.BRIGHT_RED,
+    "FAILED": _Colors.BOLD + _Colors.BRIGHT_RED,
+    "ERROR": _Colors.BOLD + _Colors.BRIGHT_RED,
+    "TIMEOUT": _Colors.BOLD + _Colors.BRIGHT_RED,
+    "BLOCKED": _Colors.BOLD + _Colors.RED,
+    "REJECTED": _Colors.BOLD + _Colors.RED,
+    "WARN": _Colors.BOLD + _Colors.YELLOW,
+    "SKIPPED": _Colors.BOLD + _Colors.YELLOW,
+    "SKIP": _Colors.BOLD + _Colors.YELLOW,
+}
+_TOKEN_COLORS: dict[str, str] = {**_OPERATION_COLORS, **_STATUS_COLORS}
+# Upper-case whole words only, so a setting id (`game_config:mw4:ok`) or a path
+# is never touched; `[OK]` matches because `[` and `]` are word boundaries.
+_TOKEN = re.compile(r"\b(" + "|".join(sorted(_TOKEN_COLORS, key=len, reverse=True)) + r")\b")
+
+
+def colorize_tokens(message: str) -> str:
+    """Wrap each operation and outcome word in its colour; everything else is left as is."""
+    return _TOKEN.sub(lambda m: f"{_TOKEN_COLORS[m.group(1)]}{m.group(1)}{_Colors.RESET}", message)
 
 
 def tweak_label(setting_id: str) -> str:
@@ -80,6 +127,10 @@ class _ColorFormatter(logging.Formatter):
     """Custom formatter with colors and professional format.
 
     Format: LEVEL | service | dd.mm.yyyy HH:MM:SS | message
+
+    The frame (level, component, time) is kept quiet — the level carries the one
+    colour there — so that the message's own operation and outcome words, coloured
+    by ``colorize_tokens``, are what stands out.
     """
 
     # Level colors
@@ -121,11 +172,11 @@ class _ColorFormatter(logging.Formatter):
             return (
                 f"{level_color}{level}{_Colors.RESET} "
                 f"{_Colors.DIM}|{_Colors.RESET} "
-                f"{_Colors.MAGENTA}{name:20}{_Colors.RESET} "
+                f"{_Colors.DIM}{name:20}{_Colors.RESET} "
                 f"{_Colors.DIM}|{_Colors.RESET} "
                 f"{_Colors.GRAY}{timestamp}{_Colors.RESET} "
                 f"{_Colors.DIM}|{_Colors.RESET} "
-                f"{message}"
+                f"{colorize_tokens(message)}"
             )
         else:
             return f"{level} | {name:20} | {timestamp} | {message}"
@@ -354,15 +405,16 @@ def log_activity(message: str, level: str = "info") -> None:
     """
     activity_log.add(message, level)
 
-    # Also log to standard logger with colored prefix
+    # Also log to the standard logger with a plain prefix (ASCII for Windows
+    # compatibility). The console formatter colours the prefix along with every
+    # other outcome word, so no escape is written into the message here — which
+    # is also why the file handler has nothing to strip from these lines.
     logger = get_logger()
-
-    # Map level to log method and add prefix (ASCII for Windows compatibility)
     if level == "success":
-        logger.info(f"{_Colors.GREEN}[OK]{_Colors.RESET} {message}")
+        logger.info(f"[OK] {message}")
     elif level == "error":
-        logger.error(f"{_Colors.RED}[FAIL]{_Colors.RESET} {message}")
+        logger.error(f"[FAIL] {message}")
     elif level == "warning":
-        logger.warning(f"{_Colors.YELLOW}[WARN]{_Colors.RESET} {message}")
+        logger.warning(f"[WARN] {message}")
     else:
         logger.info(message)

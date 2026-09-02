@@ -27,6 +27,7 @@ from fpstune.utils.logger import setup_logging
 from fpstune.utils.runtime import frontend_dist, frontend_source, is_frozen
 
 if TYPE_CHECKING:
+    import subprocess
     import types
 
 # ---------------------------------------------------------------------------
@@ -454,15 +455,38 @@ def _serve_packaged(*, port: int, no_browser: bool) -> None:
         ui.ok("Goodbye")
 
 
+def _pump_output(name: str, proc: subprocess.Popen[bytes]) -> None:
+    """Relay a child's output line by line until it closes its pipe.
+
+    The children used to write into pipes nobody read: their logs were invisible,
+    and once a pipe's buffer filled (64 KB of uvicorn output — an hour of use) the
+    child blocked on its next write and the API stopped answering. Reading here
+    is what keeps the child alive; the relay is what makes the logs visible.
+    """
+    stdout = getattr(proc, "stdout", None)
+    if stdout is None:
+        return
+    for raw in stdout:
+        ui.relay(name, raw.decode("utf-8", errors="replace").rstrip("\r\n"))
+
+
 def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: bool) -> None:
     """Run the API and the Vite dev server as children, so both reload on edit."""
+    import os
     import signal
     import subprocess
+    import threading
     import time
     import webbrowser
 
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
     frontend_dir = frontend_source()
+
+    # The children cannot see the terminal, so left alone they print plain text.
+    # FORCE_COLOR asks their loggers (Rich honours it, so does Vite) to colour
+    # anyway; `relay` parses those escapes and this console renders them by
+    # whatever means it has. Only asked for when there is a terminal to render.
+    child_env = {**os.environ, "FORCE_COLOR": "1"} if ui.console.is_terminal else None
 
     if not api_only and frontend_dir is None:
         ui.warn("No frontend source tree here", "serving the API alone")
@@ -482,10 +506,12 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
                 str(port),
             ],
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            env=child_env,
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
         )
         processes.append(("API", api_process))
+        threading.Thread(target=_pump_output, args=("API", api_process), daemon=True).start()
         ui.ok("API started", f"http://127.0.0.1:{port}")
     except OSError as e:
         ui.fail("Could not start the API", str(e))
@@ -512,11 +538,15 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
                 ["npm", "run", "dev", "--", "--port", str(ui_port)],
                 cwd=frontend_dir,
                 stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                env=child_env,
                 shell=sys.platform == "win32",
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
             )
             processes.append(("Frontend", frontend_process))
+            threading.Thread(
+                target=_pump_output, args=("WEB", frontend_process), daemon=True
+            ).start()
             ui.ok("Frontend started", f"http://localhost:{ui_port}")
         except OSError as e:
             ui.warn("Could not start the frontend", str(e))

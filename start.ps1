@@ -4,10 +4,12 @@
 $ErrorActionPreference = "Stop"
 $Host.UI.RawUI.WindowTitle = "fpstune"
 
-# Set UTF-8 encoding and disable colors for clean output
+# UTF-8, and colour only where this host can render it. The API's logger gives
+# every operation and outcome its own colour; a host without virtual-terminal
+# support would print the escapes literally, so that host gets plain text.
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $env:PYTHONIOENCODING = "utf-8"
-$env:NO_COLOR = "1"
+$script:UseColor = [bool]$Host.UI.SupportsVirtualTerminal
 
 # Load user profile if exists (for Conda, nvm, etc.)
 if (Test-Path $PROFILE) {
@@ -117,14 +119,16 @@ Write-Host "[*] Starting servers..." -ForegroundColor Green
 
 # Start backend as a background job
 $backendJob = Start-Job -ScriptBlock {
-    param($pythonCmd, $workDir)
+    param($pythonCmd, $workDir, $useColor)
     Set-Location $workDir
     [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
     $OutputEncoding = [System.Text.Encoding]::UTF8
     $env:PYTHONIOENCODING = "utf-8"
-    $env:NO_COLOR = "1"
+    # A job has no terminal, so the logger would print plain text; FORCE_COLOR
+    # asks it to colour anyway, and the relay below prints the line as it came.
+    if ($useColor) { $env:FORCE_COLOR = "1" } else { $env:NO_COLOR = "1" }
     & $pythonCmd -m uvicorn fpstune.api.main:app --host 127.0.0.1 --port 8000 2>&1
-} -ArgumentList $pythonCmd, $PSScriptRoot
+} -ArgumentList $pythonCmd, $PSScriptRoot, $script:UseColor
 
 # Start frontend as a background job
 $frontendJob = Start-Job -ScriptBlock {
@@ -166,7 +170,8 @@ try {
         $backendOutput = Receive-Job -Job $backendJob -ErrorAction SilentlyContinue
         if ($backendOutput) {
             $backendOutput | ForEach-Object {
-                Write-Host "[API] $_" -ForegroundColor DarkCyan
+                Write-Host "[API] " -NoNewline -ForegroundColor DarkCyan
+                Write-Host "$_"
             }
         }
 

@@ -20,7 +20,6 @@ if %errorlevel% neq 0 (
 
 :: We have admin privileges - continue with normal startup
 chcp 65001 >nul 2>&1
-set NO_COLOR=1
 set PYTHONIOENCODING=utf-8
 cd /d "%~dp0"
 start "" powershell -NoExit -ExecutionPolicy Bypass -Command "& '%~dp0start.ps1'"

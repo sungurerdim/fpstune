@@ -172,6 +172,21 @@ def link(label: str, url: str) -> None:
     )
 
 
+def relay(prefix: str, line: str) -> None:
+    """A line from a child process, tagged with whose it is, styled as the child styled it.
+
+    ``Text.from_ansi`` keeps the child's colours — the API logger's palette,
+    Vite's — where this console renders colour and drops the escapes where it
+    cannot; markup is never interpreted, so a path or a ``[skipped]`` stays
+    literal.
+    """
+    console.print(
+        Text.assemble((f"[{prefix}] ", "dim"), Text.from_ansi(line)),
+        highlight=False,
+        soft_wrap=True,
+    )
+
+
 def panel(body: RenderableType, *, title: str = "", style: str = "cyan") -> None:
     console.print(
         Panel(body, title=title, title_align="left", border_style=style, width=content_width())

@@ -25,14 +25,12 @@ export function useApplySingle() {
   const applySingle = useCallback(
     async (setting: Setting, value: unknown): Promise<ApplyResponse> => {
       setPendingIds((prev) => new Set(prev).add(setting.id));
+      useStore.getState().beginOperation();
       try {
         const response = await settingsApi.applySetting(setting.id, value);
         if (response.success) {
           addNotification(`Applied ${setting.displayName}`, "success");
-          if (
-            response.new_value !== null &&
-            response.new_value !== undefined
-          ) {
+          if (response.new_value !== null && response.new_value !== undefined) {
             const isOptimized = valuesEqual(
               response.new_value,
               setting.recommendedValue,
@@ -55,6 +53,7 @@ export function useApplySingle() {
         }
         return response;
       } finally {
+        useStore.getState().endOperation();
         setPendingIds((prev) => {
           const n = new Set(prev);
           n.delete(setting.id);
@@ -79,6 +78,7 @@ export function useApplySingle() {
   const undoSingle = useCallback(
     async (setting: Setting): Promise<ApplyResponse | null> => {
       setPendingIds((prev) => new Set(prev).add(setting.id));
+      useStore.getState().beginOperation();
       try {
         const response = await settingsApi.undoSetting(setting.id);
         if (response.success) {
@@ -96,6 +96,7 @@ export function useApplySingle() {
         await detectionManager.redetectSettings([setting.id]);
         return null;
       } finally {
+        useStore.getState().endOperation();
         setPendingIds((prev) => {
           const n = new Set(prev);
           n.delete(setting.id);
@@ -118,6 +119,7 @@ export function useApplySingle() {
   const resetSingle = useCallback(
     async (setting: Setting): Promise<ApplyResponse> => {
       setPendingIds((prev) => new Set(prev).add(setting.id));
+      useStore.getState().beginOperation();
       try {
         const response = await settingsApi.resetSetting(setting.id);
         if (response.success) {
@@ -148,6 +150,7 @@ export function useApplySingle() {
         }
         return response;
       } finally {
+        useStore.getState().endOperation();
         setPendingIds((prev) => {
           const n = new Set(prev);
           n.delete(setting.id);

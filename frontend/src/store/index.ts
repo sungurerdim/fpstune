@@ -7,12 +7,7 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 // the tab is gone; nothing persists the active tab, so no stored value can point
 // at a route that no longer exists.
 export type TabId =
-  | "home"
-  | "settings"
-  | "hardware"
-  | "games"
-  | "cleanup"
-  | "benchmarks";
+  "home" | "settings" | "hardware" | "games" | "cleanup" | "benchmarks";
 export type OperationStatus = "queued" | "running" | "verified" | "failed";
 
 /** Outcome of a single cleanup/maintenance action for the results summary. */
@@ -63,8 +58,20 @@ interface AppSlice {
   activeTab: TabId;
   setActiveTab: (tab: TabId) => void;
 
+  /**
+   * True while the app is changing the machine: a single apply, a bulk run, a
+   * cleanup. Anything that competes for the same PowerShell — the hardware
+   * re-read on window focus, above all — asks this first.
+   *
+   * Counter-backed rather than a bare boolean, because these overlap: a bulk
+   * run finishing while a cleanup is still going must not report the machine
+   * idle. Was a boolean nothing ever set, so every reader of it was reading a
+   * constant false.
+   */
   isApplying: boolean;
-  setIsApplying: (value: boolean) => void;
+  busyOperations: number;
+  beginOperation: () => void;
+  endOperation: () => void;
 
   /**
    * Errors the app has decided the user must be told about.
@@ -169,7 +176,19 @@ export const useStore = create<FpstuneStore>()((...args) => {
     setActiveTab: (tab) => set({ activeTab: tab }),
 
     isApplying: false,
-    setIsApplying: (value) => set({ isApplying: value }),
+    busyOperations: 0,
+    beginOperation: () =>
+      set((state) => ({
+        busyOperations: state.busyOperations + 1,
+        isApplying: true,
+      })),
+    endOperation: () =>
+      set((state) => {
+        // Never below zero: an unbalanced end would otherwise make the next
+        // begin fail to register.
+        const busyOperations = Math.max(0, state.busyOperations - 1);
+        return { busyOperations, isApplying: busyOperations > 0 };
+      }),
 
     notifications: [],
     addNotification: (message, type) =>

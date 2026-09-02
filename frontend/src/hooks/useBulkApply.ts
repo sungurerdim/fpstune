@@ -42,6 +42,8 @@ export function useBulkApply(
   } | null>(null);
 
   const mutation = useMutation({
+    onMutate: () => useStore.getState().beginOperation(),
+    onSettled: () => useStore.getState().endOperation(),
     mutationFn: (settings: Record<string, unknown>) =>
       settingsApi.bulkApply(settings),
     onSuccess: async (response) => {

@@ -195,6 +195,7 @@ export function useCleanupRunner({
       return settingsApi.bulkApply(payload);
     },
     onSettled: (_data, _err, ids) => {
+      useStore.getState().endOperation();
       // Running one docker prune changes the OTHER's reclaimable estimate; the
       // backend invalidated both sibling caches, so re-detect both docker ids to
       // recompute their now-stale sizes (the run id refreshes on its own path).
@@ -213,6 +214,9 @@ export function useCleanupRunner({
       }
     },
     onMutate: (ids: string[]) => {
+      // The store's busy flag, so the hardware re-read on window focus stays off
+      // the machine while a cleanup holds PowerShell. A DISM run takes minutes.
+      useStore.getState().beginOperation();
       // Snapshot pre-cleanup sizes so freed space can be reported afterwards.
       for (const id of ids) {
         const setting = settings.get(id as SettingId);

@@ -21,7 +21,11 @@ export function SelectionToolbar() {
   const clearSelection = useStore((s) => s.clearSelection);
   const setOperationStatus = useStore((s) => s.setOperationStatus);
   const clearOperationStatus = useStore((s) => s.clearOperationStatus);
-  const setSettingDetectionResult = useStore((s) => s.setSettingDetectionResult);
+  const beginOperation = useStore((s) => s.beginOperation);
+  const endOperation = useStore((s) => s.endOperation);
+  const setSettingDetectionResult = useStore(
+    (s) => s.setSettingDetectionResult,
+  );
   const settings = useStore((s) => s.settings);
 
   const [isRunning, setIsRunning] = useState(false);
@@ -43,6 +47,9 @@ export function SelectionToolbar() {
     const ids = [...selectedSettingIds];
     ids.forEach((id) => setOperationStatus(id, "queued"));
     setIsRunning(true);
+    // Tell the store the machine is being changed, so the hardware re-read on
+    // window focus stays off the same PowerShell for the length of the run.
+    beginOperation();
 
     const streamFn =
       action === "apply"
@@ -64,7 +71,10 @@ export function SelectionToolbar() {
           const currentValue = (event as Record<string, unknown>).current_value;
           const setting = settings.get(id as `${string}:${string}`);
           if (setting !== undefined && currentValue !== undefined) {
-            const isOptimized = valuesEqual(currentValue, setting.recommendedValue);
+            const isOptimized = valuesEqual(
+              currentValue,
+              setting.recommendedValue,
+            );
             setSettingDetectionResult(
               id as `${string}:${string}`,
               currentValue,
@@ -78,6 +88,7 @@ export function SelectionToolbar() {
       },
       () => {
         setIsRunning(false);
+        endOperation();
         setCancelFn(null);
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       },
@@ -96,6 +107,7 @@ export function SelectionToolbar() {
   const handleCancel = () => {
     cancelFn?.();
     setIsRunning(false);
+    endOperation();
     setCancelFn(null);
     clearOperationStatus();
   };
@@ -167,9 +179,7 @@ export function SelectionToolbar() {
                 onClick={() => handleAction("apply")}
               >
                 {t("toolbar.applySelected")}
-                {hasAdvanced && (
-                  <AlertTriangle className="w-3 h-3 ml-0.5" />
-                )}
+                {hasAdvanced && <AlertTriangle className="w-3 h-3 ml-0.5" />}
               </Button>
             </>
           )}

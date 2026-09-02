@@ -12,9 +12,7 @@ import {
   ShieldAlert,
   Network,
 } from "lucide-react";
-import {
-  api,
-} from "../lib/api";
+import { api } from "../lib/api";
 import { hardwareManager, HardwareInfo } from "../lib/hardware-manager";
 import { isComponentTweak } from "../lib/tweakDomain";
 import { cn } from "../lib/utils";
@@ -64,11 +62,11 @@ function useHardware(): { hardware: HardwareInfo | null; isLoading: boolean } {
       }
     };
 
-    if (!hardwareManager.hasData()) {
-      fetchData();
-    } else {
-      setIsLoading(false);
-    }
+    // Unconditional, because getHardware() returns the cached inventory
+    // immediately when it has one — so the branch that used to call
+    // setIsLoading synchronously in the effect body is not needed, and that
+    // call was a cascading render React would have had to bail out of.
+    fetchData();
 
     return () => {
       mounted = false;
@@ -157,7 +155,9 @@ export function HardwarePanel() {
                 </p>
                 {/* Thermal condition is a finding about this chip, not a system
                     setting. It had no home on this page at all. */}
-                <DeviceTweakList match={(setting) => isComponentTweak(setting, "cpu")} />
+                <DeviceTweakList
+                  match={(setting) => isComponentTweak(setting, "cpu")}
+                />
               </div>
             ) : !isLoading ? (
               <NotDetected />
@@ -244,13 +244,17 @@ export function HardwarePanel() {
           >
             {safeArray(hardware?.monitors).length > 0 ? (
               <div className="space-y-2">
-                <DisplaysAutoAllButton monitors={safeArray(hardware?.monitors)} />
+                <DisplaysAutoAllButton
+                  monitors={safeArray(hardware?.monitors)}
+                />
                 {safeArray(hardware?.monitors).map((monitor, i) => (
                   <MonitorCard key={i} monitor={monitor} displayIndex={i} />
                 ))}
                 {/* Windowed flip model and MPO are properties of the display stack,
                     not of one panel, so they sit with the section. */}
-                <DeviceTweakList match={(setting) => setting.module === "display"} />
+                <DeviceTweakList
+                  match={(setting) => setting.module === "display"}
+                />
               </div>
             ) : !isLoading ? (
               <NotDetected />
@@ -273,7 +277,9 @@ export function HardwarePanel() {
                 ))}
                 {/* TRIM, 8.3 names and last-access are filesystem-wide, not
                     properties of one drive, so they belong to the section. */}
-                <DeviceTweakList match={(setting) => setting.module === "storage"} />
+                <DeviceTweakList
+                  match={(setting) => setting.module === "storage"}
+                />
               </div>
             ) : !isLoading ? (
               <NotDetected />
@@ -314,4 +320,3 @@ export function HardwarePanel() {
     </Card>
   );
 }
-

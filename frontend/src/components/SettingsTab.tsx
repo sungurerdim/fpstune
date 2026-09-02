@@ -125,14 +125,19 @@ export function SettingsTab({
         for (const c of impacts) counts.set(c, (counts.get(c) ?? 0) + 1);
         if (impactFilter !== "all" && !impacts.includes(impactFilter)) continue;
 
-        const moduleLabel = moduleMetaMap.get(s.module)?.displayName ?? s.module;
+        const moduleLabel =
+          moduleMetaMap.get(s.module)?.displayName ?? s.module;
         const row: TweakRow = {
           setting: s,
           contextLabel:
             moduleLabel === category.displayName
               ? category.displayName
               : `${category.displayName} · ${moduleLabel}`,
+          // Nothing is created here: getIconByName is a lookup into lucide's
+          // own module exports, so CategoryIcon is a stable reference and
+          // remounts nothing. The rule cannot see through the indirection.
           contextIcon: (
+            // eslint-disable-next-line react-hooks/static-components -- a lookup, not a definition
             <CategoryIcon className="w-3 h-3 text-primary/70 shrink-0" />
           ),
         };
@@ -159,9 +164,7 @@ export function SettingsTab({
 
   return (
     <div className="space-y-4 pb-16">
-      <DetectionNotice
-        owns={(s) => !isGameTweak(s) && !isHardwareTweak(s)}
-      />
+      <DetectionNotice owns={(s) => !isGameTweak(s) && !isHardwareTweak(s)} />
       {/* Filter bar: the only navigation this screen needs now that the rows are flat. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">
@@ -217,17 +220,13 @@ export function SettingsTab({
           </button>
           {/* Driven by IMPACT_CATEGORY_META order, not by Map insertion order,
               so the chips do not reshuffle as detection fills in. */}
-          {(
-            Object.keys(IMPACT_CATEGORY_META) as ImpactCategory[]
-          ).map((c) =>
+          {(Object.keys(IMPACT_CATEGORY_META) as ImpactCategory[]).map((c) =>
             impactCounts.has(c) ? (
               <button
                 key={c}
                 type="button"
                 data-category={c}
-                onClick={() =>
-                  setImpactFilter(impactFilter === c ? "all" : c)
-                }
+                onClick={() => setImpactFilter(impactFilter === c ? "all" : c)}
                 aria-pressed={impactFilter === c}
                 className={cn(
                   "text-xs px-2 py-0.5 rounded-full border transition-colors",
@@ -306,7 +305,8 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
 
   const fixAll = () => {
     const payload: Record<string, unknown> = {};
-    for (const { setting } of fixable) payload[setting.id] = setting.recommendedValue;
+    for (const { setting } of fixable)
+      payload[setting.id] = setting.recommendedValue;
     if (Object.keys(payload).length > 0) apply(payload);
   };
 
@@ -317,12 +317,16 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
         <h2 className="text-sm font-bold uppercase tracking-wider text-warning">
           {t("settings.needsOptimization")}
         </h2>
-        <span className="text-xs text-muted-foreground/60">({rows.length})</span>
+        <span className="text-xs text-muted-foreground/60">
+          ({rows.length})
+        </span>
         {lastResult && (
           <span className="text-xs text-muted-foreground">
             {t("settings.appliedCount", { count: lastResult.success })}
             {lastResult.error > 0 && (
-              <span className="text-destructive">{t("settings.failedCount", { count: lastResult.error })}</span>
+              <span className="text-destructive">
+                {t("settings.failedCount", { count: lastResult.error })}
+              </span>
             )}
           </span>
         )}

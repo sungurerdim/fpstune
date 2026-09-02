@@ -30,6 +30,29 @@ WLAN_INTERFACE_STATE_CONNECTED = 1
 # WLAN_INTF_OPCODE values used here.
 WLAN_INTF_OPCODE_CURRENT_CONNECTION = 7
 WLAN_INTF_OPCODE_CHANNEL_NUMBER = 8
+WLAN_INTF_OPCODE_SUPPORTED_INFRASTRUCTURE_AUTH_CIPHER_PAIRS = 9
+# DOT11_AUTH_ALGORITHM / DOT11_CIPHER_ALGORITHM members named here (wlantypes.h).
+DOT11_AUTH_ALGO_WPA_PSK = 4
+DOT11_AUTH_ALGO_RSNA_PSK = 7  # WPA2-Personal
+DOT11_AUTH_ALGO_WPA3_SAE = 9  # WPA3-Personal
+DOT11_CIPHER_ALGO_WEP40 = 0x01
+DOT11_CIPHER_ALGO_TKIP = 0x02
+DOT11_CIPHER_ALGO_WEP104 = 0x05
+DOT11_CIPHER_ALGO_WEP = 0x101
+# The pre-RSN ciphers. 802.11n and every later amendment refuse HT/VHT/HE rates
+# on a link keyed with one of these, so the connection runs at 802.11g speeds.
+LEGACY_CIPHERS = frozenset(
+    {
+        DOT11_CIPHER_ALGO_WEP40,
+        DOT11_CIPHER_ALGO_TKIP,
+        DOT11_CIPHER_ALGO_WEP104,
+        DOT11_CIPHER_ALGO_WEP,
+    }
+)
+# IEEE 802.11 RSN information element: element id, and the AKM suite selectors
+# that mean SAE (WPA3-Personal): 00-0F-AC:8 (SAE) and 00-0F-AC:24 (SAE-EXT-KEY).
+RSN_ELEMENT_ID = 48
+_RSN_AKM_SAE = (b"\x00\x0f\xac\x08", b"\x00\x0f\xac\x18")
 # DOT11_BSS_TYPE / WLAN_CONNECTION_MODE values used here.
 DOT11_BSS_TYPE_INFRASTRUCTURE = 1
 WLAN_CONNECTION_MODE_PROFILE = 0
@@ -146,6 +169,12 @@ class WlanRecord:
     ssid: str
     profile_name: str
     bssid: str
+    # DOT11_CIPHER_ALGORITHM of the connection; 0 when the API gave none.
+    cipher_algorithm: int = 0
+    # Whether the connected access point's RSN element advertises SAE (WPA3).
+    ap_offers_sae: bool = False
+    # Whether this adapter lists an SAE auth/cipher pair among what it supports.
+    adapter_supports_sae: bool = False
 
     def as_record_line(self) -> str:
         """``guid|channel|freqKHz|phy|signal|auth|ssid`` — SSID last because an
@@ -167,6 +196,42 @@ PHY_NAMES = {
     10: "802.11ax",
     11: "802.11be",
 }
+
+
+# DOT11_AUTH_ALGORITHM and DOT11_CIPHER_ALGORITHM, by the API's own numbers.
+AUTH_NAMES = {
+    1: "Open",
+    2: "Shared",
+    3: "WPA-Enterprise",
+    4: "WPA-Personal",
+    6: "WPA2-Enterprise",
+    7: "WPA2-Personal",
+    8: "WPA3-Enterprise",
+    9: "WPA3-Personal",
+    10: "OWE",
+    11: "WPA3-Enterprise-192",
+}
+CIPHER_NAMES = {
+    0: "None",
+    DOT11_CIPHER_ALGO_WEP40: "WEP-40",
+    DOT11_CIPHER_ALGO_TKIP: "TKIP",
+    4: "AES-CCMP",
+    DOT11_CIPHER_ALGO_WEP104: "WEP-104",
+    8: "AES-GCMP",
+    9: "AES-GCMP-256",
+    10: "AES-CCMP-256",
+    DOT11_CIPHER_ALGO_WEP: "WEP",
+}
+
+
+def auth_name(auth_algorithm: int) -> str:
+    """The security standard's name, or empty when the enum is unknown."""
+    return AUTH_NAMES.get(auth_algorithm, "")
+
+
+def cipher_name(cipher_algorithm: int) -> str:
+    """The cipher's name, or empty when the enum is unknown."""
+    return CIPHER_NAMES.get(cipher_algorithm, "")
 
 
 def phy_name(phy_type: int) -> str:
@@ -338,8 +403,53 @@ def _query(
     return data
 
 
-def _center_khz(api: ctypes.WinDLL, handle: wintypes.HANDLE, guid: str, bssid: bytes) -> int:
-    """The connected BSS entry's own centre frequency; 0 when it is not listed."""
+def rsn_offers_sae(ies: bytes) -> bool:
+    """Whether a beacon's information elements carry an RSN element listing SAE.
+
+    Walks the ``id, length, body`` chain and reads the RSN body per 802.11:
+    version(2), group cipher(4), pairwise count(2) + suites, AKM count(2) +
+    suites. A truncated element answers False — never a guess.
+    """
+    pos = 0
+    while pos + 2 <= len(ies):
+        element_id, length = ies[pos], ies[pos + 1]
+        body = ies[pos + 2 : pos + 2 + length]
+        pos += 2 + length
+        if element_id != RSN_ELEMENT_ID or len(body) < 8:
+            continue
+        pairwise_count = int.from_bytes(body[6:8], "little")
+        akm_at = 8 + 4 * pairwise_count
+        if len(body) < akm_at + 2:
+            return False
+        akm_count = int.from_bytes(body[akm_at : akm_at + 2], "little")
+        suites = body[akm_at + 2 : akm_at + 2 + 4 * akm_count]
+        return any(suites[i : i + 4] in _RSN_AKM_SAE for i in range(0, len(suites), 4))
+    return False
+
+
+def _supported_auth_cipher_pairs(
+    api: ctypes.WinDLL, handle: wintypes.HANDLE, guid: str
+) -> list[tuple[int, int]]:
+    """The adapter's own list of infrastructure auth/cipher pairs (WLAN_AUTH_CIPHER_PAIR_LIST)."""
+    data = _query(api, handle, guid, WLAN_INTF_OPCODE_SUPPORTED_INFRASTRUCTURE_AUTH_CIPHER_PAIRS)
+    if data is None or data.value is None:
+        return []
+    try:
+        count = ctypes.cast(data, ctypes.POINTER(wintypes.DWORD))[0]
+        words = ctypes.cast(data.value + 4, ctypes.POINTER(wintypes.DWORD * (2 * count)))[0]
+        return [(int(words[2 * i]), int(words[2 * i + 1])) for i in range(count)]
+    finally:
+        api.WlanFreeMemory(data)
+
+
+def _bss_facts(
+    api: ctypes.WinDLL, handle: wintypes.HANDLE, guid: str, bssid: bytes
+) -> tuple[int, bool]:
+    """The connected BSS entry's own centre frequency and whether it offers SAE.
+
+    (0, False) when the entry is not listed: an unknown band stays unknown and
+    an unread beacon offers nothing.
+    """
     plist = ctypes.c_void_p()
     status = api.WlanGetNetworkBssList(
         handle,
@@ -352,16 +462,20 @@ def _center_khz(api: ctypes.WinDLL, handle: wintypes.HANDLE, guid: str, bssid: b
     )
     address = plist.value
     if status != ERROR_SUCCESS or address is None:
-        return 0
+        return 0, False
     try:
         count = ctypes.cast(address + 4, ctypes.POINTER(wintypes.DWORD))[0]
         base = address + 8  # dwTotalSize, dwNumberOfItems
         size = ctypes.sizeof(WLAN_BSS_ENTRY)
         for index in range(count):
-            entry = WLAN_BSS_ENTRY.from_address(base + index * size)
-            if bytes(entry.dot11Bssid[:6]) == bssid:
-                return int(entry.ulChCenterFrequency)
-        return 0
+            entry_at = base + index * size
+            entry = WLAN_BSS_ENTRY.from_address(entry_at)
+            if bytes(entry.dot11Bssid[:6]) != bssid:
+                continue
+            # ulIeOffset is relative to the start of this WLAN_BSS_ENTRY.
+            ies = ctypes.string_at(entry_at + int(entry.ulIeOffset), int(entry.ulIeSize))
+            return int(entry.ulChCenterFrequency), rsn_offers_sae(ies)
+        return 0, False
     finally:
         api.WlanFreeMemory(plist)
 
@@ -387,6 +501,7 @@ def query_connected() -> list[WlanRecord]:
                 phy = int(assoc.dot11PhyType)
                 signal = int(assoc.wlanSignalQuality)
                 auth = int(conn.wlanSecurityAttributes.dot11AuthAlgorithm)
+                cipher = int(conn.wlanSecurityAttributes.dot11CipherAlgorithm)
                 profile = conn.strProfileName
             finally:
                 api.WlanFreeMemory(data)
@@ -399,17 +514,25 @@ def query_connected() -> list[WlanRecord]:
                 finally:
                     api.WlanFreeMemory(data)
 
+            center_khz, ap_sae = _bss_facts(api, handle, iface.guid, bssid_raw)
+            adapter_sae = any(
+                auth_algo == DOT11_AUTH_ALGO_WPA3_SAE
+                for auth_algo, _cipher in _supported_auth_cipher_pairs(api, handle, iface.guid)
+            )
             records.append(
                 WlanRecord(
                     interface_guid=iface.guid,
                     channel=int(channel),
-                    center_khz=_center_khz(api, handle, iface.guid, bssid_raw),
+                    center_khz=center_khz,
                     phy_type=phy,
                     signal_percent=signal,
                     auth_algorithm=auth,
                     ssid=ssid,
                     profile_name=profile,
                     bssid=_mac(assoc.dot11Bssid),
+                    cipher_algorithm=cipher,
+                    ap_offers_sae=ap_sae,
+                    adapter_supports_sae=adapter_sae,
                 )
             )
         return records

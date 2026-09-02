@@ -146,6 +146,63 @@ describe("a Wi-Fi link", () => {
   });
 });
 
+describe("a Wi-Fi link's security", () => {
+  it("names the cipher that holds the radio to 802.11g and the router setting to change", () => {
+    const tkip = advisory({
+      currentValue: "legacy_cipher",
+      finding: {
+        kind: "wifi_security",
+        auth: "WPA2-Personal",
+        cipher: "TKIP",
+        adapter_wpa3: true,
+        ap_wpa3: false,
+      },
+    });
+    const text = describeFinding(tkip);
+    expect(text?.summary).toBe(
+      "WPA2-Personal with the TKIP cipher: the radio is held to 802.11g speeds.",
+    );
+    expect(text?.advice).toContain("WPA2 or WPA3 with AES");
+  });
+
+  it("says both ends can do WPA3 and that the speed does not change", () => {
+    const wpa2 = advisory({
+      currentValue: "wpa3_available",
+      finding: {
+        kind: "wifi_security",
+        auth: "WPA2-Personal",
+        cipher: "AES-CCMP",
+        adapter_wpa3: true,
+        ap_wpa3: true,
+      },
+    });
+    const text = describeFinding(wpa2);
+    expect(text?.summary).toBe(
+      "WPA2-Personal with AES-CCMP; this adapter and the router both support WPA3.",
+    );
+    expect(text?.advice).toContain("Speed stays the same");
+    setLocale("tr");
+    expect(describeFinding(wpa2)?.advice).toContain("Hız aynı kalır");
+  });
+
+  it("reports a good link's standard and cipher with no advice", () => {
+    const wpa3 = advisory({
+      currentValue: "good",
+      finding: {
+        kind: "wifi_security",
+        auth: "WPA3-Personal",
+        cipher: "AES-CCMP",
+        adapter_wpa3: true,
+        ap_wpa3: true,
+      },
+    });
+    expect(describeFinding(wpa3)).toEqual({
+      summary: "WPA3-Personal with AES-CCMP.",
+      advice: "",
+    });
+  });
+});
+
 describe("findings this module has no sentence for", () => {
   it("yield null, so the row falls back to its description, never to JSON", () => {
     expect(describeFinding(advisory({}))).toBeNull();

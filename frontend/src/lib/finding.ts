@@ -88,6 +88,29 @@ function wifiLink(
   return { summary, advice: adviceKey ? t(adviceKey) : "" };
 }
 
+function wifiSecurity(
+  finding: Record<string, unknown>,
+  value: unknown,
+): FindingText | null {
+  const auth = typeof finding.auth === "string" ? finding.auth : "";
+  const cipher = typeof finding.cipher === "string" ? finding.cipher : "";
+  if (!auth && !cipher) return null;
+  const params = { auth: auth || "?", cipher: cipher || "?" };
+  if (value === "legacy_cipher") {
+    return {
+      summary: t("finding.wifiSecurity.legacyCipher", params),
+      advice: t("finding.wifiSecurity.adviceCipher"),
+    };
+  }
+  if (value === "wpa3_available") {
+    return {
+      summary: t("finding.wifiSecurity.wpa3Available", params),
+      advice: t("finding.wifiSecurity.adviceWpa3"),
+    };
+  }
+  return { summary: t("finding.wifiSecurity.good", params), advice: "" };
+}
+
 /** The finding's sentence(s) for this setting, or null when it carries none. */
 export function describeFinding(setting: Setting): FindingText | null {
   const finding = setting.finding;
@@ -97,6 +120,8 @@ export function describeFinding(setting: Setting): FindingText | null {
       return linkSpeed(finding);
     case "wifi_link":
       return wifiLink(finding, setting.currentValue);
+    case "wifi_security":
+      return wifiSecurity(finding, setting.currentValue);
     default:
       return null;
   }
@@ -114,6 +139,8 @@ const CHOICE_KEYS: Record<string, MessageKey> = {
   good: "choice.good",
   weak_signal: "choice.weak_signal",
   on_2_4ghz: "choice.on_2_4ghz",
+  legacy_cipher: "choice.legacy_cipher",
+  wpa3_available: "choice.wpa3_available",
 };
 
 export function advisoryChoiceLabel(value: unknown): string | null {

@@ -108,11 +108,22 @@ export const tr: Record<keyof typeof en, string> = {
     "Modeme yaklaşın ya da aradaki engeli kaldırın; kablo her radyodan iyidir.",
   "finding.wifi.adviceBand":
     "Modemin 5 GHz veya 6 GHz ağına bağlanın; 2,4 GHz daha yavaş ve daha kalabalıktır.",
+  "finding.wifiSecurity.legacyCipher":
+    "{auth}, {cipher} şifresiyle: radyo 802.11g hızlarına kilitli.",
+  "finding.wifiSecurity.wpa3Available":
+    "{auth}, {cipher} ile; bu bağdaştırıcı da modem de WPA3 destekliyor.",
+  "finding.wifiSecurity.good": "{auth}, {cipher} ile.",
+  "finding.wifiSecurity.adviceCipher":
+    "Modemde Wi-Fi güvenliğini AES ile WPA2 veya WPA3 yapın; sonra Windows'ta bu ağı unutup yeniden bağlanın.",
+  "finding.wifiSecurity.adviceWpa3":
+    "Windows'ta bu ağı unutup yeniden bağlanın; profil WPA3 olarak oluşturulur. Hız aynı kalır, parola çok daha zor kırılır.",
   "choice.at_capability": "Bağdaştırıcının en yükseğinde",
   "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
   "choice.good": "İyi",
   "choice.weak_signal": "Zayıf sinyal",
   "choice.on_2_4ghz": "2,4 GHz'de",
+  "choice.legacy_cipher": "Eski şifre",
+  "choice.wpa3_available": "WPA3 mümkün",
   "badge.risk": "RİSK",
   "badge.note": "NOT",
 

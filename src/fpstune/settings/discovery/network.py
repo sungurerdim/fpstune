@@ -259,8 +259,8 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
     return len(valid_adapters)
 
 
-def discover_wifi_link_quality(registry: Registrar, probes: HardwareProbes) -> int:
-    """Register the Wi-Fi link-quality advisory on every Wi-Fi adapter.
+def discover_wifi_advisories(registry: Registrar, probes: HardwareProbes) -> int:
+    """Register the Wi-Fi link-quality and security advisories on every Wi-Fi adapter.
 
     Runs after the per-adapter settings so it reads the same memoised adapter
     list. An adapter whose GUID the probe could not pair is skipped rather than
@@ -270,7 +270,10 @@ def discover_wifi_link_quality(registry: Registrar, probes: HardwareProbes) -> i
     Returns:
         Number of advisories registered.
     """
-    from fpstune.settings.definitions.network import create_wifi_link_quality_setting
+    from fpstune.settings.definitions.network import (
+        create_wifi_link_quality_setting,
+        create_wifi_security_setting,
+    )
 
     adapters = filter_valid_adapters(probes.active_adapters())
     wifi = [(index, name) for index, name, media in adapters if "802.11" in (media or "")]
@@ -287,5 +290,6 @@ def discover_wifi_link_quality(registry: Registrar, probes: HardwareProbes) -> i
             )
             continue
         registry.register(create_wifi_link_quality_setting(index, guid, name))
-        count += 1
+        registry.register(create_wifi_security_setting(index, guid, name))
+        count += 2
     return count

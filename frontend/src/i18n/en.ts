@@ -114,12 +114,23 @@ export const en = {
     "Move closer to the router or clear what stands between; a cable beats any radio.",
   "finding.wifi.adviceBand":
     "Join the router's 5 GHz or 6 GHz network; 2.4 GHz is slower and more crowded.",
+  "finding.wifiSecurity.legacyCipher":
+    "{auth} with the {cipher} cipher: the radio is held to 802.11g speeds.",
+  "finding.wifiSecurity.wpa3Available":
+    "{auth} with {cipher}; this adapter and the router both support WPA3.",
+  "finding.wifiSecurity.good": "{auth} with {cipher}.",
+  "finding.wifiSecurity.adviceCipher":
+    "In the router, set the Wi-Fi security to WPA2 or WPA3 with AES; then forget this network in Windows and reconnect.",
+  "finding.wifiSecurity.adviceWpa3":
+    "Forget this network in Windows and reconnect, so the profile is created as WPA3. Speed stays the same; the password becomes far harder to crack.",
   // Advisory values, in words
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",
   "choice.good": "Good",
   "choice.weak_signal": "Weak signal",
   "choice.on_2_4ghz": "On 2.4 GHz",
+  "choice.legacy_cipher": "Legacy cipher",
+  "choice.wpa3_available": "WPA3 available",
   "badge.risk": "RISK",
   "badge.note": "NOTE",
 

@@ -23,7 +23,7 @@ from fpstune.api.schemas import NetworkAdapterInfo
 from fpstune.utils.debug import debug_log
 from fpstune.utils.powershell import run_powershell
 from fpstune.utils.winapi import wlan
-from fpstune.utils.winapi.wlan import WlanRecord, band_ghz, phy_name
+from fpstune.utils.winapi.wlan import WlanRecord, auth_name, band_ghz, phy_name
 
 logger = logging.getLogger(__name__)
 
@@ -227,6 +227,7 @@ _ADAPTER_INVENTORY_SCRIPT = """
     $results | ConvertTo-Json -Depth 2
     """
 
+
 # WiFi facts come from wlanapi.dll, never from netsh text: netsh's interface
 # listing answers in the system language (a Turkish install labels the
 # fields "Kanal", "Sinyal", "Radyo türü"), so every English-label regex
@@ -238,23 +239,9 @@ _ADAPTER_INVENTORY_SCRIPT = """
 # command, the pattern Windows Defender flagged on 2026-09-02.
 #
 # The record-to-report mapping is a pure function so it can be tested against
-# described records. The map keys on the API's own numeric enum
-# (DOT11_AUTH_ALGORITHM); the radio name and band come from ``wlan.phy_name``
-# and ``wlan.band_ghz``, shared with the advisory that judges the same link.
-_AUTH_NAMES = {
-    1: "Open",
-    2: "Shared",
-    3: "WPA-Enterprise",
-    4: "WPA-Personal",
-    6: "WPA2-Enterprise",
-    7: "WPA2-Personal",
-    8: "WPA3-Enterprise",
-    9: "WPA3-Personal",
-    10: "OWE",
-    11: "WPA3-Enterprise-192",
-}
-
-
+# described records. Every name comes from ``wlan``'s own enum tables
+# (auth_name, phy_name, band_ghz), shared with the advisories that judge the
+# same link, so the panel and the finding can never disagree on a word.
 def _normal_guid(value: object) -> str:
     return str(value or "").strip().strip("{}").lower()
 
@@ -281,7 +268,7 @@ def wifi_rows(records: list[WlanRecord], adapters: list[dict[str, Any]]) -> list
                     "FrequencyGHz": band_ghz(record.center_khz),
                     "RadioType": phy_name(record.phy_type),
                     "SignalPercent": record.signal_percent,
-                    "AuthType": _AUTH_NAMES.get(record.auth_algorithm, ""),
+                    "AuthType": auth_name(record.auth_algorithm),
                 }
             )
     return rows

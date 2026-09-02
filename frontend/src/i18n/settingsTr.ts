@@ -2076,6 +2076,13 @@ export const settingsTr: Record<
     effect:
       "Erişim noktasına yaklaşın ya da aradaki engeli kaldırın; yönlendirici sunuyorsa 5 GHz veya 6 GHz ağına bağlanın; kablo ikisini de geçer.",
   },
+  "network:*:wifi_security": {
+    name: "Wi-Fi güvenlik denetimi",
+    description:
+      "Wi-Fi bağlantısının hangi güvenlik standardını ve şifreyi kullandığı. TKIP veya WEP şifresi bağlantıyı 802.11g hızına kilitler; iki uç da WPA3 yapabiliyorken WPA2, aynı hızda daha zayıf korumadır.",
+    effect:
+      "Modemi AES ile WPA2/WPA3 yapın; sonra Windows'ta bu ağı unutup yeniden bağlanın ki profil güçlü standartla oluşsun.",
+  },
   "network:*:roaming_aggressiveness": {
     name: "Wi-Fi gezinme hevesi",
     description:

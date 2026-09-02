@@ -92,6 +92,61 @@ def wifi_link_reading(signal_percent: int, center_khz: int, phy_type: int) -> Re
     )
 
 
+def classify_wifi_security(
+    auth_algorithm: int, cipher_algorithm: int, adapter_supports_sae: bool, ap_offers_sae: bool
+) -> str:
+    """One word for the link's security: ``legacy_cipher``, ``wpa3_available`` or ``good``.
+
+    Cipher first, because it is the performance finding: 802.11n and later
+    refuse HT/VHT/HE rates on a TKIP or WEP link, so the radio runs at 802.11g
+    speed whatever the standard on the box. WPA2-AES to WPA3 changes no rate —
+    it is a security finding — and it is only a finding when both ends can do
+    it: the adapter lists SAE among its pairs *and* the access point's beacon
+    offers it. A WPA2 link to a WPA2-only router is not the user's to fix
+    here; enterprise networks are their administrator's.
+    """
+    from fpstune.utils.winapi import wlan
+
+    if cipher_algorithm in wlan.LEGACY_CIPHERS:
+        return "legacy_cipher"
+    personal_pre_wpa3 = (wlan.DOT11_AUTH_ALGO_WPA_PSK, wlan.DOT11_AUTH_ALGO_RSNA_PSK)
+    if auth_algorithm in personal_pre_wpa3 and adapter_supports_sae and ap_offers_sae:
+        return "wpa3_available"
+    return "good"
+
+
+def wifi_security_reading(record: Any) -> Reading:
+    """The verdict plus the names the user reads: which standard, which cipher, who can do WPA3."""
+    from fpstune.utils.winapi.wlan import auth_name, cipher_name
+
+    return Reading(
+        classify_wifi_security(
+            record.auth_algorithm,
+            record.cipher_algorithm,
+            record.adapter_supports_sae,
+            record.ap_offers_sae,
+        ),
+        {
+            "kind": "wifi_security",
+            "auth": auth_name(record.auth_algorithm),
+            "cipher": cipher_name(record.cipher_algorithm),
+            "adapter_wpa3": bool(record.adapter_supports_sae),
+            "ap_wpa3": bool(record.ap_offers_sae),
+        },
+    )
+
+
+def wifi_security(args: dict[str, Any]) -> str | Reading:
+    """The connected radio's security standard and cipher, or the absent sentinel."""
+    from fpstune.utils.winapi import wlan
+
+    guid = str(args.get("interface_guid", "")).lower().strip("{}")
+    for record in wlan.query_connected():
+        if record.interface_guid == guid:
+            return wifi_security_reading(record)
+    return NOT_AVAILABLE
+
+
 def wifi_link_quality(args: dict[str, Any]) -> str | Reading:
     """The connected radio's link quality, or the absent sentinel when it is not connected."""
     from fpstune.utils.winapi import wlan
@@ -108,4 +163,5 @@ def wifi_link_quality(args: dict[str, Any]) -> str | Reading:
 # setting's ``detect_command`` key before it builds any command line.
 PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "wifi_link_quality": wifi_link_quality,
+    "wifi_security": wifi_security,
 }

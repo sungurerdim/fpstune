@@ -16,7 +16,7 @@ import pytest
 from fpstune.settings.applicability import ABSENT_READINGS, NOT_AVAILABLE
 from fpstune.settings.definitions.network import create_wifi_link_quality_setting
 from fpstune.settings.discovery import all_discoverers
-from fpstune.settings.discovery.network import discover_wifi_link_quality
+from fpstune.settings.discovery.network import discover_wifi_advisories
 from fpstune.settings.discovery.probes import HardwareProbes
 from fpstune.settings.executors import python_actions
 from fpstune.settings.executors.powershell import PowerShellExecutor
@@ -160,16 +160,16 @@ class TestDiscovery:
     def test_one_advisory_per_wifi_adapter_keyed_by_its_index(self) -> None:
         registrar = _FakeRegistrar()
         adapters = [(7, "Ethernet", "802.3"), (12, "Wi-Fi", "Native 802.11")]
-        count = discover_wifi_link_quality(registrar, _probes(adapters, {7: "eth-guid", 12: GUID}))
+        count = discover_wifi_advisories(registrar, _probes(adapters, {7: "eth-guid", 12: GUID}))
 
-        assert count == 1
-        [setting] = registrar.registered
-        assert setting.id == "network:12:wifi_link_quality"
-        assert setting.detect_args["interface_guid"] == GUID
+        assert count == 2
+        ids = [s.id for s in registrar.registered]
+        assert ids == ["network:12:wifi_link_quality", "network:12:wifi_security"]
+        assert all(s.detect_args["interface_guid"] == GUID for s in registrar.registered)
 
     def test_a_radio_without_a_guid_is_skipped_rather_than_registered_blind(self) -> None:
         registrar = _FakeRegistrar()
-        count = discover_wifi_link_quality(registrar, _probes([(12, "Wi-Fi", "Native 802.11")], {}))
+        count = discover_wifi_advisories(registrar, _probes([(12, "Wi-Fi", "Native 802.11")], {}))
         assert (count, registrar.registered) == (0, [])
 
     def test_an_ethernet_only_machine_registers_nothing_and_asks_for_no_guids(self) -> None:
@@ -184,12 +184,12 @@ class TestDiscovery:
                 active_adapters=lambda: [(7, "Ethernet", "802.3")], adapter_guids=explode
             ),
         )
-        assert discover_wifi_link_quality(registrar, probes) == 0
+        assert discover_wifi_advisories(registrar, probes) == 0
 
     def test_the_pass_runs_right_after_the_adapter_pass(self) -> None:
         names = [d.__name__ for d in all_discoverers()]
         assert (
-            names.index("discover_wifi_link_quality")
+            names.index("discover_wifi_advisories")
             == names.index("discover_network_adapter_settings") + 1
         )
 

@@ -3429,6 +3429,62 @@ def create_wifi_link_quality_setting(
     )
 
 
+def create_wifi_security_setting(
+    interface_index: int, interface_guid: str, display_name: str
+) -> SettingExecutor:
+    """A read-only advisory on the Wi-Fi link's security standard and cipher.
+
+    Two findings, on two different axes. A TKIP or WEP cipher is a *performance*
+    finding: 802.11n and every later amendment refuse HT/VHT/HE rates on such a
+    link, so the radio runs at 802.11g speed whatever the router's box says.
+    WPA2-Personal on a link where the adapter lists SAE among its pairs and the
+    access point's beacon offers it is a *security* finding, and the copy says
+    so plainly — WPA3 changes no rate, so nothing here claims frames for it.
+
+    Both ends are read, never assumed: the adapter's own auth/cipher pair list
+    (``WlanQueryInterface``) and the connected BSS entry's RSN element. A router
+    that does not offer WPA3 is not this advisory's business, and neither is
+    an enterprise network.
+    """
+    return SettingExecutor(
+        id=f"network:{interface_index}:wifi_security",
+        category=SettingCategory.NETWORK,
+        display_name=f"Wi-Fi Security Standard ({display_name})",
+        short_name=f"Wi-Fi security check ({display_name})",
+        description="Which security standard and cipher the Wi-Fi link uses. A TKIP or WEP "
+        "cipher locks the link to 802.11g speeds; WPA2 where both ends can do WPA3 is weaker "
+        "protection for no speed.",
+        value_type=SettingValueType.CHOICE,
+        choices=("good", "legacy_cipher", "wpa3_available"),
+        default_value="good",
+        recommended_value="good",
+        requires_reboot=False,
+        evidence_level="proven",
+        risk_level="safe",
+        sources=[
+            "https://learn.microsoft.com/en-us/windows/win32/api/wlanapi/ne-wlanapi-wlan_intf_opcode",
+            "https://learn.microsoft.com/en-us/windows/win32/nativewifi/dot11-cipher-algorithm",
+        ],
+        current_impact="Legacy cipher: the radio is held to 802.11g rates; WPA2 with WPA3 "
+        "available: weaker protection at the same speed",
+        recommended_impact="Good: AES cipher, and WPA3 wherever both ends support it",
+        scope=SettingScope.RECOMMENDED,
+        category_order=26,
+        effect="Set the router to WPA2/WPA3 with AES; then forget this network in Windows "
+        "and reconnect so the profile is created with the stronger standard",
+        impact_scores={
+            "bandwidth": "TKIP or WEP holds an 802.11n or later radio to 802.11g rates",
+            "security": "WPA3-Personal resists offline password guessing; WPA2 does not",
+        },
+        is_readonly=True,
+        detect_type=DetectType.POWERSHELL,
+        # A Python detector key, not a script: see executors/python_actions.py.
+        detect_command="wifi_security",
+        detect_args={"interface_guid": interface_guid},
+        value_map={},
+    )
+
+
 def create_link_capability_setting(interface_index: int, display_name: str) -> SettingExecutor:
     """Create a read-only advisory comparing the negotiated link to the adapter's own ceiling.
 

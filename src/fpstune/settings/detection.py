@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from contextvars import copy_context
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.applicability import (
     ApplicabilityChecker,
@@ -16,7 +16,7 @@ from fpstune.settings.applicability import (
     is_absent_reading,
     values_equal,
 )
-from fpstune.settings.base import DetectionResult
+from fpstune.settings.base import DetectionResult, Reading
 from fpstune.settings.executors import CommandExecutor
 from fpstune.settings.executors.game_config_cache import prefetch_game_configs
 from fpstune.settings.executors.ps_batch import (
@@ -285,6 +285,14 @@ class DetectionEngine:
             value, error = CommandExecutor.detect(setting)
             elapsed_ms = int((time.perf_counter() - start) * 1000)
 
+            # A detector with numbers behind its word hands both back in a
+            # Reading; split them here, once, so nothing below ever compares a
+            # Reading to a recommended value.
+            finding: dict[str, Any] | None = None
+            if isinstance(value, Reading):
+                finding = value.finding
+                value = value.value
+
             # Log raw detection result
             debug_log(
                 "detect",
@@ -352,6 +360,7 @@ class DetectionEngine:
                 is_optimized=is_optimized,
                 is_applicable=is_applicable,
                 applicable_reason=applicable_reason,
+                finding=finding,
             )
         except Exception as e:
             elapsed_ms = int((time.perf_counter() - start) * 1000)

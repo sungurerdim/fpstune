@@ -176,6 +176,12 @@ export type SettingScope = "essential" | "recommended" | "complete";
  * Centralized Setting entity - Single Source of Truth
  * Combines static metadata with runtime state
  */
+/** What a detector measured, under a kind lib/finding.ts has a sentence for. */
+export interface Finding {
+  kind: string;
+  [key: string]: unknown;
+}
+
 export interface Setting {
   // === Identity ===
   id: SettingId; // "timer:hpet"
@@ -261,6 +267,9 @@ export interface Setting {
 
   // === Runtime State (dynamic) ===
   currentValue: unknown | null; // "enabled" | null (if loading)
+  // The measured facts behind an advisory's value — "linked at 100 Mbps, the
+  // adapter does 2500" — keyed by `kind`. Absent for an ordinary setting.
+  finding?: Finding;
   originalValue?: unknown; // Value before any changes (for revert)
   status: SettingStatus; // Computed from current vs recommended
   executionStatus: ExecutionStatus; // For UI feedback during apply/revert

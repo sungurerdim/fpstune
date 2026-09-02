@@ -22,9 +22,10 @@ from __future__ import annotations
 import sys
 
 import pytest
-from tests.test_windows_contract.conftest import run_shipped_command
+from tests.test_windows_contract.conftest import run_shipped_command, run_shipped_script
 
 from fpstune.settings.definitions.network import create_link_capability_setting
+from fpstune.settings.executors.powershell import _split_detect_output
 from fpstune.settings.executors.ps_batch import command_is_batchable
 from fpstune.utils.powershell import substitute_placeholders
 
@@ -139,3 +140,34 @@ def test_the_command_survives_a_shared_detect_session() -> None:
     """
     setting = create_link_capability_setting(17, "Ethernet")
     assert command_is_batchable(setting.detect_command)
+
+
+def _detect_with_finding(speed_bps: int, valid: list[int]) -> tuple[str | None, dict | None]:
+    """The value and the finding, split exactly the way the executor splits them."""
+    setting = create_link_capability_setting(17, "Ethernet")
+    command = substitute_placeholders(setting.detect_command, **setting.detect_args)
+    payload = {"adapter": {"Name": "Ethernet", "Status": "Up", "Speed": speed_bps}, "valid": valid}
+    lines, finding = _split_detect_output(
+        setting.id, run_shipped_script(_HARNESS + command, payload)
+    )
+    return (lines[-1] if lines else None), finding
+
+
+def test_the_numbers_travel_with_the_word_from_real_powershell() -> None:
+    """ConvertTo-Json's actual output parses back into the two integers the UI phrases."""
+    value, finding = _detect_with_finding(100_000_000, REALTEK_2_5G)
+    assert value == "below_capability"
+    assert finding == {"kind": "link_speed", "linked_mbps": 100, "ceiling_mbps": 2500}
+
+
+def test_a_clean_link_still_reports_what_it_measured() -> None:
+    value, finding = _detect_with_finding(1_000_000_000, GIGABIT)
+    assert value == "at_capability"
+    assert finding == {"kind": "link_speed", "linked_mbps": 1000, "ceiling_mbps": 1000}
+
+
+def test_a_refused_ceiling_carries_no_finding() -> None:
+    """No ceiling, no numbers: a finding with an invented ceiling is the bug this guards."""
+    value, finding = _detect_with_finding(1_000_000_000, [0, 1, 2, 9999])
+    assert value == "not_available"
+    assert finding is None

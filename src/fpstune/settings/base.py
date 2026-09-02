@@ -628,6 +628,23 @@ class SettingExecutor:
         }
 
 
+@dataclass(frozen=True)
+class Reading:
+    """A detected value together with the numbers that produced it.
+
+    An advisory's value is one word — ``below_capability`` — but the reason it
+    was chosen is a pair of numbers the user needs more than the word: the rate
+    this link negotiated and the rate the adapter can do. A detector that has
+    such numbers returns them here, keyed by a ``kind`` the UI has a sentence
+    for, and the engine splits the two so every downstream comparison still
+    sees a plain value. Every number in ``finding`` was read on this machine
+    during this detect (C11); none is ever typed into source (C9).
+    """
+
+    value: Any
+    finding: dict[str, Any] | None = None
+
+
 @dataclass
 class DetectionResult:
     """Result of detecting a single setting's value."""
@@ -639,6 +656,9 @@ class DetectionResult:
     is_optimized: bool = False  # True if current value == recommended value
     is_applicable: bool = True  # False if setting doesn't apply to this hardware
     applicable_reason: str = ""  # Human-readable reason when not applicable
+    # The measured facts behind an advisory's value (see ``Reading``); None for
+    # the ordinary setting whose value is the whole story.
+    finding: dict[str, Any] | None = None
 
     @property
     def success(self) -> bool:
@@ -656,6 +676,7 @@ class DetectionResult:
             "is_optimized": self.is_optimized,
             "is_applicable": self.is_applicable,
             "applicable_reason": self.applicable_reason,
+            "finding": self.finding,
         }
 
 

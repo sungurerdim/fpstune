@@ -23,7 +23,7 @@ from fpstune.api.schemas import NetworkAdapterInfo
 from fpstune.utils.debug import debug_log
 from fpstune.utils.powershell import run_powershell
 from fpstune.utils.winapi import wlan
-from fpstune.utils.winapi.wlan import WlanRecord
+from fpstune.utils.winapi.wlan import WlanRecord, band_ghz, phy_name
 
 logger = logging.getLogger(__name__)
 
@@ -238,19 +238,9 @@ _ADAPTER_INVENTORY_SCRIPT = """
 # command, the pattern Windows Defender flagged on 2026-09-02.
 #
 # The record-to-report mapping is a pure function so it can be tested against
-# described records. Both maps key on the API's own numeric enums
-# (dot11_phy_type, DOT11_AUTH_ALGORITHM); an unknown frequency stays 0 — never
-# guessed from the channel number.
-_PHY_NAMES = {
-    4: "802.11a",
-    5: "802.11b",
-    6: "802.11g",
-    7: "802.11n",
-    8: "802.11ac",
-    9: "802.11ad",
-    10: "802.11ax",
-    11: "802.11be",
-}
+# described records. The map keys on the API's own numeric enum
+# (DOT11_AUTH_ALGORITHM); the radio name and band come from ``wlan.phy_name``
+# and ``wlan.band_ghz``, shared with the advisory that judges the same link.
 _AUTH_NAMES = {
     1: "Open",
     2: "Shared",
@@ -263,17 +253,6 @@ _AUTH_NAMES = {
     10: "OWE",
     11: "WPA3-Enterprise-192",
 }
-
-
-def band_ghz(center_khz: int) -> float:
-    """The band from the BSS entry's centre frequency; 0 when no entry answered."""
-    if center_khz >= 5_925_000:
-        return 6.0
-    if center_khz >= 4_900_000:
-        return 5.0
-    if center_khz >= 2_400_000:
-        return 2.4
-    return 0.0
 
 
 def _normal_guid(value: object) -> str:
@@ -300,7 +279,7 @@ def wifi_rows(records: list[WlanRecord], adapters: list[dict[str, Any]]) -> list
                     "SSID": record.ssid,
                     "Channel": record.channel,
                     "FrequencyGHz": band_ghz(record.center_khz),
-                    "RadioType": _PHY_NAMES.get(record.phy_type, ""),
+                    "RadioType": phy_name(record.phy_type),
                     "SignalPercent": record.signal_percent,
                     "AuthType": _AUTH_NAMES.get(record.auth_algorithm, ""),
                 }

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import sys
 import threading
 from typing import TYPE_CHECKING, Any
 
+from fpstune.settings.base import Reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 from fpstune.settings.executors.powershell_actions import (
     ACTION_COMMANDS,
@@ -187,6 +189,8 @@ def _scriptless_reading(setting: SettingExecutor, cmd_key: str) -> Any | None:
     if detector is not None:
         raw = detector(setting.detect_args)
         debug_log("powershell", f"DETECT PYTHON {setting.id}: {cmd_key} → {raw!r}")
+        if isinstance(raw, Reading):
+            return Reading(map_raw_to_display(setting.value_map, raw.value), raw.finding)
         return map_raw_to_display(setting.value_map, raw)
 
     constant = CONSTANT_STATUS_ACTIONS.get(cmd_key)
@@ -194,6 +198,47 @@ def _scriptless_reading(setting: SettingExecutor, cmd_key: str) -> Any | None:
         debug_log("powershell", f"DETECT CONSTANT {setting.id}: {cmd_key} → {constant!r}")
         return map_raw_to_display(setting.value_map, constant)
     return None
+
+
+def _split_detect_output(
+    setting_id: str, output: str | None
+) -> tuple[list[str], dict[str, Any] | None]:
+    """Separate a detect script's value lines from the two kinds that ride along.
+
+    "FPSTUNE_WARN: msg" is a diagnostic for the log — a missing tool, an
+    unreadable counter — that must not fail the detection. "FPSTUNE_FINDING:
+    {json}" is the numbers behind an advisory's word, handed to the UI as the
+    Reading's finding. Neither is ever the value; the value is the last line left.
+    """
+    value_lines: list[str] = []
+    finding: dict[str, Any] | None = None
+    for line in (output or "").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("FPSTUNE_WARN:"):
+            _logger.info("[%s] %s", setting_id, stripped[len("FPSTUNE_WARN:") :].strip())
+        elif stripped.startswith("FPSTUNE_FINDING:"):
+            finding = _parse_finding(setting_id, stripped[len("FPSTUNE_FINDING:") :])
+        elif stripped:
+            value_lines.append(stripped)
+    return value_lines, finding
+
+
+def _parse_finding(setting_id: str, text: str) -> dict[str, Any] | None:
+    """The JSON object a detect script wrote after ``FPSTUNE_FINDING:``, or None.
+
+    Only an object with a string ``kind`` counts: the UI picks its sentence by
+    that key, and a finding it has no sentence for is shown as nothing, not as
+    raw JSON.
+    """
+    try:
+        parsed = json.loads(text.strip())
+    except ValueError:
+        _logger.warning("[%s] unreadable FPSTUNE_FINDING line: %r", setting_id, text[:200])
+        return None
+    if not isinstance(parsed, dict) or not isinstance(parsed.get("kind"), str):
+        _logger.warning("[%s] FPSTUNE_FINDING without a kind: %r", setting_id, text[:200])
+        return None
+    return parsed
 
 
 class PowerShellExecutor(BaseExecutor):
@@ -417,20 +462,7 @@ class PowerShellExecutor(BaseExecutor):
         if not success:
             return None, f"PowerShell failed: {output}"
 
-        # Extract FPSTUNE_WARN: diagnostic lines from output and log them,
-        # then use only the remaining lines as the actual value.
-        # Detection scripts write "FPSTUNE_WARN: msg" to inform users of missing
-        # tools or system features without failing the detection entirely.
-        value_lines: list[str] = []
-        if output:
-            for line in output.splitlines():
-                stripped = line.strip()
-                if stripped.startswith("FPSTUNE_WARN:"):
-                    msg = stripped[len("FPSTUNE_WARN:") :].strip()
-                    _logger.info("[%s] %s", setting.id, msg)
-                elif stripped:
-                    value_lines.append(stripped)
-
+        value_lines, finding = _split_detect_output(setting.id, output)
         raw_value = value_lines[-1] if value_lines else None
 
         debug_log("powershell", f"DETECT PARSE {setting.id}: raw_value={repr(raw_value)}")
@@ -444,12 +476,14 @@ class PowerShellExecutor(BaseExecutor):
             return None, None
 
         # Map raw value to display value if mapping exists
+        value: Any = raw_value
         if setting.value_map:
-            mapped = map_raw_to_display(setting.value_map, raw_value)
-            debug_log("powershell", f"DETECT MAP {setting.id}: {repr(raw_value)} -> {repr(mapped)}")
-            return mapped, None
+            value = map_raw_to_display(setting.value_map, raw_value)
+            debug_log("powershell", f"DETECT MAP {setting.id}: {repr(raw_value)} -> {repr(value)}")
 
-        return raw_value, None
+        if finding is not None:
+            return Reading(value, finding), None
+        return value, None
 
     def apply(self, setting: SettingExecutor, value: Any) -> tuple[bool, str | None]:
         """Apply a value using PowerShell."""

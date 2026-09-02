@@ -99,6 +99,27 @@ export const en = {
   "sr.optimal": "Already at the recommended value: ",
   "sr.currently": "Currently ",
   "sr.recommendedIs": ", recommended value is ",
+  // Advisory findings: the measured numbers, then the one move (lib/finding.ts)
+  "finding.linkSpeed.below":
+    "Link running at {linked}; the adapter supports {ceiling}.",
+  "finding.linkSpeed.atCeiling":
+    "Link running at {linked}, the adapter's maximum.",
+  "finding.linkSpeed.adviceCable":
+    "Use a {cable} or better cable, and check the router or switch port also does {ceiling}.",
+  "finding.linkSpeed.adviceFarEnd":
+    "Check the cable and that the router or switch port does {ceiling}.",
+  "finding.wifi.onBand": "Signal {signal}% on the {band} GHz band{radio}.",
+  "finding.wifi.bandUnknown": "Signal {signal}%; band not reported{radio}.",
+  "finding.wifi.adviceSignal":
+    "Move closer to the router or clear what stands between; a cable beats any radio.",
+  "finding.wifi.adviceBand":
+    "Join the router's 5 GHz or 6 GHz network; 2.4 GHz is slower and more crowded.",
+  // Advisory values, in words
+  "choice.at_capability": "At the adapter's maximum",
+  "choice.below_capability": "Below the adapter's maximum",
+  "choice.good": "Good",
+  "choice.weak_signal": "Weak signal",
+  "choice.on_2_4ghz": "On 2.4 GHz",
   "badge.risk": "RISK",
   "badge.note": "NOTE",
 

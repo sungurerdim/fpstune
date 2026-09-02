@@ -3494,18 +3494,23 @@ def create_link_capability_setting(interface_index: int, display_name: str) -> S
             "else { $unknown = $true } } "
             "$linked = [int]([math]::Round($a.Speed / 1000000)); "
             # Write-Output, not Write-Host. Host output bypasses the pipeline, so a
-            # batch group's `| Out-String` never sees it — the warning is lost and
-            # the stray line costs every setting in that group a live subprocess
+            # batch group's `| Out-String` never sees it — the line is lost and
+            # the stray output costs every setting in that group a live subprocess
             # (measured: two such commands took a group of 12 down). Through the
-            # pipeline it becomes part of the captured value, and the detect path
-            # strips FPSTUNE_WARN lines before reading the value off the last line.
+            # pipeline it becomes part of the captured text, and the detect path
+            # lifts FPSTUNE_WARN and FPSTUNE_FINDING lines out before reading the
+            # value off the last line.
             "if ($unknown -or $ceiling -le 0) { "
             "Write-Output ('FPSTUNE_WARN: unrecognised *SpeedDuplex values on ' + $a.Name + "
             "' (' + ($prop.ValidRegistryValues -join ',') + '), cannot derive a link ceiling'); "
             "'not_available' } "
-            "elseif ($linked -ge $ceiling) { 'at_capability' } "
-            "else { Write-Output ('FPSTUNE_WARN: ' + $a.Name + ' linked at ' + $linked + "
-            "' Mbps but the adapter supports ' + $ceiling + ' Mbps'); 'below_capability' } } }"
+            # The two numbers are the finding itself — the UI says "linked at
+            # 100 Mbps, adapter supports 2500 Mbps" and picks the cable class
+            # from the ceiling — so they travel as a FPSTUNE_FINDING line in
+            # both outcomes, not as a warning that only the log would read.
+            "else { Write-Output ('FPSTUNE_FINDING: ' + (@{kind='link_speed'; "
+            "linked_mbps=$linked; ceiling_mbps=$ceiling} | ConvertTo-Json -Compress)); "
+            "if ($linked -ge $ceiling) { 'at_capability' } else { 'below_capability' } } } }"
         ),
         detect_args={"ifindex": interface_index},
         value_map={},

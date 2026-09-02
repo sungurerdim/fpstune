@@ -20,8 +20,8 @@ from pathlib import Path
 import pytest
 
 import fpstune.api.hardware.network_adapters as network_adapters
-from fpstune.api.hardware.network_adapters import band_ghz, wifi_rows
-from fpstune.utils.winapi.wlan import WlanRecord
+from fpstune.api.hardware.network_adapters import wifi_rows
+from fpstune.utils.winapi.wlan import WlanRecord, band_ghz
 
 GUID = "aaaabbbb-cccc-dddd-eeee-ffff00001111"
 WIFI = [{"Name": "Wi-Fi", "InterfaceGuid": "{" + GUID.upper() + "}", "MediaType": "Native 802.11"}]

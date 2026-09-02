@@ -189,6 +189,27 @@ describe("Home separates advisories that found something", () => {
     expect(advisoryAt).toBeLessThan(hardwareAt);
   });
 
+  it("shows the measured numbers and the cable the ceiling needs, not the enum", () => {
+    // What the machine reported: a 100 Mbps link on a 2.5 GbE adapter. The row
+    // has to say exactly that and name the move — not `below_capability` and a
+    // paragraph about cables in general.
+    const measured: Setting = {
+      ...SLOW_LINK,
+      finding: { kind: "link_speed", linked_mbps: 100, ceiling_mbps: 2500 },
+    };
+    setStore([measured]);
+    render(<HomeTab />);
+
+    expect(screen.getByTestId("advisory-finding")).toHaveTextContent(
+      "Link running at 100 Mbps; the adapter supports 2.5 Gbps.",
+    );
+    expect(screen.getByTestId("advisory-advice")).toHaveTextContent(
+      "Use a Cat 6 or better cable",
+    );
+    expect(screen.queryByText(/below_capability/)).not.toBeInTheDocument();
+    expect(screen.getByText("Below the adapter's maximum")).toBeInTheDocument();
+  });
+
   it("keeps an inapplicable advisory off the page entirely", () => {
     // `system:thermal_condition` reports not-applicable on a machine whose ACPI
     // exposes no thermal zone. A row that cannot mean anything is not a finding.

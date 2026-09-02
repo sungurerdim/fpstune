@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
+import { advisoryChoiceLabel } from "../lib/finding";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -31,6 +32,12 @@ export function SettingValueState({
   if (isLoading) return null;
 
   const label = (value: unknown) => {
+    // An advisory's value is a state name for the comparison code; the user
+    // reads "Below the adapter's maximum", never `below_capability`.
+    if (setting.isReadonly) {
+      const words = advisoryChoiceLabel(value);
+      if (words) return words;
+    }
     const formatted = formatSettingValue(value);
     const hint = setting.valueHints?.[String(value)];
     return hint && hint !== formatted ? `${formatted} (${hint})` : formatted;

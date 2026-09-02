@@ -451,6 +451,11 @@ export interface DetectionResultResponse {
    * undo action only when this is present and differs from `value`.
    */
   original_value?: unknown;
+  /**
+   * The numbers behind an advisory's value, keyed by a `kind` the frontend has
+   * a sentence for (lib/finding.ts). Read on this machine during this detect.
+   */
+  finding?: Record<string, unknown> | null;
 }
 
 export interface DetectRequest {

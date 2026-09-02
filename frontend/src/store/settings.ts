@@ -7,6 +7,7 @@
 
 import type { StateCreator } from "zustand";
 import type {
+  Finding,
   Setting,
   SettingId,
   SettingCategory,
@@ -55,6 +56,16 @@ export interface DetectionResultUpdate {
   error?: string | null;
   recommended_value?: unknown;
   original_value?: unknown;
+  // The numbers behind an advisory's word; absent = no news, null = none.
+  finding?: Record<string, unknown> | null;
+}
+
+function isFinding(value: unknown): value is Finding {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as { kind?: unknown }).kind === "string"
+  );
 }
 
 export interface SettingsSlice {
@@ -222,6 +233,11 @@ export const createSettingsSlice: StateCreator<
           // standing rather than erase what only a full scan records.
           ...(result.original_value !== undefined && {
             originalValue: result.original_value ?? undefined,
+          }),
+          // Same shape as the original: absent leaves the last finding standing,
+          // null (a detect that measured nothing this time) clears it.
+          ...(result.finding !== undefined && {
+            finding: isFinding(result.finding) ? result.finding : undefined,
           }),
           status: computeStatusFromResult(result.is_optimized, result.value),
         };

@@ -18,10 +18,11 @@ from collections.abc import Callable
 from typing import Any
 
 from fpstune.settings.applicability import NOT_AVAILABLE
+from fpstune.settings.base import Reading
 from fpstune.utils.winapi.memory import purge_standby_list
 
 PythonAction = Callable[[dict[str, Any]], tuple[bool, str | None]]
-PythonDetector = Callable[[dict[str, Any]], str]
+PythonDetector = Callable[[dict[str, Any]], "str | Reading"]
 
 
 def purge_standby(_args: dict[str, Any]) -> tuple[bool, str | None]:
@@ -69,14 +70,36 @@ def classify_wifi_link(signal_percent: int, center_khz: int) -> str:
     return "good"
 
 
-def wifi_link_quality(args: dict[str, Any]) -> str:
+def wifi_link_reading(signal_percent: int, center_khz: int, phy_type: int) -> Reading:
+    """The link's one-word verdict plus the numbers it was judged on.
+
+    The word drives the row's state; the numbers are what the user is shown —
+    "signal 38%, 2.4 GHz, 802.11n" says which move to make where the word
+    ``weak_signal`` only says that one is needed. A band of 0 (no BSS entry
+    matched) is passed through as 0, so the UI can say the band is unknown
+    rather than invent one.
+    """
+    from fpstune.utils.winapi.wlan import band_ghz, phy_name
+
+    return Reading(
+        classify_wifi_link(signal_percent, center_khz),
+        {
+            "kind": "wifi_link",
+            "signal_percent": signal_percent,
+            "band_ghz": band_ghz(center_khz),
+            "radio": phy_name(phy_type),
+        },
+    )
+
+
+def wifi_link_quality(args: dict[str, Any]) -> str | Reading:
     """The connected radio's link quality, or the absent sentinel when it is not connected."""
     from fpstune.utils.winapi import wlan
 
     guid = str(args.get("interface_guid", "")).lower().strip("{}")
     for record in wlan.query_connected():
         if record.interface_guid == guid:
-            return classify_wifi_link(record.signal_percent, record.center_khz)
+            return wifi_link_reading(record.signal_percent, record.center_khz, record.phy_type)
     return NOT_AVAILABLE
 
 

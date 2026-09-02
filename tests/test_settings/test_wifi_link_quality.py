@@ -70,11 +70,30 @@ class TestTheDetector:
     def test_it_answers_for_the_radio_it_was_asked_about(self, monkeypatch) -> None:
         other = _record(guid="ffffffff-0000-4000-8000-000000000002", signal=10)
         monkeypatch.setattr(wlan, "query_connected", lambda: [other, _record(signal=45)])
-        assert wifi_link_quality({"interface_guid": GUID}) == "weak_signal"
+        assert wifi_link_quality({"interface_guid": GUID}).value == "weak_signal"
 
     def test_braces_and_case_in_the_guid_do_not_matter(self, monkeypatch) -> None:
         monkeypatch.setattr(wlan, "query_connected", lambda: [_record(center_khz=2_412_000)])
-        assert wifi_link_quality({"interface_guid": "{" + GUID.upper() + "}"}) == "on_2_4ghz"
+        reading = wifi_link_quality({"interface_guid": "{" + GUID.upper() + "}"})
+        assert reading.value == "on_2_4ghz"
+
+    def test_the_numbers_it_judged_on_travel_with_the_word(self, monkeypatch) -> None:
+        """ "weak_signal" says a move is needed; 38% on 2.4 GHz 802.11n says which."""
+        monkeypatch.setattr(
+            wlan, "query_connected", lambda: [_record(signal=38, center_khz=2_437_000)]
+        )
+        reading = wifi_link_quality({"interface_guid": GUID})
+        assert reading.value == "weak_signal"
+        assert reading.finding == {
+            "kind": "wifi_link",
+            "signal_percent": 38,
+            "band_ghz": 2.4,
+            "radio": "802.11n",
+        }
+
+    def test_an_unmatched_bss_reports_the_band_as_zero_not_a_guess(self, monkeypatch) -> None:
+        monkeypatch.setattr(wlan, "query_connected", lambda: [_record(signal=90, center_khz=0)])
+        assert wifi_link_quality({"interface_guid": GUID}).finding["band_ghz"] == 0.0
 
     def test_a_disconnected_radio_is_the_absent_sentinel(self, monkeypatch) -> None:
         """Not connected means nothing to advise on — the setting steps aside."""
@@ -94,10 +113,12 @@ class TestThroughTheExecutor:
         monkeypatch.setattr("fpstune.settings.executors.powershell.run_powershell", no_powershell)
         monkeypatch.setattr(wlan, "query_connected", lambda: [_record(signal=40)])
 
-        value, error = PowerShellExecutor().detect(setting)
+        reading, error = PowerShellExecutor().detect(setting)
 
-        assert (value, error) == ("weak_signal", None)
-        assert value in setting.choices
+        assert error is None
+        assert reading.value == "weak_signal"
+        assert reading.value in setting.choices
+        assert reading.finding["signal_percent"] == 40
 
     def test_the_detector_table_names_the_settings_key(self) -> None:
         setting = create_wifi_link_quality_setting(12, GUID, "x")

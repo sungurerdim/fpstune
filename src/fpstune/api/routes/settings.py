@@ -283,8 +283,7 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
 
     # Convert to response
     response_results: dict[str, DetectionResultResponse] = {}
-    success_count = 0
-    error_count = 0
+    success_count = error_count = 0
     settings_map = {s.id: s for s in settings}
 
     originals = get_original_values()
@@ -301,6 +300,7 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
             applicable_reason=result.applicable_reason,
             recommended_value=setting_obj.recommended_value if setting_obj else None,
             original_value=originals.get(setting_id),
+            finding=result.finding,
         )
         if result.success:
             success_count += 1

@@ -94,6 +94,25 @@ export const tr: Record<keyof typeof en, string> = {
   "sr.optimal": "Zaten önerilen değerde: ",
   "sr.currently": "Şu an ",
   "sr.recommendedIs": ", önerilen değer ",
+  "finding.linkSpeed.below":
+    "Bağlantı {linked} hızında; bağdaştırıcı {ceiling} destekliyor.",
+  "finding.linkSpeed.atCeiling":
+    "Bağlantı {linked} hızında, bağdaştırıcının en yükseği.",
+  "finding.linkSpeed.adviceCable":
+    "{cable} veya üstü kablo kullanın; modem ya da switch portunun da {ceiling} desteklediğini kontrol edin.",
+  "finding.linkSpeed.adviceFarEnd":
+    "Kabloyu ve modem ya da switch portunun {ceiling} desteklediğini kontrol edin.",
+  "finding.wifi.onBand": "Sinyal %{signal}, {band} GHz bandında{radio}.",
+  "finding.wifi.bandUnknown": "Sinyal %{signal}; bant bildirilmedi{radio}.",
+  "finding.wifi.adviceSignal":
+    "Modeme yaklaşın ya da aradaki engeli kaldırın; kablo her radyodan iyidir.",
+  "finding.wifi.adviceBand":
+    "Modemin 5 GHz veya 6 GHz ağına bağlanın; 2,4 GHz daha yavaş ve daha kalabalıktır.",
+  "choice.at_capability": "Bağdaştırıcının en yükseğinde",
+  "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
+  "choice.good": "İyi",
+  "choice.weak_signal": "Zayıf sinyal",
+  "choice.on_2_4ghz": "2,4 GHz'de",
   "badge.risk": "RİSK",
   "badge.note": "NOT",
 

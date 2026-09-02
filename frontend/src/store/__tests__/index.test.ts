@@ -181,6 +181,51 @@ describe("useStore", () => {
     });
   });
 
+  describe("finalizeDetection and the measured finding", () => {
+    it("carries a finding with a kind onto the setting and clears it on null", () => {
+      useStore.getState().initializeFromDefinitions(mockDefinitions);
+      useStore.getState().finalizeDetection(
+        {
+          "timer:hpet": {
+            value: "enabled",
+            is_optimized: false,
+            is_applicable: true,
+            finding: { kind: "link_speed", linked_mbps: 100, ceiling_mbps: 2500 },
+          },
+        },
+        [],
+      );
+      expect(useStore.getState().settings.get("timer:hpet")?.finding).toEqual({
+        kind: "link_speed",
+        linked_mbps: 100,
+        ceiling_mbps: 2500,
+      });
+
+      // An update that says nothing about the finding leaves it standing...
+      useStore.getState().finalizeDetection(
+        { "timer:hpet": { value: "enabled", is_optimized: false, is_applicable: true } },
+        [],
+      );
+      expect(useStore.getState().settings.get("timer:hpet")?.finding?.kind).toBe(
+        "link_speed",
+      );
+
+      // ...and one that measured nothing this time clears it.
+      useStore.getState().finalizeDetection(
+        {
+          "timer:hpet": {
+            value: "enabled",
+            is_optimized: false,
+            is_applicable: true,
+            finding: null,
+          },
+        },
+        [],
+      );
+      expect(useStore.getState().settings.get("timer:hpet")?.finding).toBeUndefined();
+    });
+  });
+
   describe("finalizeDetection and the recorded original", () => {
     it("keeps the recorded original when an update does not carry one", () => {
       // Only the full scan records originals, and a post-apply re-detect is not

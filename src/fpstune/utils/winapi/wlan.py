@@ -156,6 +156,35 @@ class WlanRecord:
         )
 
 
+# dot11_phy_type, by the API's own numeric enum; anything else is an empty name.
+PHY_NAMES = {
+    4: "802.11a",
+    5: "802.11b",
+    6: "802.11g",
+    7: "802.11n",
+    8: "802.11ac",
+    9: "802.11ad",
+    10: "802.11ax",
+    11: "802.11be",
+}
+
+
+def phy_name(phy_type: int) -> str:
+    """The radio standard's name, or empty when the enum is unknown."""
+    return PHY_NAMES.get(phy_type, "")
+
+
+def band_ghz(center_khz: int) -> float:
+    """The band from the BSS entry's centre frequency; 0 when no entry answered."""
+    if center_khz >= 5_925_000:
+        return 6.0
+    if center_khz >= 4_900_000:
+        return 5.0
+    if center_khz >= 2_400_000:
+        return 2.4
+    return 0.0
+
+
 def _guid_str(raw: bytes) -> str:
     return str(uuid.UUID(bytes_le=bytes(raw)))
 

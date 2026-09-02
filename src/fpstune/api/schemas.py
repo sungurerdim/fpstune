@@ -425,6 +425,10 @@ class DetectionResultResponse(BaseModel):
     is_applicable: bool = True
     applicable_reason: str = ""
     recommended_value: Any | None = None
+    # The numbers behind an advisory's value, keyed by a `kind` the frontend
+    # has a sentence for ("linked at 100 Mbps, adapter supports 2500 Mbps").
+    # Read on this machine during this detect; None for an ordinary setting.
+    finding: dict[str, Any] | None = None
     # What this machine held when fpstune first saw the setting. None means
     # nothing was recorded, so there is nothing to undo — which is a different
     # state from "the original happens to equal the current value", and the UI

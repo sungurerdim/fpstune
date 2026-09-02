@@ -164,3 +164,28 @@ describe("RiskWarningBadge", () => {
     expect(screen.queryByTestId("risk-warning-badge")).not.toBeInTheDocument();
   });
 });
+
+describe("an advisory's value is shown in words", () => {
+  it("renders the state name's label, never the enum", () => {
+    render(
+      <SettingValueState
+        setting={makeSetting({
+          id: "network:19:link_capability" as `${string}:${string}`,
+          isReadonly: true,
+          choices: ["at_capability", "below_capability"],
+          currentValue: "below_capability",
+          recommendedValue: "at_capability",
+        })}
+      />,
+    );
+    const state = screen.getByTestId("setting-value-state");
+    expect(state).toHaveTextContent("Below the adapter's maximum");
+    expect(state).toHaveTextContent("At the adapter's maximum");
+    expect(state).not.toHaveTextContent("below_capability");
+  });
+
+  it("leaves an ordinary setting's choices as they are", () => {
+    render(<SettingValueState setting={makeSetting({ currentValue: "High" })} />);
+    expect(screen.getByTestId("setting-value-state")).toHaveTextContent("High");
+  });
+});

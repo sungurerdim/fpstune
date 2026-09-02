@@ -31,6 +31,7 @@ import {
   localizedName,
 } from "../i18n/settings";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
+import { describeFinding } from "../lib/finding";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
@@ -505,20 +506,29 @@ export function HomeTab() {
                   </span>
                   <SettingInfoTooltip setting={s} />
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {localizedDescription(s)}
+                {/* The measured numbers when the detector produced them —
+                    "link at 100 Mbps; the adapter supports 2.5 Gbps" — and the
+                    static description only when it did not. The description
+                    stays in the tooltip either way. */}
+                <p
+                  className="text-xs text-muted-foreground mt-0.5"
+                  data-testid="advisory-finding"
+                >
+                  {describeFinding(s)?.summary ?? localizedDescription(s)}
                 </p>
                 <div className="mt-1">
                   <SettingValueState setting={s} />
                 </div>
                 {/* The finding names a problem; this names the move. A cable to
-                    change, a band to switch to — the one line the user came for. */}
-                {localizedEffect(s) && (
-                  <p className="text-xs mt-1.5">
+                    change, a band to switch to — the one line the user came for.
+                    A measured finding carries its own, sized to the numbers
+                    (the cable class the ceiling needs); otherwise the static one. */}
+                {(describeFinding(s)?.advice || localizedEffect(s)) && (
+                  <p className="text-xs mt-1.5" data-testid="advisory-advice">
                     <span className="font-semibold text-warning">
                       {t("home.whatToDo")}
                     </span>{" "}
-                    {localizedEffect(s)}
+                    {describeFinding(s)?.advice || localizedEffect(s)}
                   </p>
                 )}
               </div>

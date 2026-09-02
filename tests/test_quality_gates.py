@@ -461,6 +461,38 @@ class TestC3TooltipCopy:
         )
 
 
+class TestC3DescriptionsStateTheConsequence:
+    """A description says what the setting costs or buys, not how it is read.
+
+    From the 2026-09-02 report, on the thermal advisory: "Reads the system
+    thermal zone temperature. Above 80°C the machine is at risk of throttling."
+    That is a description of the reading function. What a user needs from the
+    same two sentences is what they gain by acting and what it is costing them
+    now.
+
+    Only the narrow, mechanical half of that is asserted here — an opening verb
+    that announces a measurement rather than a consequence. The rest is prose
+    and is reviewed as prose: a keyword rule for "does this state a benefit"
+    flagged forty descriptions that plainly do state one, and a gate that cries
+    wolf is a gate nobody runs.
+    """
+
+    # Verbs that describe taking a reading. "Sets" and "Controls" are not here:
+    # a game config line legitimately opens by naming the cvar it writes.
+    _READING_VERB = re.compile(r"^\s*(Reads|Detects|Checks|Reports|Measures)\b", re.I)
+
+    def test_no_description_opens_by_describing_a_reading(self) -> None:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        offenders = sorted(
+            s.id for s in get_all_static_settings() if self._READING_VERB.match(s.description or "")
+        )
+        assert not offenders, (
+            "C3: descriptions that open by describing the reading rather than what it "
+            "costs or buys the user: " + ", ".join(offenders)
+        )
+
+
 class TestF4CopyRegister:
     """The backend half of F4: setting copy carries the plain-language register.
 

@@ -98,7 +98,8 @@ SERVICE_DIAGTRACK = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Connected User Experiences and Telemetry",
     short_name="Windows telemetry service",
-    description="Collects and sends diagnostic data to Microsoft.",
+    description="Collects usage and diagnostic data and uploads it to Microsoft on its own schedule, "
+    "including during a match. Off, that collection and its upload stop.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -262,7 +263,8 @@ SERVICE_FAX = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Fax Service",
     short_name="Fax service",
-    description="Manages fax transmission. Not needed on modern systems.",
+    description="Runs a fax service on a machine with no fax hardware. Off, it stops occupying a service slot "
+    "and starting with Windows for nothing.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -341,7 +343,8 @@ SERVICE_RETAIL_DEMO = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Retail Demo Service",
     short_name="Store demo service",
-    description="Demo mode for retail stores. Not needed on personal computers.",
+    description="Exists to run the demo loop on a shop display machine. It has no purpose on a personal "
+    "computer and starting it is pure waste.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -621,8 +624,8 @@ SERVICE_UCPD = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="User Choice Protection Driver (UCPD)",
     short_name="Browser-choice protection driver",
-    description="Hidden Microsoft driver that blocks third-party changes to "
-    "default app associations. Can interfere with some system tweaks.",
+    description="A hidden driver that silently blocks changes to default app associations, so a change "
+    "appears to apply and is quietly reverted. Off, the settings a user makes actually hold.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -679,7 +682,8 @@ TELEMETRY_TASKS = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Telemetry Scheduled Tasks",
     short_name="Telemetry scheduled tasks",
-    description="Disables Windows telemetry scheduled tasks as a named compound. Bundles DiagTrack/CEIP/Customer Experience tasks that share one privacy concept.",
+    description="Scheduled tasks that gather and upload usage data, all serving one purpose and so switched "
+    "off together. Off, they stop waking the machine to report on it.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -884,7 +888,8 @@ PRIVACY_CORTANA = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Cortana",
     short_name="Cortana",
-    description="Microsoft's voice assistant. Deprecated in Win11 but still collects data if enabled.",
+    description="Deprecated in Windows 11 and still able to collect voice and usage data when left on. Off, "
+    "it stops running and stops sending.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1119,7 +1124,8 @@ PRIVACY_COPILOT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Windows Copilot",
     short_name="Windows Copilot",
-    description="AI assistant in Windows 11. Disabling removes Copilot completely.",
+    description="The assistant keeps a background process and a taskbar entry running whether or not it is "
+    "used. Off, that process stops taking memory and CPU from the game.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1227,7 +1233,8 @@ PERF_ACCESSIBILITY_POPUPS = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Accessibility Key Popups",
     short_name="Sticky-keys pop-ups",
-    description="Sticky Keys (Shift x5), Filter Keys, Toggle Keys popups. Annoying for gamers.",
+    description="Tapping Shift five times in a match opens a Sticky Keys dialog, which takes focus away from "
+    "the game. Off, the shortcut stops interrupting.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1289,7 +1296,8 @@ PERF_FAST_STARTUP = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Fast Startup (Hybrid Boot)",
     short_name="Fast startup",
-    description="Hybrid shutdown that saves kernel state. Can cause driver issues.",
+    description="Shutdown keeps the old kernel state and restores it next boot, so a driver update never "
+    "fully takes effect and hardware faults survive a restart. Off, a shutdown is a real one.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1774,7 +1782,8 @@ SYSTEM_FILE_EXPLORER_LAUNCH = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="File Explorer Default View",
     short_name="File Explorer opens to",
-    description="Where File Explorer opens by default. 'This PC' shows drives immediately instead of cloud-connected Home/Quick Access.",
+    description="Home queries cloud and recent-file providers every time a window opens, which is the pause "
+    "before anything appears. This PC shows the drives immediately.",
     value_type=SettingValueType.CHOICE,
     choices=("home", "this_pc"),
     default_value="home",
@@ -2288,7 +2297,8 @@ CLEANUP_TEMP = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Temp Files",
     short_name="Temp files",
-    description="Cleans temporary files from Windows and user folders.",
+    description="Installers, updaters and games leave working files behind in the temp folders and never come "
+    "back for them. Clearing them costs nothing and returns the space to the disk.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -3012,7 +3022,8 @@ MAINTENANCE_SFC = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="System File Checker",
     short_name="System file repair",
-    description="Scan and repair Windows system files.",
+    description="Finds Windows system files that no longer match what Windows shipped and puts the originals "
+    "back. A corrupted one shows up as a crash or a feature that stopped working.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -3044,7 +3055,8 @@ MAINTENANCE_DISM_HEALTH = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="DISM Health Check",
     short_name="Windows image repair",
-    description="Check Windows image health.",
+    description="A damaged Windows component store is what turns a routine update into a failed one, and it "
+    "stays hidden until then. This reports the damage; nothing is changed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -3192,7 +3204,8 @@ PRIVACY_CAMERA_INDICATOR = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Camera On/Off Indicator",
     short_name="Camera use indicator",
-    description="Shows an on-screen notification above the taskbar when any app turns the camera on or off. Useful on devices without a physical camera LED.",
+    description="Puts a notification on screen whenever an app starts or stops using the camera. On a machine "
+    "with no camera light, this is the only way to know it happened.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -3492,7 +3505,8 @@ PERF_NUMLOCK_DEFAULT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Num Lock Default State",
     short_name="Num Lock at startup",
-    description="Sets Num Lock state at every Windows login. Useful for numpad keybinds in games.",
+    description="Whether the numpad is active as soon as Windows starts. Off, a keybind on the numpad does "
+    "nothing until the key is pressed once, which is found out mid-match.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
     default_value="off",

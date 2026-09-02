@@ -75,7 +75,8 @@ TRANSPARENCY = SettingExecutor(
     category=SettingCategory.VISUAL,
     display_name="Transparency",
     short_name="Transparency effects",
-    description="Whether windows and menus draw with transparency, which uses the GPU continuously.",
+    description="The blur behind windows and menus is redrawn by the GPU the whole time it is on screen, "
+    "including while a game runs behind it. Off, that work goes to the game instead.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",

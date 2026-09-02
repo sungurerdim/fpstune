@@ -91,7 +91,8 @@ SCALING_HEURISTICS = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Scaling Heuristics",
     short_name="Windows override of auto-tuning",
-    description="Legacy setting (no effect on Windows 8.1+). Heuristics disabled by default.",
+    description="Windows 8.1 and later ignore this key, so nothing here changes a modern machine. It exists "
+    "to put back what an older guide or optimizer switched on.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -132,7 +133,8 @@ CONGESTION_PROVIDER = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Congestion Provider",
     short_name="Congestion control algorithm",
-    description="Controls how TCP responds to network congestion. CUBIC is the most optimized algorithm for modern networks.",
+    description="How TCP backs off when the line is busy. CUBIC recovers throughput faster than the older "
+    "algorithms on a modern connection, which is a shorter wait on downloads and updates.",
     value_type=SettingValueType.CHOICE,
     choices=("CUBIC", "NewReno", "CTCP", "DCTCP", "Default"),
     default_value="CUBIC",
@@ -1124,8 +1126,8 @@ TCP_DEL_ACK_TICKS = SettingExecutor(
     # Microsoft documents TcpDelAckTicks in 100 ms intervals, range 0-6, default 2.
     # This file previously described the unit as 10 ms, which understated the timer
     # by a factor of ten in user-facing text.
-    description="Delayed ACK timer in 100ms intervals (TcpDelAckTicks); Windows defaults to 2 "
-    "and 0 disables it. A Windows 2000-era key that affects TCP only, not UDP game traffic.",
+    description="How long TCP waits before acknowledging. It touches TCP only, so a game on UDP feels nothing "
+    "either way, and the Windows default is already right.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "disabled"),
     default_value="default",
@@ -1197,8 +1199,8 @@ DNS_LOCAL_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Local Cache Priority (LocalPriority)",
     short_name="Local Priority",
-    description="Where the local resolver cache sits in the name lookup order, lower being checked earlier. "
-    "Optimized 4, Windows default 499.",
+    description="How early the local cache is consulted when a name is looked up. Earlier means an "
+    "already-known address costs no network round trip at all.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1238,8 +1240,8 @@ DNS_HOSTS_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Hosts File Priority (HostsPriority)",
     short_name="Hosts Priority",
-    description="Where the hosts file sits in the name lookup order, lower being checked earlier. Optimized "
-    "5, Windows default 500.",
+    description="How early the hosts file is consulted when a name is looked up. Earlier means the answer "
+    "arrives without waiting on the slower sources behind it.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1279,8 +1281,8 @@ DNS_QUERY_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Server Query Priority (DnsPriority)",
     short_name="DNS Priority",
-    description="Where the DNS server query sits in the name lookup order, lower being queried earlier. "
-    "Optimized 6, Windows default 2000.",
+    description="How early the DNS server itself is queried when a name is looked up. Ahead of the legacy "
+    "sources, a lookup stops waiting on paths that will not answer.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1320,8 +1322,8 @@ DNS_NETBT_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="NetBIOS Name Resolution Priority (NetbtPriority)",
     short_name="NetBT Priority",
-    description="Where NetBIOS resolution sits in the name lookup order, lower being queried earlier. "
-    "Optimized 7, Windows default 2001.",
+    description="How early NetBIOS is queried when a name is looked up. It answers for almost nothing on a "
+    "modern network, so querying it early only adds delay.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1487,7 +1489,9 @@ IPV6_RANDOM_IDS = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="IPv6 Random Identifiers",
     short_name="IPv6 Random IDs",
-    description="Randomizes IPv6 interface identifiers. Disabling provides stable connections.",
+    description="Windows rotates the machine's IPv6 address for privacy, and each rotation drops the "
+    "connections using the old one. Off, a long session stops being interrupted by its own "
+    "address changing.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1935,7 +1939,8 @@ MAX_USER_PORT = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Max Ephemeral Ports (MaxUserPort)",
     short_name="Max Ports",
-    description="Ephemeral port range upper bound. Higher = more outbound ports for simultaneous connections.",
+    description="How many outbound connections the machine can hold open at once. Run out and new connections "
+    "fail while a game, a launcher and a browser are all talking at the same time.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "maximum"),
     default_value="default",
@@ -1980,7 +1985,8 @@ TCP_NUM_CONNECTIONS = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="TCP Max Connections (TcpNumConnections)",
     short_name="Max TCP Conn",
-    description="Maximum simultaneous TCP connections. 65534 prevents connection table overflow.",
+    description="The ceiling on simultaneous TCP connections. Hitting it fails new connections outright, "
+    "which shows up as a launcher or a store page that simply will not load.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "maximum"),
     default_value="default",

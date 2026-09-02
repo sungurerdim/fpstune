@@ -29,7 +29,9 @@ WINDOWED_FLIP_MODEL = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Windowed Games Optimization",
     short_name="Windowed game fast-path",
-    description="Enables flip-model presentation for DX10-DX11 windowed/borderless games. Provides lower latency + enables Auto HDR + VRR.",
+    description="Borderless and windowed games hand frames straight to the display engine instead of through "
+    "an extra copy. Off, every windowed frame costs latency and neither Auto HDR nor VRR can "
+    "work.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",

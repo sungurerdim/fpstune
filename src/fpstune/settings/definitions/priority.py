@@ -115,8 +115,8 @@ SYSTEM_RESPONSIVENESS = SettingExecutor(
     category=SettingCategory.CORE,
     display_name="System Responsiveness",
     short_name="Reserved CPU for background",
-    description="Share of CPU time Windows reserves for background tasks; 0 gives the foreground app "
-    "everything.",
+    description="The share of CPU time Windows holds back for background tasks. At the default a fifth of the "
+    "machine is reserved away from the game in the foreground.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=20,
@@ -217,7 +217,8 @@ WIN32_PRIORITY_SEPARATION = SettingExecutor(
     category=SettingCategory.CORE,
     display_name="CPU Quantum Allocation",
     short_name="Foreground CPU share",
-    description="Controls CPU time slice distribution. Fixed short quanta = lower input latency.",
+    description="How long a thread keeps the CPU before Windows switches away. Short fixed slices mean the "
+    "game's input thread waits less for its turn, which is felt as aim that answers sooner.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "gaming", "balanced"),
     default_value="standard",

@@ -39,7 +39,7 @@ export const settingsTr: Record<
   "power:cpu_increase_policy": {
     name: "CPU'nun hızlanma biçimi",
     description:
-      "Frekans yükseltilirken kullanılan algoritma. Rocket doğrudan gereken en yüksek frekansa sıçrar; Ideal kademeli adımlar kullanır.",
+      "İş geldiğinde CPU'nun daha yüksek hıza ne kadar çabuk çıktığı. Rocket adımı tek seferde atar, böylece aniden çekirdeklere ihtiyaç duyan bir kare kademeleri beklemez.",
   },
   "power:cpu_decrease_policy": {
     name: "CPU'nun yavaşlama biçimi",
@@ -49,7 +49,7 @@ export const settingsTr: Record<
   "power:cpu_epp": {
     name: "Performans-pil dengesi",
     description:
-      "CPU donanım zamanlayıcısına verilen performans-verimlilik dengesi ipucu. Düşük değerler performansa yaslanır; 0 = en yüksek performans, 100 = en yüksek verimlilik.",
+      "CPU'nun hızlı cevap vermek yerine güç tasarrufuna ne kadar yöneldiği. Verimliliğe yönelmek her karenin başında cevap süresine mal olur; fazla öbür yana yönelmek boşuna ısı harcar.",
   },
   "power:cpu_min_state": {
     name: "Asgari CPU hızı",
@@ -139,7 +139,7 @@ export const settingsTr: Record<
   "timer:global_timer_resolution": {
     name: "Windows zamanlayıcı hassasiyeti",
     description:
-      "Zamanlayıcı çözünürlüğü isteklerini işlem başına değil sistem genelinde uygular.",
+      "Daha ince zamanlayıcı isteyen bir programın bunu yalnızca kendisi için mi yoksa tüm sistem için mi aldığı. Sistem genelinde olması, isteyen oyun olmasa da kare düzenini korur.",
   },
   "priority:gpu_priority": {
     name: "Oyuna GPU önceliği",
@@ -151,7 +151,8 @@ export const settingsTr: Record<
   },
   "priority:system_responsiveness": {
     name: "Arka plana ayrılan CPU",
-    description: "Ön plan uygulama önceliği (0 = azami ön plan önceliği).",
+    description:
+      "Windows'un arka plan işleri için ayırdığı CPU zamanı payı. Varsayılanda makinenin beşte biri, öndeki oyundan alınıp bir kenara ayrılmış olur.",
   },
   "priority:scheduling_category": {
     name: "Oyun zamanlama sınıfı",
@@ -161,7 +162,7 @@ export const settingsTr: Record<
   "priority:win32_priority_separation": {
     name: "Ön plan CPU payı",
     description:
-      "CPU zaman dilimi dağıtımını belirler. Sabit kısa kuantumlar daha düşük giriş gecikmesi demektir.",
+      "Windows başka bir işe geçmeden önce bir iş parçacığının CPU'yu ne kadar tuttuğu. Kısa ve sabit dilimler, oyunun giriş iş parçacığının sırasını daha az beklemesi demektir.",
   },
   "priority:sfio_priority": {
     name: "Oyun depolama önceliği",
@@ -175,7 +176,8 @@ export const settingsTr: Record<
   },
   "visual:transparency": {
     name: "Saydamlık efektleri",
-    description: "Pencere saydamlık efektleri (GPU kullanır).",
+    description:
+      "Pencere ve menülerin arkasındaki bulanıklık, ekranda kaldığı sürece GPU tarafından yeniden çizilir — arkada bir oyun çalışırken bile. Kapalıyken bu iş oyuna gider.",
   },
   "visual:smooth_scrolling": {
     name: "Akıcı kaydırma",
@@ -220,17 +222,17 @@ export const settingsTr: Record<
   "network:tcp_del_ack_ticks": {
     name: "TCP gecikmeli onay sayacı",
     description:
-      "100 ms adımlarla gecikmeli onay sayacı (TcpDelAckTicks); Windows varsayılanı 2, 0 kapatır. Windows 2000 dönemi bir anahtar; yalnız TCP'yi etkiler, UDP oyun trafiğini etkilemez.",
+      "TCP'nin onay göndermeden önce ne kadar beklediği. Yalnızca TCP'yi ilgilendirir, UDP üzerinden çalışan bir oyun bunu hiç hissetmez ve Windows varsayılanı zaten doğrudur.",
   },
   "network:scaling_heuristics": {
     name: "Otomatik ayarın Windows engeli",
     description:
-      "Eski bir ayar (Windows 8.1 sonrasında etkisiz). Sezgisel kısıtlama varsayılan olarak kapalıdır.",
+      "Windows 8.1 ve sonrası bu anahtarı yok sayar, yani modern bir makinede hiçbir şeyi değiştirmez. Eski bir rehberin ya da iyileştiricinin açtığı değeri geri almak için vardır.",
   },
   "network:congestion_provider": {
     name: "Tıkanıklık kontrol algoritması",
     description:
-      "TCP'nin ağ tıkanıklığına nasıl tepki vereceğini belirler. CUBIC, modern ağlar için en iyi durumdaki algoritmadır.",
+      "Hat yoğunken TCP'nin nasıl geri çekildiği. CUBIC modern bir bağlantıda eski algoritmalardan daha hızlı toparlanır; bu da indirme ve güncellemelerde daha kısa bekleme demektir.",
   },
   "network:receive_side_scaling": {
     name: "Ağ yükünü çekirdeklere dağıt",
@@ -260,22 +262,22 @@ export const settingsTr: Record<
   "network:dns_local_priority": {
     name: "Yerel DNS önbellek önceliği",
     description:
-      "Yerel çözümleyici önbelleğinin ad çözümleme sırasındaki yeri; düşük değer daha erken bakılması demektir. İyileştirilmiş 4, Windows varsayılanı 499.",
+      "Bir ad çözümlenirken yerel önbelleğe ne kadar erken bakıldığı. Erken olması, zaten bilinen bir adresin hiç ağ turu harcamaması demektir.",
   },
   "network:dns_hosts_priority": {
     name: "Hosts dosyası önceliği",
     description:
-      "Hosts dosyasının ad çözümleme sırasındaki yeri; düşük değer daha erken bakılması demektir. İyileştirilmiş 5, Windows varsayılanı 500.",
+      "Bir ad çözümlenirken hosts dosyasına ne kadar erken bakıldığı. Erken olması, cevabın arkadaki yavaş kaynakları beklemeden gelmesi demektir.",
   },
   "network:dns_query_priority": {
     name: "DNS sorgu önceliği",
     description:
-      "DNS sunucusu sorgusunun ad çözümleme sırasındaki yeri; düşük değer daha erken sorulması demektir. İyileştirilmiş 6, Windows varsayılanı 2000.",
+      "Bir ad çözümlenirken DNS sunucusuna ne kadar erken sorulduğu. Eski kaynakların önünde olması, sorgunun cevap vermeyecek yolları beklemesini bitirir.",
   },
   "network:dns_netbt_priority": {
     name: "NetBIOS çözümleme önceliği",
     description:
-      "NetBIOS çözümlemenin ad çözümleme sırasındaki yeri; düşük değer daha erken sorulması demektir. İyileştirilmiş 7, Windows varsayılanı 2001.",
+      "Bir ad çözümlenirken NetBIOS'a ne kadar erken sorulduğu. Modern bir ağda neredeyse hiçbir şeye cevap vermez, bu yüzden erken sorulması yalnızca gecikme ekler.",
   },
   "network:qos_bandwidth": {
     name: "QoS bant genişliği payı",
@@ -295,12 +297,12 @@ export const settingsTr: Record<
   "network:max_user_port": {
     name: "Azami bağlantı portu",
     description:
-      "Geçici port aralığının üst sınırı. Yüksek değer, eşzamanlı bağlantılar için daha fazla giden port demektir.",
+      "Makinenin aynı anda kaç giden bağlantı tutabildiği. Tükendiğinde; oyun, başlatıcı ve tarayıcı aynı anda konuşurken yeni bağlantılar başarısız olur.",
   },
   "network:tcp_num_connections": {
     name: "Azami TCP bağlantısı",
     description:
-      "Eşzamanlı azami TCP bağlantısı. 65534 bağlantı tablosunun taşmasını önler.",
+      "Eşzamanlı TCP bağlantısı üst sınırı. Sınıra ulaşmak yeni bağlantıları doğrudan başarısız kılar; bu da açılmayan bir başlatıcı ya da mağaza sayfası olarak görünür.",
   },
   "network:tcp_timed_wait_delay": {
     name: "Kapanan port bekleme süresi",
@@ -315,7 +317,7 @@ export const settingsTr: Record<
   "network:ipv6_random_identifiers": {
     name: "IPv6 rastgele kimlikler",
     description:
-      "IPv6 arayüz kimliklerini rastgeleleştirir. Kapatmak kararlı bağlantılar sağlar.",
+      "Windows gizlilik için IPv6 adresini döndürür ve her döndürme o adresi kullanan bağlantıları düşürür. Kapalıyken uzun bir oturum kendi adresi yüzünden kesilmez.",
   },
   "network:teredo": {
     name: "Teredo tüneli",
@@ -370,7 +372,7 @@ export const settingsTr: Record<
   "gpu-nvidia:vrr_mode": {
     name: "G-Sync",
     description:
-      "NVIDIA Denetim Masası'nın G-SYNC kapsamını yansıtan değişken yenileme hızı modu. 'on' pencereli ve kenarlıksızın yanında tam ekranı da kapsar. G-Sync/FreeSync uyumlu monitör gerektirir.",
+      "Ekranın kare hızını izlemesini sağlar, tersini değil; yırtılma V-Sync'in getirdiği giriş gecikmesi olmadan gider. 'Açık', yalnızca tam ekranı değil kenarlıksız ve pencereliyi de kapsar.",
     effect:
       "Uyumlu monitörde yırtılmasız oyun için değişken yenileme hızını açar",
   },
@@ -392,7 +394,7 @@ export const settingsTr: Record<
   "gpu-nvidia:texture_lod_bias": {
     name: "Doku keskinlik eğilimi",
     description:
-      "Doku filtrelemede negatif LOD eğilimini denetler. Clamp bulanık dokuları önler.",
+      "Negatif sapma doku filtrelemesini keskinleştirir ama uzaktaki yüzeylerde titreşim yaratır — tam da rakibin ayırt edilmesi gereken yerde. Clamp bu takası reddeder.",
   },
   "gpu-nvidia:ogl_thread_opt": {
     name: "OpenGL iş parçacığı",
@@ -417,12 +419,12 @@ export const settingsTr: Record<
   "gpu-nvidia:vrr_app_override": {
     name: "Uygulama bazlı G-Sync",
     description:
-      "Uygulama başına G-Sync geçersiz kılma. Sürücü varsayılanı genel ayarı uygular; zorla açmak kenarlıksız pencereli oyunlarda G-Sync'i etkin tutar.",
+      "Tek bir oyunun sürücünün G-Sync kapsamını geçersiz kılıp kılamayacağı. Sürücü varsayılanında genel ayar karar verir; kenarlıksız bir oyunun yırtılmasız kalması için gereken de budur.",
   },
   "gpu-nvidia:fan_curve": {
     name: "GPU fan eğrisi",
     description:
-      "GPU sıcak nokta sıcaklığını çekirdekle karşılaştırır. Sıcak nokta çekirdeği 20°C'den fazla aşıyorsa fan eğrisi bu kart için fazla pasiftir.",
+      "Sıcak noktanın çekirdekten çok yüksek olması, fanın bu kart için fazla yavaş döndüğü anlamına gelir; kart da buna hızını düşürerek karşılık verir. Bu, bir fan ayarına kaybedilen karedir.",
     effect:
       "MSI Afterburner veya GPU Tweak'te çekirdeği 60°C, sıcak noktayı 70°C altında tutan bir fan eğrisi kurun",
   },
@@ -488,7 +490,7 @@ export const settingsTr: Record<
   "display:windowed_flip_model": {
     name: "Pencereli oyun hızlı yolu",
     description:
-      "DX10-DX11 pencereli/kenarlıksız oyunlar için flip-model sunumu açar. Daha düşük gecikme sağlar, Auto HDR ve VRR'yi mümkün kılar.",
+      "Kenarlıksız ve pencereli oyunlar kareyi fazladan bir kopya yerine doğrudan görüntü motoruna verir. Kapalıyken her pencereli kare gecikme demektir ve Auto HDR ile VRR çalışamaz.",
   },
   "display:mpo_disable": {
     name: "Çoklu düzlem katmanı",
@@ -512,7 +514,8 @@ export const settingsTr: Record<
   },
   "services:DiagTrack": {
     name: "Windows telemetri hizmeti",
-    description: "Tanılama verilerini toplar ve Microsoft'a gönderir.",
+    description:
+      "Kullanım ve tanılama verisi toplayıp kendi takvimine göre Microsoft'a yükler — maç sırasında da. Kapalıyken bu toplama ve yükleme durur.",
   },
   "services:WSearch": {
     name: "Windows arama dizini",
@@ -530,7 +533,8 @@ export const settingsTr: Record<
   },
   "services:Fax": {
     name: "Faks hizmeti",
-    description: "Faks iletimini yönetir. Modern sistemlerde gerekmez.",
+    description:
+      "Faks donanımı olmayan bir makinede faks hizmeti çalıştırır. Kapalıyken bir hizmet yuvasını işgal etmeyi ve boşuna Windows'la birlikte başlamayı bırakır.",
   },
   "services:WerSvc": {
     name: "Hata raporlama hizmeti",
@@ -540,7 +544,7 @@ export const settingsTr: Record<
   "services:RetailDemo": {
     name: "Mağaza demo hizmeti",
     description:
-      "Mağazalar için tanıtım modu. Kişisel bilgisayarlarda gerekmez.",
+      "Mağaza teşhir makinesinde tanıtım döngüsünü çalıştırmak için vardır. Kişisel bir bilgisayarda hiçbir işlevi yoktur, başlatılması tamamen israftır.",
   },
   "services:dmwappushservice": {
     name: "WAP anında ileti hizmeti",
@@ -575,12 +579,12 @@ export const settingsTr: Record<
   "services:telemetry_tasks": {
     name: "Telemetri zamanlanmış görevleri",
     description:
-      "Windows telemetri zamanlanmış görevlerini tek kavram olarak kapatır. Aynı gizlilik kavramını paylaşan DiagTrack/CEIP/Customer Experience görevlerini bir arada ele alır.",
+      "Kullanım verisi toplayıp yükleyen zamanlanmış görevler; hepsi aynı amaca hizmet ettiği için birlikte kapatılır. Kapalıyken makineyi kendisi hakkında rapor vermek için uyandırmayı bırakırlar.",
   },
   "services:UCPD": {
     name: "Tarayıcı seçimi koruma sürücüsü",
     description:
-      "Varsayılan uygulama ilişkilendirmelerinin üçüncü taraflarca değiştirilmesini engelleyen gizli Microsoft sürücüsü. Bazı sistem ayarlarına karışabilir.",
+      "Varsayılan uygulama eşleşmelerini sessizce engelleyen gizli bir sürücü; değişiklik uygulanmış görünüp geri alınır. Kapalıyken kullanıcının yaptığı ayarlar gerçekten kalır.",
   },
   "system:large_system_cache": {
     name: "Uygulama-önbellek bellek dengesi",
@@ -625,7 +629,7 @@ export const settingsTr: Record<
   "system:file_explorer_launch": {
     name: "Dosya Gezgini açılış görünümü",
     description:
-      "Dosya Gezgini'nin varsayılan olarak nerede açıldığı. 'Bu bilgisayar' buluta bağlı Giriş/Hızlı Erişim yerine sürücüleri anında gösterir.",
+      "Home, her pencere açılışında bulut ve son dosya sağlayıcılarını sorgular; hiçbir şey görünmeden önceki duraklama budur. Bu Bilgisayar sürücüleri hemen gösterir.",
   },
   "system:hyper_v": {
     name: "Hyper-V sanallaştırma",
@@ -689,7 +693,7 @@ export const settingsTr: Record<
   "privacy:cortana": {
     name: "Cortana",
     description:
-      "Microsoft'un sesli asistanı. Windows 11'de emekli edildi ama açıksa hâlâ veri toplar.",
+      "Windows 11'de kullanımdan kaldırıldı ve açık bırakıldığında hâlâ ses ve kullanım verisi toplayabiliyor. Kapalıyken çalışmayı da göndermeyi de bırakır.",
   },
   "privacy:bing_search": {
     name: "Başlat menüsünde web sonuçları",
@@ -719,7 +723,7 @@ export const settingsTr: Record<
   "privacy:copilot": {
     name: "Windows Copilot",
     description:
-      "Windows 11'deki yapay zekâ asistanı. Kapatmak Copilot'u tamamen kaldırır.",
+      "Asistan, kullanılsın kullanılmasın bir arka plan süreci ve görev çubuğu girdisi çalışır tutar. Kapalıyken bu süreç oyundan bellek ve CPU almayı bırakır.",
   },
   "privacy:windows_ads": {
     name: "Windows reklamları ve ipuçları",
@@ -739,7 +743,7 @@ export const settingsTr: Record<
   "privacy:camera_indicator": {
     name: "Kamera kullanım göstergesi",
     description:
-      "Bir uygulama kamerayı açtığında veya kapattığında görev çubuğunun üstünde bildirim gösterir. Fiziksel kamera ışığı olmayan cihazlarda yararlıdır.",
+      "Bir uygulama kamerayı her başlattığında ya da durdurduğunda ekrana bildirim koyar. Kamera ışığı olmayan bir makinede bunu öğrenmenin tek yolu budur.",
   },
   "privacy:app_launch_tracking": {
     name: "Uygulama başlatma izleme",
@@ -789,7 +793,7 @@ export const settingsTr: Record<
   "perf:accessibility_popups": {
     name: "Yapışkan tuş uyarıları",
     description:
-      "Yapışkan Tuşlar (5×Shift), Filtre Tuşları ve Geçiş Tuşları pencereleri. Oyun sırasında rahatsız eder.",
+      "Maç sırasında Shift'e beş kez basmak Yapışkan Tuşlar penceresini açar ve odağı oyundan alır. Kapalıyken bu kısayol araya girmeyi bırakır.",
   },
   "perf:mouse_acceleration": {
     name: "Fare ivmesi",
@@ -799,7 +803,7 @@ export const settingsTr: Record<
   "perf:fast_startup": {
     name: "Hızlı başlangıç",
     description:
-      "Çekirdek durumunu kaydeden melez kapanış. Sürücü sorunlarına yol açabilir.",
+      "Kapatma eski çekirdek durumunu saklayıp açılışta geri yükler; bu yüzden bir sürücü güncellemesi tam oturmaz ve donanım arızaları yeniden başlatmayı atlatır. Kapalıyken kapatma gerçek olur.",
   },
   "perf:svchost_split_threshold": {
     name: "Hizmet süreci gruplama",
@@ -814,7 +818,7 @@ export const settingsTr: Record<
   "perf:numlock_default": {
     name: "Açılışta Num Lock",
     description:
-      "Her Windows oturumunda Num Lock durumunu ayarlar. Sayısal tuş ataması kullanan oyunlar için yararlıdır.",
+      "Windows açılır açılmaz numpad'in etkin olup olmadığı. Kapalıyken numpad'e atanmış bir tuş, bir kez basılana dek hiçbir şey yapmaz ve bu maç ortasında fark edilir.",
   },
   "perf:focus_assist": {
     name: "Oyunda bildirimler",
@@ -834,7 +838,7 @@ export const settingsTr: Record<
   "cleanup:temp_files": {
     name: "Geçici dosyalar",
     description:
-      "Windows ve kullanıcı klasörlerindeki geçici dosyaları temizler.",
+      "Kurulum, güncelleme ve oyunlar geçici klasörlerde çalışma dosyaları bırakır ve bir daha dönüp bakmaz. Temizlemek hiçbir şeye mal olmaz ve alanı diske geri verir.",
   },
   "cleanup:event_logs": {
     name: "Olay günlükleri",
@@ -983,21 +987,23 @@ export const settingsTr: Record<
   },
   "maintenance:sfc_scan": {
     name: "Sistem dosyası onarımı",
-    description: "Windows sistem dosyalarını tarar ve onarır.",
+    description:
+      "Windows'un gönderdiğinden farklılaşmış sistem dosyalarını bulur ve orijinallerini geri koyar. Bozulmuş bir dosya, çökme ya da çalışmayı bırakan bir özellik olarak görünür.",
   },
   "maintenance:dism_health": {
     name: "Windows imaj onarımı",
-    description: "Windows imajının sağlığını denetler.",
+    description:
+      "Bozulmuş bir Windows bileşen deposu, sıradan bir güncellemeyi başarısız kılan şeydir ve o ana kadar gizli kalır. Bu, bozulmayı raporlar; hiçbir şey değiştirilmez.",
   },
   "game:game_mode": {
     name: "Oyun Modu",
     description:
-      "Windows oyun iyileştirmesi. GPU'ya öncelik verir, oyun sırasında güncellemeleri engeller.",
+      "Windows'un maç ortasında güncelleme ve arka plan kurulumu başlatmasını engeller, GPU'da önceliği oyuna verir. Kapalıyken bir güncelleme raundun ortasına düşebilir.",
   },
   "game:game_bar": {
     name: "Xbox Game Bar",
     description:
-      "Ekran görüntüsü, kayıt ve performans bileşenleri için Xbox katmanı.",
+      "Xbox katmanı kayıt ve pencere sunmak için her oyuna bağlanır. Kapalıyken bu bağlanma ve arka plan süreci, hiç istemediğiniz kareleri harcamayı bırakır.",
   },
   "game:background_recording": {
     name: "Arka plan kaydı",
@@ -1014,7 +1020,7 @@ export const settingsTr: Record<
   "game:vrr": {
     name: "Pencereli VRR",
     description:
-      "DX11 oyunları için sistem geneli VRR. FreeSync, G-Sync Compatible ve Adaptive-Sync ile çalışır.",
+      "Ekranın yenileme hızını GPU'nun ürettiği kareye uydurur; böylece DX11 oyunlarında yırtılma, V-Sync'in getirdiği giriş gecikmesi olmadan biter. FreeSync veya G-Sync monitör gerekir.",
   },
   "audio:enhancements": {
     name: "Ses geliştirmeleri",
@@ -1024,7 +1030,7 @@ export const settingsTr: Record<
   "audio:endpoint_enhancements": {
     name: "Çıkış bazlı ses efektleri",
     description:
-      "Herhangi bir etkin çıkışta o aygıta özgü Windows geliştirmelerinin hâlâ açık olup olmadığı. Genel anahtar bunları kapsamaz.",
+      "Tek bir çıkış için açık bırakılmış aygıta özel ses efektleri. Oyunla hoparlör arasına girip bir ayak sesinin hangi yönden geldiğini bulanıklaştırırlar.",
   },
   "audio:device_format": {
     name: "Ses örnekleme hızı",
@@ -1104,7 +1110,7 @@ export const settingsTr: Record<
   "game_config:cs2:sdr": {
     name: "CS2 Steam Datagram Relay",
     description:
-      "CS2 autoexec.cfg'ye 'net_client_steamdatagram_enable_override 1' yazar. Trafiği açık internet yerine Valve'ın özel SDR omurgasından geçirir.",
+      "Maç trafiğini genel internet yerine Valve'ın kendi omurgası üzerinden gönderir; böylece sunucuya giden yol, sağlayıcınızın seçtiği rotaya bağlı olmaktan çıkar.",
   },
   "game_config:cs2:maxping": {
     name: "CS2 azami eşleştirme pingi",
@@ -1259,7 +1265,7 @@ export const settingsTr: Record<
   "game_config:mw3:audio_mix": {
     name: "MW3 ses karışımı",
     description:
-      "Ses son işleme ön ayarı. Treble Boost (5) ve Headphones (1) tiz sesleri (ayak sesleri, silah tıkırtıları) bas müzik ve patlamaların önüne çıkarır.",
+      "Miksin hangi frekansları öne çıkardığı. Treble Boost ayak seslerini ve silah seslerini müzik ile patlamaların üstüne taşır; bu da birini duymakla sahneyi duymak arasındaki farktır.",
   },
   "game_config:mw3:detail_quality": {
     name: "MW3 ayrıntı kalitesi",
@@ -1459,7 +1465,7 @@ export const settingsTr: Record<
   "game_config:hots:reflections": {
     name: "HotS yansımalar",
     description:
-      "Su gibi yansıtıcı yüzeyler; yansıma görüntüsü için sahnenin bir kısmını ikinci kez çizer.",
+      "Su ve diğer yansıtıcı yüzeyler, yansımayı üretmek için sahnenin bir bölümünü ikinci kez çizer. O ikinci görüntüdeki hiçbir şey oyuna dahil edilmez.",
   },
   "game_config:hots:physics_quality": {
     name: "HotS fizik kalitesi",

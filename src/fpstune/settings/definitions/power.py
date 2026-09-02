@@ -364,8 +364,8 @@ POWER_CPU_INCREASE_POLICY = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Scale-Up Policy",
     short_name="How fast the CPU speeds up",
-    description="Algorithm used when scaling CPU frequency up. Rocket jumps immediately "
-    "to the highest needed frequency; Ideal uses gradual steps.",
+    description="How fast the CPU climbs to a higher clock when work arrives. Rocket takes the whole step at "
+    "once, so a frame that suddenly needs the cores does not wait through gradual steps.",
     value_type=SettingValueType.CHOICE,
     # All four states Windows publishes. A machine sitting on Single or
     # IdealAggressive must read as itself, not fall outside `choices` (C6).
@@ -463,8 +463,9 @@ POWER_CPU_EPP = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Energy Performance Preference",
     short_name="Performance vs battery bias",
-    description="Hint to the CPU hardware scheduler balancing performance vs efficiency. "
-    "Lower values bias toward performance; 0 = maximum performance, 100 = maximum efficiency.",
+    description="How strongly the CPU leans toward saving power over answering quickly. Leaning to efficiency "
+    "costs response at the start of every frame; leaning too far the other way spends heat for "
+    "nothing.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=50,

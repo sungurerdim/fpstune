@@ -21,7 +21,8 @@ GAME_MODE = SettingExecutor(
     category=SettingCategory.GAME,
     display_name="Game Mode",
     short_name="Game Mode",
-    description="Windows gaming optimization. Prioritizes GPU, blocks updates during gameplay.",
+    description="Keeps Windows from starting updates and background installs mid-match, and gives the game "
+    "first call on the GPU. Off, an update can land in the middle of a round.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -68,7 +69,8 @@ GAME_BAR = SettingExecutor(
     category=SettingCategory.GAME,
     display_name="Xbox Game Bar",
     short_name="Xbox Game Bar",
-    description="Xbox overlay for screenshots, recording, performance widgets.",
+    description="The Xbox overlay hooks every game to offer recording and widgets. Off, that hook and its "
+    "background process stop costing frames you never asked to spend.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -213,7 +215,8 @@ WINDOWS_VRR = SettingExecutor(
     category=SettingCategory.GAME,
     display_name="Variable Refresh Rate (VRR)",
     short_name="Windowed VRR",
-    description="System-wide VRR for DX11 games. Works with FreeSync, G-Sync Compatible, Adaptive-Sync.",
+    description="Lets the display change its refresh rate to match the frames the GPU produces, so DX11 games "
+    "stop tearing without the input lag V-Sync costs. Needs a FreeSync or G-Sync monitor.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",

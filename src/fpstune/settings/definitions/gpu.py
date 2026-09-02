@@ -396,9 +396,9 @@ NVIDIA_VRR_MODE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="G-Sync / VRR Mode",
     short_name="G-Sync",
-    description="Variable Refresh Rate mode, mirroring NVIDIA Control Panel's G-SYNC scope. "
-    "'on' covers windowed and borderless as well as exclusive fullscreen. Requires a "
-    "G-Sync/FreeSync compatible monitor.",
+    description="Lets the display follow the frame rate instead of the other way round, so tearing goes "
+    "without the input lag V-Sync costs. 'On' covers borderless and windowed, not only exclusive "
+    "fullscreen.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "fullscreen"),
     default_value="off",
@@ -511,7 +511,8 @@ NVIDIA_TEXTURE_LOD_BIAS = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Texture LOD Bias",
     short_name="Texture sharpness bias",
-    description="Controls negative LOD bias for texture filtering. Clamp prevents blurry textures.",
+    description="A negative bias sharpens texture filtering at the cost of shimmering on surfaces at range, "
+    "which is where an opponent has to be told apart. Clamp refuses the trade.",
     value_type=SettingValueType.CHOICE,
     choices=("allow", "clamp"),
     default_value="allow",
@@ -673,8 +674,8 @@ NVIDIA_VRR_APP_OVERRIDE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="G-Sync Application Override",
     short_name="G-Sync per-app override",
-    description="Per-application G-Sync override. Driver default lets the global setting apply; forcing it on "
-    "keeps G-Sync active for borderless windowed games.",
+    description="Whether one game may override the driver's G-Sync scope. Left at the driver default the "
+    "global setting decides, which is what a borderless game needs to stay tear-free.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "driver_default", "force_on"),
     default_value="driver_default",
@@ -710,8 +711,8 @@ NVIDIA_FAN_CURVE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="GPU Thermal / Fan Curve",
     short_name="GPU fan curve",
-    description="Compares the GPU's hotspot temperature with its core. A hotspot more than 20°C above the "
-    "core means the fan curve is too passive for this card.",
+    description="A hotspot far above the core means the fan is running too slow for this card, and the card "
+    "answers by dropping clocks. That is frames lost to a fan setting.",
     value_type=SettingValueType.CHOICE,
     choices=("ok", "hotspot_warning", "thermal_warning"),
     default_value="ok",

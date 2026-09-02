@@ -54,7 +54,8 @@ GLOBAL_TIMER_RESOLUTION = SettingExecutor(
     category=SettingCategory.TIMER,
     display_name="Global Timer Resolution (Win11)",
     short_name="Windows timer precision",
-    description="Makes timer resolution requests system-wide instead of per-process.",
+    description="Whether a program asking for a finer timer gets it for the whole system or only for itself. "
+    "System-wide keeps frame pacing even when the game is not the one that asked.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",

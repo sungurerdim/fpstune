@@ -173,8 +173,8 @@ CS2_SDR = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="CS2 Steam Datagram Relay",
     short_name="CS2 Steam Datagram Relay",
-    description="Sets 'net_client_steamdatagram_enable_override 1' in CS2 autoexec.cfg. "
-    "Routes traffic through Valve's private SDR backbone instead of the public internet.",
+    description="Sends match traffic over Valve's own backbone instead of the public internet, so the route "
+    "to the server stops depending on whichever path your provider happens to pick.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "enabled"),
     default_value="default",
@@ -848,8 +848,8 @@ HOTS_REFLECTIONS = _make_hots_setting(
     setting_id="game_config:hots:reflections",
     display_name="HotS Reflections",
     short_name="HotS Reflections",
-    description="Reflective surfaces such as water, which re-render parts of the scene a second "
-    "time to produce the reflected image.",
+    description="Water and other reflective surfaces re-render part of the scene a second time to produce the "
+    "reflection. Nothing in that second image is ever acted on.",
     key="GraphicsOptionReflections",
     default_value="1",
     recommended_value="0",
@@ -1576,8 +1576,8 @@ MW3_AUDIO_MIX = _make_mw3_cst_setting(
     setting_id="game_config:mw3:audio_mix",
     display_name="MW3 Audio Mix",
     short_name="MW3 Audio Mix",
-    description="Audio post-processing preset. Treble Boost (5) and Headphones (1) emphasize "
-    "high-frequency sounds (footsteps, weapon foley) over low-end music/explosions.",
+    description="Which frequencies the mix favours. Treble Boost lifts footsteps and weapon foley above music "
+    "and explosions, which is the difference between hearing someone and hearing the scene.",
     cst_key="AudioMix:0.0",
     choices=("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"),
     default_value="0",

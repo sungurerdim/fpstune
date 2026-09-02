@@ -223,8 +223,8 @@ AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     category=SettingCategory.AUDIO,
     display_name="Per-Output Audio Effects",
     short_name="Per-output audio effects",
-    description="Whether any active output still has Windows enhancements switched on for that "
-    "device specifically. The global switch does not cover these.",
+    description="Per-device audio effects left switched on for one output. They sit between the game and the "
+    "speakers and smear the direction a footstep came from.",
     value_type=SettingValueType.CHOICE,
     choices=("clean", "effects_active"),
     default_value="clean",

@@ -91,32 +91,6 @@ class TestCreateRestorePoint:
             assert "-RestorePointType 'MODIFY_SETTINGS'" in script
 
 
-class TestCreateRestorePointWmi:
-    """WMI fallback path mirrors PowerShell path semantics."""
-
-    def test_unavailable_returns_false(self):
-        """Off-Windows must short-circuit to False."""
-        with patch("sys.platform", "linux"):
-            mgr = RestorePointManager()
-            assert mgr.create_restore_point_wmi() is False
-
-    def test_success_returns_true(self):
-        """wmic returncode=0 must yield True."""
-        with patch("sys.platform", "win32"):
-            mgr = RestorePointManager()
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
-                assert mgr.create_restore_point_wmi() is True
-
-    def test_failure_returns_false(self):
-        """Non-zero returncode must yield False."""
-        with patch("sys.platform", "win32"):
-            mgr = RestorePointManager()
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="")
-                assert mgr.create_restore_point_wmi() is False
-
-
 class TestListRestorePoints:
     """list_restore_points parses the pipe-separated PowerShell output."""
 
@@ -316,17 +290,6 @@ class TestDescriptionInjection:
                 mgr.create_restore_point("\r\n\t")
             script = self._captured_ps_script(mock_run)
         assert "-Description 'fpstune backup'" in script
-
-    def test_wmi_path_strips_embedded_double_quotes(self):
-        """wmic quotes the description itself; an embedded quote is the only
-        way out of that argument."""
-        with patch("sys.platform", "win32"):
-            mgr = RestorePointManager()
-            with patch("subprocess.run") as mock_run:
-                mock_run.return_value = MagicMock(returncode=0, stdout="OK", stderr="")
-                mgr.create_restore_point_wmi('backup", 100, 12 & del C:\\Windows')
-            args = mock_run.call_args.args[0]
-        assert '"backup, 100, 12 & del C:\\Windows"' in args
 
 
 class TestRestoreToPoint:

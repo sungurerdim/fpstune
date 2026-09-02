@@ -176,49 +176,6 @@ class RestorePointManager:
         except (subprocess.SubprocessError, OSError):
             return False
 
-    def create_restore_point_wmi(self, description: str = "fpstune optimization backup") -> bool:
-        """Create a system restore point using WMI.
-
-        Alternative method that may work when PowerShell method fails.
-
-        Args:
-            description: Description for the restore point.
-
-        Returns:
-            True if restore point was created successfully.
-        """
-        if not self._available:
-            return False
-
-        try:
-            # Use WMIC to create restore point. The description travels inside
-            # wmic's own quoting, so embedded double quotes are stripped — they
-            # are the only way out of that argument.
-            safe_description = _sanitize_description(description).replace('"', "")
-            result = subprocess.run(
-                [
-                    "wmic.exe",
-                    "/Namespace:\\\\root\\default",
-                    "Path",
-                    "SystemRestore",
-                    "Call",
-                    "CreateRestorePoint",
-                    f'"{safe_description}"',
-                    "100",
-                    "12",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=120,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            return result.returncode == 0
-        except (subprocess.SubprocessError, OSError):
-            return False
-
     def list_restore_points(self, limit: int = 10) -> list[RestorePointInfo]:
         """List available system restore points.
 

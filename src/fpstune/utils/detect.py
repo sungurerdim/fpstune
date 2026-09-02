@@ -625,23 +625,10 @@ def get_cpu_info() -> dict[str, str]:
                 if result.returncode == 0 and result.stdout.strip():
                     cpu_name = result.stdout.strip()
             except (subprocess.SubprocessError, OSError):
-                # Fallback to WMIC for older Windows
-                try:
-                    result = subprocess.run(
-                        ["wmic", "cpu", "get", "Name", "/value"],
-                        capture_output=True,
-                        text=True,
-                        timeout=5,
-                        creationflags=subprocess.CREATE_NO_WINDOW,
-                        encoding="utf-8",
-                        errors="replace",
-                    )
-                    for line in result.stdout.splitlines():
-                        if line.startswith("Name="):
-                            cpu_name = line.split("=", 1)[1].strip()
-                            break
-                except (subprocess.SubprocessError, OSError):
-                    pass
+                # No wmic fallback: Microsoft removed wmic in Windows 11 24H2, so
+                # on the target OS it could only ever fail. platform.processor()
+                # stays the fallback name.
+                pass
 
         # The PowerShell path may have fallen back to platform.processor(); that
         # fallback is as session-stable as the real name, so it is cached too.

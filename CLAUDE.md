@@ -7,7 +7,7 @@ gets the best gaming experience **that machine and that internet connection are
 capable of**. Not a preset, not a generic checklist — the ceiling of the actual
 hardware and the actual line.
 
-Five consequences that decide real arguments:
+Six consequences that decide real arguments:
 
 1. **Derive from the hardware, never assume.** The right value is whatever the
    device reports it can do: the panel's own max refresh, the adapter's own
@@ -92,6 +92,28 @@ Five consequences that decide real arguments:
    Which side a setting falls on is decided **per game**, not globally: shadows
    are decoration in an isometric MOBA and information in a first-person shooter
    where one is cast around a corner.
+
+6. **Retiring a harmful tweak means guaranteeing its harmless value.** Decided
+   2026-09-02. A setting that turns out to lower the ceiling is not merely deleted
+   from the catalogue: the machines that already carry it — from an earlier
+   fpstune release, another optimizer, or a guide — keep carrying it, and
+   deleting the row is how that harm becomes invisible. So retirement has two
+   halves. The tweak leaves, and a guard arrives whose `recommended_value` is the
+   harmless state, derived the way every value is (the scheme default from
+   `DefaultPowerSchemeValues`, the driver's own default, Windows stock) — a
+   network-adapter keyword pulled for doing harm keeps its harmless value as
+   fpstune's default, it does not vanish. The mirror holds for proposals: an
+   item dropped as "not a tweak" whose *active* state is the beneficial one
+   ships as a recommendation rather than disappearing — Wi-Fi background-scan
+   blocking on a good signal, transmit power at the driver's maximum. In one
+   sentence: a faulty setting is converted to its correct state, never just
+   forgotten.
+
+   Two things this is not. It is not a licence to guard no-ops: a placebo key
+   Windows 11 ignores has no harmful state to undo, and a row for it is noise.
+   And it is not a way back for tweaks whose harm was the point: a
+   security-costing switch stays retired, and its guard restores the
+   mitigation.
 
 ## 11 Quality Gates — non-negotiable for every PR, feature, and setting
 

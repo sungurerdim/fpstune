@@ -24,6 +24,28 @@ def _access(base: int) -> int:
     return base | winreg.KEY_WOW64_64KEY
 
 
+def _root_and_path(hive: str, path: str) -> tuple[int, str]:
+    """The winreg root and full subkey for a setting's hive.
+
+    ``HKLM`` is what it says. ``HKCU`` is *the person at the keyboard*: fpstune
+    runs elevated, and when a standard user elevates with an administrator's
+    credentials the process token is the administrator's, so
+    ``HKEY_CURRENT_USER`` would be the wrong account. ``winapi.session``
+    resolves the console user once; when it is someone else and their hive is
+    loaded, per-user keys go under ``HKEY_USERS\\<SID>``.
+    """
+    import winreg
+
+    from fpstune.utils.winapi.session import user_hive
+
+    if hive == "HKLM":
+        return winreg.HKEY_LOCAL_MACHINE, path
+    target = user_hive()
+    if target.root == "HKU":
+        return winreg.HKEY_USERS, target.path(path)
+    return winreg.HKEY_CURRENT_USER, path
+
+
 class RegistryExecutor(BaseExecutor):
     """Execute Windows Registry operations.
 
@@ -57,9 +79,9 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey = winreg.HKEY_LOCAL_MACHINE if hive == "HKLM" else winreg.HKEY_CURRENT_USER
+            hkey, target_path = _root_and_path(hive, path)
 
-            with winreg.OpenKey(hkey, path, 0, _access(winreg.KEY_READ)) as key:
+            with winreg.OpenKey(hkey, target_path, 0, _access(winreg.KEY_READ)) as key:
                 value, reg_type = winreg.QueryValueEx(key, name)
 
                 debug_log(
@@ -135,7 +157,7 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey = winreg.HKEY_LOCAL_MACHINE if hive == "HKLM" else winreg.HKEY_CURRENT_USER
+            hkey, target_path = _root_and_path(hive, path)
 
             # Map type string to winreg constant
             reg_type_map = {
@@ -148,7 +170,7 @@ class RegistryExecutor(BaseExecutor):
             reg_type = reg_type_map.get(reg_type_str, winreg.REG_DWORD)
 
             # Create/open key with write access
-            with winreg.CreateKeyEx(hkey, path, 0, _access(winreg.KEY_WRITE)) as key:
+            with winreg.CreateKeyEx(hkey, target_path, 0, _access(winreg.KEY_WRITE)) as key:
                 winreg.SetValueEx(key, name, 0, reg_type, raw_value)
 
             debug_log("registry", f"APPLY {setting.id}: SUCCESS")
@@ -166,9 +188,9 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey = winreg.HKEY_LOCAL_MACHINE if hive == "HKLM" else winreg.HKEY_CURRENT_USER
+            hkey, target_path = _root_and_path(hive, path)
 
-            with winreg.OpenKey(hkey, path, 0, _access(winreg.KEY_WRITE)) as key:
+            with winreg.OpenKey(hkey, target_path, 0, _access(winreg.KEY_WRITE)) as key:
                 winreg.DeleteValue(key, name)
 
             return True, None

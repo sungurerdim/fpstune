@@ -166,6 +166,28 @@ describe("TweakSetting", () => {
     expect(screen.queryByText("ADV")).not.toBeInTheDocument();
   });
 
+  it("states what an advisory found, not only that it is one", () => {
+    // The Software Tweaks row showed a bare "Advisory" badge for a detect-only
+    // setting. The row must state the current state — here the machine's own
+    // numbers — on this surface as on Home.
+    const setting = makeSetting({
+      id: "network:19:link_capability" as `${string}:${string}`,
+      isReadonly: true,
+      choices: ["at_capability", "below_capability"],
+      currentValue: "below_capability",
+      recommendedValue: "at_capability",
+      isOptimized: false,
+      status: "suboptimal",
+      finding: { kind: "link_speed", linked_mbps: 100, ceiling_mbps: 2500 },
+    });
+    render(<TweakSetting setting={setting} {...defaultProps} />);
+    expect(screen.getByText("Advisory")).toBeInTheDocument();
+    expect(screen.getByTestId("setting-value-state")).toHaveTextContent(
+      "Link running at 100 Mbps; the adapter supports 2.5 Gbps.",
+    );
+    expect(screen.queryByText(/below_capability/)).not.toBeInTheDocument();
+  });
+
   it("shows a warning for moderate risk too, not only advanced", () => {
     // 29 shipped settings carry a riskWarning at moderate/low. The badge was
     // gated on riskLevel === "advanced", so every one of those warnings was

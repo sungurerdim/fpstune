@@ -1,6 +1,6 @@
 import { t, getLocale } from "../i18n";
 import type { MessageKey } from "../i18n/en";
-import type { Setting } from "../types/setting";
+import { formatSettingValue, type Setting } from "../types/setting";
 
 /**
  * The sentence an advisory's measured finding becomes.
@@ -146,4 +146,17 @@ const CHOICE_KEYS: Record<string, MessageKey> = {
 export function advisoryChoiceLabel(value: unknown): string | null {
   const key = typeof value === "string" ? CHOICE_KEYS[value] : undefined;
   return key ? t(key) : null;
+}
+
+/**
+ * The one way a row prints a setting's value: an advisory's state name in
+ * words, else the raw-value hint the definition carries, else the value.
+ */
+export function valueLabel(setting: Setting, value: unknown): string {
+  if (setting.isReadonly) {
+    const words = advisoryChoiceLabel(value);
+    if (words) return words;
+  }
+  const hint = value !== null ? setting.valueHints?.[String(value)] : undefined;
+  return hint ?? formatSettingValue(value);
 }

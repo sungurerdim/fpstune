@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
-import { advisoryChoiceLabel } from "../lib/finding";
+import { advisoryChoiceLabel, describeFinding } from "../lib/finding";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -30,6 +30,31 @@ export function SettingValueState({
 
   const isLoading = setting.status === "loading" && setting.currentValue === null;
   if (isLoading) return null;
+
+  // An advisory that measured something states the measurement as its current
+  // state — "Link running at 100 Mbps; the adapter supports 2.5 Gbps." — on
+  // every surface that shows the row. The arrow form would only repeat the
+  // state name the measurement already explains.
+  const measured = setting.isReadonly ? describeFinding(setting) : null;
+  if (measured) {
+    return (
+      <span
+        className={cn(
+          "inline-flex items-center gap-1 text-xs font-medium",
+          setting.isOptimized ? "text-success" : "text-warning",
+          className,
+        )}
+        data-testid="setting-value-state"
+        data-state={setting.isOptimized ? "optimal" : "drifted"}
+      >
+        {setting.isOptimized && <Check className="w-3 h-3 shrink-0" aria-hidden />}
+        <span className="sr-only">
+          {setting.isOptimized ? t("sr.optimal") : t("sr.currently")}
+        </span>
+        <span>{measured.summary}</span>
+      </span>
+    );
+  }
 
   const label = (value: unknown) => {
     // An advisory's value is a state name for the comparison code; the user

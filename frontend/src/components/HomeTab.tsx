@@ -506,17 +506,13 @@ export function HomeTab() {
                   </span>
                   <SettingInfoTooltip setting={s} />
                 </div>
-                {/* The measured numbers when the detector produced them —
-                    "link at 100 Mbps; the adapter supports 2.5 Gbps" — and the
-                    static description only when it did not. The description
-                    stays in the tooltip either way. */}
-                <p
-                  className="text-xs text-muted-foreground mt-0.5"
-                  data-testid="advisory-finding"
-                >
-                  {describeFinding(s)?.summary ?? localizedDescription(s)}
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {localizedDescription(s)}
                 </p>
-                <div className="mt-1">
+                {/* The current state — the measured numbers when the detector
+                    produced them: "Link running at 100 Mbps; the adapter
+                    supports 2.5 Gbps." */}
+                <div className="mt-1" data-testid="advisory-finding">
                   <SettingValueState setting={s} />
                 </div>
                 {/* The finding names a problem; this names the move. A cable to

@@ -207,7 +207,6 @@ describe("Home separates advisories that found something", () => {
       "Use a Cat 6 or better cable",
     );
     expect(screen.queryByText(/below_capability/)).not.toBeInTheDocument();
-    expect(screen.getByText("Below the adapter's maximum")).toBeInTheDocument();
   });
 
   it("keeps an inapplicable advisory off the page entirely", () => {

@@ -16,7 +16,8 @@ import { localizedName } from "../i18n/settings";
 import { Loader2, RotateCcw, ShieldCheck, CheckCircle2, XCircle, Undo2 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
-import { canUndoSetting, formatSettingValue } from "../types/setting";
+import { canUndoSetting } from "../types/setting";
+import { valueLabel } from "../lib/finding";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import {
   ImpactCategoryTags,
@@ -215,16 +216,22 @@ export function TweakSetting({
           ) : isInitialLoading ? (
             <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
           ) : setting.isReadonly ? (
-            <span
-              className={cn(
-                "text-xs font-medium px-2 py-0.5 rounded border",
-                isOptimal
-                  ? "text-success border-success/30 bg-success/10"
-                  : "text-warning border-warning/30 bg-warning/10",
-              )}
-            >
-              {isOptimal ? t("row.ok") : t("row.advisory")}
-            </span>
+            <>
+              {/* What the check found, in the machine's own numbers where it
+                  has them — the row must state the current state, not only
+                  that there is one. */}
+              <SettingValueState setting={setting} className="mr-1 max-w-[28rem]" />
+              <span
+                className={cn(
+                  "text-xs font-medium px-2 py-0.5 rounded border shrink-0",
+                  isOptimal
+                    ? "text-success border-success/30 bg-success/10"
+                    : "text-warning border-warning/30 bg-warning/10",
+                )}
+              >
+                {isOptimal ? t("row.ok") : t("row.advisory")}
+              </span>
+            </>
           ) : (
             <>
               <SettingValueState setting={setting} className="mr-1 max-w-[14rem]" />
@@ -319,7 +326,7 @@ export function TweakSetting({
               {t("row.default")}
             </span>
             <span className="text-muted-foreground font-medium break-words min-w-0">
-              {setting.valueHints?.[String(setting.defaultValue)] ?? formatSettingValue(setting.defaultValue)}
+              {valueLabel(setting, setting.defaultValue)}
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
@@ -332,15 +339,13 @@ export function TweakSetting({
                 isOptimal ? "text-success" : "text-warning",
               )}
             >
-              {setting.currentValue !== null && setting.valueHints?.[String(setting.currentValue)]
-                ? setting.valueHints[String(setting.currentValue)]
-                : formatSettingValue(setting.currentValue)}
+              {valueLabel(setting, setting.currentValue)}
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
             <span className="text-muted-foreground/50 text-xs shrink-0">{t("row.target")}</span>
             <span className="text-primary font-medium break-words min-w-0">
-              {setting.valueHints?.[String(profileTarget)] ?? formatSettingValue(profileTarget)}
+              {valueLabel(setting, profileTarget)}
             </span>
           </span>
         </div>
@@ -491,7 +496,9 @@ function InlineControl({
         isOptimal ? "text-success" : "text-warning",
       )}
     >
-      {String(setting.currentValue ?? "-")}
+      {setting.currentValue === null || setting.currentValue === undefined
+        ? "-"
+        : valueLabel(setting, setting.currentValue)}
     </span>
   );
 }

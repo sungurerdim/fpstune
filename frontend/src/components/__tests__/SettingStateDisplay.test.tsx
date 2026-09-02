@@ -184,6 +184,28 @@ describe("an advisory's value is shown in words", () => {
     expect(state).not.toHaveTextContent("below_capability");
   });
 
+  it("states the measurement itself when the advisory has one", () => {
+    // "Below the adapter's maximum" says a gap exists; the row must say what
+    // the gap is, on every surface, in the machine's own numbers.
+    render(
+      <SettingValueState
+        setting={makeSetting({
+          id: "network:19:link_capability" as `${string}:${string}`,
+          isReadonly: true,
+          currentValue: "below_capability",
+          recommendedValue: "at_capability",
+          finding: { kind: "link_speed", linked_mbps: 100, ceiling_mbps: 2500 },
+        })}
+      />,
+    );
+    const state = screen.getByTestId("setting-value-state");
+    expect(state).toHaveTextContent(
+      "Link running at 100 Mbps; the adapter supports 2.5 Gbps.",
+    );
+    expect(state).toHaveAttribute("data-state", "drifted");
+    expect(state).not.toHaveTextContent("below_capability");
+  });
+
   it("leaves an ordinary setting's choices as they are", () => {
     render(<SettingValueState setting={makeSetting({ currentValue: "High" })} />);
     expect(screen.getByTestId("setting-value-state")).toHaveTextContent("High");

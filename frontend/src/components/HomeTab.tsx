@@ -16,6 +16,7 @@ import {
   ChevronRight,
   Info,
   AlertTriangle,
+  HelpCircle,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
@@ -162,16 +163,30 @@ export function HomeTab() {
   // The actionable ones render above the fold; the clear ones stay below, where
   // "we checked and it is fine" belongs. Neither is dropped: a check with no
   // finding is still evidence the check ran.
-  const [actionableAdvisories, clearAdvisories] = useMemo(() => {
-    const actionable: Setting[] = [];
-    const clear: Setting[] = [];
-    for (const s of settings.values()) {
-      if (!s.isApplicable || s.isAction || !s.isReadonly) continue;
-      (s.isOptimized ? clear : actionable).push(s);
-    }
-    return [actionable, clear];
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
-  }, [settings, settingsVersion]);
+  //
+  // Three buckets, not two. A check that could not read anything is not a
+  // finding: `isOptimized` is false whenever the current value does not equal
+  // the ideal, and a value that was never read does not equal anything — so a
+  // detector that failed, timed out, or is still running was landing under
+  // "needs your attention" and warning about a state nobody had measured. That
+  // is the one thing an advisory must never do, and it is C11's rule 3 on this
+  // surface: what could not be measured says so.
+  const [actionableAdvisories, clearAdvisories, unreadAdvisories] =
+    useMemo(() => {
+      const actionable: Setting[] = [];
+      const clear: Setting[] = [];
+      const unread: Setting[] = [];
+      for (const s of settings.values()) {
+        if (!s.isApplicable || s.isAction || !s.isReadonly) continue;
+        if (s.currentValue === null || s.currentValue === undefined) {
+          unread.push(s);
+        } else {
+          (s.isOptimized ? clear : actionable).push(s);
+        }
+      }
+      return [actionable, clear, unread];
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+    }, [settings, settingsVersion]);
 
   // The settings already at their ideal value, behind a fold: Home's headline
   // counts them, and a count whose members cannot be seen is a claim.
@@ -667,6 +682,49 @@ export function HomeTab() {
           the evidence the check ran, and dropping it makes a silent detector
           indistinguishable from a missing one. Below the fold, because a clear
           result is not something to act on. */}
+      {/* Checks that produced no reading. Rendered, never silently dropped: a
+          detector that could not answer and a detector that was never wired
+          look identical once you stop showing the first. The row says what it
+          could not read, and asserts nothing about the machine. */}
+      {unreadAdvisories.length > 0 && (
+        <Card data-testid="home-unread-advisories">
+          <div className="flex items-center gap-2 p-3 border-b border-border">
+            <HelpCircle className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-semibold text-sm">
+              {t("home.advisoriesUnread")}
+            </h2>
+            <span className="text-xs text-muted-foreground">
+              {unreadAdvisories.length}
+            </span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {t("home.advisoriesUnreadHint")}
+            </span>
+          </div>
+          <div className="p-3 space-y-2">
+            {unreadAdvisories.map((s) => (
+              <div
+                key={s.id}
+                className="p-3 rounded-md border border-border border-l-2 border-l-muted-foreground/40"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">
+                    {localizedName(s)}
+                  </span>
+                  <SettingInfoTooltip setting={s} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {s.detectionError
+                    ? t("home.advisoryUnreadReason", {
+                        reason: s.detectionError,
+                      })
+                    : t("home.advisoryUnreadNoReason")}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {clearAdvisories.length > 0 && (
         <Card>
           <div className="flex items-center gap-2 p-3 border-b border-border">

@@ -13,7 +13,14 @@
 
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
-import { Loader2, RotateCcw, ShieldCheck, CheckCircle2, XCircle, Undo2 } from "lucide-react";
+import {
+  Loader2,
+  RotateCcw,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  Undo2,
+} from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
 import { canUndoSetting } from "../types/setting";
@@ -107,7 +114,9 @@ export function TweakSetting({
   return (
     <div
       data-testid="tweak-row"
-      data-optimal={!isDisabled && !isInitialLoading ? String(isOptimal) : undefined}
+      data-optimal={
+        !isDisabled && !isInitialLoading ? String(isOptimal) : undefined
+      }
       className={cn(
         "py-2 px-3 rounded transition-colors border-l-2",
         rowBgClass,
@@ -220,21 +229,38 @@ export function TweakSetting({
               {/* What the check found, in the machine's own numbers where it
                   has them — the row must state the current state, not only
                   that there is one. */}
-              <SettingValueState setting={setting} className="mr-1 max-w-[28rem]" />
+              <SettingValueState
+                setting={setting}
+                className="mr-1 max-w-[28rem]"
+              />
               <span
                 className={cn(
                   "text-xs font-medium px-2 py-0.5 rounded border shrink-0",
-                  isOptimal
-                    ? "text-success border-success/30 bg-success/10"
-                    : "text-warning border-warning/30 bg-warning/10",
+                  // A check that read nothing is neither OK nor a finding.
+                  // Badging it as a finding warns about a state nobody
+                  // measured, which is what the thermal advisory did.
+                  setting.currentValue === null ||
+                    setting.currentValue === undefined
+                    ? "text-muted-foreground border-border bg-muted/40"
+                    : isOptimal
+                      ? "text-success border-success/30 bg-success/10"
+                      : "text-warning border-warning/30 bg-warning/10",
                 )}
               >
-                {isOptimal ? t("row.ok") : t("row.advisory")}
+                {setting.currentValue === null ||
+                setting.currentValue === undefined
+                  ? t("row.notRead")
+                  : isOptimal
+                    ? t("row.ok")
+                    : t("row.advisory")}
               </span>
             </>
           ) : (
             <>
-              <SettingValueState setting={setting} className="mr-1 max-w-[14rem]" />
+              <SettingValueState
+                setting={setting}
+                className="mr-1 max-w-[14rem]"
+              />
               <InlineControl
                 setting={setting}
                 profileTarget={profileTarget}
@@ -273,7 +299,9 @@ export function TweakSetting({
                         onClick={onUndo}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label={t("row.undo", { value: String(setting.originalValue) })}
+                        aria-label={t("row.undo", {
+                          value: String(setting.originalValue),
+                        })}
                       >
                         <Undo2 className="w-3.5 h-3.5" />
                       </button>
@@ -302,7 +330,8 @@ export function TweakSetting({
                     </TooltipTrigger>
                     <TooltipContent side="top">
                       {t("row.resetDefault")}
-                      {setting.defaultValue !== undefined && ` (${String(setting.defaultValue)})`}
+                      {setting.defaultValue !== undefined &&
+                        ` (${String(setting.defaultValue)})`}
                     </TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
@@ -343,7 +372,9 @@ export function TweakSetting({
             </span>
           </span>
           <span className="flex items-center gap-1 min-w-0">
-            <span className="text-muted-foreground/50 text-xs shrink-0">{t("row.target")}</span>
+            <span className="text-muted-foreground/50 text-xs shrink-0">
+              {t("row.target")}
+            </span>
             <span className="text-primary font-medium break-words min-w-0">
               {valueLabel(setting, profileTarget)}
             </span>

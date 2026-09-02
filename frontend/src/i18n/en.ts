@@ -80,6 +80,7 @@ export const en = {
   // Row surface
   "row.ok": "OK",
   "row.advisory": "Advisory",
+  "row.notRead": "Not read",
   "row.verify": "Verify current value",
   "row.undo": "Undo fpstune's change, back to {value}",
   "row.undoNamed": "Undo fpstune's change to {name}, back to {value}",
@@ -165,6 +166,12 @@ export const en = {
   "home.advisoriesClearHint":
     "hardware fpstune checked and found already correct",
   "home.whatToDo": "What you can do:",
+  "home.advisoriesUnread": "Could not be checked",
+  "home.advisoriesUnreadHint":
+    "these say nothing about this machine either way",
+  "home.advisoryUnreadReason": "Nothing was read: {reason}",
+  "home.advisoryUnreadNoReason":
+    "Nothing was read, so there is no finding here to act on.",
   "home.alreadyOptimized": "Already optimized",
   "home.detecting":
     "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",

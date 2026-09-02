@@ -74,6 +74,7 @@ export const tr: Record<keyof typeof en, string> = {
   // Row surface
   "row.ok": "Tamam",
   "row.advisory": "Bilgilendirme",
+  "row.notRead": "Okunamadı",
   "row.verify": "Mevcut değeri doğrula",
   "row.undo": "fpstune'un değişikliğini geri al, {value} değerine dön",
   "row.undoNamed":
@@ -157,6 +158,12 @@ export const tr: Record<keyof typeof en, string> = {
   "home.advisoriesClearHint":
     "fpstune'un denetleyip zaten doğru bulduğu donanım ayarları",
   "home.whatToDo": "Ne yapabilirsiniz:",
+  "home.advisoriesUnread": "Denetlenemedi",
+  "home.advisoriesUnreadHint":
+    "bunlar bu makine hakkında hiçbir şey söylemiyor",
+  "home.advisoryUnreadReason": "Hiçbir değer okunamadı: {reason}",
+  "home.advisoryUnreadNoReason":
+    "Hiçbir değer okunamadı, dolayısıyla burada eyleme geçilecek bir bulgu yok.",
   "home.alreadyOptimized": "Zaten en iyi durumda",
   "home.detecting":
     "Ayarlarınız algılanıyor — {done}/{total} kategori okundu; listeler ve toplamlar sonuçlar geldikçe dolar…",

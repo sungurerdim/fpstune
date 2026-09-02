@@ -163,7 +163,9 @@ describe("Home separates advisories that found something", () => {
     render(<HomeTab />);
 
     expect(screen.getByText("Checked, nothing to change")).toBeInTheDocument();
-    expect(screen.getByText("XMP / EXPO Profile (RAM Speed)")).toBeInTheDocument();
+    expect(
+      screen.getByText("XMP / EXPO Profile (RAM Speed)"),
+    ).toBeInTheDocument();
   });
 
   it("shows no attention heading when every check is clear", () => {
@@ -207,6 +209,48 @@ describe("Home separates advisories that found something", () => {
       "Use a Cat 6 or better cable",
     );
     expect(screen.queryByText(/below_capability/)).not.toBeInTheDocument();
+  });
+
+  it("never warns about a check that read nothing", () => {
+    // The report: a thermal advisory shown under "needs your attention" with no
+    // current value behind it. isOptimized is false whenever current does not
+    // equal ideal, and a value never read equals nothing — so an unread check
+    // was warning about a state nobody had measured.
+    const unread: Setting = {
+      ...SLOW_LINK,
+      currentValue: null,
+      isOptimized: false,
+      detectionError: "MSAcpi_ThermalZoneTemperature WMI class not found",
+    };
+    setStore([unread]);
+    render(<HomeTab />);
+
+    expect(screen.queryByText("Needs your attention")).not.toBeInTheDocument();
+    expect(screen.getByText("Could not be checked")).toBeInTheDocument();
+    expect(
+      screen.getByText(/MSAcpi_ThermalZoneTemperature WMI class not found/),
+    ).toBeInTheDocument();
+  });
+
+  it("says a check read nothing even when it has no reason to give", () => {
+    setStore([{ ...SLOW_LINK, currentValue: null, isOptimized: false }]);
+    render(<HomeTab />);
+
+    expect(screen.getByTestId("home-unread-advisories")).toHaveTextContent(
+      "Nothing was read",
+    );
+    expect(screen.queryByText("Needs your attention")).not.toBeInTheDocument();
+  });
+
+  it("does not count an unread check among the clear ones either", () => {
+    // "We checked and it is fine" is a claim too, and it was not checked.
+    setStore([{ ...RAM_FINE, currentValue: null }]);
+    render(<HomeTab />);
+
+    expect(
+      screen.queryByText("Checked, nothing to change"),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("Could not be checked")).toBeInTheDocument();
   });
 
   it("keeps an inapplicable advisory off the page entirely", () => {

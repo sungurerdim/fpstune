@@ -94,9 +94,14 @@ describe("TweakSetting", () => {
   });
 
   it("shows the Windows-default button when setting is suboptimal", () => {
-    const setting = makeSetting({ isOptimized: false, currentValue: "enabled" });
+    const setting = makeSetting({
+      isOptimized: false,
+      currentValue: "enabled",
+    });
     render(<TweakSetting setting={setting} {...defaultProps} />);
-    const resetBtn = screen.getByRole("button", { name: /restore the windows default/i });
+    const resetBtn = screen.getByRole("button", {
+      name: /restore the windows default/i,
+    });
     expect(resetBtn).toBeInTheDocument();
   });
 
@@ -115,12 +120,17 @@ describe("TweakSetting", () => {
   it("calls onReset when the Windows-default button is clicked", async () => {
     const user = userEvent.setup();
     const onReset = vi.fn();
-    const setting = makeSetting({ isOptimized: false, currentValue: "enabled" });
+    const setting = makeSetting({
+      isOptimized: false,
+      currentValue: "enabled",
+    });
     render(
       <TweakSetting setting={setting} {...defaultProps} onReset={onReset} />,
     );
 
-    const resetBtn = screen.getByRole("button", { name: /restore the windows default/i });
+    const resetBtn = screen.getByRole("button", {
+      name: /restore the windows default/i,
+    });
     await user.click(resetBtn);
     expect(onReset).toHaveBeenCalledTimes(1);
   });
@@ -128,11 +138,7 @@ describe("TweakSetting", () => {
   it("shows Verify button when onVerify prop is provided", () => {
     const setting = makeSetting({ currentValue: "enabled" });
     render(
-      <TweakSetting
-        setting={setting}
-        {...defaultProps}
-        onVerify={vi.fn()}
-      />,
+      <TweakSetting setting={setting} {...defaultProps} onVerify={vi.fn()} />,
     );
     expect(
       screen.getByRole("button", { name: /verify current value/i }),
@@ -188,6 +194,21 @@ describe("TweakSetting", () => {
     expect(screen.queryByText(/below_capability/)).not.toBeInTheDocument();
   });
 
+  it("badges an advisory that read nothing as not read, never as a finding", () => {
+    const setting = makeSetting({
+      id: "system:thermal_condition" as `${string}:${string}`,
+      isReadonly: true,
+      currentValue: null,
+      recommendedValue: "ok",
+      isOptimized: false,
+      status: "suboptimal",
+    });
+    render(<TweakSetting setting={setting} {...defaultProps} />);
+    expect(screen.getByText("Not read")).toBeInTheDocument();
+    expect(screen.queryByText("Advisory")).not.toBeInTheDocument();
+    expect(screen.queryByText("OK")).not.toBeInTheDocument();
+  });
+
   it("shows a warning for moderate risk too, not only advanced", () => {
     // 29 shipped settings carry a riskWarning at moderate/low. The badge was
     // gated on riskLevel === "advanced", so every one of those warnings was
@@ -210,7 +231,10 @@ describe("TweakSetting", () => {
   });
 
   it("shows (R) badge for settings that require reboot", () => {
-    const setting = makeSetting({ requiresReboot: true, currentValue: "enabled" });
+    const setting = makeSetting({
+      requiresReboot: true,
+      currentValue: "enabled",
+    });
     render(<TweakSetting setting={setting} {...defaultProps} />);
     expect(screen.getByText("(R)")).toBeInTheDocument();
   });
@@ -347,7 +371,9 @@ describe("the row's switch carries the row's name", () => {
     render(<TweakSetting setting={setting} {...defaultProps} />);
 
     expect(
-      screen.getByRole("switch", { name: "Hardware-Accelerated GPU Scheduling" }),
+      screen.getByRole("switch", {
+        name: "Hardware-Accelerated GPU Scheduling",
+      }),
     ).toBeInTheDocument();
   });
 });

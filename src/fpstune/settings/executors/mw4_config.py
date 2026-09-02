@@ -31,6 +31,7 @@ import re
 import stat
 import sys
 import threading
+import time
 import uuid
 from collections.abc import Iterator, Sequence
 from ctypes import wintypes
@@ -260,6 +261,12 @@ def _clear_readonly(path: Path) -> None:
         logger.debug("MW4 config read-only clear failed for %s: %s", path, exc)
 
 
+# How many times a replace that Windows refuses is retried, and the pause that
+# grows between attempts: 0.15, 0.30, ... about two seconds in all.
+_REPLACE_ATTEMPTS = 6
+_REPLACE_BACKOFF_S = 0.15
+
+
 def _write_atomically(path: Path, payload: bytes) -> None:
     """Replace the file in one step, so an interrupted write cannot truncate it.
 
@@ -270,11 +277,32 @@ def _write_atomically(path: Path, payload: bytes) -> None:
     That is belt to the lock's braces: with the lock held there is only ever one
     writer, and without a unique name a lock that failed open would turn a loud
     `Permission denied` into a silent half-written file.
+
+    ``os.replace`` answers ``PermissionError`` (WinError 5) while another process
+    holds the target open without FILE_SHARE_DELETE: an antivirus scanning the
+    file the game just wrote, a sync client, the game itself between the
+    running-game check and this write. Measured on 2026-09-02: one apply of
+    ``game_config:mw4:dof_weapon`` failed exactly so, and the whole explanation
+    the user got was the OS text in the system language. The retry covers the
+    transient holder; the message names the persistent one.
     """
     temp = path.with_name(f"{path.name}.{uuid.uuid4().hex[:8]}.fpstune-tmp")
     try:
         temp.write_bytes(payload)
-        os.replace(temp, path)
+        for attempt in range(1, _REPLACE_ATTEMPTS + 1):
+            try:
+                os.replace(temp, path)
+                return
+            except PermissionError:
+                if attempt == _REPLACE_ATTEMPTS:
+                    raise
+                time.sleep(_REPLACE_BACKOFF_S * attempt)
+    except PermissionError as exc:
+        temp.unlink(missing_ok=True)
+        raise PermissionError(
+            f"{path.name} is held open by another program (the game, a sync client or an "
+            "antivirus scan in progress), so it could not be replaced. Close it and apply again."
+        ) from exc
     except OSError:
         temp.unlink(missing_ok=True)
         raise

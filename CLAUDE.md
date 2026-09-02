@@ -348,6 +348,17 @@ Every `SettingExecutor` carries `risk_level`. All tweaks (including `advanced`) 
 
 Promotion rule: `evidence_level="experimental"` → `risk_level="advanced"` + non-None `risk_warning`.
 
+**Measured exception (decided 2026-09-02) — there is no expert mode.** A setting
+whose cost is security rather than frames — a per-executable Control Flow Guard
+opt-out, a Defender exclusion, a speculative-execution mitigation switch — is
+never shipped on evidence from someone else's machine. It may be offered only
+after fpstune's own verify round (`verify_round.measure_pair()` over
+`noise_floor()`) has measured a gain on *this* machine; it then lands in
+`complete` with `risk_level="advanced"`, the cost written in the copy, and the
+same undo as any other setting. The red lines stay red under every rule: Secure
+Boot, HVCI / core isolation, driver signature enforcement, test-signing,
+hardware-ID changes and kernel drivers are never offered, measured or not.
+
 ---
 
 ## Project Map

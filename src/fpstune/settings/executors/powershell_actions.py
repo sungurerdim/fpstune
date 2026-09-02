@@ -861,17 +861,18 @@ ACTION_COMMANDS: dict[str, str] = {
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,
+    # One Remove-Item over the whole folder, not one call per file. The
+    # per-file loop ran past the 30 s apply timeout on a machine with a few
+    # thousand .pf entries (reported 2026-09-02): every iteration paid a cmdlet
+    # dispatch, and what the user saw was a timeout rather than a refusal. The
+    # size is summed first, because after the delete there is nothing to measure.
     "prefetch_cleanup": """
         $path = "$env:windir\\Prefetch"
         $freed = 0
         if (Test-Path $path) {
-            $files = Get-ChildItem -Path $path -Force -ErrorAction SilentlyContinue
-            foreach ($f in $files) {
-                try {
-                    $freed += [int64]$f.Length
-                    Remove-Item -Path $f.FullName -Force -ErrorAction SilentlyContinue
-                } catch { }
-            }
+            $freed = [int64](Get-ChildItem -Path $path -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+            Remove-Item -Path "$path\\*" -Force -Recurse -ErrorAction SilentlyContinue
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,

@@ -120,9 +120,12 @@ export const tr: Record<keyof typeof en, string> = {
   "home.measuringReclaim": "Geri kazanılabilecek alan ölçülüyor…",
   "home.nothingToReclaim": "Şu an geri kazanılacak bir şey yok.",
   "home.rowMeasuring": "— geri kazanılabilecek alan ölçülüyor…",
-  "home.advisories": "Bilgilendirmeler",
+  "home.advisories": "Sizin müdahalenizi bekliyor",
   "home.advisoriesHint":
     "fpstune'un algılayabildiği ama yalnızca sizin değiştirebileceğiniz bulgular",
+  "home.advisoriesClear": "Denetlendi, değişiklik gerekmiyor",
+  "home.advisoriesClearHint":
+    "fpstune'un denetleyip zaten doğru bulduğu donanım ayarları",
   "home.alreadyOptimized": "Zaten en iyi durumda",
   "home.detecting":
     "Ayarlarınız algılanıyor — {done}/{total} kategori okundu; listeler ve toplamlar sonuçlar geldikçe dolar…",

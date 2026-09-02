@@ -127,8 +127,10 @@ export const en = {
   "home.measuringReclaim": "Measuring what can be reclaimed…",
   "home.nothingToReclaim": "Nothing to reclaim right now.",
   "home.rowMeasuring": "— measuring what can be reclaimed…",
-  "home.advisories": "Advisories",
+  "home.advisories": "Needs your attention",
   "home.advisoriesHint": "findings fpstune can detect but only you can change",
+  "home.advisoriesClear": "Checked, nothing to change",
+  "home.advisoriesClearHint": "hardware fpstune checked and found already correct",
   "home.alreadyOptimized": "Already optimized",
   "home.detecting":
     "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",

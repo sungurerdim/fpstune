@@ -145,12 +145,25 @@ export function HomeTab() {
   // (BIOS toggles, physical facts). is_readonly kept them out of every Home
   // list — XMP off, the largest hardware finding the product makes, was
   // invisible from the landing page.
-  const advisories = useMemo(() => {
-    const rows: Setting[] = [];
+  //
+  // Split by whether the finding is *actionable*, because an advisory that
+  // reports "nothing wrong" and one that reports a 25x loss are not the same
+  // row. Measured on a real machine: `network:link_capability` found an
+  // Ethernet link negotiated at 100 Mbps on an adapter that does 2500 — the
+  // single largest ceiling loss on that box, and it sat under a heading counted
+  // together with five findings that were fine.
+  //
+  // The actionable ones render above the fold; the clear ones stay below, where
+  // "we checked and it is fine" belongs. Neither is dropped: a check with no
+  // finding is still evidence the check ran.
+  const [actionableAdvisories, clearAdvisories] = useMemo(() => {
+    const actionable: Setting[] = [];
+    const clear: Setting[] = [];
     for (const s of settings.values()) {
-      if (s.isApplicable && !s.isAction && s.isReadonly) rows.push(s);
+      if (!s.isApplicable || s.isAction || !s.isReadonly) continue;
+      (s.isOptimized ? clear : actionable).push(s);
     }
-    return rows;
+    return [actionable, clear];
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settings, settingsVersion]);
 
@@ -450,6 +463,47 @@ export function HomeTab() {
         </div>
       )}
 
+      {/* Advisories with something to report, above the tweak lists.
+          fpstune cannot press these — a BIOS toggle, a cable — which is exactly
+          why they need to be *read*, and why burying them under everything the
+          product can do itself gets the priority backwards. Measured: an
+          Ethernet link at 100 Mbps on a 2500 Mbps adapter is a bigger ceiling
+          loss than every registry tweak above it combined, and it was the sixth
+          section down. */}
+      {actionableAdvisories.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 p-3 border-b border-border">
+            <Info className="w-4 h-4 text-warning" />
+            <h2 className="font-semibold text-sm">{t("home.advisories")}</h2>
+            <span className="text-xs text-muted-foreground">
+              {actionableAdvisories.length}
+            </span>
+            <span className="text-xs text-muted-foreground hidden sm:inline">
+              {t("home.advisoriesHint")}
+            </span>
+          </div>
+          <div className="p-3 space-y-2">
+            {actionableAdvisories.map((s) => (
+              <div
+                key={s.id}
+                className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
+              >
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-medium text-sm">{localizedName(s)}</span>
+                  <SettingInfoTooltip setting={s} />
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {localizedDescription(s)}
+                </p>
+                <div className="mt-1">
+                  <SettingValueState setting={s} />
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
       {/* Two columns only when both halves have something in them. A fixed split
           gave an empty card with a disabled button half of a 1600px screen while
           the other half scrolled eighteen rows. */}
@@ -559,33 +613,35 @@ export function HomeTab() {
         </Card>
       </div>
 
-      {/* Advisories: findings only the user can act on — a BIOS toggle, a
-          physical fact. No Apply button, because fpstune cannot press it. */}
-      {advisories.length > 0 && (
+      {/* The advisories that found nothing. Kept on the page rather than
+          hidden: "we checked your RAM speed and it is at its rated profile" is
+          the evidence the check ran, and dropping it makes a silent detector
+          indistinguishable from a missing one. Below the fold, because a clear
+          result is not something to act on. */}
+      {clearAdvisories.length > 0 && (
         <Card>
           <div className="flex items-center gap-2 p-3 border-b border-border">
-            <Info className="w-4 h-4 text-warning" />
-            <h2 className="font-semibold text-sm">{t("home.advisories")}</h2>
+            <Info className="w-4 h-4 text-muted-foreground" />
+            <h2 className="font-semibold text-sm">
+              {t("home.advisoriesClear")}
+            </h2>
             <span className="text-xs text-muted-foreground">
-              {advisories.length}
+              {clearAdvisories.length}
             </span>
             <span className="text-xs text-muted-foreground hidden sm:inline">
-              {t("home.advisoriesHint")}
+              {t("home.advisoriesClearHint")}
             </span>
           </div>
           <div className="p-3 space-y-2">
-            {advisories.map((s) => (
+            {clearAdvisories.map((s) => (
               <div
                 key={s.id}
-                className="p-3 rounded-md border border-border border-l-2 border-l-warning/70"
+                className="p-3 rounded-md border border-border border-l-2 border-l-success/60"
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm">{localizedName(s)}</span>
                   <SettingInfoTooltip setting={s} />
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {localizedDescription(s)}
-                </p>
                 <div className="mt-1">
                   <SettingValueState setting={s} />
                 </div>

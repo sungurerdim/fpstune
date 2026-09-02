@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import sys
 import threading
 from collections import deque
@@ -11,10 +12,17 @@ from datetime import datetime
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from rich.text import Text
+
 from fpstune.utils.console import console
 
 # Logger name
 LOGGER_NAME = "fpstune"
+
+# CSI sequences — the only kind this module emits (colour and reset). Matched
+# rather than assumed away, because the colour enters through the message and a
+# message can come from anywhere.
+_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
 
 
 # ANSI color codes (Windows 10+ and all Unix terminals support these)
@@ -123,18 +131,50 @@ class _ColorFormatter(logging.Formatter):
             return f"{level} | {name:20} | {timestamp} | {message}"
 
 
-class _ConsoleHandler(logging.Handler):
-    """Emit through the shared Console so colour is decided and enabled once.
+class _PlainFileFormatter(logging.Formatter):
+    """Strip colour before it reaches the log file.
 
-    The formatter still produces the ANSI escapes; this only routes them to the
-    stream Rich has prepared. `markup=False` and `highlight=False` because the
-    text is already styled and already escaped — letting Rich re-interpret it
-    would turn a Windows path or a `[skipped]` in a message into markup.
+    Colour arrives in the *message*, not just the format: ``log_activity``
+    prefixes ``[OK]``/``[FAIL]``/``[WARN]`` with raw escapes and ``tweak_label``
+    colours a setting id, and both land inside ``record.getMessage()``. The file
+    handler formatted that verbatim, so ``fpstune.log`` carried::
+
+        INFO  | fpstune.api          | \\x1b[32m[OK]\\x1b[0m applied
+
+    which is noise in every editor and in every `grep`. A log file has no colour
+    to render, so the escapes are removed here rather than at each call site —
+    one place that cannot be forgotten by the next thing that logs a label.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        return _ANSI_ESCAPE.sub("", super().format(record))
+
+
+class _ConsoleHandler(logging.Handler):
+    """Emit through the shared Console, with the escapes parsed rather than passed.
+
+    Routing the formatter's output to Rich was only half the fix. Rich on a
+    legacy Windows console does not *write* ANSI at all — it sets colour through
+    the Win32 console API and emits plain text. Measured on this machine:
+    ``legacy_windows=True``, ``color_system='windows'``. So a string carrying raw
+    ``\\033[36m`` bytes went through Rich untouched and the console, never having
+    been put into virtual-terminal mode, printed them literally::
+
+        ←[36mINFO ←[0m ←[2m|←[0m ←[35mapi   ←[0m ... fpstune API starting...
+
+    ``Text.from_ansi`` parses those escapes into Rich's own spans, so Rich knows
+    what the colours *are* and can apply them by whatever mechanism the terminal
+    actually supports — Win32 calls here, real ANSI on a VT-capable terminal.
+
+    It also replaces what ``markup=False`` was there to do: ``from_ansi`` never
+    interprets square brackets, so a Windows path or a ``[skipped]`` in a message
+    stays literal without a second guard. ``highlight=False`` still matters —
+    Rich would otherwise re-colour numbers and paths inside the message.
     """
 
     def emit(self, record: logging.LogRecord) -> None:
         try:
-            console.print(self.format(record), markup=False, highlight=False, soft_wrap=True)
+            console.print(Text.from_ansi(self.format(record)), highlight=False, soft_wrap=True)
         except Exception:  # pragma: no cover - logging must never raise
             self.handleError(record)
 
@@ -215,7 +255,7 @@ def setup_logging(
         )
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(
-            logging.Formatter(
+            _PlainFileFormatter(
                 "%(levelname)-5s | %(name)-20s | %(asctime)s | %(message)s",
                 datefmt="%d.%m.%Y %H:%M:%S",
             )

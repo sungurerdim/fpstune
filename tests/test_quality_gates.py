@@ -710,45 +710,218 @@ class TestNoRuntimeCompile:
 class TestNoLocalizedTextParsing:
     """#83 Phase 4: a detect or apply path never matches text Windows localizes.
 
-    ``Select-String`` and ``findstr`` over a tool's output are the recurring shape
-    of the defect (netsh wlan labels, fsutil's TRIM line, netsh's congestion
-    label); ``wmic`` no longer exists on 24H2. Each surviving use is listed with
-    the reason it is safe — a GUID is not a word — and anything new is red on
-    arrival.
+    Two layers. Tokens that are the defect by themselves — ``Select-String``,
+    ``findstr``, ``wmic``, ``Get-Counter`` — are forbidden outright. The PowerShell
+    comparison operators (``-match`` / ``-like`` and their negations), case
+    folding and the ``-DisplayName`` parameter are each legitimate against
+    fpstune's own literals and dangerous against a tool's output, so every use
+    must be one of the shapes no Windows language changes — a regex of digits
+    and punctuation, a hardware id, a marker fpstune wrote, a variable fpstune
+    built — or carry an allowlist entry naming the file, a marker on the line,
+    and the reason. Anything new is red on arrival, and an allowlist entry whose
+    marker is gone is red too.
+
+    The three this found on landing, all shipped: DISM's component-store report
+    parsed for English words (it answers in the system language, and the words
+    never sat on a line with a size anyway), powercfg's active scheme taken as
+    the fourth word of a localized label, and netsh's congestion label.
     """
 
-    _FORBIDDEN = ("Select-String", "findstr", "wmic")
-    # (relative path, substring that must be on the same line) -> why it is allowed.
-    _ALLOWED = {
+    _FORBIDDEN = ("Select-String", "findstr", "wmic", "Get-Counter")
+    _FORBIDDEN_ALLOWED = {
         (
             "src/fpstune/api/routes/system_audio.py",
             "d04e05a6",
         ): "matches a property GUID, not a word",
     }
+    _OPERATOR = re.compile(
+        r"(?<![\w-])-[ci]?(?:not)?(?:match|like)\b"  # the operator; not "mid-match" in prose
+        r"|\.To(?:Lower|Upper)\(\)"
+        r"|-DisplayName\s+[\"']"  # the cmdlet parameter, handed a literal
+    )
+    _LITERAL = re.compile(r"-[ci]?(?:not)?(?:match|like)\s+(['\"])(.*?)\1")
+    _VARIABLE_OPERAND = re.compile(r"-[ci]?(?:not)?(?:match|like)\s+[$(]")
+    _FOLD_OR_PARAM = re.compile(r"\.To(?:Lower|Upper)\(\)|-DisplayName\s+[\"']")
+    _INVARIANT = re.compile(r"VEN_|\b(?:PCI|USB|ACPI|SWD|ROOT)(?:\\|\*)|UID\(|===fpstune-")
 
-    def test_no_new_text_matching_on_tool_output(self) -> None:
+    _ADAPTER_STRINGS = (
+        "inbox INF description strings, verified English on a Turkish Windows "
+        "(2026-09-02); -not $_.Virtual is the primary filter"
+    )
+    _GAME_TEXT = "the subject is a game's own config text, which Windows does not localize"
+    _ENUM_802 = "MSFT_NetAdapter MediaType enum string, not MUI text"
+    # (relative path, substring on the same line) -> why it cannot be localized.
+    _ALLOWED: dict[tuple[str, str], str] = {
+        ("src/fpstune/api/hardware/network_adapters.py", "-notlike '*"): _ADAPTER_STRINGS,
+        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$adapterDesc*"'): (
+            "correlates two of the driver's own strings"
+        ),
+        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$($_.FriendlyName)*"'): (
+            "correlates two of the driver's own strings"
+        ),
+        ("src/fpstune/api/hardware/network_adapters.py", "(Realtek|Intel|Killer"): (
+            "vendor brand names inside the driver's own string"
+        ),
+        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$vendor*"'): (
+            "vendor brand names inside the driver's own string"
+        ),
+        ("src/fpstune/api/hardware/network_adapters.py", "'Wi-Fi|Wireless'"): (
+            "fallback on the driver's own name where MediaType is absent"
+        ),
+        ("src/fpstune/api/routes/debug.py", "'*NVIDIA*'"): "a vendor brand name (C5 allows it)",
+        ("src/fpstune/api/routes/debug.py", "'Render'"): (
+            "a registry key name under MMDevices\\Audio, not text"
+        ),
+        ("src/fpstune/api/routes/system_audio.py", "'*TrustedInstaller*'"): (
+            "the service SID's account name; the localized authority prefix is not compared"
+        ),
+        ("src/fpstune/api/routes/system_network.py", "'*802.11*'"): _ENUM_802,
+        ("src/fpstune/settings/definitions/audio.py", "-like '*{fragment}*'"): (
+            "device-path fragments fpstune lists itself"
+        ),
+        ("src/fpstune/settings/definitions/display.py", "SwapEffectUpgradeEnable="): (
+            "the registry value's own token format"
+        ),
+        ("src/fpstune/settings/definitions/game.py", "VRROptimizeEnable="): (
+            "the registry value's own token format"
+        ),
+        ("src/fpstune/settings/definitions/gpu.py", "GpuPreference="): (
+            "the registry value's own token format"
+        ),
+        ("src/fpstune/settings/definitions/gpu.py", "'Intel|UHD|Iris'"): "vendor names (C5)",
+        ("src/fpstune/settings/definitions/gpu.py", "'NVIDIA|GeForce|Radeon'"): "vendor names (C5)",
+        ("src/fpstune/settings/definitions/gpu.py", "-notmatch 'Intel'"): "vendor names (C5)",
+        ("src/fpstune/settings/definitions/game_configs.py", "$c -match"): _GAME_TEXT,
+        ("src/fpstune/settings/definitions/game_configs.py", "mw3fix_backup"): (
+            "fpstune's own backup folder name"
+        ),
+        ("src/fpstune/settings/definitions/game_configs.py", "-DisplayName 'fpstune-"): (
+            "fpstune's own firewall rule name"
+        ),
+        ("src/fpstune/settings/definitions/launchers.py", "$c -match"): _GAME_TEXT,
+        ("src/fpstune/settings/definitions/launchers.py", "cef-disable-gpu"): (
+            "Steam's own launch option"
+        ),
+        ("src/fpstune/settings/definitions/network.py", "-notlike '*"): _ADAPTER_STRINGS,
+        ("src/fpstune/settings/definitions/network.py", ".ToString().ToLower()"): (
+            ".NET enum name of a Get-NetTCPSetting property"
+        ),
+        ("src/fpstune/settings/definitions/network.py", "$_.RegistryKeyword -match"): (
+            "the driver's INF keyword, which no Windows language changes"
+        ),
+        ("src/fpstune/settings/definitions/network.py", "$_.DisplayName -match"): (
+            "secondary to the RegistryKeyword test; both are the driver's own strings"
+        ),
+        ("src/fpstune/settings/definitions/network.py", "'*802.11*'"): _ENUM_802,
+        ("src/fpstune/settings/definitions/power.py", "'AMD Ryzen'"): (
+            "AMD's plan name, installed verbatim by the chipset driver"
+        ),
+        ("src/fpstune/settings/discovery/probes.py", "-notlike '*"): _ADAPTER_STRINGS,
+        ("src/fpstune/settings/executors/bcdedit.py", ".ToString().ToLower()"): (
+            "a boolean rendered lower-case"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", '-match "`r`n"'): (
+            "line-ending probe on fpstune's own file content"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", "'docker-desktop*'"): (
+            "WSL's fixed distribution name for Docker Desktop"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", "[kmgtKMGT]"): (
+            "docker CLI output, which is English-only"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", "$Matches[2].ToUpper()"): (
+            "docker CLI output, which is English-only"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", "Backups and Disabled Features"): (
+            "DISM run with /English; these are its own invariant labels"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", "mw3fix_backup"): (
+            "fpstune's own backup folder name"
+        ),
+        ("src/fpstune/settings/executors/powershell_actions.py", '-DisplayName "$ruleName'): (
+            "fpstune's own firewall rule name"
+        ),
+    }
+
+    @classmethod
+    def _allowed(cls, table: dict, relative: str, line: str) -> bool:
+        return any(rel == relative and marker in line for rel, marker in table)
+
+    @classmethod
+    def _invariant(cls, literal: str) -> bool:
+        if cls._INVARIANT.search(literal):
+            return True
+        return not re.search(r"[A-Za-z]", re.sub(r"\\+.", "", literal))
+
+    @classmethod
+    def _offence(cls, relative: str, number: int, line: str) -> str | None:
+        stripped = line.strip()
+        if stripped.startswith("#"):
+            return None
+        for token in cls._FORBIDDEN:
+            if token in line and not cls._allowed(cls._FORBIDDEN_ALLOWED, relative, line):
+                return f"{relative}:{number}: {token}"
+        if not cls._OPERATOR.search(line):
+            return None
+        if cls._allowed(cls._ALLOWED, relative, line):
+            return None
+        literals = [m.group(2) for m in cls._LITERAL.finditer(line)]
+        if cls._FOLD_OR_PARAM.search(line):
+            return f"{relative}:{number}: {stripped[:100]}"
+        if literals and all(cls._invariant(lit) for lit in literals):
+            return None
+        if not literals and cls._VARIABLE_OPERAND.search(line):
+            return None
+        return f"{relative}:{number}: {stripped[:100]}"
+
+    def test_no_text_matching_on_localized_tool_output(self) -> None:
         offenders = []
-        for path in (ROOT / "src" / "fpstune").rglob("*.py"):
+        for path in sorted((ROOT / "src" / "fpstune").rglob("*.py")):
             relative = path.relative_to(ROOT).as_posix()
             for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
-                stripped = line.strip()
-                if stripped.startswith("#"):
-                    continue
-                for token in self._FORBIDDEN:
-                    if token not in line:
-                        continue
-                    if any(rel == relative and marker in line for rel, marker in self._ALLOWED):
-                        continue
-                    offenders.append(f"{relative}:{number}: {token}")
+                offence = self._offence(relative, number, line)
+                if offence:
+                    offenders.append(offence)
         assert not offenders, (
-            "text matching on localized tool output — read the API, the registry or a "
-            "numeric field instead: " + "; ".join(offenders)
+            "text matching on possibly localized output — read the API, the registry or a "
+            "numeric field, or allowlist the line with the reason it cannot be localized:\n  "
+            + "\n  ".join(offenders)
         )
 
-    def test_the_allowlist_is_not_stale(self) -> None:
+    def test_the_allowlists_are_not_stale(self) -> None:
         """An allowlisted line that no longer exists is a rule nobody checks."""
-        for (relative, marker), _reason in self._ALLOWED.items():
-            text = (ROOT / relative).read_text(encoding="utf-8")
-            assert marker in text, (
-                f"{relative} no longer contains {marker!r}; drop the allowlist entry"
-            )
+        for table in (self._FORBIDDEN_ALLOWED, self._ALLOWED):
+            for (relative, marker), _reason in table.items():
+                text = (ROOT / relative).read_text(encoding="utf-8")
+                assert marker in text, (
+                    f"{relative} no longer contains {marker!r}; drop the allowlist entry"
+                )
+
+    def test_the_operator_regex_ignores_prose(self) -> None:
+        """'mid-match' in a description is not the -match operator."""
+        assert not self._OPERATOR.search('description="Textures download mid-match."')
+        assert self._OPERATOR.search("if ($line -match 'Cleanup') {")
+        assert self._OPERATOR.search("$_.Name -notlike '*vEthernet*'")
+
+
+class TestHkcuGoesThroughTheRunner:
+    """A PowerShell script that names HKCU: reaches the console user's hive only if it
+    runs through ``run_powershell``, which rewrites the drive. A module that spawns
+    powershell.exe itself and mentions HKCU: has bypassed that, silently."""
+
+    _SPAWN = re.compile(r"[\"'](?:powershell|powershell\.exe|pwsh)[\"']")
+
+    def test_no_direct_powershell_spawn_names_hkcu(self) -> None:
+        offenders = []
+        for path in sorted((ROOT / "src" / "fpstune").rglob("*.py")):
+            relative = path.relative_to(ROOT).as_posix()
+            if relative == "src/fpstune/utils/powershell.py":
+                continue
+            text = path.read_text(encoding="utf-8")
+            if self._SPAWN.search(text) and "HKCU:" in text:
+                offenders.append(relative)
+        assert not offenders, (
+            "these modules spawn powershell.exe themselves and name HKCU:, so the drive is "
+            "never redirected to the console user; route them through run_powershell: "
+            + ", ".join(offenders)
+        )

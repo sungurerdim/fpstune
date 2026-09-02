@@ -5,8 +5,8 @@ keys, WSL's distribution list, Docker's per-user uninstall entry — write or re
 ``HKCU:``. Rewriting the drive in ``run_powershell`` rather than in each script is
 what keeps them from disagreeing with the winreg executor about whose hive that
 is; a script that bypassed the runner would be the defect these tests would miss,
-which is why `TestNoLocalizedTextParsing`'s sibling gate counts PowerShell
-invocations outside it.
+which is why ``TestHkcuGoesThroughTheRunner`` in the quality gates fails any
+module that spawns powershell.exe itself and names ``HKCU:``.
 """
 
 from __future__ import annotations

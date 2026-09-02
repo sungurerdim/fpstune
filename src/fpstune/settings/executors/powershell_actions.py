@@ -219,7 +219,40 @@ def _cod_cache_size(flavor: str, label: str) -> str:
     )
 
 
-_CLEANUP_STATUS = r"""        function Get-DirSizeBytes([string]$dirPath) {
+# DISM answers in the system language, and the old parser looked for the English
+# words 'Reclaimable|Reduction|Cleanup' on a line that also carried a size — a
+# line AnalyzeComponentStore never prints, in any language — so the estimate was
+# "0 MB" on every machine. /English is DISM's own documented global option for
+# invariant output, and the estimate is DISM's own accounting of what
+# StartComponentCleanup can free: superseded backups plus the cache. No such
+# line, or a non-zero exit (740 when not elevated), is "unavailable" — never a
+# number nobody measured (C11).
+_DISM_RECLAIMABLE_FUNCTION = r"""
+        function Get-DismReclaimableMB {
+            $out = & dism.exe /Online /English /Cleanup-Image /AnalyzeComponentStore 2>&1
+            if ($LASTEXITCODE -ne 0) { return $null }
+            $total = 0.0
+            $found = $false
+            foreach ($line in $out) {
+                if ("$line" -match '^\s*(Backups and Disabled Features|Cache and Temporary Data)\s*:\s*([\d.]+)\s*(bytes|KB|MB|GB|TB)\s*$') {
+                    $found = $true
+                    $n = [double]$Matches[2]
+                    switch ($Matches[3]) {
+                        'bytes' { $total += $n / 1MB }
+                        'KB' { $total += $n / 1024 }
+                        'MB' { $total += $n }
+                        'GB' { $total += $n * 1024 }
+                        'TB' { $total += $n * 1048576 }
+                    }
+                }
+            }
+            if (-not $found) { return $null }
+            return [int][math]::Round($total)
+        }
+"""
+
+_CLEANUP_STATUS = (
+    r"""        function Get-DirSizeBytes([string]$dirPath) {
             $size = [long]0
             if (-not [System.IO.Directory]::Exists($dirPath)) { return $size }
             try {
@@ -286,7 +319,9 @@ _CLEANUP_STATUS = r"""        function Get-DirSizeBytes([string]$dirPath) {
             }
             return $h
         }
-        # The dispatch is a function so that the ~15 KB of helpers above can be
+"""
+    + _DISM_RECLAIMABLE_FUNCTION
+    + r"""        # The dispatch is a function so that the ~15 KB of helpers above can be
         # parsed once and then asked about every cleanup type in the same
         # session. Measured on the dev machine: a cold scan spawned 26
         # PowerShell processes here, one per cleanup setting, each re-parsing
@@ -295,21 +330,10 @@ _CLEANUP_STATUS = r"""        function Get-DirSizeBytes([string]$dirPath) {
         switch ($type) {
             'dism' {
                 try {
-                    $out = & dism.exe /online /Cleanup-Image /AnalyzeComponentStore 2>&1
-                    $mb = $null
-                    foreach ($line in $out) {
-                        if ($line -match 'Reclaimable|Reduction|Cleanup' -and $line -match ':\s*([\d,]+)\s*MB') {
-                            $mb = [int](($Matches[1] -replace ',',''))
-                            break
-                        }
-                        if ($line -match 'Reclaimable|Reduction|Cleanup' -and $line -match ':\s*([\d.]+)\s*GB') {
-                            $mb = [int]([double]($Matches[1]) * 1024)
-                            break
-                        }
-                    }
-                    if ($null -ne $mb) { Write-Output "ready|$mb MB" } else { Write-Output "ready|0 MB" }
+                    $mb = Get-DismReclaimableMB
+                    if ($null -ne $mb) { Write-Output "ready|$mb MB" } else { Write-Output 'ready|unavailable' }
                 } catch {
-                    Write-Output "ready|0 MB"
+                    Write-Output 'ready|unavailable'
                 }
             }
             'temp' {
@@ -528,12 +552,13 @@ __MW4_SHADER_SIZE__
                     Write-Output 'ready|not_installed'
                 }
             }
-            default { Write-Output "ready|0 MB" }
+            default { Write-Output 'ready|unavailable' }
         }
         }
         Get-CleanupStatus '%type%'
 """.replace("__MW3_SHADER_SIZE__", _cod_cache_size("cod23", "MW3")).replace(
-    "__MW4_SHADER_SIZE__", _cod_cache_size("cod26", "MW4")
+        "__MW4_SHADER_SIZE__", _cod_cache_size("cod26", "MW4")
+    )
 )
 
 
@@ -583,19 +608,8 @@ ACTION_COMMANDS: dict[str, str] = {
         }
     """,
     # Cleanup actions
-    "dism_cleanup": r"""
-        function Get-DismReclaimableMB {
-            $out = & dism.exe /online /Cleanup-Image /AnalyzeComponentStore 2>&1
-            foreach ($line in $out) {
-                if ($line -match 'Reclaimable|Reduction|Cleanup' -and $line -match ':\s*([\d,]+)\s*MB') {
-                    return [int](($Matches[1] -replace ',',''))
-                }
-                if ($line -match 'Reclaimable|Reduction|Cleanup' -and $line -match ':\s*([\d.]+)\s*GB') {
-                    return [int]([double]($Matches[1]) * 1024)
-                }
-            }
-            return $null
-        }
+    "dism_cleanup": _DISM_RECLAIMABLE_FUNCTION
+    + r"""
         $before = Get-DismReclaimableMB
         Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
         $after = Get-DismReclaimableMB

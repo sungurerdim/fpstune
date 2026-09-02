@@ -118,6 +118,13 @@ export const tr: Record<keyof typeof en, string> = {
     "Modemde Wi-Fi güvenliğini AES ile WPA2 veya WPA3 yapın; sonra Windows'ta bu ağı unutup yeniden bağlanın.",
   "finding.wifiSecurity.adviceWpa3":
     "Windows'ta bu ağı unutup yeniden bağlanın; profil WPA3 olarak oluşturulur. Hız aynı kalır, parola çok daha zor kırılır.",
+  "finding.thermal.zoneReads": "termal bölge {celsius}°C gösteriyor",
+  "finding.thermal.noReading": "sıcaklık bildirilmedi",
+  "finding.thermal.notThrottling": "Şu an ısı nedeniyle kısılmıyor; {reading}.",
+  "finding.thermal.throttling":
+    "Ürün yazılımı serin kalmak için hızları düşürüyor; {reading}.",
+  "finding.thermal.advice":
+    "Soğutucu ve fanlardaki tozu temizleyin, üç yıldan eski termal macunu yenileyin.",
   "choice.at_capability": "Bağdaştırıcının en yükseğinde",
   "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
   "choice.good": "İyi",
@@ -125,6 +132,8 @@ export const tr: Record<keyof typeof en, string> = {
   "choice.on_2_4ghz": "2,4 GHz'de",
   "choice.legacy_cipher": "Eski şifre",
   "choice.wpa3_available": "WPA3 mümkün",
+  "choice.not_throttling": "Kısılmıyor",
+  "choice.throttling": "Kısılıyor",
   "badge.risk": "RİSK",
   "badge.note": "NOT",
 

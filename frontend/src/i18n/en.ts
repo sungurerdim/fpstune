@@ -124,6 +124,14 @@ export const en = {
     "In the router, set the Wi-Fi security to WPA2 or WPA3 with AES; then forget this network in Windows and reconnect.",
   "finding.wifiSecurity.adviceWpa3":
     "Forget this network in Windows and reconnect, so the profile is created as WPA3. Speed stays the same; the password becomes far harder to crack.",
+  "finding.thermal.zoneReads": "the thermal zone reads {celsius}°C",
+  "finding.thermal.noReading": "no temperature was reported",
+  "finding.thermal.notThrottling":
+    "Not thermally throttled right now; {reading}.",
+  "finding.thermal.throttling":
+    "The firmware is holding clocks down to stay cool; {reading}.",
+  "finding.thermal.advice":
+    "Clear dust from the heatsinks and fans, and replace thermal paste older than three years.",
   // Advisory values, in words
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",
@@ -132,6 +140,8 @@ export const en = {
   "choice.on_2_4ghz": "On 2.4 GHz",
   "choice.legacy_cipher": "Legacy cipher",
   "choice.wpa3_available": "WPA3 available",
+  "choice.not_throttling": "Not throttling",
+  "choice.throttling": "Throttling",
   "badge.risk": "RISK",
   "badge.note": "NOTE",
 

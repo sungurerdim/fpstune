@@ -637,19 +637,19 @@ export const settingsTr: Record<
     description:
       "Android uygulamaları ve WSL2 için Windows sanallaştırması. Bu özellikler kullanılmıyorsa kapatmak sanallaştırma yükünü kaldırır.",
   },
+  "system:thermal_condition": {
+    name: "Isı nedeniyle hız kısma",
+    description:
+      "Makinenin şu anda serin kalmak için hızından feragat edip etmediği. Kısma, kare hızının maçın kırkıncı dakikasında düşmesinin nedenidir.",
+    effect:
+      "Soğutucu ve fanlardaki tozu temizleyin, üç yıldan eski termal macunu yenileyin",
+  },
   "system:xmp_expo": {
     name: "RAM anma hızı profili (XMP)",
     description:
       "RAM'in anma XMP/EXPO hızında mı yoksa daha yavaş JEDEC varsayılanında mı çalıştığı. Bir BIOS güncellemesi bunu sessizce sıfırlar.",
     effect:
       "BIOS'ta Advanced > DRAM Configuration altında XMP/EXPO profilini Profile 1 veya en yükseği yapın",
-  },
-  "system:thermal_condition": {
-    name: "CPU ısı payı",
-    description:
-      "Sistem termal bölge sıcaklığını okur. 80°C üstünde makine kısılma riskindedir ve 3-5 yılı geçmiş termal macun bunun olağan nedenidir.",
-    effect:
-      "CPU'yu 80°C, GPU'yu 85°C altında tutun: soğutucuları tozdan arındırın ve eski termal macunu yenileyin",
   },
   "system:network_afd_receive_window": {
     name: "Ağ alma arabelleği",

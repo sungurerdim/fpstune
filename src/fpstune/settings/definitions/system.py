@@ -1969,23 +1969,23 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Thermal Condition",
     short_name="CPU thermal headroom",
-    description="Reads the system thermal zone temperature. Above 80°C the machine is at risk of throttling, "
-    "and thermal paste past 3-5 years is the usual cause.",
+    description="Whether the machine is currently giving up clock speed to stay cool. Throttling is how a "
+    "frame rate decays in minute forty of a match, long after any setting was changed.",
     value_type=SettingValueType.CHOICE,
-    choices=("ok", "warning", "critical"),
-    default_value="ok",
-    recommended_value="ok",
+    choices=("not_throttling", "throttling"),
+    default_value="not_throttling",
+    recommended_value="not_throttling",
     requires_reboot=False,
     evidence_level="proven",
     sources=[
-        "https://smoothfps.com/guides/thermal-throttling",
+        "https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-perfformatteddata",
+        "https://learn.microsoft.com/en-us/windows-hardware/design/device-experiences/design-guide-thermal",
     ],
-    current_impact="Unknown: Thermal data not yet read",
-    recommended_impact="OK: Temperatures within safe range, no thermal throttling",
+    current_impact="Throttling: the machine is holding clocks down to stay cool, and frames go with them",
+    recommended_impact="Not throttling: the machine is free to hold its clocks through a whole match",
     scope=SettingScope.COMPLETE,
     category_order=53,
-    effect="Keep the CPU under 80°C and the GPU under 85°C at full load: clean the heatsinks and replace "
-    "old thermal paste",
+    effect="Clear dust from the heatsinks and fans, and replace thermal paste older than three years",
     impact_scores={
         "fps_sustained": "-25 to -50% if throttling",
         "latency_ms": 5,
@@ -1993,18 +1993,41 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     },
     is_readonly=True,
     detect_type=DetectType.POWERSHELL,
+    # Two sources, and a verdict that is a fact rather than an inference.
+    #
+    # MSAcpi_ThermalZoneTemperature is absent on a great many machines — measured
+    # absent on the development laptop — and that used to end the reading. The
+    # performance counter reads the same ACPI zones through a different provider
+    # and answered on that machine (`\_TZ.TZ00` and `\_SB.ECTZ`, both live: three
+    # samples four seconds apart moved 354.2 K, 355.2 K, 354.2 K), so it is the
+    # fallback.
+    #
+    # The verdict comes from ThrottleReasons and PercentPassiveLimit, not from a
+    # temperature threshold, because those two *state* whether the firmware is
+    # holding the machine back. A threshold over a zone temperature would be an
+    # inference about a sensor whose meaning varies by board: the zone above idles
+    # at 81 °C on hardware that is not throttling at all, and a rule that called
+    # that a warning would be wrong on exactly the machine it was read from. The
+    # temperature still travels, as the finding's context, labelled as the zone
+    # reading it is.
     detect_command=(
-        "$tz = Get-CimInstance -Namespace root/wmi "
+        "$acpi = Get-CimInstance -Namespace root/wmi "
         "-ClassName MSAcpi_ThermalZoneTemperature -EA SilentlyContinue "
         "| Sort-Object CurrentTemperature -Descending | Select-Object -First 1; "
-        "if (-not $tz) { "
-        "  Write-Host 'FPSTUNE_WARN: MSAcpi_ThermalZoneTemperature WMI class not found. "
-        "Normal on many desktop systems — ACPI firmware does not expose thermal zones. "
-        "Install HWiNFO64 sensor driver for hardware temperature monitoring.'; "
-        "  'not_available' "
-        "} else { "
-        "  $c = [math]::Round(($tz.CurrentTemperature / 10) - 273.15, 0); "
-        "  if ($c -gt 90) { 'critical' } elseif ($c -gt 80) { 'warning' } else { 'ok' } "
+        "$perf = Get-CimInstance "
+        "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA SilentlyContinue "
+        "| Sort-Object HighPrecisionTemperature -Descending | Select-Object -First 1; "
+        "$celsius = $null; "
+        "if ($acpi) { $celsius = [math]::Round(($acpi.CurrentTemperature / 10) - 273.15, 0) } "
+        "elseif ($perf -and $perf.HighPrecisionTemperature) { "
+        "  $celsius = [math]::Round(($perf.HighPrecisionTemperature / 10) - 273.15, 0) } "
+        "$throttling = $null; "
+        "if ($perf) { $throttling = ($perf.ThrottleReasons -ne 0) -or ($perf.PercentPassiveLimit -lt 100) } "
+        "if ($null -eq $celsius -and $null -eq $throttling) { 'not_available' } else { "
+        "  $zone = if ($perf) { $perf.Name } elseif ($acpi) { $acpi.InstanceName } else { '' }; "
+        "  Write-Output ('FPSTUNE_FINDING: ' + (@{kind='thermal'; celsius=$celsius; "
+        "throttling=$throttling; zone=$zone} | ConvertTo-Json -Compress)); "
+        "  if ($throttling -eq $true) { 'throttling' } else { 'not_throttling' } "
         "}"
     ),
     detect_args={},

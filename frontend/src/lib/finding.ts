@@ -111,6 +111,25 @@ function wifiSecurity(
   return { summary: t("finding.wifiSecurity.good", params), advice: "" };
 }
 
+function thermal(finding: Record<string, unknown>): FindingText | null {
+  const throttling = finding.throttling;
+  if (typeof throttling !== "boolean") return null;
+  const celsius = num(finding.celsius);
+  // The temperature is context, not the verdict: an ACPI zone's meaning varies
+  // by board, so it is reported as the zone reading it is and never turned into
+  // a threshold. The verdict is what the firmware itself says.
+  const reading =
+    celsius === null
+      ? t("finding.thermal.noReading")
+      : t("finding.thermal.zoneReads", { celsius });
+  return throttling
+    ? {
+        summary: t("finding.thermal.throttling", { reading }),
+        advice: t("finding.thermal.advice"),
+      }
+    : { summary: t("finding.thermal.notThrottling", { reading }), advice: "" };
+}
+
 /** The finding's sentence(s) for this setting, or null when it carries none. */
 export function describeFinding(setting: Setting): FindingText | null {
   const finding = setting.finding;
@@ -122,6 +141,8 @@ export function describeFinding(setting: Setting): FindingText | null {
       return wifiLink(finding, setting.currentValue);
     case "wifi_security":
       return wifiSecurity(finding, setting.currentValue);
+    case "thermal":
+      return thermal(finding);
     default:
       return null;
   }
@@ -141,6 +162,8 @@ const CHOICE_KEYS: Record<string, MessageKey> = {
   on_2_4ghz: "choice.on_2_4ghz",
   legacy_cipher: "choice.legacy_cipher",
   wpa3_available: "choice.wpa3_available",
+  not_throttling: "choice.not_throttling",
+  throttling: "choice.throttling",
 };
 
 export function advisoryChoiceLabel(value: unknown): string | null {

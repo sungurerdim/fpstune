@@ -620,23 +620,40 @@ ACTION_COMMANDS: dict[str, str] = {
             Write-Output 'DISM cleanup completed (reboot may be required for full reclaim)'
         }
     """,
+    # Two rules this script exists to keep, both learned from cleanup:prefetch
+    # timing out on a real machine (2026-09-02):
+    #
+    # 1. One Remove-Item, not one per file. Enumerate the *top level* and let
+    #    -Recurse take the subtrees: measured here, Temp held 12719 files under
+    #    438 top-level entries, so the per-file loop paid a command dispatch
+    #    thirty times over for nothing.
+    # 2. Report what was freed, not what was found. Temp always holds files a
+    #    running process has open, and those survive the delete — the old script
+    #    counted them as freed anyway. Sizing before and after makes the number
+    #    a measurement (C11). A process writing into Temp between the two passes
+    #    can only make the figure conservative, never inflate it.
     "temp_cleanup": """
-        $paths = @(
-            $env:TEMP,
-            "$env:LOCALAPPDATA\\Temp",
-            "$env:windir\\Temp"
-        )
-        $freed = 0
+        # The user temp variable and the one under local app data name the
+        # same folder on a stock profile, so without this the walk runs
+        # twice for it. Percent-delimited spellings stay out of this comment:
+        # that is fpstune's own placeholder syntax, and the renderer would
+        # read one here as a placeholder nobody supplies.
+        $paths = @($env:TEMP, "$env:LOCALAPPDATA\\Temp", "$env:windir\\Temp") |
+            Where-Object { $_ } |
+            ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd('\\') } |
+            Select-Object -Unique
+        function Get-SizeBytes([string]$dir) {
+            if (-not (Test-Path -LiteralPath $dir)) { return [int64]0 }
+            return [int64](Get-ChildItem -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue |
+                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        }
+        $freed = [int64]0
         foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $files = Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue
-                foreach ($file in $files) {
-                    try {
-                        $freed += $file.Length
-                        Remove-Item -Path $file.FullName -Force -Recurse -ErrorAction SilentlyContinue
-                    } catch { }
-                }
-            }
+            if (-not (Test-Path -LiteralPath $path)) { continue }
+            $before = Get-SizeBytes $path
+            Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+            $freed += $before - (Get-SizeBytes $path)
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,
@@ -861,18 +878,25 @@ ACTION_COMMANDS: dict[str, str] = {
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,
-    # One Remove-Item over the whole folder, not one call per file. The
-    # per-file loop ran past the 30 s apply timeout on a machine with a few
-    # thousand .pf entries (reported 2026-09-02): every iteration paid a cmdlet
-    # dispatch, and what the user saw was a timeout rather than a refusal. The
-    # size is summed first, because after the delete there is nothing to measure.
+    # The report that started all of this: this script called Remove-Item once
+    # per file, and on a machine with a few thousand .pf entries it ran past the
+    # 30 s apply timeout, so the user saw a timeout rather than a refusal and
+    # nothing was cleaned. Same two rules as temp_cleanup above — one piped
+    # Remove-Item, and a freed figure measured before against after, since
+    # Windows keeps some .pf files open and those survive the delete.
     "prefetch_cleanup": """
         $path = "$env:windir\\Prefetch"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = [int64](Get-ChildItem -Path $path -Force -ErrorAction SilentlyContinue |
+        function Get-SizeBytes([string]$dir) {
+            if (-not (Test-Path -LiteralPath $dir)) { return [int64]0 }
+            return [int64](Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue |
                 Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Force -Recurse -ErrorAction SilentlyContinue
+        }
+        $freed = [int64]0
+        if (Test-Path -LiteralPath $path) {
+            $before = Get-SizeBytes $path
+            Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
+                Remove-Item -Force -ErrorAction SilentlyContinue
+            $freed = $before - (Get-SizeBytes $path)
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,
@@ -936,17 +960,28 @@ ACTION_COMMANDS: dict[str, str] = {
         Start-Service -Name dosvc -ErrorAction SilentlyContinue
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,
+    # Only the cache databases, never the folder: Explorer keeps its own state
+    # here. The measured-freed rule matters most on this one — Explorer usually
+    # holds these files open, so the old script reported the full cache size as
+    # freed on runs that deleted nothing at all.
     "thumbnail_cache_cleanup": """
         $path = "$env:LOCALAPPDATA\\Microsoft\\Windows\\Explorer"
-        $freed = 0
-        if (Test-Path $path) {
-            Get-ChildItem -Path $path -Filter "thumbcache_*.db" -Force -ErrorAction SilentlyContinue | ForEach-Object {
-                try { $freed += [int64]$_.Length; Remove-Item -Path $_.FullName -Force -ErrorAction SilentlyContinue } catch { }
-            }
-            $icdb = Join-Path $path "IconCache.db"
-            if (Test-Path $icdb) {
-                try { $freed += [int64](Get-Item $icdb -Force).Length; Remove-Item -Path $icdb -Force -ErrorAction SilentlyContinue } catch { }
-            }
+        # -Filter, not a Where-Object name test: the filesystem provider does the
+        # matching, so this never becomes text matching on output that could be
+        # localized, and the two lists still reach one Remove-Item together.
+        function Get-CacheItems([string]$dir) {
+            if (-not (Test-Path -LiteralPath $dir)) { return @() }
+            return @(Get-ChildItem -LiteralPath $dir -Filter 'thumbcache_*.db' -Force -ErrorAction SilentlyContinue) +
+                @(Get-ChildItem -LiteralPath $dir -Filter 'IconCache.db' -Force -ErrorAction SilentlyContinue)
+        }
+        function Get-CacheBytes([string]$dir) {
+            return [int64](Get-CacheItems $dir | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
+        }
+        $freed = [int64]0
+        if (Test-Path -LiteralPath $path) {
+            $before = Get-CacheBytes $path
+            Get-CacheItems $path | Remove-Item -Force -ErrorAction SilentlyContinue
+            $freed = $before - (Get-CacheBytes $path)
         }
         Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
     """,

@@ -585,6 +585,10 @@ class PowerShellExecutor(BaseExecutor):
         }
         _medium_apply = {
             "service_toggle",
+            # Two recursive sizing passes over %TEMP% measured 2.8 s each on a
+            # folder holding 12719 files, before any deleting — inside 30 s, but
+            # not by enough to leave a bigger Temp or a slower disk any room.
+            "temp_cleanup",
             "hyper_v_only_toggle",
             "vm_platform_toggle",
             "windows_update_cache_cleanup",

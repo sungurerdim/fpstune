@@ -7,6 +7,47 @@ script that uses %placeholder% substitution at execution time.
 
 from __future__ import annotations
 
+# Read and write a config file without changing its byte-level shape.
+#
+# `[System.IO.File]::WriteAllText($p, $t, [System.Text.Encoding]::UTF8)` writes a
+# BOM, because .NET's `Encoding.UTF8` is constructed with
+# `encoderShouldEmitUTF8Identifier: true`. Every writer here used that form, so
+# every BOM-less file fpstune touched came back with three bytes prepended.
+#
+# Measured 2026-08-30: a `line1\nline2\n` file went through that exact call and
+# came back `\xef\xbb\xbfLINE1\nline2\n`. The files this actually happens to are
+# MW3's `options.4.cod23.cst` (no BOM, pure LF) and Steam's `.vdf` files (no
+# BOM) — while HotS's `Variables.txt` and CS2's `autoexec.cfg` do carry one, so
+# unconditionally dropping the BOM would break those instead. Neither constant
+# is right; the file's own answer is.
+#
+# This is the same rule `mw4_config.py` already follows in Python — "the read
+# strips it and the write puts back exactly what was there" — brought to the
+# PowerShell writers that were left behind.
+_CONFIG_IO_HELPERS = r"""
+    function Read-ConfigText([string]$Path) {
+        $bytes = [System.IO.File]::ReadAllBytes($Path)
+        $script:ConfigHadBom = ($bytes.Length -ge 3) -and ($bytes[0] -eq 0xEF) -and
+                               ($bytes[1] -eq 0xBB) -and ($bytes[2] -eq 0xBF)
+        $offset = 0
+        if ($script:ConfigHadBom) { $offset = 3 }
+        return [System.Text.Encoding]::UTF8.GetString($bytes, $offset, $bytes.Length - $offset)
+    }
+    function Write-ConfigText([string]$Path, [string]$Text) {
+        # $ConfigHadBom is set by the matching Read-ConfigText. Defaulting to
+        # $false when it is unset keeps a writer that forgot to read from
+        # inventing a BOM, which is the failure this whole helper exists for.
+        $emitBom = [bool]$script:ConfigHadBom
+        [System.IO.File]::WriteAllText($Path, $Text, (New-Object System.Text.UTF8Encoding($emitBom)))
+    }
+    function Get-ConfigNewline([string]$Text) {
+        # Appending CRLF to a pure-LF file leaves it with two conventions. MW3's
+        # options file is pure LF and the append path used a literal "`r`n".
+        if ($Text -match "`r`n") { return "`r`n" }
+        return "`n"
+    }
+"""
+
 # Shared docker reclaim script. Docker Desktop's WSL2 backend keeps its data in a
 # sparse vhdx that does NOT auto-shrink: `docker system prune` frees space inside
 # the VM, but the host file stays large. To return real disk space we snapshot the
@@ -1206,7 +1247,8 @@ ACTION_COMMANDS: dict[str, str] = {
     #        %cvar_value%  e.g. '1'
     #        %marker%      unique block tag (no spaces) e.g. 'cs2_forcepreload'
     #        %value%       'optimized' (write block) | 'default' (remove block)
-    "cs2_cvar_toggle": r"""
+    "cs2_cvar_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
@@ -1235,22 +1277,23 @@ ACTION_COMMANDS: dict[str, str] = {
         $pat = "(?s)// ===fpstune-${marker}-start===.*?// ===fpstune-${marker}-end===\r?\n?"
         if ($action -eq 'optimized' -or $action -eq 'enabled') {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, $pat, '')
                 $content = $existing.TrimEnd() + "`n`n" + $block
             } else { $content = $block }
-            [System.IO.File]::WriteAllText($cfgPath, $content, [System.Text.Encoding]::UTF8)
+            Write-ConfigText $cfgPath $content
         } else {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, $pat, '')
-                [System.IO.File]::WriteAllText($cfgPath, $existing.TrimEnd(), [System.Text.Encoding]::UTF8)
+                Write-ConfigText $cfgPath $existing.TrimEnd()
             }
         }
         Write-Output 'ok'
     """,
     # CS2 Steam Datagram Relay (SDR) - routes traffic through Valve's network backbone
-    "cs2_sdr_toggle": r"""
+    "cs2_sdr_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
@@ -1278,22 +1321,23 @@ ACTION_COMMANDS: dict[str, str] = {
         $block = "$ms`nnet_client_steamdatagram_enable_override 1`n$me"
         if ($action -eq 'enabled') {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-cs2_sdr-start===.*?// ===fpstune-cs2_sdr-end===\r?\n?', '')
                 $content = $existing.TrimEnd() + "`n`n" + $block
             } else { $content = $block }
-            [System.IO.File]::WriteAllText($cfgPath, $content, [System.Text.Encoding]::UTF8)
+            Write-ConfigText $cfgPath $content
         } else {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-cs2_sdr-start===.*?// ===fpstune-cs2_sdr-end===\r?\n?', '')
-                [System.IO.File]::WriteAllText($cfgPath, $existing.TrimEnd(), [System.Text.Encoding]::UTF8)
+                Write-ConfigText $cfgPath $existing.TrimEnd()
             }
         }
         Write-Output 'ok'
     """,
     # CS2 mm_dedicated_search_maxping - skip servers above this ping to reduce unfair matches
-    "cs2_maxping_toggle": r"""
+    "cs2_maxping_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
@@ -1321,22 +1365,23 @@ ACTION_COMMANDS: dict[str, str] = {
         $block = "$ms`nmm_dedicated_search_maxping 50`n$me"
         if ($action -eq '50ms') {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-cs2_maxping-start===.*?// ===fpstune-cs2_maxping-end===\r?\n?', '')
                 $content = $existing.TrimEnd() + "`n`n" + $block
             } else { $content = $block }
-            [System.IO.File]::WriteAllText($cfgPath, $content, [System.Text.Encoding]::UTF8)
+            Write-ConfigText $cfgPath $content
         } else {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-cs2_maxping-start===.*?// ===fpstune-cs2_maxping-end===\r?\n?', '')
-                [System.IO.File]::WriteAllText($cfgPath, $existing.TrimEnd(), [System.Text.Encoding]::UTF8)
+                Write-ConfigText $cfgPath $existing.TrimEnd()
             }
         }
         Write-Output 'ok'
     """,
     # MW3 texture streaming config - sets HTTPStreamLimitMBytes to 0 in gamerprofile
-    "mw3_texture_toggle": r"""
+    "mw3_texture_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $docPath = [System.Environment]::GetFolderPath('MyDocuments')
         $action = '%value%'
         if ($action -eq 'not_installed') { Write-Output 'not_installed'; exit 0 }
@@ -1358,7 +1403,7 @@ ACTION_COMMANDS: dict[str, str] = {
         if ($attr -band [System.IO.FileAttributes]::ReadOnly) {
             Set-ItemProperty -Path $cfgFile -Name Attributes -Value ($attr -band (-bnot [System.IO.FileAttributes]::ReadOnly))
         }
-        $c = [System.IO.File]::ReadAllText($cfgFile, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $cfgFile
         # MW3 writes gamerprofile in TWO shapes, and which one a machine has
         # depends on the profile, not on the game version: measured on one install,
         # one account's gamerprofile.0.BASE.cst uses `Key@0 = value` for all 60
@@ -1382,7 +1427,7 @@ ACTION_COMMANDS: dict[str, str] = {
             $c = [regex]::Replace($c, $gate, "`${1}$gateVal")
         }
 
-        [System.IO.File]::WriteAllText($cfgFile, $c, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $cfgFile $c
         Write-Output $action
     """,
     # MW3 NAT firewall rules - opens required ports for Open NAT
@@ -1443,7 +1488,8 @@ ACTION_COMMANDS: dict[str, str] = {
     # Key format: "KeyName:version.platform" e.g. "WorldStreamingQuality:0.0"
     # If the key is absent (game has never written it), the toggle APPENDS it
     # so the next launch picks up the recommended value instead of failing.
-    "mw3_options_toggle": r"""
+    "mw3_options_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $docPath = [System.Environment]::GetFolderPath('MyDocuments')
         $optPath = Join-Path $docPath 'Call of Duty MWIII\players\options.4.cod23.cst'
         if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; exit 0 }
@@ -1460,7 +1506,7 @@ ACTION_COMMANDS: dict[str, str] = {
             Set-ItemProperty -Path $optPath -Name Attributes -Value ($startAttrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
         }
 
-        $c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $optPath
         # Strip version suffix (e.g. "DisplayMode:0.0" -> "DisplayMode") so we match
         # any version the game writes (0.0, 1.0, etc.) — avoids spurious appends when
         # the game uses a different version number than our apply_args key.
@@ -1474,11 +1520,14 @@ ACTION_COMMANDS: dict[str, str] = {
             $newContent = [regex]::Replace($c, "(?m)(^\s*$escapedName`:[0-9.]+\s*=\s*`")[^`"]*`"", "`${1}$newVal`"")
             if ($newContent -eq $c) { Write-Output 'unchanged'; exit 0 }
         } else {
-            $appendBlock = "`r`n// fpstune-appended`r`n$key = `"$newVal`"`r`n"
+            # The file's own line ending, not a literal CRLF: options.4.cod23.cst
+            # is pure LF, and appending CRLF left it carrying both conventions.
+            $nl = Get-ConfigNewline $c
+            $appendBlock = "$nl// fpstune-appended$nl$key = `"$newVal`"$nl"
             $newContent = $c.TrimEnd() + $appendBlock
             $resultTag = 'ok_appended'
         }
-        [System.IO.File]::WriteAllText($optPath, $newContent, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $optPath $newContent
         Write-Output $resultTag
     """,
     # Heroes of the Storm Variables.txt - plain key=value, one per line.
@@ -1493,7 +1542,8 @@ ACTION_COMMANDS: dict[str, str] = {
     # earlier release and the game then could not persist any setting at all;
     # HotS rewrites Variables.txt on exit the same way, so a lock here would
     # freeze every graphics option the player changes in-game.
-    "hots_variable_set": r"""
+    "hots_variable_set": _CONFIG_IO_HELPERS
+    + r"""
         $docPath = [System.Environment]::GetFolderPath('MyDocuments')
         $varPath = Join-Path $docPath 'Heroes of the Storm\Variables.txt'
         if (-not (Test-Path $varPath)) { Write-Output 'not_installed'; exit 0 }
@@ -1506,7 +1556,7 @@ ACTION_COMMANDS: dict[str, str] = {
             Set-ItemProperty -Path $varPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
         }
 
-        $c = [System.IO.File]::ReadAllText($varPath, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $varPath
         $escapedName = [regex]::Escape($key)
         # ^ anchored so 'shadows' cannot match inside 'localShadows', and the
         # optional [n] is part of the key rather than part of the value.
@@ -1516,16 +1566,18 @@ ACTION_COMMANDS: dict[str, str] = {
             $newContent = [regex]::Replace($c, "(?mi)^([ \t]*$escapedName(?:\[\d+\])?[ \t]*=[ \t]*).*$", "`${1}$newVal")
             if ($newContent -eq $c) { Write-Output 'unchanged'; exit 0 }
         } else {
-            $newContent = $c.TrimEnd() + "`r`n$key=$newVal`r`n"
+            $nl = Get-ConfigNewline $c
+            $newContent = $c.TrimEnd() + "$nl$key=$newVal$nl"
             $resultTag = 'ok_appended'
         }
-        [System.IO.File]::WriteAllText($varPath, $newContent, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $varPath $newContent
         Write-Output $resultTag
     """,
     # MW3 pause-rendering compound - PauseRenderingEnabled and
     # SustainabilityPauseRendering both stop rendering on focus loss, so writing
     # only one leaves the behaviour switched on by the other.
-    "mw3_pause_rendering_toggle": r"""
+    "mw3_pause_rendering_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $docPath = [System.Environment]::GetFolderPath('MyDocuments')
         $optPath = Join-Path $docPath 'Call of Duty MWIII\players\options.4.cod23.cst'
         if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; exit 0 }
@@ -1538,7 +1590,7 @@ ACTION_COMMANDS: dict[str, str] = {
             Set-ItemProperty -Path $optPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
         }
 
-        $c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $optPath
         $written = 0
         foreach ($k in @('PauseRenderingEnabled', 'SustainabilityPauseRendering')) {
             $pattern = "(?m)(^\s*$k`:[0-9.]+\s*=\s*`")[^`"]*`""
@@ -1548,11 +1600,12 @@ ACTION_COMMANDS: dict[str, str] = {
             }
         }
         if ($written -eq 0) { Write-Output 'not_installed'; exit 0 }
-        [System.IO.File]::WriteAllText($optPath, $c, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $optPath $c
         Write-Output $newVal
     """,
     # CS2 fps_max toggle - uncaps frame rate for maximum performance
-    "cs2_fps_max_toggle": r"""
+    "cs2_fps_max_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
@@ -1581,18 +1634,18 @@ ACTION_COMMANDS: dict[str, str] = {
         $block = "$marker_start`nfps_max 0`n$marker_end"
         if ($action -eq 'uncapped') {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-fps_max-start===.*?// ===fpstune-fps_max-end===\r?\n?', '')
                 $content = $existing.TrimEnd() + "`n`n" + $block
             } else {
                 $content = $block
             }
-            [System.IO.File]::WriteAllText($cfgPath, $content, [System.Text.Encoding]::UTF8)
+            Write-ConfigText $cfgPath $content
         } else {
             if (Test-Path $cfgPath) {
-                $existing = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+                $existing = Read-ConfigText $cfgPath
                 $existing = [regex]::Replace($existing, '(?s)// ===fpstune-fps_max-start===.*?// ===fpstune-fps_max-end===\r?\n?', '')
-                [System.IO.File]::WriteAllText($cfgPath, $existing.TrimEnd(), [System.Text.Encoding]::UTF8)
+                Write-ConfigText $cfgPath $existing.TrimEnd()
             }
         }
         Write-Output 'ok'
@@ -1609,25 +1662,27 @@ ACTION_COMMANDS: dict[str, str] = {
         }
     """,
     # Steam config.vdf toggle - modifies global Steam config
-    "steam_config_vdf_toggle": r"""
+    "steam_config_vdf_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
         $vdfPath = Join-Path $sp 'config\config.vdf'
         if (-not (Test-Path $vdfPath)) { Write-Output 'not_installed'; exit 0 }
         $key = '%key%'; $newVal = '%value%'
-        $c = [System.IO.File]::ReadAllText($vdfPath, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $vdfPath
         $escaped = [regex]::Escape($key)
         if ($c -match ('"' + $escaped + '"')) {
             $c = [regex]::Replace($c, '("' + $escaped + '"\s+)"[^"]*"', "`$1`"$newVal`"")
         } else {
             $c = [regex]::Replace($c, '("Steam"\s*\n\s*\{)', "`$1`n`t`t`t`t`"$key`"`t`t`t`"$newVal`"")
         }
-        [System.IO.File]::WriteAllText($vdfPath, $c, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $vdfPath $c
         Write-Output 'ok'
     """,
     # Steam localconfig.vdf toggle - modifies per-user Steam config (most-recent user)
-    "steam_localconfig_vdf_toggle": r"""
+    "steam_localconfig_vdf_toggle": _CONFIG_IO_HELPERS
+    + r"""
         $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
         if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
         if (-not $sp) { Write-Output 'not_installed'; exit 0 }
@@ -1635,14 +1690,14 @@ ACTION_COMMANDS: dict[str, str] = {
                 Sort-Object LastWriteTime -Descending | Select-Object -First 1
         if (-not $lcfg) { Write-Output 'not_installed'; exit 0 }
         $key = '%key%'; $newVal = '%value%'
-        $c = [System.IO.File]::ReadAllText($lcfg.FullName, [System.Text.Encoding]::UTF8)
+        $c = Read-ConfigText $lcfg.FullName
         $escaped = [regex]::Escape($key)
         if ($c -match ('"' + $escaped + '"')) {
             $c = [regex]::Replace($c, '("' + $escaped + '"\s+)"[^"]*"', "`$1`"$newVal`"")
         } else {
             $c = [regex]::Replace($c, '("system"\s*\n\s*\{)', "`$1`n`t`t`t`"$key`"`t`t`t`"$newVal`"")
         }
-        [System.IO.File]::WriteAllText($lcfg.FullName, $c, [System.Text.Encoding]::UTF8)
+        Write-ConfigText $lcfg.FullName $c
         Write-Output 'ok'
     """,
     # Battle.net JSON config toggle - modifies Battle.net.config JSON

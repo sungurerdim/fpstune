@@ -45,7 +45,7 @@ class TestTheRuleIsWrittenDown:
 
     def test_claude_md_carries_the_fifth_consequence(self) -> None:
         text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
-        assert "Five consequences" in text, "the consequence list lost its own count"
+        assert "Six consequences" in text, "the consequence list lost its own count"
         assert "information and decoration" in text
 
     def test_it_puts_frames_first_and_makes_raising_the_exception(self) -> None:

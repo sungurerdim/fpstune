@@ -140,7 +140,8 @@ class StorageDriveInfo(BaseModel):
     media_type: str  # SSD, HDD
     size_gb: int
     free_gb: int | None = None
-    trim_enabled: bool = False
+    # None: not an SSD, or the registry could not be read — never shown as off.
+    trim_enabled: bool | None = None
     bus_type: str | None = None  # NVMe, SATA, etc.
     unique_id: str = ""  # EUI-64 for NVMe, serial for SATA (hardware-stable ID)
 

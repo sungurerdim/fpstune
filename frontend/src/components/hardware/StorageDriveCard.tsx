@@ -1,6 +1,12 @@
 import { useT } from "../../i18n";
 import { useMutation } from "@tanstack/react-query";
-import { CheckCircle2, RefreshCw, Sparkles, XCircle } from "lucide-react";
+import {
+  CheckCircle2,
+  HelpCircle,
+  RefreshCw,
+  Sparkles,
+  XCircle,
+} from "lucide-react";
 import { useState } from "react";
 import { api, type StorageDriveInfo } from "../../lib/api";
 import { createLogger } from "../../lib/logger";
@@ -40,8 +46,7 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
 
   const actionLabel =
     drive.media_type === "SSD" ? t("storage.retrim") : t("storage.defrag");
-  const canOptimize =
-    drive.media_type === "SSD" || drive.media_type === "HDD";
+  const canOptimize = drive.media_type === "SSD" || drive.media_type === "HDD";
 
   return (
     <div className="pl-3 border-l-2 border-border">
@@ -64,7 +69,13 @@ export function StorageDriveCard({ drive }: { drive: StorageDriveInfo }) {
         {drive.media_type === "SSD" && (
           <span className="ml-1">
             • TRIM:{" "}
-            {drive.trim_enabled ? (
+            {drive.trim_enabled === null ? (
+              <HelpCircle
+                className="w-3 h-3 inline text-muted-foreground"
+                role="img"
+                aria-label={t("storage.trimUnknown")}
+              />
+            ) : drive.trim_enabled ? (
               <CheckCircle2 className="w-3 h-3 inline text-success" />
             ) : (
               <XCircle className="w-3 h-3 inline text-warning" />

@@ -269,6 +269,7 @@ export const tr: Record<keyof typeof en, string> = {
   // Storage card
   "storage.retrim": "Retrim",
   "storage.defrag": "Birleştir",
+  "storage.trimUnknown": "TRIM durumu okunamadı",
   "storage.running": "{action} çalışıyor…",
   // Time distance (formatAge)
   "age.justNow": "az önce",
@@ -307,10 +308,8 @@ export const tr: Record<keyof typeof en, string> = {
   "headroom.tierUnknown": "Ölçülmedi",
   "headroom.tierUnknownMeaning":
     "Bu oyun için henüz bir ölçüm yok ve sessizlik kanıt değildir — bu yüzden kare hızına mal olan hiçbir şey önerilmeyecek.",
-  "headroom.gpuBound":
-    "GPU'ya bağlı — kareler grafik ayarlarında saklı",
-  "headroom.cpuBound":
-    "CPU'ya bağlı — grafik ayarları bunu pek değiştirmez",
+  "headroom.gpuBound": "GPU'ya bağlı — kareler grafik ayarlarında saklı",
+  "headroom.cpuBound": "CPU'ya bağlı — grafik ayarları bunu pek değiştirmez",
   "headroom.bothBound":
     "İki taraf da doymuş — tek başına grafik ayarları farkı kapatmaz",
 
@@ -327,7 +326,8 @@ export const tr: Record<keyof typeof en, string> = {
   "suite.measureAgain": "Tekrar ölç ve karşılaştır",
   "suite.measureThis": "Bu makineyi ölç",
   "suite.startOver": "Baştan başla",
-  "suite.selectionSummary": "{total} araçtan {selected} seçili · {repeats} tekrar",
+  "suite.selectionSummary":
+    "{total} araçtan {selected} seçili · {repeats} tekrar",
   "suite.before": "Önce",
   "suite.after": "Sonra",
   "suite.notMeasuredYet": "Henüz ölçülmedi",
@@ -335,14 +335,14 @@ export const tr: Record<keyof typeof en, string> = {
   "suite.notInRunAll": "(\u201ctümünü çalıştır\u201d kapsamında değil)",
   "suite.measuringBench": "{bench} ölçülüyor…",
   "suite.startingRun": "{label} koşusu başlatılıyor…",
-  "suite.minRepeats": "{min} veya daha fazla — tek okumanın gürültü tabanı olmaz",
+  "suite.minRepeats":
+    "{min} veya daha fazla — tek okumanın gürültü tabanı olmaz",
   "suite.notCompared": "Karşılaştırılmadı",
   "suite.metric": "Metrik",
   "suite.change": "Değişim",
   "suite.verdict": "Karar",
   "suite.withinNoise": "gürültü içinde (±{noise}{unit})",
-  "suite.deltaBarLabel":
-    "{metric}: bu gruptaki en büyüğe göre %{pct} değişim",
+  "suite.deltaBarLabel": "{metric}: bu gruptaki en büyüğe göre %{pct} değişim",
   "suite.otherMeasurements": "Diğer ölçümler",
   "suiteCat.latency": "Gecikme",
   "suiteCat.fps": "Kare hızı",

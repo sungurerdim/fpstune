@@ -130,7 +130,8 @@ export const en = {
   "home.advisories": "Needs your attention",
   "home.advisoriesHint": "findings fpstune can detect but only you can change",
   "home.advisoriesClear": "Checked, nothing to change",
-  "home.advisoriesClearHint": "hardware fpstune checked and found already correct",
+  "home.advisoriesClearHint":
+    "hardware fpstune checked and found already correct",
   "home.alreadyOptimized": "Already optimized",
   "home.detecting":
     "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",
@@ -225,7 +226,8 @@ export const en = {
   "devices.reading": "Reading tweaks…",
   "devices.showIdeal": "Show tweaks already ideal",
   "devices.hideIdeal": "Hide tweaks already ideal",
-  "devices.advisoryHint": "fpstune cannot change these — each row says where to.",
+  "devices.advisoryHint":
+    "fpstune cannot change these — each row says where to.",
   "devices.fix": "Fix",
   "devices.advancedBadge": "ADV",
 
@@ -275,6 +277,7 @@ export const en = {
   // Storage card
   "storage.retrim": "Retrim",
   "storage.defrag": "Defrag",
+  "storage.trimUnknown": "TRIM state could not be read",
   "storage.running": "{action} running…",
 
   // Time distance (formatAge)
@@ -437,7 +440,8 @@ export const en = {
   "tooltip.provenDetail": "Proven: 3+ independent sources",
   "tooltip.experimentalDetail":
     "Experimental: safe but unproven on modern systems",
-  "tooltip.monitorOnly": "FPSTune cannot apply this automatically — monitor only.",
+  "tooltip.monitorOnly":
+    "FPSTune cannot apply this automatically — monitor only.",
   "tooltip.sources": "Sources:",
   "tooltip.requiresRestart": "Requires system restart",
 

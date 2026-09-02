@@ -39,7 +39,7 @@ export interface StorageDriveInfo {
   media_type: string;
   size_gb: number;
   free_gb?: number;
-  trim_enabled: boolean;
+  trim_enabled: boolean | null; // null: not an SSD, or the registry could not be read
   bus_type?: string; // NVMe, SATA, etc.
 }
 
@@ -266,7 +266,8 @@ function postEventStream(
       }
       onDone?.();
     } catch (err) {
-      if ((err as Error).name !== "AbortError") log.error(`${label} error`, err);
+      if ((err as Error).name !== "AbortError")
+        log.error(`${label} error`, err);
     }
   })();
   return () => controller.abort();
@@ -290,8 +291,9 @@ export const api = {
     }>(
       `/audio/device/${encodeURIComponent(deviceId)}/loudness-eq?enabled=${enabled}`,
       {
-      method: "POST",
-    }),
+        method: "POST",
+      },
+    ),
 
   // Audio device enable/disable toggle
   setAudioDeviceEnabled: (deviceId: string, enabled: boolean) =>
@@ -303,8 +305,9 @@ export const api = {
     }>(
       `/audio/device/${encodeURIComponent(deviceId)}/enabled?enabled=${enabled}`,
       {
-      method: "POST",
-    }),
+        method: "POST",
+      },
+    ),
 
   // Display/Monitor settings
   setDisplayToAuto: (displayIndex: number) =>
@@ -352,9 +355,12 @@ export const api = {
     fetchJson<PowerProfileStatus>("/power-profile/status"),
 
   activatePowerProfile: () =>
-    fetchJson<{ success: boolean; message: string }>("/power-profile/activate", {
-      method: "POST",
-    }),
+    fetchJson<{ success: boolean; message: string }>(
+      "/power-profile/activate",
+      {
+        method: "POST",
+      },
+    ),
 
   revertPowerProfile: () =>
     fetchJson<{ success: boolean; message: string }>("/power-profile/revert", {
@@ -501,8 +507,7 @@ export const settingsApi = {
    * Get all setting definitions (instant, no detection)
    * Use this for initial store population
    */
-  getDefinitions: () =>
-    fetchJson<SettingDefinition[]>("/settings/definitions"),
+  getDefinitions: () => fetchJson<SettingDefinition[]>("/settings/definitions"),
 
   /**
    * Detect multiple settings in parallel (single request, no polling)

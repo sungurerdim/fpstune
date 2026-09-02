@@ -158,10 +158,10 @@ CONGESTION_PROVIDER = SettingExecutor(
         "try { "
         "$setting = Get-NetTCPSetting -SettingName Internet -ErrorAction Stop; "
         "if ($setting.CongestionProvider) { $setting.CongestionProvider } else { 'CUBIC' } "
-        "} catch { "
-        "$netsh = netsh int tcp show global 2>$null | Select-String 'Congestion'; "
-        "if ($netsh -match 'ctcp') { 'CTCP' } elseif ($netsh -match 'cubic') { 'CUBIC' } else { 'CUBIC' } "
-        "}"
+        # No netsh fallback: its labels are localized, and answering CUBIC when the
+        # read failed reported a value nothing had read (A11). The sentinel says
+        # "could not answer" and the setting is shown as not applicable.
+        "} catch { 'not_available' }"
     ),
     detect_args={},
     value_map={},  # Direct pass-through

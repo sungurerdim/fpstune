@@ -282,9 +282,16 @@ def run_powershell(
         On failure, output contains error message.
     """
     from fpstune.utils.debug import debug_powershell
+    from fpstune.utils.winapi.session import redirect_hkcu
 
     if sys.platform != "win32":
         return False, "PowerShell is only available on Windows"
+
+    # `HKCU:` means the person at the keyboard, not the elevated token's owner.
+    # Rewritten here, in the one runner, so every shipped script — executors,
+    # batches, hardware inventory — addresses the same hive the winreg
+    # executor does (see winapi.session).
+    command = redirect_hkcu(command)
 
     try:
         # Prefix command with UTF-8 encoding for international Windows

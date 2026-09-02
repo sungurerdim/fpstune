@@ -71,11 +71,13 @@ def _registry_key_exists(root: str, path: str) -> bool:
     try:
         import winreg
 
-        hive = winreg.HKEY_LOCAL_MACHINE if root == "HKLM" else winreg.HKEY_CURRENT_USER
+        from fpstune.utils.winapi.session import registry_root
+
+        hive, full_path = registry_root(root, path)
         access = winreg.KEY_READ
         if root == "HKLM":
             access |= winreg.KEY_WOW64_64KEY
-        with winreg.OpenKey(hive, path, 0, access):
+        with winreg.OpenKey(hive, full_path, 0, access):
             return True
     except FileNotFoundError:
         return False
@@ -120,7 +122,10 @@ def _wsl_distributions() -> VirtualizationConsumer | None:
     try:
         import winreg
 
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _WSL_DISTRIBUTIONS_KEY) as key:
+        from fpstune.utils.winapi.session import registry_root
+
+        root, key_path = registry_root("HKCU", _WSL_DISTRIBUTIONS_KEY)
+        with winreg.OpenKey(root, key_path) as key:
             count = winreg.QueryInfoKey(key)[0]
     except FileNotFoundError:
         return None

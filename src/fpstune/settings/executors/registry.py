@@ -6,6 +6,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.utils.winapi.session import registry_root
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -22,28 +23,6 @@ def _access(base: int) -> int:
     import winreg
 
     return base | winreg.KEY_WOW64_64KEY
-
-
-def _root_and_path(hive: str, path: str) -> tuple[int, str]:
-    """The winreg root and full subkey for a setting's hive.
-
-    ``HKLM`` is what it says. ``HKCU`` is *the person at the keyboard*: fpstune
-    runs elevated, and when a standard user elevates with an administrator's
-    credentials the process token is the administrator's, so
-    ``HKEY_CURRENT_USER`` would be the wrong account. ``winapi.session``
-    resolves the console user once; when it is someone else and their hive is
-    loaded, per-user keys go under ``HKEY_USERS\\<SID>``.
-    """
-    import winreg
-
-    from fpstune.utils.winapi.session import user_hive
-
-    if hive == "HKLM":
-        return winreg.HKEY_LOCAL_MACHINE, path
-    target = user_hive()
-    if target.root == "HKU":
-        return winreg.HKEY_USERS, target.path(path)
-    return winreg.HKEY_CURRENT_USER, path
 
 
 class RegistryExecutor(BaseExecutor):
@@ -79,7 +58,7 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey, target_path = _root_and_path(hive, path)
+            hkey, target_path = registry_root(hive, path)
 
             with winreg.OpenKey(hkey, target_path, 0, _access(winreg.KEY_READ)) as key:
                 value, reg_type = winreg.QueryValueEx(key, name)
@@ -157,7 +136,7 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey, target_path = _root_and_path(hive, path)
+            hkey, target_path = registry_root(hive, path)
 
             # Map type string to winreg constant
             reg_type_map = {
@@ -188,7 +167,7 @@ class RegistryExecutor(BaseExecutor):
         try:
             import winreg
 
-            hkey, target_path = _root_and_path(hive, path)
+            hkey, target_path = registry_root(hive, path)
 
             with winreg.OpenKey(hkey, target_path, 0, _access(winreg.KEY_WRITE)) as key:
                 winreg.DeleteValue(key, name)

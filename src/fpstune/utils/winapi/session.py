@@ -21,6 +21,7 @@ fails on every 64-bit machine, silently.
 from __future__ import annotations
 
 import ctypes
+import re
 import sys
 from ctypes import wintypes
 from dataclasses import dataclass
@@ -234,3 +235,46 @@ def user_hive() -> UserHive:
     process = process_user_sid()
     loaded = bool(interactive) and _hive_is_loaded(interactive or "")
     return resolve_user_hive(process, interactive, loaded)
+
+
+def registry_root(hive: str, path: str) -> tuple[int, str]:
+    """The winreg root and full subkey for a setting's hive.
+
+    ``HKLM`` is what it says. ``HKCU`` is the person at the keyboard: when the
+    console user is someone other than the token's owner and their hive is
+    loaded, per-user keys live under ``HKEY_USERS\\<SID>``. Every winreg reader
+    of a per-user key goes through here — the executor, the Documents-folder
+    lookup, the Docker and WSL probes — so none of them can disagree.
+    """
+    import winreg
+
+    if hive == "HKLM":
+        return winreg.HKEY_LOCAL_MACHINE, path
+    target = user_hive()
+    if target.root == "HKU":
+        return winreg.HKEY_USERS, target.path(path)
+    return winreg.HKEY_CURRENT_USER, path
+
+
+# The drive, however cased, wherever it starts a path: `HKCU:\Software\...` and
+# `'HKCU:\...'` alike. `HKCU` without the colon is not a PowerShell path.
+_HKCU_DRIVE = re.compile(r"\bHKCU:", re.IGNORECASE)
+
+
+def redirect_hkcu(script: str) -> str:
+    """Point a PowerShell script's ``HKCU:`` drive at the console user's hive.
+
+    ``HKCU:`` is bound to the *process token's* user by the Registry provider,
+    so a script that writes there under an administrator's elevation writes the
+    administrator's hive. The Registry provider accepts a provider-qualified
+    path to any loaded hive — ``Registry::HKEY_USERS\\<SID>\\Software\\...`` — and
+    that is what the drive is rewritten to when the console user is someone
+    else. Same user, or no console session: the script is returned untouched.
+    """
+    if "HKCU:" not in script.upper():
+        return script
+    target = user_hive()
+    if target.root != "HKU":
+        return script
+    replacement = "Registry::HKEY_USERS\\" + target.prefix.rstrip("\\")
+    return _HKCU_DRIVE.sub(lambda _m: replacement, script)

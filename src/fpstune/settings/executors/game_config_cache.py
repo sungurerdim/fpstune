@@ -70,8 +70,15 @@ def _documents_dir() -> Path | None:
     try:
         import winreg
 
-        key_path = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
+        from fpstune.utils.winapi.session import registry_root
+
+        # The console user's Documents, not the elevated token's: under another
+        # administrator's credentials HKEY_CURRENT_USER is that administrator's
+        # hive, whose Documents folder holds no game config at all.
+        root, key_path = registry_root(
+            "HKCU", r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
+        )
+        with winreg.OpenKey(root, key_path) as key:
             personal, _ = winreg.QueryValueEx(key, "Personal")
         expanded = Path(str(personal))
         if expanded.exists():

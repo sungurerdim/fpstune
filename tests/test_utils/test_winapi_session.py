@@ -60,3 +60,83 @@ class TestTheRealMachine:
             assert hive == UserHive("HKCU", "")
         else:
             assert hive.root in ("HKCU", "HKU")
+
+
+class TestRedirectingPowerShell:
+    """`HKCU:` in a shipped script is rewritten to the console user's hive, or left alone."""
+
+    STEAM = "$val = (Get-ItemProperty -Path 'HKCU:\\Software\\Valve\\Steam' -Name 'x').x"
+
+    def test_another_console_user_gets_a_provider_qualified_path(self, monkeypatch) -> None:
+        monkeypatch.setattr(session, "user_hive", lambda: UserHive("HKU", f"{PLAYER}\\"))
+        out = session.redirect_hkcu(self.STEAM)
+        assert out == (
+            f"$val = (Get-ItemProperty -Path 'Registry::HKEY_USERS\\{PLAYER}\\Software\\Valve\\Steam'"
+            " -Name 'x').x"
+        )
+
+    def test_the_players_own_session_leaves_the_script_untouched(self, monkeypatch) -> None:
+        monkeypatch.setattr(session, "user_hive", lambda: UserHive("HKCU", ""))
+        assert session.redirect_hkcu(self.STEAM) == self.STEAM
+
+    def test_every_spelling_of_the_drive_is_rewritten_and_hklm_is_not(self, monkeypatch) -> None:
+        monkeypatch.setattr(session, "user_hive", lambda: UserHive("HKU", f"{PLAYER}\\"))
+        script = "Test-Path 'hkcu:\\A'; Test-Path 'HKLM:\\B'; $p = 'HKCU:\\C'"
+        out = session.redirect_hkcu(script)
+        assert "HKCU:" not in out.upper().replace("REGISTRY::HKEY_USERS", "")
+        assert "HKLM:\\B" in out
+        assert out.count(f"Registry::HKEY_USERS\\{PLAYER}\\") == 2
+
+    def test_a_script_without_the_drive_never_resolves_the_session(self, monkeypatch) -> None:
+        """Most scripts touch no per-user key; they must not pay for the lookup."""
+
+        def explode() -> UserHive:
+            raise AssertionError("user_hive() resolved for a script without HKCU:")
+
+        monkeypatch.setattr(session, "user_hive", explode)
+        assert session.redirect_hkcu("Get-NetAdapter") == "Get-NetAdapter"
+
+
+class TestTheWinregResolver:
+    def test_hkcu_of_another_console_user_is_hkey_users_plus_sid(self, monkeypatch) -> None:
+        import winreg
+
+        monkeypatch.setattr(session, "user_hive", lambda: UserHive("HKU", f"{PLAYER}\\"))
+        assert session.registry_root("HKCU", r"Software\X") == (
+            winreg.HKEY_USERS,
+            rf"{PLAYER}\Software\X",
+        )
+
+    def test_hklm_never_moves(self, monkeypatch) -> None:
+        import winreg
+
+        monkeypatch.setattr(session, "user_hive", lambda: UserHive("HKU", f"{PLAYER}\\"))
+        assert session.registry_root("HKLM", r"SYSTEM\X") == (
+            winreg.HKEY_LOCAL_MACHINE,
+            r"SYSTEM\X",
+        )
+
+
+@pytest.mark.skipif(sys.platform != "win32", reason="asks the Registry provider on this machine")
+class TestTheProviderAcceptsWhatWeEmit:
+    def test_registry_hkey_users_sid_is_a_path_powershell_resolves(self) -> None:
+        """Read-only: the exact path shape `redirect_hkcu` produces, for this process's
+        own SID, must be one `Test-Path` answers True to — otherwise every redirected
+        script would fail at binding rather than at the wrong hive."""
+        import subprocess
+
+        sid = session.process_user_sid()
+        assert sid is not None
+        result = subprocess.run(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                f"Test-Path 'Registry::HKEY_USERS\\{sid}\\Software'",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
+        )
+        assert result.stdout.strip() == "True", result.stderr

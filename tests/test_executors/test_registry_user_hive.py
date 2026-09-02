@@ -4,8 +4,8 @@ fpstune runs elevated. When a standard user elevates with an administrator's
 password the token is the administrator's, and ``HKEY_CURRENT_USER`` is the
 administrator's hive: Game DVR, mouse acceleration, GPU preferences — every
 per-user tweak — would land in an account the player never uses. The executor
-now asks ``winapi.session`` whose hive HKCU should mean and, when the console
-user is someone else with a loaded hive, opens ``HKEY_USERS\\<SID>\\...``. HKLM is
+asks ``winapi.session`` whose hive HKCU should mean and, when the console user is
+someone else with a loaded hive, opens ``HKEY_USERS\\<SID>\\...``. HKLM is
 untouched by any of this.
 """
 
@@ -17,9 +17,9 @@ from typing import Any
 
 import pytest
 
-from fpstune.settings.executors import registry as registry_module
 from fpstune.settings.executors.registry import RegistryExecutor
 from fpstune.settings.registry import SettingsRegistry
+from fpstune.utils.winapi import session
 from fpstune.utils.winapi.session import UserHive
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="winreg is Windows only")
@@ -59,7 +59,11 @@ class _FakeKey:
 
 @contextmanager
 def _fake_winreg(monkeypatch: pytest.MonkeyPatch, hive: UserHive):
-    """Record every root/path the executor opens, and answer a DWORD 1 on read."""
+    """Record every root/path the executor opens, and answer a DWORD 1 on read.
+
+    Only the session's answer is faked; the resolver the executor ships runs for
+    real, so a test here fails if it stops asking the session at all.
+    """
     import winreg
 
     opened: list[tuple[int, str]] = []
@@ -68,25 +72,12 @@ def _fake_winreg(monkeypatch: pytest.MonkeyPatch, hive: UserHive):
         opened.append((root, path))
         return _FakeKey()
 
-    monkeypatch.setattr(registry_module, "_root_and_path", _real_root_and_path_with(hive))
+    monkeypatch.setattr(session, "user_hive", lambda: hive)
     monkeypatch.setattr(winreg, "OpenKey", open_key)
     monkeypatch.setattr(winreg, "CreateKeyEx", open_key)
     monkeypatch.setattr(winreg, "QueryValueEx", lambda _k, _n: (1, winreg.REG_DWORD))
     monkeypatch.setattr(winreg, "SetValueEx", lambda *_a, **_k: None)
     yield opened
-
-
-def _real_root_and_path_with(hive: UserHive):
-    import winreg
-
-    def resolve(hive_name: str, path: str) -> tuple[int, str]:
-        if hive_name == "HKLM":
-            return winreg.HKEY_LOCAL_MACHINE, path
-        if hive.root == "HKU":
-            return winreg.HKEY_USERS, hive.path(path)
-        return winreg.HKEY_CURRENT_USER, path
-
-    return resolve
 
 
 class TestWhereHkcuGoes:
@@ -120,19 +111,17 @@ class TestWhereHkcuGoes:
 
 class TestTheRealResolver:
     def test_the_shipped_resolver_agrees_with_the_session_module(self) -> None:
-        """Not a fake: the executor's own resolver on this machine, against the
-        decision the session module publishes."""
+        """Not a fake: the resolver on this machine, against the decision the
+        session module publishes."""
         import winreg
 
-        from fpstune.utils.winapi.session import user_hive
-
-        hive = user_hive()
-        root, path = registry_module._root_and_path("HKCU", r"Software\Microsoft\GameBar")
+        hive = session.user_hive()
+        root, path = session.registry_root("HKCU", r"Software\Microsoft\GameBar")
         if hive.root == "HKCU":
             assert (root, path) == (winreg.HKEY_CURRENT_USER, r"Software\Microsoft\GameBar")
         else:
             assert root == winreg.HKEY_USERS and path.startswith("S-1-5-")
-        assert registry_module._root_and_path("HKLM", r"SYSTEM\X") == (
+        assert session.registry_root("HKLM", r"SYSTEM\X") == (
             winreg.HKEY_LOCAL_MACHINE,
             r"SYSTEM\X",
         )

@@ -19,6 +19,7 @@ import statistics
 import subprocess
 import sys
 import zipfile
+from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -37,6 +38,24 @@ from fpstune.utils.logger import get_logger
 # `PresentMonBenchmark.resolve_download()` asks GitHub instead.
 PRESENTMON_RELEASE_API = "https://api.github.com/repos/GameTechDev/PresentMon/releases/latest"
 PRESENTMON_DOWNLOAD_SIZE_MB = 1  # The console build is under a megabyte.
+
+
+# PresentMon's own spellings of the swapchain presentation path, across versions.
+# "Hardware: Independent Flip" is the path a borderless game should be on; a
+# "Composed" mode means the desktop compositor sat between the game and the
+# screen. Shared with the MPO diagnostic, which reads the same column.
+PRESENT_MODE_COLUMNS = ("PresentMode", "presentMode", "Present Mode")
+
+# A frame counts as a stutter above this multiple of the run's average frame time.
+# CapFrameX draws its line at 2.5x; fpstune keeps 2x, decided 2026-09-02: the
+# shorter hitch is the one a player at a high refresh rate feels, and the
+# threshold is a convention either way — what matters is that it is one number,
+# named here, applied to before and after alike.
+STUTTER_THRESHOLD_FACTOR = 2.0
+
+# Two costs within this band of each other cannot be told apart — see
+# `FrameTimeStats.bottleneck`.
+_BOTTLENECK_BAND = 1.1
 
 
 @dataclass
@@ -79,6 +98,10 @@ class FrameTimeStats:
     # Input to photon, when the capture carries it — the number a player feels,
     # as opposed to the frame time they see.
     input_latency_ms: float = 0.0
+    # The presentation path most frames took, verbatim from PresentMon
+    # ("Hardware: Independent Flip", "Composed: Flip", ...). Empty when the
+    # capture carried no PresentMode column. A fact about the run, not a score.
+    present_mode: str = ""
 
     # Raw data for charts
     frametimes: list[float] = field(default_factory=list)
@@ -86,25 +109,38 @@ class FrameTimeStats:
 
     @property
     def bottleneck(self) -> str:
-        """Which side the frame is waiting on: ``gpu``, ``cpu``, ``both`` or ``unknown``.
+        """Which side the frame waited on: ``gpu``, ``cpu`` or ``unknown``.
 
-        The 10% band matters. Two components within a tenth of each other are
-        not "balanced" in the comfortable sense — they are *both* saturated, and
-        relieving one alone moves the frame rate barely at all. Calling that
-        GPU-bound because the GPU is a hair higher would send a user to change
-        settings that cannot help them.
+        The 10% band matters, and inside it the answer is *unknown*, not "both".
+        PresentMon's ``MsCPUBusy`` can equal the frame time on a GPU-bound system
+        (PresentMon issue #222), which makes the two costs read as equal exactly
+        when the GPU is the one to blame. The dev-machine reading that once
+        motivated a "both" verdict — CPU 17.18 ms against GPU 17.33 ms — is that
+        shape. Reporting a side from inside the band would send a user to change
+        settings that cannot help them; reporting nothing is the true statement.
         """
         if self.cpu_busy_ms <= 0 or self.gpu_time_ms <= 0:
             return "unknown"
-        if self.gpu_time_ms > self.cpu_busy_ms * 1.1:
+        if self.gpu_time_ms > self.cpu_busy_ms * _BOTTLENECK_BAND:
             return "gpu"
-        if self.cpu_busy_ms > self.gpu_time_ms * 1.1:
+        if self.cpu_busy_ms > self.gpu_time_ms * _BOTTLENECK_BAND:
             return "cpu"
-        return "both"
+        return "unknown"
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary (without raw data for smaller output)."""
-        return {
+        """Convert to dictionary (without raw data for smaller output).
+
+        Three keys are conditional, and the condition is the instrument's own
+        evidence rather than a default value. ``fps_gpu_bound`` / ``fps_cpu_bound``
+        exist only when the capture established that side, so a claim about a
+        GPU-bound frame rate is never judged against a run that was not one;
+        ``input_latency_ms`` exists only when PresentMon reported input-to-photon
+        (it needs ``--track_input``), so a 0.0 default can never read as a
+        measured zero; ``present_mode`` exists only when the column was there.
+        `verify_round` falls through to *unmeasured* on an absent key, which is
+        the verdict a missing reading deserves.
+        """
+        payload: dict[str, Any] = {
             "frame_count": self.frame_count,
             "duration_seconds": round(self.duration_seconds, 2),
             "fps_avg": round(self.fps_avg, 2),
@@ -122,9 +158,17 @@ class FrameTimeStats:
             "cpu_busy_ms": round(self.cpu_busy_ms, 3),
             "gpu_time_ms": round(self.gpu_time_ms, 3),
             "gpu_wait_ms": round(self.gpu_wait_ms, 3),
-            "input_latency_ms": round(self.input_latency_ms, 3),
             "bottleneck": self.bottleneck,
         }
+        if self.input_latency_ms > 0:
+            payload["input_latency_ms"] = round(self.input_latency_ms, 3)
+        if self.bottleneck == "gpu":
+            payload["fps_gpu_bound"] = round(self.fps_avg, 2)
+        if self.bottleneck == "cpu":
+            payload["fps_cpu_bound"] = round(self.fps_avg, 2)
+        if self.present_mode:
+            payload["present_mode"] = self.present_mode
+        return payload
 
 
 @dataclass
@@ -617,6 +661,7 @@ class PresentMonBenchmark:
             "gpu_wait": [],
             "input_latency": [],
         }
+        present_modes: Counter[str] = Counter()
         breakdown_columns = {
             "cpu_busy": ("MsCPUBusy", "msCPUBusy"),
             "gpu_time": ("MsGPUTime", "msGPUTime", "MsGPUBusy"),
@@ -660,6 +705,12 @@ class PresentMonBenchmark:
                             if value is not None:
                                 breakdown[key].append(value)
 
+                        for column in PRESENT_MODE_COLUMNS:
+                            mode = (row.get(column) or "").strip()
+                            if mode:
+                                present_modes[mode] += 1
+                                break
+
                         # Get timestamp if available
                         for tcol in ["TimeInSeconds", "Time", "TimeInMs"]:
                             if tcol in row:
@@ -676,19 +727,22 @@ class PresentMonBenchmark:
         if not frametimes:
             return None
 
-        return self._calculate_stats(frametimes, timestamps, breakdown)
+        return self._calculate_stats(frametimes, timestamps, breakdown, present_modes)
 
     def _calculate_stats(
         self,
         frametimes: list[float],
         timestamps: list[float],
         breakdown: dict[str, list[float]] | None = None,
+        present_modes: Counter[str] | None = None,
     ) -> FrameTimeStats:
         """Calculate statistics from frame time data.
 
         Args:
             frametimes: List of frame times in milliseconds.
             timestamps: List of timestamps (optional).
+            breakdown: Per-frame CPU/GPU/input costs, where the capture had them.
+            present_modes: How many frames took each presentation path.
 
         Returns:
             FrameTimeStats with calculated values.
@@ -697,6 +751,8 @@ class PresentMonBenchmark:
         stats.frametimes = frametimes
         stats.timestamps = timestamps
         stats.frame_count = len(frametimes)
+        if present_modes:
+            stats.present_mode = present_modes.most_common(1)[0][0]
 
         # Where the frame time went. Averages rather than medians so a run with
         # a few very expensive frames reports the cost it actually paid — the
@@ -751,8 +807,8 @@ class PresentMonBenchmark:
             low_01_percent = sorted_fps[: max(1, idx_01)]
             stats.fps_0_1_percent_low = statistics.mean(low_01_percent)
 
-        # Stutter detection (frames > 2x average)
-        stutter_threshold = stats.frametime_avg * 2
+        # Stutter detection: frames above the named multiple of the average.
+        stutter_threshold = stats.frametime_avg * STUTTER_THRESHOLD_FACTOR
         stats.stutter_count = sum(1 for ft in frametimes if ft > stutter_threshold)
         stats.stutter_percent = (stats.stutter_count / len(frametimes)) * 100
 
@@ -871,6 +927,11 @@ class PresentMonBenchmark:
             frametime_99th=stats_data.get("frametime_99th", 0),
             stutter_count=stats_data.get("stutter_count", 0),
             stutter_percent=stats_data.get("stutter_percent", 0),
+            cpu_busy_ms=stats_data.get("cpu_busy_ms", 0.0),
+            gpu_time_ms=stats_data.get("gpu_time_ms", 0.0),
+            gpu_wait_ms=stats_data.get("gpu_wait_ms", 0.0),
+            input_latency_ms=stats_data.get("input_latency_ms", 0.0),
+            present_mode=stats_data.get("present_mode", ""),
         )
 
         return BenchmarkCapture(

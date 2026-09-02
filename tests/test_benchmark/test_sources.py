@@ -46,7 +46,14 @@ def _emitted_keys(source_name: str) -> set[str]:
     if source_name == "presentmon":
         from fpstune.benchmark.presentmon import FrameTimeStats
 
-        return set(FrameTimeStats().to_dict())
+        # Three keys are gated on the run's own evidence (#74), so the union of
+        # a GPU-bound and a CPU-bound run with input tracked is what the source
+        # can ever see; a bare FrameTimeStats() emits none of them.
+        gpu_bound = FrameTimeStats(
+            fps_avg=60.0, cpu_busy_ms=8.0, gpu_time_ms=16.0, input_latency_ms=20.0
+        )
+        cpu_bound = FrameTimeStats(fps_avg=60.0, cpu_busy_ms=16.0, gpu_time_ms=8.0)
+        return set(gpu_bound.to_dict()) | set(cpu_bound.to_dict())
     if source_name == "network":
         from fpstune.benchmark.network import LatencyStats
 
@@ -257,19 +264,22 @@ class TestAgainstTheRealRegistry:
     def test_the_shipped_coverage_is_reported_rather_than_assumed(self) -> None:
         """A record of where this actually stands, that fails if it collapses.
 
-        Not a target — the honest number today is low, and the point of the
-        module is that it says so. What this catches is the mapping breaking
-        wholesale, which would otherwise show up as a report full of "not
-        checked" that nobody reads as a regression.
+        Not a target. The honest number was low until PresentMon's bottleneck
+        split landed (#74): `fps_gpu_bound` is the registry's most-claimed metric,
+        so the day it became measurable the balance flipped. What this catches is
+        the mapping breaking wholesale, which would otherwise show up as a report
+        full of "not checked" that nobody reads as a regression.
         """
         settings = SettingsRegistry(discover_dynamic=False).get_all()
         result = coverage(settings)
 
         assert result.total > 300, f"only {result.total} claims found in the registry"
         assert result.measurable, "nothing in the registry is measurable at all"
-        assert len(result.unmeasurable) > len(result.measurable), (
-            "most claims are expected to be unmeasurable in this build; if that "
-            "has changed, the summary wording should change with it"
+        measurable_metrics = {claim.metric for claim, _ in result.measurable}
+        assert {"fps", "fps_gpu_bound", "fps_cpu_bound"} <= measurable_metrics
+        assert len(result.measurable) > len(result.unmeasurable), (
+            "most claims are measurable since #74; a flip back means an instrument "
+            "mapping broke wholesale, not that the registry changed"
         )
 
 
@@ -311,7 +321,7 @@ class TestAQualitativeClaimIsNotAGap:
         result = coverage(
             [
                 _setting("t:1", privacy="improved"),
-                _setting("t:2", fps_gpu_bound="+5%"),
+                _setting("t:2", vram_mb=-200.0),
             ]
         )
 

@@ -58,6 +58,7 @@ _LOWER_IS_BETTER: frozenset[str] = frozenset(
         "matchmaking_s",
         "boot_time_s",
         "input_lag_ms",
+        "input_latency_ms",
         "frame_time_ms",
         "stutter_count",
         "dpc_latency_us",

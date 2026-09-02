@@ -23,6 +23,7 @@ from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 
+from fpstune.benchmark.presentmon import PRESENT_MODE_COLUMNS
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -31,8 +32,6 @@ logger = get_logger()
 # normalised string rather than an exact value because the column's spelling has
 # changed across PresentMon versions ("Hardware Composed: Independent Flip").
 _MPO_MARKER = "hardware composed"
-
-_PRESENT_MODE_COLUMNS = ("PresentMode", "presentMode", "Present Mode")
 
 
 @dataclass(frozen=True)
@@ -81,7 +80,7 @@ def read_capture(capture_file: Path) -> MpoObservation:
         with open(capture_file, newline="", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             column = next(
-                (c for c in _PRESENT_MODE_COLUMNS if reader.fieldnames and c in reader.fieldnames),
+                (c for c in PRESENT_MODE_COLUMNS if reader.fieldnames and c in reader.fieldnames),
                 None,
             )
             if column is None:

@@ -321,6 +321,7 @@ export const en = {
   "headroom.cpuBound": "CPU-bound — graphics settings will not move this much",
   "headroom.bothBound":
     "Both sides saturated — graphics settings alone will not close the gap",
+  "headroom.presentMode": "Present mode: {mode}",
 
   // Benchmarks tab
   "bench.measure": "Measure",

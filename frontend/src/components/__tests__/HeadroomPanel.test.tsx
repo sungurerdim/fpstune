@@ -47,6 +47,7 @@ function game(overrides: Partial<GameHeadroom> = {}): GameHeadroom {
     cpu_busy_ms: null,
     gpu_time_ms: null,
     input_latency_ms: null,
+    present_mode: null,
     measured_at: null,
     ...overrides,
   };
@@ -145,6 +146,25 @@ describe("HeadroomPanel with a measurement", () => {
     render(<HeadroomPanel />);
 
     expect(await screen.findByText(/36.4 at the 1% low/)).toBeInTheDocument();
+  });
+
+  it("shows PresentMon's present mode verbatim, as a fact and not a score", async () => {
+    mocked.list.mockResolvedValue({
+      poll_interval_seconds: 60,
+      games: [game({ ...MEASURED, present_mode: "Hardware: Independent Flip" })],
+    });
+    render(<HeadroomPanel />);
+
+    expect(
+      await screen.findByText("Present mode: Hardware: Independent Flip"),
+    ).toBeInTheDocument();
+  });
+
+  it("says nothing about the present mode when the capture had none", async () => {
+    render(<HeadroomPanel />);
+
+    await screen.findByText("57.4");
+    expect(screen.queryByText(/Present mode/)).not.toBeInTheDocument();
   });
 });
 

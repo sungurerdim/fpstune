@@ -312,6 +312,7 @@ export const tr: Record<keyof typeof en, string> = {
   "headroom.cpuBound": "CPU'ya bağlı — grafik ayarları bunu pek değiştirmez",
   "headroom.bothBound":
     "İki taraf da doymuş — tek başına grafik ayarları farkı kapatmaz",
+  "headroom.presentMode": "Sunum modu: {mode}",
 
   // Benchmarks tab
   "bench.measure": "Ölç",

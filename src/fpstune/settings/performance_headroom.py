@@ -124,6 +124,10 @@ class PerformanceHeadroom:
     cpu_busy_ms: float | None = None
     gpu_time_ms: float | None = None
     input_latency_ms: float | None = None
+    # PresentMon's PresentMode for most frames of the run — the one observable
+    # that proves a borderless game is flipping rather than being composed. A
+    # fact the panel shows verbatim; nothing scores it.
+    present_mode: str | None = None
 
     @property
     def achievement(self) -> float | None:
@@ -225,6 +229,7 @@ def read_headroom(game: str, now: float | None = None) -> PerformanceHeadroom:
         cpu_busy_ms=number("cpu_busy_ms"),
         gpu_time_ms=number("gpu_time_ms"),
         input_latency_ms=number("input_latency_ms"),
+        present_mode=str(entry["present_mode"]) if entry.get("present_mode") else None,
     )
 
 
@@ -239,6 +244,7 @@ def record_headroom(
     cpu_busy_ms: float | None = None,
     gpu_time_ms: float | None = None,
     input_latency_ms: float | None = None,
+    present_mode: str | None = None,
 ) -> bool:
     """Store one game's measurement. Returns whether it was written.
 
@@ -261,6 +267,7 @@ def record_headroom(
         "cpu_busy_ms": round(float(cpu_busy_ms), 3) if cpu_busy_ms else None,
         "gpu_time_ms": round(float(gpu_time_ms), 3) if gpu_time_ms else None,
         "input_latency_ms": round(float(input_latency_ms), 3) if input_latency_ms else None,
+        "present_mode": present_mode or None,
     }
 
     try:
@@ -398,4 +405,5 @@ def probe_running_game(
         cpu_busy_ms=stats.cpu_busy_ms or None,
         gpu_time_ms=stats.gpu_time_ms or None,
         input_latency_ms=stats.input_latency_ms or None,
+        present_mode=stats.present_mode or None,
     ), reason

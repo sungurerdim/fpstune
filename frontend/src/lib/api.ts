@@ -916,6 +916,8 @@ export interface GameHeadroom {
   cpu_busy_ms: number | null;
   gpu_time_ms: number | null;
   input_latency_ms: number | null;
+  /** PresentMon's PresentMode for most frames; a fact, shown verbatim. */
+  present_mode: string | null;
   measured_at: number | null;
 }
 

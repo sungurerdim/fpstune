@@ -140,6 +140,14 @@ function GameRow({ game }: { game: GameHeadroom }) {
               {t(bottleneckKey)}
             </p>
           )}
+          {/* PresentMon's own word for the path frames took to the screen. It
+              is the one observable that proves a borderless game is flipping
+              rather than being composed, so it is shown as a fact, unscored. */}
+          {game.present_mode && (
+            <p className="text-sm text-muted-foreground mt-1">
+              {t("headroom.presentMode", { mode: game.present_mode })}
+            </p>
+          )}
           <p className="text-xs text-muted-foreground mt-1">
             {t("headroom.measuredAgo", { age: formatAge(game.measured_at) })}
           </p>

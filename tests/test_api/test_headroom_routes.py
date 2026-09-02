@@ -84,6 +84,7 @@ class TestTheReadIsAlwaysAnswerable:
             bottleneck="both",
             cpu_busy_ms=17.18,
             gpu_time_ms=17.33,
+            present_mode="Hardware: Independent Flip",
         )
 
         games = {g["game"]: g for g in client.get("/api/benchmark/headroom").json()["games"]}
@@ -97,6 +98,8 @@ class TestTheReadIsAlwaysAnswerable:
         assert mw4["achievement_percent"] == 19
         assert mw4["tier"] == "critical"
         assert mw4["bottleneck"] == "both"
+        assert mw4["present_mode"] == "Hardware: Independent Flip"
+        assert games["mw3"]["present_mode"] is None
         assert games["mw3"]["is_measured"] is False
 
     def test_the_percentage_is_computed_here_not_in_the_browser(self, client: TestClient) -> None:

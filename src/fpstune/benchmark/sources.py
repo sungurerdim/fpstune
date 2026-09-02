@@ -28,9 +28,9 @@ compared. That one *is* a to-do: the number exists, it just was not written.
 scored as a gain in either direction. The setting still works; the number is
 just not the kind you compare.
 
-*No instrument.* `fps_gpu_bound` is a perfectly measurable quantity that nothing
-in this build separates from `fps`. That one is a to-do, not a fact about the
-setting, and it should read as a to-do.
+*No instrument.* `vram_mb` is a perfectly measurable quantity that nothing in
+this build samples. That one is a to-do, not a fact about the setting, and it
+should read as a to-do.
 
 The order those are checked in is the whole point. Ask "did somebody forget a
 number" first and a privacy claim answers yes, joining a queue it can never
@@ -79,8 +79,16 @@ SOURCES: tuple[Source, ...] = (
             "fps_1_percent_low": "fps_1_percent_low",
             "frame_time_ms": "frametime_avg",
             "stutter_count": "stutter_count",
+            # Gated keys (#74): PresentMon emits `fps_gpu_bound` only from a run
+            # it found GPU-bound, `fps_cpu_bound` only from a CPU-bound one, and
+            # `input_latency_ms` only when it tracked input-to-photon. A capture
+            # that established none of that has no such key, and the claim is
+            # reported unmeasured rather than judged against the wrong run.
+            "fps_gpu_bound": "fps_gpu_bound",
+            "fps_cpu_bound": "fps_cpu_bound",
+            "input_latency_ms": "input_latency_ms",
         },
-        units={"frame_time_ms": "ms"},
+        units={"frame_time_ms": "ms", "input_latency_ms": "ms"},
     ),
     Source(
         name="network",
@@ -157,7 +165,7 @@ SOURCES: tuple[Source, ...] = (
 # any of these would mean building an instrument for "is the player able to tell
 # where that sound came from". They are real claims, they are why several
 # settings exist, and the only wrong thing that can be done with them is to file
-# them beside `fps_gpu_bound` on a list headed "not measured yet".
+# them beside `vram_mb` on a list headed "not measured yet".
 #
 # The bar for adding one is that no measurement could settle it *in principle*.
 # "Nothing here measures it" is `NO_INSTRUMENT`; "it takes years" is
@@ -183,8 +191,6 @@ NOT_JUDGEABLE: dict[str, str] = {
 # Listed explicitly so the gap is a decision on the record rather than an absence
 # nobody notices — and so that adding an instrument means deleting a line here.
 NO_INSTRUMENT: dict[str, str] = {
-    "fps_gpu_bound": "nothing here separates a GPU-bound frame rate from an overall one",
-    "fps_cpu_bound": "nothing here separates a CPU-bound frame rate from an overall one",
     "fps_sustained": "needs a long run under sustained load, which no benchmark here does",
     "fps_retained": "needs a long run under sustained load, which no benchmark here does",
     "cpu_usage": "no sampler for process CPU time",

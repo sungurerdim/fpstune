@@ -304,6 +304,7 @@ class TestTheBottleneckIsCarriedSeparately:
             cpu_busy_ms=17.177,
             gpu_time_ms=17.328,
             input_latency_ms=18.828,
+            present_mode="Hardware: Independent Flip",
         )
 
         h = read_headroom("mw4")
@@ -311,6 +312,7 @@ class TestTheBottleneckIsCarriedSeparately:
         assert h.cpu_busy_ms == 17.177
         assert h.gpu_time_ms == 17.328
         assert h.input_latency_ms == 18.828
+        assert h.present_mode == "Hardware: Independent Flip"
 
     def test_an_old_record_without_it_still_reads(self, state_dir) -> None:
         """A measurement taken before the breakdown existed is still a valid
@@ -325,6 +327,7 @@ class TestTheBottleneckIsCarriedSeparately:
         assert h.has_headroom is True
         assert h.bottleneck == "unknown"
         assert h.cpu_busy_ms is None
+        assert h.present_mode is None
 
     @pytest.mark.usefixtures("state_dir")
     def test_the_bottleneck_does_not_decide_whether_quality_is_affordable(self) -> None:

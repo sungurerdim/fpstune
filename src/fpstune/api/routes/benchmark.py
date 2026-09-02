@@ -112,6 +112,7 @@ def _headroom_payload(game: str, headroom: PerformanceHeadroom, is_running: bool
         "cpu_busy_ms": headroom.cpu_busy_ms,
         "gpu_time_ms": headroom.gpu_time_ms,
         "input_latency_ms": headroom.input_latency_ms,
+        "present_mode": headroom.present_mode,
         "measured_at": headroom.measured_at,
     }
 

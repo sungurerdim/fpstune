@@ -24,7 +24,9 @@ it would turn every wording improvement into a test failure.
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from pathlib import Path
+from typing import Any
 
 import pytest
 
@@ -388,6 +390,75 @@ class TestB6NoAssumedDeviceCapability:
                     )
 
         assert not problems, "\n".join(problems)
+
+
+class TestC3TooltipCopy:
+    """C3: every tooltip is short, plain and complete.
+
+    A description is one or two sentences and fits a tooltip at a glance;
+    the ``effect`` line is the one move in active voice, no trailing period;
+    the two impact fields open with the state they describe. The caps were set
+    on 2026-09-02 from the registry's own distribution (median description 152
+    characters, median effect 61): they hold the copy where it already was
+    and keep the 79 outliers from coming back.
+    """
+
+    DESCRIPTION_MAX_CHARS = 200
+    DESCRIPTION_MAX_SENTENCES = 2
+    EFFECT_MAX_CHARS = 120
+
+    @staticmethod
+    def _sentences(text: str) -> int:
+        # A terminator followed by a capital, a quote or the end; "2.5 Gbps"
+        # and "e.g." do not split a sentence.
+        return len(re.findall(r'[.!?](?=\s+[A-Z"(]|$)', text.strip()))
+
+    def _offenders(self, check: Callable[[Any], bool]) -> list[str]:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        return sorted(s.id for s in get_all_static_settings() if check(s))
+
+    def test_a_description_is_at_most_two_sentences_ending_in_a_period(self) -> None:
+        offenders = self._offenders(
+            lambda s: (
+                not s.description.rstrip().endswith(".")
+                or self._sentences(s.description) > self.DESCRIPTION_MAX_SENTENCES
+            )
+        )
+        assert not offenders, "C3: descriptions that are not 1-2 sentences ending in '.': " + (
+            ", ".join(offenders)
+        )
+
+    def test_a_description_fits_a_tooltip(self) -> None:
+        offenders = self._offenders(lambda s: len(s.description) > self.DESCRIPTION_MAX_CHARS)
+        assert not offenders, (
+            f"C3: descriptions over {self.DESCRIPTION_MAX_CHARS} characters: "
+            + ", ".join(offenders)
+        )
+
+    def test_an_effect_is_one_short_active_phrase(self) -> None:
+        offenders = self._offenders(
+            lambda s: (
+                not (s.effect or "").strip()
+                or (s.effect or "").rstrip().endswith(".")
+                or len(s.effect or "") > self.EFFECT_MAX_CHARS
+            )
+        )
+        assert not offenders, (
+            f"C3: effects that are empty, end in '.', or exceed {self.EFFECT_MAX_CHARS} characters: "
+            + ", ".join(offenders)
+        )
+
+    def test_impact_fields_open_with_the_state_they_describe(self) -> None:
+        form = re.compile(r"^[^:]{1,60}: \S")
+        offenders = self._offenders(
+            lambda s: (
+                not form.match(s.current_impact or "") or not form.match(s.recommended_impact or "")
+            )
+        )
+        assert not offenders, "C3: impact fields not in 'State: consequence' form: " + ", ".join(
+            offenders
+        )
 
 
 class TestF4CopyRegister:

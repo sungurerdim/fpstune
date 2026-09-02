@@ -64,7 +64,7 @@ TCP_AUTO_TUNING = SettingExecutor(
         "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
     ],
     current_impact="Normal: Windows dynamically adjusts TCP window → balanced performance",
-    recommended_impact="Normal is optimal for both speed and latency",
+    recommended_impact="Normal: the receive window scales with the link, best for both speed and latency",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for TCP performance
     category_order=1,  # Primary TCP setting
     effect="Enables dynamic TCP window sizing for optimal throughput",
@@ -146,8 +146,8 @@ CONGESTION_PROVIDER = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
     ],
-    current_impact="Determines how TCP responds to network congestion",
-    recommended_impact="CUBIC is the most optimized algorithm for modern networks",
+    current_impact="Default: TCP backs off on congestion with the stock algorithm",
+    recommended_impact="CUBIC: the congestion algorithm tuned for modern high-bandwidth links",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for congestion handling
     category_order=3,  # Congestion algorithm
     effect="Optimizes TCP congestion handling for better network performance",
@@ -188,7 +188,7 @@ RECEIVE_SIDE_SCALING = SettingExecutor(
     default_value="enabled",
     recommended_value="enabled",
     requires_reboot=False,
-    current_impact="Distributes network load across CPU cores → better parallel processing",
+    current_impact="Enabled: incoming traffic is spread across CPU cores",
     recommended_impact="Keep enabled: Multi-core utilization for higher network performance",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for multi-core
     category_order=4,  # Multi-core network processing
@@ -650,9 +650,8 @@ DNS_SECURITY = SettingExecutor(
     # recommending Quad9, because the recommendation moved and the label did not.
     display_name="Secure DNS (Quad9)",
     short_name="Secure DNS",
-    description="Which resolver answers name lookups, and whether malware and phishing domains "
-    "are blocked before they resolve. Quad9 filters those domains; none of the resolvers offered "
-    "here sends the client-subnet hint a game CDN uses to pick a nearer download edge.",
+    description="Which resolver answers name lookups. Quad9 blocks malware and phishing domains, and none of "
+    "the resolvers offered here sends the client-subnet hint a game CDN uses.",
     value_type=SettingValueType.CHOICE,
     choices=("isp", "cloudflare", "cloudflare_security", "cloudflare_family", "quad9"),
     default_value="isp",
@@ -1198,7 +1197,8 @@ DNS_LOCAL_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Local Cache Priority (LocalPriority)",
     short_name="Local Priority",
-    description="Local resolver cache lookup priority. Lower = checked earlier. Optimized: 4 (default: 499).",
+    description="Where the local resolver cache sits in the name lookup order, lower being checked earlier. "
+    "Optimized 4, Windows default 499.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1238,7 +1238,8 @@ DNS_HOSTS_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Hosts File Priority (HostsPriority)",
     short_name="Hosts Priority",
-    description="Hosts file lookup priority. Lower = checked earlier. Optimized: 5 (default: 500).",
+    description="Where the hosts file sits in the name lookup order, lower being checked earlier. Optimized "
+    "5, Windows default 500.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1278,7 +1279,8 @@ DNS_QUERY_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="DNS Server Query Priority (DnsPriority)",
     short_name="DNS Priority",
-    description="DNS server query priority. Lower = queried earlier. Optimized: 6 (default: 2000).",
+    description="Where the DNS server query sits in the name lookup order, lower being queried earlier. "
+    "Optimized 6, Windows default 2000.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
@@ -1318,7 +1320,8 @@ DNS_NETBT_PRIORITY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="NetBIOS Name Resolution Priority (NetbtPriority)",
     short_name="NetBT Priority",
-    description="NetBIOS resolution priority. Lower = queried earlier. Optimized: 7 (default: 2001).",
+    description="Where NetBIOS resolution sits in the name lookup order, lower being queried earlier. "
+    "Optimized 7, Windows default 2001.",
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",

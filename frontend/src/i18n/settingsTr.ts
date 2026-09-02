@@ -19,7 +19,7 @@ export const settingsTr: Record<
   "power:power_throttling": {
     name: "CPU güç kısması",
     description:
-      "Windows, arka plan saydığı işlemleri güç tasarrufu için kısar; dizüstünde buna oyunun ses, shader derleme ve hile koruması gibi yan işlemleri de girebilir. Kapatmak bu iş parçacıklarını tam hızda tutar.",
+      "Windows arka plan saydığı işlemleri kısar; dizüstünde buna oyunun sesi, shader derlemesi ve hile koruması girebilir. Kapalı, bu iş parçacıklarını tam hızda tutar.",
   },
   "power:cpu_boost": {
     name: "CPU hızlanma davranışı",
@@ -44,7 +44,7 @@ export const settingsTr: Record<
   "power:cpu_decrease_policy": {
     name: "CPU'nun yavaşlama biçimi",
     description:
-      "Frekans düşürülürken kullanılan algoritma. Rocket anında düşer; Ideal kademeli iner. Rocket, gerektiğinde daha hızlı geri yükselmeye izin verir.",
+      "CPU saatini nasıl düşürdüğü. Rocket anında iner ve yük dönünce en hızlı geri çıkar; Ideal kademeli iner.",
   },
   "power:cpu_epp": {
     name: "Performans-pil dengesi",
@@ -74,7 +74,7 @@ export const settingsTr: Record<
   "power:cpu_decrease_time": {
     name: "Yavaşlama gecikmesi",
     description:
-      "CPU'nun düşük saat hızına inmesi için üst üste kaç boş yük kontrolü gerektiği. Varsayılan 1'de, iki kare arasındaki tek sessiz aralık bile bir sonraki karenin geri ödemek zorunda kalacağı bir yavaşlamayı başlatır.",
+      "Saat düşmeden önce üst üste kaç boş yük kontrolü gerektiği. Varsayılan 1'de iki kare arasındaki tek sessiz aralık bile sonraki karenin geri ödediği bir yavaşlamayı başlatır.",
   },
   "power:cpu_increase_time": {
     name: "Hızlanma gecikmesi",
@@ -84,7 +84,7 @@ export const settingsTr: Record<
   "power:cpu_latency_hint_unpark": {
     name: "Ani yük için ek çekirdek",
     description:
-      "Windows tepki süresine duyarlı bir iş yükü algıladığı anda geri açtığı çekirdek payı. Boştaki çekirdek park etmeyi güvenli kılan budur: çekirdekler dinlenebilir, ama oyun hepsini teker teker değil bir anda geri alır.",
+      "Tepkiye duyarlı bir iş yükü belirdiği anda Windows'un geri açtığı park edilmiş çekirdek payı. Çekirdek park etmeyi güvenli kılan budur: oyun hepsini bir anda geri alır.",
   },
   "power:cpu_latency_hint_perf": {
     name: "Ani yük için ek hız",
@@ -94,7 +94,7 @@ export const settingsTr: Record<
   "power:cpu_parking_increase_policy": {
     name: "Çekirdeklerin uyanma biçimi",
     description:
-      "Yük arttığında Windows'un park edilmiş çekirdeklerden kaçını geri getirdiği. Hepsini birden uyandırmak gerektikleri anda hiçbir şeye mal olmaz ve maç yüklenirken teker teker uyanmanın basamak etkisini önler.",
+      "Yük artınca Windows'un park edilmiş çekirdeklerden kaçını geri getirdiği. Hepsini birden uyandırmak bir şeye mal olmaz ve teker teker uyanmanın basamak etkisini önler.",
   },
   "power:cpu_parking_increase_time": {
     name: "Çekirdek uyanma gecikmesi",
@@ -250,7 +250,7 @@ export const settingsTr: Record<
   "network:dns_security": {
     name: "Güvenli DNS",
     description:
-      "Alan adı sorgularını hangi çözümleyicinin yanıtladığını ve zararlı ile oltalama alanlarının daha çözümlenmeden engellenip engellenmediğini belirler. Quad9 bu alanları süzer; burada sunulan çözümleyicilerin hiçbiri oyun CDN'inin daha yakın indirme sunucusu seçmesini sağlayan istemci-alt-ağ ipucunu göndermez.",
+      "Alan adı sorgularını hangi çözümleyicinin yanıtladığı. Quad9 zararlı ve oltalama alanlarını engeller; buradaki hiçbir çözümleyici oyun CDN'inin kullandığı istemci-alt-ağ ipucunu göndermez.",
   },
   "network:dns_over_https": {
     name: "HTTPS üzerinden DNS",
@@ -260,22 +260,22 @@ export const settingsTr: Record<
   "network:dns_local_priority": {
     name: "Yerel DNS önbellek önceliği",
     description:
-      "Yerel çözümleyici önbelleğinin arama önceliği. Düşük değer daha önce bakılması demektir. İyileştirilmiş: 4 (varsayılan: 499).",
+      "Yerel çözümleyici önbelleğinin ad çözümleme sırasındaki yeri; düşük değer daha erken bakılması demektir. İyileştirilmiş 4, Windows varsayılanı 499.",
   },
   "network:dns_hosts_priority": {
     name: "Hosts dosyası önceliği",
     description:
-      "Hosts dosyasının arama önceliği. Düşük değer daha önce bakılması demektir. İyileştirilmiş: 5 (varsayılan: 500).",
+      "Hosts dosyasının ad çözümleme sırasındaki yeri; düşük değer daha erken bakılması demektir. İyileştirilmiş 5, Windows varsayılanı 500.",
   },
   "network:dns_query_priority": {
     name: "DNS sorgu önceliği",
     description:
-      "DNS sunucusu sorgu önceliği. Düşük değer daha önce sorulması demektir. İyileştirilmiş: 6 (varsayılan: 2000).",
+      "DNS sunucusu sorgusunun ad çözümleme sırasındaki yeri; düşük değer daha erken sorulması demektir. İyileştirilmiş 6, Windows varsayılanı 2000.",
   },
   "network:dns_netbt_priority": {
     name: "NetBIOS çözümleme önceliği",
     description:
-      "NetBIOS çözümleme önceliği. Düşük değer daha önce sorulması demektir. İyileştirilmiş: 7 (varsayılan: 2001).",
+      "NetBIOS çözümlemenin ad çözümleme sırasındaki yeri; düşük değer daha erken sorulması demektir. İyileştirilmiş 7, Windows varsayılanı 2001.",
   },
   "network:qos_bandwidth": {
     name: "QoS bant genişliği payı",
@@ -355,7 +355,7 @@ export const settingsTr: Record<
   "gpu-nvidia:threaded_opt": {
     name: "Sürücü çoklu iş parçacığı",
     description:
-      "GPU sürücüsünün çoklu iş parçacığı kullanımı. Auto kararı sürücüye bırakır (en güvenlisi). On, OpenGL'de takılmaya yol açabilir.",
+      "Sürücünün kendi işini iş parçacıklarına dağıtıp dağıtmadığı. Auto kararı sürücüye bırakır; zorla açmak OpenGL oyunlarında takılmaya yol açabilir.",
   },
   "gpu-nvidia:shader_cache": {
     name: "Shader önbelleği",
@@ -371,6 +371,8 @@ export const settingsTr: Record<
     name: "G-Sync",
     description:
       "NVIDIA Denetim Masası'nın G-SYNC kapsamını yansıtan değişken yenileme hızı modu. 'on' pencereli ve kenarlıksızın yanında tam ekranı da kapsar. G-Sync/FreeSync uyumlu monitör gerektirir.",
+    effect:
+      "Uyumlu monitörde yırtılmasız oyun için değişken yenileme hızını açar",
   },
   "gpu-nvidia:fps_limit": {
     name: "Kare hızı sınırı",
@@ -395,7 +397,7 @@ export const settingsTr: Record<
   "gpu-nvidia:ogl_thread_opt": {
     name: "OpenGL iş parçacığı",
     description:
-      "Çok iş parçacıklı OpenGL. Auto kararı sürücüye bırakır (en güvenlisi). Çoğu oyun OpenGL değil DirectX kullanır.",
+      "Sürücünün OpenGL işini iş parçacıklarına dağıtıp dağıtmadığı. Auto kararı sürücüye bırakır ve çoğu oyun OpenGL değil DirectX kullanır.",
   },
   "gpu-nvidia:cuda_force_p2": {
     name: "CUDA bellek saati sınırı",
@@ -405,27 +407,31 @@ export const settingsTr: Record<
   "gpu-nvidia:max_prerendered": {
     name: "Önceden kuyruklanan kareler",
     description:
-      "CPU'nun önceden hazırladığı kare kuyruğunun derinliği. Düşük değerler giriş gecikmesini azaltır ama aktarımı düşürebilir. İnce ayar için Düşük Gecikme Modu ile birlikte çalışır.",
+      "CPU'nun GPU'nun önüne kaç kare kuyruklayabileceği. Az olması giriş gecikmesini düşürür, aktarımdan biraz verir ve Düşük Gecikme Modu ile birlikte çalışır.",
   },
   "gpu-nvidia:triple_buffer": {
     name: "Üçlü arabellek",
     description:
-      "V-Sync için üçüncü bir kare arabelleği ekler. V-Sync açıkken akıcılığı artırabilir ama gecikme ekler. Rekabetçi oyunda kapalı tutun.",
+      "V-Sync için üçüncü bir kare arabelleği ekler. Akıcılığı artırır ama bir kare gecikme ekler, bu yüzden rekabetçi oyunda kapalı kalır.",
   },
   "gpu-nvidia:vrr_app_override": {
     name: "Uygulama bazlı G-Sync",
     description:
-      "Uygulama başına G-Sync/VRR geçersiz kılma. Sürücü varsayılanı genel ayarı uygular. Force on, kenarlıksız pencereli oyunlarda G-Sync'i garantiler.",
+      "Uygulama başına G-Sync geçersiz kılma. Sürücü varsayılanı genel ayarı uygular; zorla açmak kenarlıksız pencereli oyunlarda G-Sync'i etkin tutar.",
   },
   "gpu-nvidia:fan_curve": {
     name: "GPU fan eğrisi",
     description:
-      "GPU çekirdek ile bellek sıcak nokta sıcaklığını karşılaştırır. Sıcak nokta çekirdeği 20°C'den fazla aşıyorsa fan eğrisi fazla pasif olabilir. MSI Afterburner'dan ayarlayın.",
+      "GPU sıcak nokta sıcaklığını çekirdekle karşılaştırır. Sıcak nokta çekirdeği 20°C'den fazla aşıyorsa fan eğrisi bu kart için fazla pasiftir.",
+    effect:
+      "MSI Afterburner veya GPU Tweak'te çekirdeği 60°C, sıcak noktayı 70°C altında tutan bir fan eğrisi kurun",
   },
   "gpu-nvidia:battery_boost": {
     name: "Pilde kare sınırı",
     description:
       "NVIDIA App'in dizüstü pildeyken oyunları 30 FPS civarında tutup tutamayacağı. Sınır bir hata değil bir özellik; ama maçın ortasında kimsenin istemediği bir tavandır.",
+    effect:
+      "Pili harcamayı yeğliyorsanız NVIDIA App'te Graphics altından Battery Boost'u kapatın",
   },
   "gpu-amd:anti_lag": {
     name: "Anti-Lag",
@@ -445,7 +451,7 @@ export const settingsTr: Record<
   "gpu-amd:radeon_boost": {
     name: "Radeon Boost",
     description:
-      "Kamera hızlı hareket ederken render çözünürlüğünü düşürür ve görüntü durulunca geri yükler, böylece %5-15 daha fazla kare verir. Bedeli tam hedef takibi anında ödenir: fazladan kareler, en çok gerektiği anda netlik karşılığında alınır.",
+      "Kamera hızlı hareket ederken render çözünürlüğünü düşürür, görüntü durulunca geri yükler; %5-15 kare kazandırır. Netlik tam hedef takibi sırasında kaybedilir.",
   },
   "gpu-amd:enhanced_sync": {
     name: "Enhanced Sync",
@@ -460,12 +466,14 @@ export const settingsTr: Record<
   "gpu-amd:frtc": {
     name: "Kare hızı sınırı (FRTC)",
     description:
-      "AMD GPU'lar için genel FPS sınırı. Etkinken oyun ayarlarından bağımsız azami FPS'i sınırlar. Sınırsız performans için kapatın.",
+      "AMD GPU'lar için sürücü genelinde kare sınırı, oyun ayarlarından bağımsız uygulanır. Kapalı, performansı sınırsız bırakır.",
   },
   "gpu-hardware:resizable_bar": {
     name: "Resizable BAR",
     description:
-      "CPU'nun GPU belleğinin tamamına erişmesini sağlayan PCIe özelliği. BIOS'tan açılır (Resizable BAR + Above 4G Decoding). NVIDIA sürücü düzeyinde sessizce kapatabilir.",
+      "CPU'nun GPU belleğinin tamamını bir kerede adreslemesini sağlar; BIOS'ta Resizable BAR ve Above 4G Decoding olarak açılır. NVIDIA sürücü düzeyinde kapalı bırakabilir.",
+    effect:
+      "BIOS'ta Advanced > PCI altında Resizable BAR ve Above 4G Decoding'i etkinleştirin",
   },
   "gpu-hardware:gpu_assignment": {
     name: "Oyunu çalıştıran GPU",
@@ -537,27 +545,27 @@ export const settingsTr: Record<
   "services:dmwappushservice": {
     name: "WAP anında ileti hizmeti",
     description:
-      "MDM/Intune cihaz yönetimi iletileri. İş/okul yönetimli cihazlarda açık kalmalı!",
+      "MDM/Intune cihaz yönetimi iletileri. İş veya okul tarafından yönetilen cihazlarda açık kalmalı.",
   },
   "services:XblAuthManager": {
     name: "Xbox oturum hizmeti",
     description:
-      "Xbox Live kimlik doğrulaması. Xbox Game Save buna bağlıdır. Game Pass kullanıyorsanız açık bırakın!",
+      "Xbox Live oturum açma; Xbox Game Save buna bağlıdır. Game Pass kullanıyorsanız açık bırakın.",
   },
   "services:XblGameSave": {
     name: "Xbox bulut kayıtları",
     description:
-      "Xbox bulut kayıtları. Xbox Game Pass veya Play Anywhere kullanıyorsanız açık bırakın!",
+      "Xbox bulut kayıtları. Xbox Game Pass veya Play Anywhere kullanıyorsanız açık bırakın.",
   },
   "services:XboxNetApiSvc": {
     name: "Xbox ağ hizmeti",
     description:
-      "Xbox çok oyunculu ağ hizmeti. Xbox Game Pass veya Play Anywhere kullanıyorsanız açık bırakın!",
+      "Xbox çok oyunculu ağ hizmeti. Xbox Game Pass veya Play Anywhere kullanıyorsanız açık bırakın.",
   },
   "services:XboxGipSvc": {
     name: "Xbox aksesuar hizmeti",
     description:
-      "Xbox kumanda yönetimi. Xbox kumandası kullanıyorsanız açık bırakın!",
+      "Xbox kumanda yönetimi. Xbox kumandası kullanıyorsanız açık bırakın.",
   },
   "services:background_apps": {
     name: "Arka plan uygulamaları",
@@ -597,7 +605,7 @@ export const settingsTr: Record<
   "system:onedrive_upload_limit": {
     name: "OneDrive yükleme sınırı",
     description:
-      "OneDrive eşitlemesini yükleme hızının %30'uyla sınırlar. Ev fiberi asimetriktir; bir eşitleme patlaması çok daha küçük olan yukarı hattı doldurur ve makineden çıkan her pakete kuyruğa girme gecikmesi ekler.",
+      "OneDrive eşitlemesini yükleme hızının %30'uyla sınırlar. Ev fiberinde küçük olan yukarı hat bir eşitleme patlamasıyla dolar ve çıkan her pakete gecikme ekler.",
   },
   "system:windows_update_mode": {
     name: "Windows Update davranışı",
@@ -632,12 +640,16 @@ export const settingsTr: Record<
   "system:xmp_expo": {
     name: "RAM anma hızı profili (XMP)",
     description:
-      "RAM'in anma XMP/EXPO hızında mı yoksa daha yavaş JEDEC varsayılanında mı çalıştığını algılar. Düzeltmek için BIOS'tan XMP (Intel) veya EXPO (AMD) açın. BIOS güncellemeleri bunu sessizce sıfırlar.",
+      "RAM'in anma XMP/EXPO hızında mı yoksa daha yavaş JEDEC varsayılanında mı çalıştığı. Bir BIOS güncellemesi bunu sessizce sıfırlar.",
+    effect:
+      "BIOS'ta Advanced > DRAM Configuration altında XMP/EXPO profilini Profile 1 veya en yükseği yapın",
   },
   "system:thermal_condition": {
     name: "CPU ısı payı",
     description:
-      "Sistem termal bölge sıcaklığını okur. Yüksek sıcaklık (>80°C) termal kısma riskine işaret eder. Termal macunu yenilemeyi düşünün (3-5 yıl ömür).",
+      "Sistem termal bölge sıcaklığını okur. 80°C üstünde makine kısılma riskindedir ve 3-5 yılı geçmiş termal macun bunun olağan nedenidir.",
+    effect:
+      "CPU'yu 80°C, GPU'yu 85°C altında tutun: soğutucuları tozdan arındırın ve eski termal macunu yenileyin",
   },
   "system:network_afd_receive_window": {
     name: "Ağ alma arabelleği",
@@ -772,7 +784,7 @@ export const settingsTr: Record<
   "perf:gpu_tdr_delay": {
     name: "GPU takılma toleransı",
     description:
-      "GPU sürücüsünün zaman aşımı algılama penceresini (TDR) Windows varsayılanı 2 saniyeden 10 saniyeye çıkarır. MW3'ün DX12 yükleri GPU'yu sıkça 2 saniyeden uzun oyalayıp sahte sürücü sıfırlamaları tetikler.",
+      "GPU sürücü zaman aşımını (TDR) Windows'un 2 saniyesinden 10 saniyeye çıkarır. DX12 oyunları GPU'yu daha uzun oyalayabilir ve zorlanan sürücü sıfırlaması Dev Error olarak görünür.",
   },
   "perf:accessibility_popups": {
     name: "Yapışkan tuş uyarıları",
@@ -812,7 +824,7 @@ export const settingsTr: Record<
   "system:vbs_core_isolation": {
     name: "Çekirdek yalıtımı (VBS)",
     description:
-      "Sanallaştırma tabanlı güvenlik (Bellek Bütünlüğü). Güvenlik için açık tutun. Kapatmak ~%5 FPS verir ama Windows Güvenliği uyarısı tetikler.",
+      "Sanallaştırma tabanlı güvenlik (Bellek Bütünlüğü). Açık tutun: kapatmak ~%5 kare kazandırır ve Windows Güvenliği uyarısı tetikler.",
   },
   "cleanup:dism_cleanup": {
     name: "Windows bileşen temizliği",
@@ -842,12 +854,12 @@ export const settingsTr: Record<
   "cleanup:prefetch": {
     name: "Prefetch dosyaları",
     description:
-      "Windows prefetch dosyalarını temizler. Windows bunları kendiliğinden yeniden oluşturur. Yazılım kaldırdıktan sonra yararlıdır.",
+      "Windows prefetch dosyalarını temizler; Windows bunları kendiliğinden yeniden oluşturur. Yazılım kaldırdıktan sonra yararlıdır.",
   },
   "cleanup:browser_cache": {
     name: "Tarayıcı önbellekleri",
     description:
-      "Edge, Chrome, Brave ve Firefox önbelleklerini temizler. Tarayıcılar gezindikçe yeniden oluşturur. Ciddi disk alanı boşaltır.",
+      "Edge, Chrome, Brave ve Firefox önbelleklerini temizler; tarayıcılar gezindikçe yeniden oluşturur. Ciddi disk alanı boşaltır.",
   },
   "cleanup:windows_update_cache": {
     name: "Güncelleme indirme önbelleği",
@@ -887,7 +899,7 @@ export const settingsTr: Record<
   "cleanup:yarn_cache": {
     name: "Yarn önbelleği",
     description:
-      "Yarn paket yöneticisi önbelleğini temizler. Yarn bir sonraki kurulumda yeniden indirir. Yalnızca Yarn kuruluysa görünür.",
+      "Yarn paket önbelleğini temizler; paketler bir sonraki kurulumda yeniden iner. Yalnızca Yarn kuruluysa görünür.",
   },
   "cleanup:pnpm_cache": {
     name: "pnpm deposu",
@@ -897,27 +909,27 @@ export const settingsTr: Record<
   "cleanup:nuget_cache": {
     name: "NuGet paketleri",
     description:
-      "NuGet yerel paket önbelleğini temizler. Paketler bir sonraki derlemede yeniden iner. Yalnızca .NET/Visual Studio kuruluysa görünür.",
+      "NuGet paket önbelleğini temizler; paketler bir sonraki derlemede yeniden iner. Yalnızca .NET veya Visual Studio kuruluysa görünür.",
   },
   "cleanup:maven_cache": {
     name: "Maven deposu",
     description:
-      "Maven yerel deposunu temizler. Bağımlılıklar bir sonraki Maven derlemesinde yeniden iner. Yalnızca Maven/Java kuruluysa görünür.",
+      "Maven yerel deposunu temizler; bağımlılıklar bir sonraki derlemede yeniden iner. Yalnızca Maven kuruluysa görünür.",
   },
   "cleanup:gradle_cache": {
     name: "Gradle önbelleği",
     description:
-      "Gradle derleme önbelleğini ve indirilen bağımlılıkları temizler. Gradle bir sonraki derlemede yeniden indirir. Yalnızca Gradle kuruluysa görünür.",
+      "Gradle derleme önbelleğini ve indirilen bağımlılıkları temizler; bir sonraki derlemede yeniden iner. Yalnızca Gradle kuruluysa görünür.",
   },
   "cleanup:cargo_cache": {
     name: "Cargo kayıt önbelleği",
     description:
-      "Cargo paket kayıt önbelleğini temizler. Rust crate'leri bir sonraki cargo derlemesinde yeniden iner. Yalnızca Rust kuruluysa görünür.",
+      "Cargo paket kayıt önbelleğini temizler; crate'ler bir sonraki derlemede yeniden iner. Yalnızca Rust kuruluysa görünür.",
   },
   "cleanup:docker_prune": {
     name: "Docker kullanılmayan veriler",
     description:
-      "'docker system prune' çalıştırarak sahipsiz imajları, durmuş kapsayıcıları, kullanılmayan ağları ve derleme önbelleğini siler. Etkin kapsayıcılar, kullanılan etiketli imajlar ve adlandırılmış birimler korunur.",
+      "'docker system prune' ile sahipsiz imajları, durmuş kapsayıcıları, kullanılmayan ağları ve derleme önbelleğini siler. Etkin kapsayıcılar, kullanılan imajlar ve adlandırılmış birimler korunur.",
   },
   "cleanup:docker_prune_all": {
     name: "Docker tüm kullanılmayan imajlar",
@@ -952,7 +964,7 @@ export const settingsTr: Record<
   "game_cleanup:steam_webcache": {
     name: "Steam web önbelleği",
     description:
-      "Steam tarayıcı ve HTML önbelleğini temizler. Steam bir sonraki açılışta yeniden oluşturur. Oyun dosyalarına dokunmaz.",
+      "Steam tarayıcı ve HTML önbelleğini temizler; sonraki açılışta yeniden oluşur. Oyun dosyalarına dokunmaz.",
   },
   "game_cleanup:epic_cache": {
     name: "Epic başlatıcı önbelleği",
@@ -967,7 +979,7 @@ export const settingsTr: Record<
   "game_cleanup:battlenet_cache": {
     name: "Battle.net önbelleği",
     description:
-      "Battle.net başlatıcısının HTTP/varlık önbelleğini temizler. Başlatıcı çökmelerini, kayıp oyun simgelerini ve başarısız güncelleme indirmelerini düzeltir. Bir sonraki açılışta yeniden oluşur.",
+      "Battle.net başlatıcısının HTTP ve varlık önbelleğini temizler; sonraki açılışta yeniden oluşur. Başlatıcı çökmelerini, kayıp simgeleri ve başarısız güncellemeleri düzeltir.",
   },
   "maintenance:sfc_scan": {
     name: "Sistem dosyası onarımı",
@@ -995,7 +1007,9 @@ export const settingsTr: Record<
   "game:hags": {
     name: "GPU donanım zamanlaması",
     description:
-      "GPU zamanlamasını GPU'ya devreder. DLSS 3 Kare Üretimi için gereklidir. En iyi gecikme için kare sınırıyla birlikte kullanın.",
+      "GPU'nun kendi işini CPU yerine kendisinin zamanlamasını sağlar. DLSS 3 Kare Üretimi bunu gerektirir; en düşük gecikme için kare sınırıyla birlikte kullanın.",
+    effect:
+      "GPU tarafında zamanlamayı açar; DLSS 3 Kare Üretimi bunu gerektirir",
   },
   "game:vrr": {
     name: "Pencereli VRR",
@@ -1115,7 +1129,7 @@ export const settingsTr: Record<
   "game_config:cs2:tracers_firstperson": {
     name: "CS2 kendi izli mermilerini gizle",
     description:
-      "'r_drawtracers_firstperson 0' yazar — yalnızca kendi silahınızın izli mermilerini gizler (üçüncü şahıs izleri çizilmeye devam eder, düşman ateşi görünür kalır). Sprey sırasında daha temiz nişan görüntüsü.",
+      "'r_drawtracers_firstperson 0' yazar: yalnızca kendi silahınızın izli mermilerini gizler, düşman ateşi görünür kalır. Sprey sırasında nişan görüntüsü temizlenir.",
   },
   "game_config:cs2:low_latency_sleep": {
     name: "CS2 düşük gecikme uykusu",
@@ -1180,7 +1194,7 @@ export const settingsTr: Record<
   "game_config:mw3:local_texture_quality": {
     name: "MW3 yerel doku akış kalitesi",
     description:
-      "Sanal doku bellek yuvası sayısı. Yerel akış önbelleğine kaç dokunun sığdığını belirler. Düşük değer daha az VRAM baskısı demektir.",
+      "Yerel akış önbelleğine kaç dokunun sığdığı, sanal doku bellek yuvası olarak. Düşük değer daha az VRAM baskısı demektir.",
   },
   "game_config:mw3:nvidia_reflex": {
     name: "MW3 NVIDIA Reflex",
@@ -1190,17 +1204,17 @@ export const settingsTr: Record<
   "game_config:mw3:dlss_frame_generation": {
     name: "MW3 DLSS kare üretimi",
     description:
-      "DLSS 3+ Kare Üretimi yapay zekâyla ara kareler üretir. FPS sayacını yükseltir ama giriş gecikmesi ekler — rekabetçi çok oyunculuda istenmez. MP için KAPALI tutun.",
+      "DLSS 3 Kare Üretimi yapay zekâyla ara kareler ekler. Sayaç yükselirken giriş gecikmesi de yükselir, bu yüzden rekabetçi çok oyunculuda kapalıdır.",
   },
   "game_config:mw3:dlss_perf_mode": {
     name: "MW3 DLSS performans modu",
     description:
-      "DLSS iç çizim ölçeği. Quality doğalın %67'sinde, Balanced %58'inde, Performance %50'sinde çizer. Yükseltici kare almak için var; en üst kademesi kapatıldığı şeyin çoğunu geri verir.",
+      "DLSS iç çizim ölçeği: Quality doğalın %67'sinde, Balanced %58'inde, Performance %50'sinde çizer. Yükseltici kare almak için vardır, en üst kademesi bunun çoğunu geri verir.",
   },
   "game_config:mw3:depth_of_field": {
     name: "MW3 alan derinliği",
     description:
-      "Odak dışı bölgelerde kamera lens bulanıklığı, özellikle nişandayken. Uzak düşmanları bulanıklaştırır — görüş için istenmez. Rekabetçi oyunda daima KAPALI.",
+      "Odak dışı bölgelerde kamera lens bulanıklığı, en çok nişan alırken. Uzaktaki düşmanları bulanıklaştırdığı için rekabetçi oyunda kapalı kalır.",
   },
   "game_config:mw3:shadow_quality": {
     name: "MW3 gölge kalitesi",
@@ -1215,7 +1229,7 @@ export const settingsTr: Record<
   "game_config:mw3:volumetric_quality": {
     name: "MW3 hacimsel kalite",
     description:
-      "Tanrı ışınları, hacimsel sis ve atmosfer saçılımı kalitesi. Rekabetçi getirisi olmayan çok pahalı bir GPU efekti. Düşük önerilir.",
+      "Tanrı ışınları, hacimsel sis ve atmosfer saçılımı. Rekabetçi getirisi olmayan çok pahalı bir GPU efekti olduğu için düşük tutulur.",
   },
   "game_config:mw3:particle_quality": {
     name: "MW3 parçacık çözünürlüğü",
@@ -1235,12 +1249,12 @@ export const settingsTr: Record<
   "game_config:mw3:shader_quality": {
     name: "MW3 shader kalitesi",
     description:
-      "Malzeme shader karmaşıklığı. Düşük, geometriye ve görünürlüğe dokunmadan yüzey gölgelemesini sadeleştirir. Sürücü güncellemesi sonrası shader derleme süresini kısaltır.",
+      "Malzeme shader karmaşıklığı. Düşük, geometriye ve görünürlüğe dokunmadan yüzey gölgelemesini sadeleştirir ve sürücü sonrası derlemeyi kısaltır.",
   },
   "game_config:mw3:dxr_mode": {
     name: "MW3 ışın izleme (DXR)",
     description:
-      "Gölge ve yansımalar için DirectX ışın izleme. Devasa GPU maliyeti (%20-40 FPS kaybı), sıfır rekabetçi getiri. Çok oyunculuda azami FPS için kapalı olmalı.",
+      "Gölge ve yansımalar için DirectX ışın izleme. Kare hızının %20-40'ına mal olur ve rekabetçi getirisi yoktur, bu yüzden çok oyunculuda kapalıdır.",
   },
   "game_config:mw3:audio_mix": {
     name: "MW3 ses karışımı",
@@ -1250,7 +1264,7 @@ export const settingsTr: Record<
   "game_config:mw3:detail_quality": {
     name: "MW3 ayrıntı kalitesi",
     description:
-      "Geometri ayrıntısı / model LOD'u. Nesnelerin, bitki örtüsünün, kayaların ve çıkartmaların poligon yoğunluğunu belirler. Düşük, görünürlüğü etkilemeden küçük dağınıklığı sadeleştirir.",
+      "Geometri ve model ayrıntı düzeyi (oyun içi Detail Quality Level). Düşük; bitki örtüsü, kaya ve çıkartma gibi dağınıklığı sadeleştirir, düşman modellerine dokunmaz.",
   },
   "game_config:mw3:persistent_effects": {
     name: "MW3 kalıcı efektler",
@@ -1365,7 +1379,7 @@ export const settingsTr: Record<
   "game_config:mw3:dlss_mode": {
     name: "MW3 DLSS modu",
     description:
-      "DLSS etkin yükselticiyken alt modu. DLSS, yükseltme + kenar yumuşatmayla en iyi FPS kazancını verir. DLAA yalnızca tam çözünürlük kenar yumuşatması sağlar (FPS kazancı yok).",
+      "DLSS etkinken hangi alt modun çalışacağı. DLSS hem yükseltir hem kenar yumuşatır ve kare kazandırır; DLAA yalnızca yumuşatır, kazanç vermez.",
   },
   "game_config:mw3:sun_shadow_cascade": {
     name: "MW3 güneş gölgesi katmanları",
@@ -2067,21 +2081,21 @@ export const settingsTr: Record<
     description:
       "Bu bağlantının pazarlıkla vardığı hızı bağdaştırıcının desteklediği en yüksek hızla karşılaştırır. Fark; kablo, anahtar portu veya karşı uç sınırıdır — Windows ayarı değildir.",
     effect:
-      "Kabloyu kontrol edin (1 Gbps için Cat 5e ve üstü, 2,5 Gbps ve üzeri için Cat 6), başka bir anahtar portu deneyin ve karşı ucun yüksek hızı desteklediğini doğrulayın.",
+      "Cat 5e (1 Gbps) ya da Cat 6 (2,5 Gbps ve üzeri) kablo kullanın; modem veya switch portu da bu hızı desteklemeli",
   },
   "network:*:wifi_link_quality": {
     name: "Wi-Fi sinyal denetimi",
     description:
       "Wi-Fi bağlantısının ne kadar güçlü olduğu ve hangi bantta çalıştığı. Zayıf sinyal ya da 2,4 GHz bandı, hiçbir bağdaştırıcı ayarının kaldıramayacağı gecikme sıçramaları ekler ve hızı sınırlar.",
     effect:
-      "Erişim noktasına yaklaşın ya da aradaki engeli kaldırın; yönlendirici sunuyorsa 5 GHz veya 6 GHz ağına bağlanın; kablo ikisini de geçer.",
+      "Modeme yaklaşın ya da aradaki engeli kaldırın; varsa 5 GHz veya 6 GHz ağına geçin, kablo ikisini de geçer",
   },
   "network:*:wifi_security": {
     name: "Wi-Fi güvenlik denetimi",
     description:
       "Wi-Fi bağlantısının hangi güvenlik standardını ve şifreyi kullandığı. TKIP veya WEP şifresi bağlantıyı 802.11g hızına kilitler; iki uç da WPA3 yapabiliyorken WPA2, aynı hızda daha zayıf korumadır.",
     effect:
-      "Modemi AES ile WPA2/WPA3 yapın; sonra Windows'ta bu ağı unutup yeniden bağlanın ki profil güçlü standartla oluşsun.",
+      "Modemde AES ile WPA2/WPA3 seçin, sonra Windows'ta bu ağı unutup yeniden bağlanın",
   },
   "network:*:roaming_aggressiveness": {
     name: "Wi-Fi gezinme hevesi",

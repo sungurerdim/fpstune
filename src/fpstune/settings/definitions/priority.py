@@ -25,7 +25,7 @@ GPU_PRIORITY = SettingExecutor(
     category=SettingCategory.CORE,
     display_name="GPU Priority",
     short_name="GPU priority for games",
-    description="GPU scheduling priority for games (0-31)",
+    description="GPU scheduling priority for the Games task, from 0 to 31.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=8,
@@ -39,8 +39,8 @@ GPU_PRIORITY = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/windows/win32/procthread/multimedia-class-scheduler-service"
     ],
-    current_impact="GPU scheduling priority level",
-    recommended_impact="Priority 8 = high GPU scheduling → lower render latency",
+    current_impact="Below 8: game render work queues behind other GPU work",
+    recommended_impact="8: high GPU scheduling priority, so render work is dispatched first",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for GPU scheduling
     category_order=1,  # Primary GPU scheduling setting
     effect="Ensures high GPU scheduling priority for games",
@@ -74,14 +74,14 @@ GAME_PRIORITY = SettingExecutor(
     category=SettingCategory.CORE,
     display_name="Game Priority",
     short_name="CPU priority for games",
-    description="Game task priority (1-6, 6 = highest)",
+    description="How much CPU scheduling weight the Games task gets, from 1 to 6.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=2,
     recommended_value=6,
     requires_reboot=False,
-    current_impact="Priority 2 = normal process priority",
-    recommended_impact="Priority 6 = above normal → better CPU scheduling",
+    current_impact="2: games get normal process priority",
+    recommended_impact="6: above-normal priority, so the game wins CPU scheduling contention",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for CPU scheduling
     category_order=2,  # Game process priority
     effect="Elevates game process CPU scheduling priority",
@@ -115,14 +115,15 @@ SYSTEM_RESPONSIVENESS = SettingExecutor(
     category=SettingCategory.CORE,
     display_name="System Responsiveness",
     short_name="Reserved CPU for background",
-    description="Foreground app priority (0 = max foreground priority)",
+    description="Share of CPU time Windows reserves for background tasks; 0 gives the foreground app "
+    "everything.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=20,
     recommended_value=0,
     requires_reboot=False,
-    current_impact="20% CPU reserved for system → may limit game performance",
-    recommended_impact="0% reserved → games get full CPU priority",
+    current_impact="20: a fifth of CPU time is reserved for background tasks",
+    recommended_impact="0: nothing is reserved, so the game gets full CPU priority",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for foreground priority
     category_order=3,  # System-wide responsiveness
     effect="Allocates full CPU priority to foreground games",
@@ -168,8 +169,8 @@ SCHEDULING_CATEGORY = SettingExecutor(
     default_value="Medium",
     recommended_value="High",
     requires_reboot=False,
-    current_impact="MMCSS scheduling category for multimedia apps",
-    recommended_impact="High = better scheduling for games",
+    current_impact="Medium: games are scheduled like any multimedia app",
+    recommended_impact="High: games are scheduled ahead of other multimedia work",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for MMCSS scheduling
     category_order=4,  # MMCSS scheduling category
     effect="Improves multimedia task scheduling for games",

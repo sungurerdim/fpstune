@@ -164,7 +164,8 @@ HAGS = SettingExecutor(
     category=SettingCategory.GAME,
     display_name="Hardware-Accelerated GPU Scheduling",
     short_name="GPU hardware scheduling",
-    description="Offloads GPU scheduling to GPU. Required for DLSS 3 Frame Gen. Use with FPS cap for best latency.",
+    description="Lets the GPU schedule its own work instead of the CPU. DLSS 3 Frame Generation needs it on; "
+    "pair it with an fps cap for the lowest latency.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -174,7 +175,7 @@ HAGS = SettingExecutor(
     recommended_impact="Enabled: Required for DLSS 3 Frame Gen. Minimal FPS impact otherwise.",
     scope=SettingScope.RECOMMENDED,  # Not ESSENTIAL - minimal gaming benefit per benchmarks
     category_order=2,  # GPU scheduling feature
-    effect="Enables GPU-side scheduling. Required for DLSS 3 Frame Generation.",
+    effect="Enables GPU-side scheduling, which DLSS 3 Frame Generation requires",
     impact_scores={
         "fps": "+0-1%",
         "fps_1_percent_low": "+0-2%",

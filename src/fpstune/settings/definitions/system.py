@@ -379,7 +379,8 @@ SERVICE_WAP_PUSH = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="WAP Push Message Routing",
     short_name="WAP push service",
-    description="MDM/Intune device management push. ⚠️ Keep enabled if work/school managed!",
+    description="Device-management push for MDM and Intune. Keep it enabled on a work or school managed "
+    "machine.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -426,7 +427,7 @@ SERVICE_XBOX_AUTH = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Xbox Live Auth Manager",
     short_name="Xbox sign-in service",
-    description="Xbox Live authentication. Required by Xbox Game Save. Keep enabled for Game Pass!",
+    description="Xbox Live sign-in, which Xbox Game Save depends on. Keep it enabled for Game Pass.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -464,7 +465,7 @@ SERVICE_XBOX_GAME_SAVE = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Xbox Live Game Save",
     short_name="Xbox cloud saves",
-    description="Xbox cloud saves. ⚠️ Keep enabled if using Xbox Game Pass or Play Anywhere!",
+    description="Xbox cloud saves. Keep it enabled if you use Xbox Game Pass or Play Anywhere.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -502,8 +503,7 @@ SERVICE_XBOX_NETWORKING = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Xbox Live Networking",
     short_name="Xbox networking service",
-    description="Xbox multiplayer networking. Keep enabled if using "
-    "Xbox Game Pass or Play Anywhere!",
+    description="Xbox multiplayer networking. Keep it enabled if you use Xbox Game Pass or Play Anywhere.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -541,7 +541,7 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Xbox Accessory Management",
     short_name="Xbox accessory service",
-    description="Xbox controller management. ⚠️ Keep enabled if using Xbox controllers!",
+    description="Xbox controller management. Keep it enabled if you use an Xbox controller.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -1563,9 +1563,8 @@ SYSTEM_DO_BACKGROUND_BANDWIDTH = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Windows Update Background Bandwidth Cap",
     short_name="Update download cap",
-    description="Caps what Windows Update may consume for background downloads to 20% of the "
-    "link. On an asymmetric connection an uncapped update download fills the queue and every "
-    "other packet, including game traffic, waits behind it.",
+    description="Caps Windows Update background downloads at 20% of the link. Uncapped, an update fills the "
+    "queue and every other packet, game traffic included, waits behind it.",
     value_type=SettingValueType.CHOICE,
     choices=("unlimited", "capped"),
     default_value="unlimited",
@@ -1605,9 +1604,8 @@ SYSTEM_ONEDRIVE_UPLOAD_LIMIT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="OneDrive Upload Rate Cap",
     short_name="OneDrive upload cap",
-    description="Caps the OneDrive sync client to 30% of upload throughput. Home fibre is "
-    "asymmetric, so a sync burst saturates the much smaller uplink and adds queueing delay to "
-    "every packet leaving the machine, including game traffic.",
+    description="Caps the OneDrive sync client at 30% of upload throughput. A sync burst saturates the small "
+    "uplink of home fibre and delays every packet leaving the machine, game traffic included.",
     value_type=SettingValueType.CHOICE,
     choices=("unlimited", "capped"),
     default_value="unlimited",
@@ -1915,9 +1913,8 @@ SYSTEM_XMP_EXPO = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="XMP / EXPO Profile (RAM Speed)",
     short_name="RAM rated-speed profile (XMP)",
-    description="Detects if RAM runs at rated XMP/EXPO speed or "
-    "slower JEDEC default. Enable XMP (Intel) or EXPO (AMD) "
-    "in BIOS to fix. BIOS updates silently reset this.",
+    description="Whether RAM runs at its rated XMP or EXPO speed or at the slower JEDEC default. A BIOS "
+    "update silently resets it.",
     value_type=SettingValueType.CHOICE,
     choices=("xmp_active", "xmp_inactive"),
     default_value="xmp_inactive",
@@ -1932,8 +1929,8 @@ SYSTEM_XMP_EXPO = SettingExecutor(
     recommended_impact="XMP active: RAM at full rated speed for 10-20 FPS gain in CPU-bound titles",
     scope=SettingScope.RECOMMENDED,
     category_order=52,
-    effect="Detects RAM speed mismatch. In BIOS, go to Advanced > DRAM Configuration "
-    "and set XMP/EXPO Profile to Profile 1 (or the highest available profile).",
+    effect="In BIOS, under Advanced > DRAM Configuration, set the XMP/EXPO profile to Profile 1 or the "
+    "highest offered",
     impact_scores={
         "fps_cpu_bound": "+5-15%",
         "fps_1_percent_low": "+5-12%",
@@ -1972,9 +1969,8 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Thermal Condition",
     short_name="CPU thermal headroom",
-    description="Reads system thermal zone temperature. "
-    "High temps (>80C) indicate thermal throttling risk. "
-    "Consider reapplying thermal paste (3-5 year lifespan).",
+    description="Reads the system thermal zone temperature. Above 80°C the machine is at risk of throttling, "
+    "and thermal paste past 3-5 years is the usual cause.",
     value_type=SettingValueType.CHOICE,
     choices=("ok", "warning", "critical"),
     default_value="ok",
@@ -1988,9 +1984,8 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     recommended_impact="OK: Temperatures within safe range, no thermal throttling",
     scope=SettingScope.COMPLETE,
     category_order=53,
-    effect="Advisory: detects thermal zone temperature. "
-    "Target CPU below 80°C and GPU below 85°C under full load. "
-    "Clean dust from heatsinks and replace thermal paste if temperatures are high.",
+    effect="Keep the CPU under 80°C and the GPU under 85°C at full load: clean the heatsinks and replace "
+    "old thermal paste",
     impact_scores={
         "fps_sustained": "-25 to -50% if throttling",
         "latency_ms": 5,
@@ -2236,7 +2231,8 @@ CLEANUP_DISM = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="DISM Cleanup",
     short_name="Windows component cleanup",
-    description="Cleans Windows component store. Can free 1-10 GB. Takes 5-15 minutes. Full disk reclaim may require reboot.",
+    description="Cleans the Windows component store, freeing 1-10 GB in 5-15 minutes. A reboot may be needed "
+    "to reclaim all of it.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2393,7 +2389,8 @@ CLEANUP_PREFETCH = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Prefetch Files",
     short_name="Prefetch files",
-    description="Clears Windows prefetch files (C:\\Windows\\Prefetch). Windows rebuilds them automatically. Useful after uninstalling software.",
+    description="Clears the Windows prefetch files, which Windows rebuilds on its own. Useful after "
+    "uninstalling software.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2425,7 +2422,8 @@ CLEANUP_BROWSER_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Browser Cache",
     short_name="Browser caches",
-    description="Clears cache for Edge, Chrome, Brave, and Firefox. Browsers rebuild cache as you browse. Frees significant disk space.",
+    description="Clears the cache of Edge, Chrome, Brave and Firefox, which they rebuild as you browse. Frees "
+    "significant disk space.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2678,7 +2676,8 @@ GAME_CLEANUP_STEAM_WEBCACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Steam Web Cache",
     short_name="Steam web cache",
-    description="Clears Steam browser and HTML cache. Steam rebuilds cache on next launch. Does not affect game files.",
+    description="Clears Steam's browser and HTML cache, which rebuilds on next launch. Game files are "
+    "untouched.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2768,7 +2767,8 @@ CLEANUP_YARN_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Yarn Cache (Node.js)",
     short_name="Yarn cache",
-    description="Clears Yarn package manager cache. Yarn re-downloads packages on next install. Only present if Yarn is installed.",
+    description="Clears the Yarn package cache; packages re-download on the next install. Only present when "
+    "Yarn is installed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2828,7 +2828,8 @@ CLEANUP_NUGET_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="NuGet Packages (.NET)",
     short_name="NuGet packages",
-    description="Clears NuGet local package cache. Packages re-download on next build. Only present if .NET/Visual Studio is installed.",
+    description="Clears the NuGet package cache; packages re-download on the next build. Only present when "
+    ".NET or Visual Studio is installed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2860,7 +2861,8 @@ CLEANUP_MAVEN_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Maven Repository (Java)",
     short_name="Maven repository",
-    description="Clears Maven local repository. Dependencies re-download on next Maven build. Only present if Maven/Java is installed.",
+    description="Clears the Maven local repository; dependencies re-download on the next build. Only present "
+    "when Maven is installed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2890,7 +2892,8 @@ CLEANUP_GRADLE_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Gradle Cache (Java/Kotlin)",
     short_name="Gradle cache",
-    description="Clears Gradle build cache and downloaded dependencies. Gradle re-downloads on next build. Only present if Gradle is installed.",
+    description="Clears the Gradle build cache and downloaded dependencies, which re-download on the next "
+    "build. Only present when Gradle is installed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2920,7 +2923,8 @@ CLEANUP_CARGO_CACHE = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Cargo Registry (Rust)",
     short_name="Cargo registry",
-    description="Clears Cargo package registry cache. Rust crates re-download on next cargo build. Only present if Rust is installed.",
+    description="Clears the Cargo package registry cache; crates re-download on the next build. Only present "
+    "when Rust is installed.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2950,8 +2954,8 @@ GAME_CLEANUP_BATTLENET = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Battle.net Cache",
     short_name="Battle.net cache",
-    description="Clears the Battle.net launcher HTTP/asset cache. "
-    "Fixes launcher crashes, missing game icons, and failed update downloads. Cache rebuilds automatically on next launch.",
+    description="Clears the Battle.net launcher's HTTP and asset cache, which rebuilds on next launch. Fixes "
+    "launcher crashes, missing icons and failed updates.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -3546,7 +3550,8 @@ PERF_VBS_CORE_ISOLATION = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="VBS / Core Isolation",
     short_name="Core isolation (VBS)",
-    description="Virtualization-Based Security (Memory Integrity). Keep enabled for security. Disabling gives ~5% FPS but triggers Windows Security warning.",
+    description="Virtualization-based security (Memory Integrity). Keep it on: disabling gains about 5% fps "
+    "and trips a Windows Security warning.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -3694,9 +3699,8 @@ GPU_TDR_DELAY = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="GPU TDR Delay",
     short_name="GPU hang tolerance",
-    description="Extends the GPU driver Timeout Detection and Recovery (TDR) window from the "
-    "Windows default of 2 seconds to 10 seconds. DX12 workloads in MW3 frequently stall the GPU "
-    "longer than 2 s, triggering a forced driver reset that surfaces as a Dev Error or black-screen crash.",
+    description="Extends the GPU driver timeout (TDR) from Windows' 2 seconds to 10. DX12 games can stall the "
+    "GPU longer than 2 s, and the forced driver reset surfaces as a Dev Error or black screen.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "extended"),
     default_value="default",
@@ -3928,7 +3932,8 @@ CLEANUP_DOCKER_PRUNE_ALL = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="Docker All Unused Images (Prune -a)",
     short_name="Docker all unused images",
-    description="Runs 'docker system prune -a' to additionally remove ALL images not used by any container, not just dangling ones. Frees the most space. Named volumes and running containers are preserved; removed images are re-pulled or rebuilt on next use.",
+    description="Runs docker system prune -a, removing every image no container uses, not only dangling ones. "
+    "Named volumes and running containers survive; removed images re-pull or rebuild on next use.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,

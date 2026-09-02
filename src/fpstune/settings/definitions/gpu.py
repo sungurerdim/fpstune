@@ -113,7 +113,8 @@ NVIDIA_THREADED_OPT = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Threaded Optimization",
     short_name="Driver multi-threading",
-    description="GPU driver multi-threading. Auto lets driver decide (safest). On can cause stutter in OpenGL.",
+    description="Whether the driver spreads its own work across threads. Auto lets the driver decide; forcing "
+    "it on can stutter in OpenGL games.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "auto"),
     default_value="auto",
@@ -412,7 +413,7 @@ NVIDIA_VRR_MODE = SettingExecutor(
     recommended_impact="On: Tear-free adaptive refresh in borderless and exclusive fullscreen alike",
     scope=SettingScope.RECOMMENDED,
     category_order=6,  # Sync technology
-    effect="Enables variable refresh rate for tear-free gaming on compatible monitors.",
+    effect="Enables variable refresh rate for tear-free play on a G-Sync or compatible monitor",
     impact_scores={"fps": "0%", "latency_ms": -8, "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia", "requires_vrr": True},  # NVIDIA + VRR monitor
     detect_type=DetectType.NVPROFILE,
@@ -538,7 +539,8 @@ NVIDIA_OGL_THREAD_OPT = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="OpenGL Threading Optimization",
     short_name="OpenGL threading",
-    description="Multi-threaded OpenGL. Auto lets driver decide (safest). Most games use DirectX, not OpenGL.",
+    description="Whether the driver spreads OpenGL work across threads. Auto lets the driver decide, and most "
+    "games use DirectX rather than OpenGL.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "auto"),
     default_value="auto",
@@ -598,9 +600,8 @@ NVIDIA_MAX_PRERENDERED = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Maximum Pre-rendered Frames",
     short_name="Frames queued ahead",
-    description="CPU pre-render queue depth. Lower values reduce "
-    "input latency but may lower throughput. Works alongside "
-    "Low Latency Mode for fine-grained control.",
+    description="How many frames the CPU may queue ahead of the GPU. Fewer means less input latency at some "
+    "cost to throughput, and it works alongside Low Latency Mode.",
     value_type=SettingValueType.INT,
     choices=(),
     default_value=3,
@@ -638,9 +639,8 @@ NVIDIA_TRIPLE_BUFFER = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Triple Buffering",
     short_name="Triple buffering",
-    description="Adds a third frame buffer for VSync. Can improve "
-    "VSync-on smoothness but adds latency. Keep off for "
-    "competitive gaming.",
+    description="Adds a third frame buffer for VSync. It smooths VSync-on play but adds a frame of latency, "
+    "so it stays off for competitive games.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on"),
     default_value="off",
@@ -673,9 +673,8 @@ NVIDIA_VRR_APP_OVERRIDE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="G-Sync Application Override",
     short_name="G-Sync per-app override",
-    description="Per-application G-Sync/VRR override. "
-    "Driver default lets the global setting apply. "
-    "Force on ensures G-Sync for borderless windowed games.",
+    description="Per-application G-Sync override. Driver default lets the global setting apply; forcing it on "
+    "keeps G-Sync active for borderless windowed games.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "driver_default", "force_on"),
     default_value="driver_default",
@@ -711,9 +710,8 @@ NVIDIA_FAN_CURVE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="GPU Thermal / Fan Curve",
     short_name="GPU fan curve",
-    description="Checks GPU core vs memory hotspot temp. "
-    "If hotspot exceeds core by >20C, fan curve may be "
-    "too passive. Adjust in MSI Afterburner.",
+    description="Compares the GPU's hotspot temperature with its core. A hotspot more than 20°C above the "
+    "core means the fan curve is too passive for this card.",
     value_type=SettingValueType.CHOICE,
     choices=("ok", "hotspot_warning", "thermal_warning"),
     default_value="ok",
@@ -727,8 +725,8 @@ NVIDIA_FAN_CURVE = SettingExecutor(
     recommended_impact="OK: Core and hotspot temps within safe range, no thermal throttling",
     scope=SettingScope.COMPLETE,
     category_order=17,
-    effect="Advisory: detects GPU thermal issues. In MSI Afterburner or ASUS GPU Tweak, "
-    "create a fan curve that keeps core below 60°C and hotspot below 70°C under load.",
+    effect="In MSI Afterburner or GPU Tweak, set a fan curve that keeps the core under 60°C and the "
+    "hotspot under 70°C",
     impact_scores={"fps_sustained": "+0-30%", "gpu_temp_c": -10, "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia"},
     is_readonly=True,
@@ -785,9 +783,8 @@ GPU_RESIZABLE_BAR = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Resizable BAR / Smart Access Memory",
     short_name="Resizable BAR",
-    description="PCIe feature allowing CPU to access full GPU "
-    "VRAM. Enable in BIOS (Resizable BAR + Above 4G "
-    "Decoding). NVIDIA may silently disable at driver level.",
+    description="Lets the CPU address the GPU's whole VRAM at once, set in BIOS as Resizable BAR plus Above "
+    "4G Decoding. NVIDIA may leave it off at driver level even when BIOS has it on.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -803,8 +800,7 @@ GPU_RESIZABLE_BAR = SettingExecutor(
     recommended_impact="Enabled: Full VRAM access, 5-21% FPS gain in streaming-heavy titles",
     scope=SettingScope.RECOMMENDED,
     category_order=18,
-    effect="Detects Resizable BAR state. In BIOS, go to Advanced > PCI and set "
-    "both 'Resizable BAR' and 'Above 4G Decoding' to Enabled.",
+    effect="In BIOS, under Advanced > PCI, set Resizable BAR and Above 4G Decoding to Enabled",
     impact_scores={"fps": "+2-10%", "fps_1_percent_low": "+1-5%"},
     applicable_conditions={"gpu_vendors": ["nvidia", "amd"]},
     is_readonly=True,
@@ -1089,7 +1085,8 @@ AMD_RADEON_BOOST = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Radeon Boost",
     short_name="Radeon Boost",
-    description="Lowers the render resolution while the camera moves fast and restores it when the view settles, for 5-15% more frames. The cost lands exactly during target tracking, so the extra frames are bought with sharpness at the moment it matters most.",
+    description="Lowers render resolution while the camera moves fast and restores it when the view settles, "
+    "for 5-15% more frames. The sharpness is lost exactly while tracking a target.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -1135,7 +1132,8 @@ AMD_ENHANCED_SYNC = SettingExecutor(
     recommended_value="disabled",  # Only useful when FPS > refresh rate
     requires_reboot=False,
     current_impact="Disabled: No tear reduction (unless VSync is on)",
-    recommended_impact="Enable if your FPS exceeds monitor refresh rate and you want tear reduction",
+    recommended_impact="Disabled: no tear reduction, and no extra latency; enable only when fps exceeds the refresh "
+    "rate",
     scope=SettingScope.COMPLETE,  # Situational benefit
     category_order=5,
     perceptible_cost=(
@@ -1189,8 +1187,8 @@ NVIDIA_BATTERY_BOOST = SettingExecutor(
     recommended_impact="No cap possible: Nothing here holds the frame rate down on battery",
     scope=SettingScope.RECOMMENDED,
     category_order=21,
-    effect="Advisory: reports whether NVIDIA's battery frame cap can apply here. Turn Battery "
-    "Boost off under Graphics in the NVIDIA App if you would rather spend the battery",
+    effect="Turn Battery Boost off under Graphics in the NVIDIA App if you would rather spend the "
+    "battery",
     # A ceiling, not a gain — the same honest shape as MW3's unfocused cap, and
     # the verification engine will report it unmeasurable for the same reason:
     # a ceiling cannot move the right way.
@@ -1305,9 +1303,8 @@ AMD_FRTC = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Frame Rate Target Control (FRTC)",
     short_name="Frame rate cap (FRTC)",
-    description="Global FPS cap for AMD GPUs. When enabled, limits "
-    "maximum FPS regardless of game settings. Disable for "
-    "uncapped performance.",
+    description="A driver-wide frame cap for AMD GPUs, applied regardless of game settings. Off leaves "
+    "performance uncapped.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -1361,9 +1358,9 @@ GPU_MSI_MODE = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="GPU Message-Signaled Interrupts",
     short_name="GPU interrupt mode",
-    description="Delivers GPU interrupts per-device via MSI instead of a shared legacy IRQ line. "
-    "RTX 40-series ships with MSI already on, but 30-series and older cards frequently default to "
-    "line-based interrupts, where a shared line adds DPC latency.",
+    description="Delivers GPU interrupts per device via MSI instead of a shared legacy IRQ line. RTX "
+    "40-series ships with MSI on; older cards often default to a shared line that adds DPC "
+    "latency.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "enabled"),
     default_value="default",

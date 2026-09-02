@@ -116,8 +116,7 @@ def create_mpo_setting(build: int) -> SettingExecutor:
         display_name="Multi-Plane Overlay (MPO)",
         short_name="Multi-plane overlay",
         description="Whether the GPU's display engine composites windows in hardware. It can "
-        f"cause flicker and frame-pacing problems, most often on multi-monitor setups with mixed "
-        f"refresh rates. Written to {where}.",
+        f"flicker and mis-pace frames on mixed-refresh multi-monitor setups ({where}).",
         value_type=SettingValueType.CHOICE,
         choices=("enabled", "disabled"),
         default_value="enabled",

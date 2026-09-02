@@ -398,8 +398,8 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Scale-Down Policy",
     short_name="How fast the CPU slows down",
-    description="Algorithm used when scaling CPU frequency down. Rocket drops immediately; "
-    "Ideal uses gradual steps. Rocket allows faster re-ramp when needed.",
+    description="How the CPU steps its clock down. Rocket drops immediately and re-ramps fastest when load "
+    "returns; Ideal steps down gradually.",
     value_type=SettingValueType.CHOICE,
     choices=("ideal", "single", "rocket"),
     default_value="ideal",
@@ -669,9 +669,8 @@ POWER_THROTTLING = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Power Throttling",
     short_name="CPU power throttling",
-    description="Windows throttles processes it considers background work to save power, which "
-    "on a laptop can include a game's secondary processes such as audio, shader compilation, and "
-    "anti-cheat. Disabling it keeps those threads at full clock.",
+    description="Windows throttles processes it considers background work; on a laptop that can include a "
+    "game's audio, shader compilation and anti-cheat. Off keeps those threads at full clock.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -847,9 +846,8 @@ POWER_CPU_MIN_STATE = _cpu_power_setting(
     guid=CPU_MIN_STATE_SETTING,
     display_name="Minimum Processor State",
     short_name="Minimum CPU speed",
-    description="Lowest clock speed the CPU is allowed to drop to when nothing is asking for "
-    "work. Raising it to 100 pins every core at maximum multiplier around the clock, which "
-    "produces constant heat and no frame rate at all.",
+    description="Lowest clock the CPU may idle at. Raising it to 100 pins every core at maximum multiplier "
+    "all day, which produces constant heat and no frame rate at all.",
     default_value=5,
     recommended_value=5,
     min_value=0,
@@ -872,9 +870,8 @@ POWER_CPU_MAX_STATE = _cpu_power_setting(
     guid=CPU_MAX_STATE_SETTING,
     display_name="Maximum Processor State",
     short_name="Maximum CPU speed",
-    description="Highest clock speed the CPU is allowed to reach. The common advice to set it "
-    "to 99 in order to run cooler works by switching off turbo entirely, which costs far more "
-    "performance than the heat it saves.",
+    description="Highest clock the CPU may reach. Setting it to 99 to run cooler switches turbo off entirely, "
+    "which costs far more performance than the heat it saves.",
     default_value=100,
     recommended_value=100,
     min_value=0,
@@ -895,9 +892,8 @@ POWER_CPU_IDLE_DISABLE = _cpu_power_setting(
     guid=CPU_IDLE_DISABLE_SETTING,
     display_name="CPU Idle States",
     short_name="CPU idle sleep",
-    description="Whether cores may enter low-power C-states when they have no work. Disabling "
-    "them is a widely repeated gaming tweak that produces continuous heat and shortens the "
-    "part's life without gaining a single frame.",
+    description="Whether idle cores may enter low-power C-states. Disabling them is a widely repeated tweak "
+    "that adds constant heat and wear without gaining a single frame.",
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="enabled",
@@ -945,9 +941,8 @@ POWER_CPU_DECREASE_TIME = _cpu_power_setting(
     guid=CPU_DECREASE_TIME_SETTING,
     display_name="CPU Scale-Down Delay",
     short_name="Slow-down delay",
-    description="How many consecutive load checks must come back idle before the CPU drops to a "
-    "lower clock. At the default of one, a single quiet interval between frames is enough to "
-    "start a downshift the next frame has to pay to undo.",
+    description="How many consecutive idle load checks precede a clock drop. At the default of one, a single "
+    "quiet interval between frames starts a downshift the next frame pays to undo.",
     default_value=1,
     recommended_value=3,
     min_value=1,
@@ -966,9 +961,8 @@ POWER_CPU_LATENCY_HINT_UNPARK = _cpu_power_setting(
     guid=CPU_LATENCY_HINT_UNPARK_SETTING,
     display_name="Latency-Sensitive Workload Core Unparking",
     short_name="Extra cores for bursts",
-    description="Share of cores Windows brings back online the moment it detects a workload that "
-    "cares about response time. This is what makes idle core parking safe: cores may rest, but a "
-    "game gets all of them back at once rather than one at a time.",
+    description="Share of parked cores Windows brings back the moment a latency-sensitive workload appears. "
+    "It is what makes core parking safe: a game gets all its cores back at once.",
     default_value=50,
     recommended_value=100,
     min_value=0,

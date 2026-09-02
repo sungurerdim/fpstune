@@ -276,9 +276,8 @@ MW3_TEXTURE_STREAMING = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="MW3 Texture Streaming Limit",
     short_name="MW3 Texture Streaming Limit",
-    description="Caps the bandwidth MW3 spends downloading textures over HTTP during a match. "
-    "That download shares the line with the match's own traffic, and the engine reports the "
-    "resulting delay as packet burst because it cannot tell a late packet from a late frame.",
+    description="Caps the bandwidth MW3 spends downloading textures over HTTP during a match. That download "
+    "shares the line with the match's traffic, and the engine reports the delay as packet burst.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "minimal"),
     default_value="default",
@@ -350,9 +349,9 @@ MW3_NAT_FIREWALL = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="MW3 Open NAT Firewall Rules",
     short_name="MW3 Open NAT Firewall Rules",
-    description="Creates Windows Firewall rules to open all MW3/Warzone required ports "
-    "(UDP: 3074, 4380, 27000-27036, 28950 / TCP: 3074, 3075, 27015-27030, 27036-27037). "
-    "Enables Open NAT type for faster matchmaking and less connection failures.",
+    description="Creates Windows Firewall rules opening every port MW3 and Warzone use (UDP 3074, 4380, "
+    "27000-27036, 28950; TCP 3074, 3075, 27015-27030, 27036-27037). Open NAT means faster, more "
+    "reliable matchmaking.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "open_nat"),
     default_value="default",
@@ -492,10 +491,8 @@ CS2_LOW_LATENCY_SLEEP = _make_cs2_cvar_setting(
     setting_id="game_config:cs2:low_latency_sleep",
     display_name="CS2 Low-Latency Sleep After Tick",
     short_name="CS2 Low-Latency Sleep After Tick",
-    description="Sets 'engine_low_latency_sleep_after_client_tick true' — moves "
-    "the engine's low-latency sleep to after the client tick instead of before, "
-    "tightening render latency on Reflex-style frame pacing. Pair with capped "
-    "fps_max for best effect.",
+    description="Moves the engine's low-latency sleep to after the client tick instead of before, tightening "
+    "render latency with Reflex-style pacing. Pairs best with a capped fps_max.",
     cvar="engine_low_latency_sleep_after_client_tick",
     cvar_value="true",
     default_cvar_value="false",
@@ -555,9 +552,8 @@ CS2_VIOLENCE_HBLOOD = _make_cs2_cvar_setting(
     setting_id="game_config:cs2:violence_hblood",
     display_name="CS2 Disable Blood Decals",
     short_name="CS2 Disable Blood Decals",
-    description="Sets 'violence_hblood 0' in CS2 autoexec.cfg, disabling blood splatter "
-    "decals on surfaces and characters. Blood confirms a hit you could not otherwise see "
-    "landing and marks the wall where a fight already happened.",
+    description="Sets violence_hblood 0 in CS2's autoexec.cfg, removing blood decals. Blood confirms a hit "
+    "you could not otherwise see land and marks the wall where a fight already happened.",
     cvar="violence_hblood",
     cvar_value="0",
     default_cvar_value="1",
@@ -601,9 +597,9 @@ CS2_DRAW_PARTICLES = _make_cs2_cvar_setting(
     setting_id="game_config:cs2:draw_particles",
     display_name="CS2 Disable Cosmetic Particles",
     short_name="CS2 Disable Cosmetic Particles",
-    description="Sets 'r_drawparticles 0' in CS2 autoexec.cfg, turning off the particle draw "
-    "pass. Impact sparks tell you where incoming fire is coming from and fire emitters are how "
-    "a molotov's area is visible, so this trades information for a fraction of a frame.",
+    description="Sets r_drawparticles 0 in CS2's autoexec.cfg, turning off the particle pass. Impact sparks "
+    "show where fire comes from and emitters show a molotov's area: information traded for a "
+    "sliver of a frame.",
     cvar="r_drawparticles",
     cvar_value="0",
     default_cvar_value="1",
@@ -726,9 +722,9 @@ HOTS_VSYNC = _make_hots_setting(
     setting_id="game_config:hots:vsync",
     display_name="HotS Vertical Sync",
     short_name="HotS Vertical Sync",
-    description="In-game frame synchronisation. With a variable-refresh panel the driver already "
-    "holds the frame rate inside the G-Sync window, so a second V-Sync inside the game only adds "
-    "the wait the display was chosen to remove.",
+    description="In-game frame synchronisation. On a variable-refresh panel the driver already holds the "
+    "frame rate inside the G-Sync window, so a second V-Sync only adds the wait the display was "
+    "chosen to remove.",
     key="vsync",
     default_value="true",
     recommended_value="false",
@@ -1050,9 +1046,9 @@ MW3_WORLD_STREAMING = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="MW3 On-Demand Texture Streaming",
     short_name="MW3 On-Demand Texture Streaming",
-    description="How much MW3 downloads on demand during a match (in-game labels: Minimal and "
-    "Optimized). Season 5 Reloaded removed the old Off option, so Low is the least this build "
-    "will download, and downloading less is what keeps the line clear for the match itself.",
+    description="How much MW3 downloads on demand during a match, the in-game Minimal and Optimized labels. "
+    "Season 5 Reloaded removed Off, so Low is the least this build downloads, keeping the line "
+    "clear.",
     value_type=SettingValueType.CHOICE,
     choices=("Low", "High"),
     default_value="High",
@@ -1103,9 +1099,8 @@ MW3_LOCAL_TEXTURE_QUALITY = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="MW3 Local Texture Streaming Quality",
     short_name="MW3 Local Texture Streaming Quality",
-    description="Virtual texture memory slot count. Controls how many textures fit in the "
-    "local streaming cache. Lower = less VRAM pressure. "
-    "Writes to options.4.cod23.cst.",
+    description="How many textures fit in the local streaming cache, as virtual texture memory slots. Lower "
+    "means less VRAM pressure.",
     value_type=SettingValueType.CHOICE,
     choices=("Extra Small", "Small", "Medium", "Large", "Extra Large"),
     default_value="Large",
@@ -1290,8 +1285,8 @@ MW3_DLSS_FRAME_GENERATION = _make_mw3_cst_setting(
     setting_id="game_config:mw3:dlss_frame_generation",
     display_name="MW3 DLSS Frame Generation",
     short_name="MW3 DLSS Frame Generation",
-    description="DLSS 3+ Frame Generation creates AI-interpolated frames. Boosts FPS counter "
-    "but adds input latency — undesirable for competitive multiplayer. Keep OFF for MP.",
+    description="DLSS 3 Frame Generation inserts AI-generated frames. The counter rises and input latency "
+    "rises with it, so it stays off for competitive multiplayer.",
     cst_key="DLSSFrameGeneration:0.0",
     choices=("true", "false"),
     default_value="false",
@@ -1310,9 +1305,9 @@ MW3_DLSS_PERF_MODE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:dlss_perf_mode",
     display_name="MW3 DLSS Performance Mode",
     short_name="MW3 DLSS Performance Mode",
-    description="DLSS internal render scale. Quality renders at 67% of native, Balanced at 58%, "
-    "Performance at 50%. An upscaler exists to buy frames, so its top tier gives back most of "
-    "what it was turned on for.",
+    description="DLSS internal render scale: Quality renders at 67% of native, Balanced at 58%, Performance "
+    "at 50%. An upscaler exists to buy frames, so its top tier gives back most of what it was "
+    "turned on for.",
     cst_key="DLSSPerfMode:0.0",
     choices=("Ultra Performance", "Maximum Performance", "Balanced", "Maximum Quality"),
     default_value="Maximum Quality",
@@ -1374,8 +1369,8 @@ MW3_DEPTH_OF_FIELD = _make_mw3_cst_setting(
     setting_id="game_config:mw3:depth_of_field",
     display_name="MW3 Depth of Field",
     short_name="MW3 Depth of Field",
-    description="Camera lens blur on out-of-focus regions, especially when ADS. Blurs distant "
-    "enemies — undesirable for visibility. Always OFF for competitive play.",
+    description="Camera lens blur on out-of-focus regions, strongest while aiming down sights. It blurs "
+    "distant enemies, so it stays off for competitive play.",
     cst_key="DepthOfField:0.0",
     choices=("true", "false"),
     default_value="true",
@@ -1425,9 +1420,9 @@ MW3_SCREEN_SPACE_SHADOWS = _make_mw3_cst_setting(
     setting_id="game_config:mw3:screen_space_shadows",
     display_name="MW3 Screen Space Shadows",
     short_name="MW3 Screen Space Shadows",
-    description="Self-shadowing on characters and weapons. What the channel carries is that a "
-    "body is shadowed at all, which separates it from the environment; how sharply that shadow "
-    "is resolved is not something a player reads.",
+    description="Self-shadowing on characters and weapons. What matters is that a body is shadowed at all, "
+    "which separates it from the environment; how sharply that shadow resolves is not something a "
+    "player reads.",
     cst_key="ScreenSpaceShadowQuality:0.0",
     choices=("Off", "Low", "High"),
     default_value="High",
@@ -1455,8 +1450,8 @@ MW3_VOLUMETRIC_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:volumetric_quality",
     display_name="MW3 Volumetric Quality",
     short_name="MW3 Volumetric Quality",
-    description="God rays, volumetric fog, and atmospheric scattering quality. Very expensive "
-    "GPU effect with no competitive benefit. Low recommended.",
+    description="God rays, volumetric fog and atmospheric scattering. A very expensive GPU effect with no "
+    "competitive benefit, so Low.",
     cst_key="VolumetricQuality:0.0",
     choices=("QUALITY_LOW", "QUALITY_MEDIUM", "QUALITY_HIGH"),
     default_value="QUALITY_HIGH",
@@ -1474,9 +1469,8 @@ MW3_PARTICLE_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:particle_quality",
     display_name="MW3 Particle Resolution",
     short_name="MW3 Particle Resolution",
-    description="Smoke, fire, explosion, and bullet impact particle resolution/density "
-    "(in-game UI label: 'Particle Resolution'; cst key still ParticleQuality). Low keeps "
-    "effects readable while reducing CPU/GPU particle simulation cost.",
+    description="Resolution and density of smoke, fire, explosion and impact particles, the in-game Particle "
+    "Resolution option. Low keeps effects readable while cutting their CPU and GPU cost.",
     cst_key="ParticleQuality:0.0",
     choices=("very low", "low", "medium", "high"),
     default_value="medium",
@@ -1539,8 +1533,8 @@ MW3_SHADER_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:shader_quality",
     display_name="MW3 Shader Quality",
     short_name="MW3 Shader Quality",
-    description="Material shader complexity. Low simplifies surface shading without affecting "
-    "geometry or visibility. Reduces shader compile time after driver updates.",
+    description="Material shader complexity. Low simplifies surface shading without touching geometry or "
+    "visibility, and shortens shader compilation after a driver update.",
     cst_key="ShaderQuality:0.0",
     choices=("Default", "Medium", "Low"),
     default_value="Default",
@@ -1563,8 +1557,8 @@ MW3_DXR_MODE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:dxr_mode",
     display_name="MW3 Ray Tracing (DXR)",
     short_name="MW3 Ray Tracing (DXR)",
-    description="DirectX Raytracing for shadows and reflections. Massive GPU cost (20-40% FPS "
-    "loss) with zero competitive benefit. Off mandatory for max FPS in multiplayer.",
+    description="DirectX ray tracing for shadows and reflections. It costs 20-40% of the frame rate and gives "
+    "no competitive advantage, so it is off for multiplayer.",
     cst_key="DxrMode:0.0",
     choices=("Off", "On"),
     default_value="Off",
@@ -1601,9 +1595,8 @@ MW3_DETAIL_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:detail_quality",
     display_name="MW3 Detail Quality Level",
     short_name="MW3 Detail Quality Level",
-    description="Geometry detail / model LOD (in-game UI label: 'Detail Quality Level'). "
-    "Controls the polygonal density of objects, foliage, rocks, and decals. Low simplifies "
-    "small clutter without affecting enemy character models.",
+    description="Geometry and model level of detail, the in-game Detail Quality Level option. Low simplifies "
+    "clutter such as foliage, rocks and decals without touching enemy character models.",
     cst_key="ModelQuality:0.0",
     choices=("Low Quality", "Medium Quality", "High Quality"),
     default_value="Medium Quality",
@@ -1621,11 +1614,9 @@ MW3_PERSISTENT_EFFECTS = _make_mw3_cst_setting(
     setting_id="game_config:mw3:persistent_effects",
     display_name="MW3 Persistent Effects",
     short_name="MW3 Persistent Effects",
-    description="Bullet impact decals and explosion marks that linger on surfaces "
-    "(in-game UI label: 'Persistent Effects'). Authoritative competitive guides "
-    "(PCOptimizedSettings, Charlie Intel) recommend KEEPING THIS ON because the "
-    "decals reveal recent enemy fire and prior engagements — competitive intel, "
-    "not pure cosmetic. VRAM-only effect, no measurable FPS cost.",
+    description="Bullet impact decals and explosion marks that linger on surfaces, the in-game Persistent "
+    "Effects option. They reveal recent enemy fire and past engagements, so they stay on; the "
+    "cost is VRAM only.",
     cst_key="PersistentDamageLayer:0.0",
     choices=("true", "false"),
     default_value="true",
@@ -1646,9 +1637,8 @@ MW3_STATIC_REFLECTION_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:static_reflection_quality",
     display_name="MW3 Static Reflection Quality",
     short_name="MW3 Static Reflection Quality",
-    description="Cubemap reflection probe relighting frequency / quality "
-    "(in-game UI label: 'Static Reflection Quality'). Value 1=Low, 4=High. "
-    "Dropping to 1 measures at only 0-1% FPS, so the game default is kept.",
+    description="How often cubemap reflection probes are relit, the in-game Static Reflection Quality option, "
+    "1 (Low) to 4 (High). Dropping to 1 measured 0-1% fps, so the game default is kept.",
     cst_key="ReflectionProbeRelighting:0.0",
     choices=("1", "2", "3", "4"),
     default_value="4",
@@ -1666,9 +1656,8 @@ MW3_DEFERRED_PHYSICS = _make_mw3_cst_setting(
     setting_id="game_config:mw3:deferred_physics",
     display_name="MW3 Deferred Physics Quality",
     short_name="MW3 Deferred Physics Quality",
-    description="GPU-accelerated environmental physics simulation (debris, smoke deformation). "
-    "(in-game UI label: 'Deferred Physics Quality'). The cost lands on the CPU, not the GPU as "
-    "the in-game menu implies, so CPU-limited systems gain the most from Low.",
+    description="Environmental physics such as debris and smoke deformation, the in-game Deferred Physics "
+    "Quality option. The cost lands on the CPU, so CPU-limited machines gain the most from Low.",
     cst_key="DeferredPhysics:0.0",
     choices=("Low Quality", "Medium Quality", "High Quality", "Developer"),
     default_value="Medium Quality",
@@ -1689,11 +1678,9 @@ MW3_RENDER_RESOLUTION = _make_mw3_cst_setting(
     setting_id="game_config:mw3:render_resolution",
     display_name="MW3 Render Resolution Multiplier",
     short_name="MW3 Render Resolution Multiplier",
-    description="Outer render scale (% of display) applied BEFORE the upscaler "
-    "(in-game UI label: 'Render Resolution'). Quality/performance trade-off — "
-    "50 = +89% FPS over native but very blurry; 75 = +33% FPS, balanced; "
-    "100 = native (let DLSS handle scaling). RECOMMEND 100 when DLSS Quality is "
-    "active (DLSS already gives 67% internal); use 75 only for pure-native targets.",
+    description="Render scale as a percentage of the display, applied before the upscaler, the in-game Render "
+    "Resolution option. Keep 100 with DLSS Quality, which already renders at 67%; 75 only for "
+    "native targets.",
     cst_key="ResolutionMultiplier:0.0",
     choices=("25", "50", "67", "75", "100", "125", "150"),
     default_value="100",
@@ -1824,9 +1811,9 @@ MW3_MENU_RENDER_RESOLUTION = _make_mw3_cst_setting(
     setting_id="game_config:mw3:menu_render_resolution",
     display_name="MW3 Menu Render Resolution",
     short_name="MW3 Menu Render Resolution",
-    description="How far MW3 drops the render resolution of non-gameplay scenes (menus, lobby) "
-    "to save power (in-game UI label: 'Menu Render Resolution'). The value names the size of the "
-    "reduction, not the resolution, so 'full' is the cheapest setting and 'off' the most expensive.",
+    description="How far MW3 drops the render resolution in menus and the lobby, the in-game Menu Render "
+    "Resolution option. The value is the size of the reduction, so full is the cheapest and off "
+    "the most expensive.",
     cst_key="SustainabilityMenuSceneResolution:0.0",
     choices=("off", "min", "full"),
     # The value is the amount of REDUCTION, confirmed against the in-game labels:
@@ -1860,9 +1847,9 @@ MW3_DISPLAY_MODE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:display_mode",
     display_name="MW3 Display Mode",
     short_name="MW3 Display Mode",
-    description="Window mode (in-game UI label: 'Display Mode'). Borderless keeps MW3 on the "
-    "flip-model presentation path, which on Windows 11 costs no measurable latency over "
-    "exclusive fullscreen while keeping alt-tab instant on multi-monitor setups.",
+    description="Window mode, the in-game Display Mode option. Borderless keeps MW3 on the flip-model path, "
+    "which on Windows 11 costs no measurable latency over exclusive fullscreen and alt-tabs "
+    "instantly.",
     cst_key="DisplayMode:0.0",
     choices=(
         "Windowed",
@@ -1904,9 +1891,8 @@ MW3_ANISOTROPIC = _make_mw3_cst_setting(
     setting_id="game_config:mw3:anisotropic",
     display_name="MW3 Texture Filter Anisotropic",
     short_name="MW3 Texture Filter Anisotropic",
-    description="Anisotropic filtering level for textures viewed at oblique angles "
-    "(in-game UI label: 'Texture Filter Anisotropic'). Normal (4x) gives sharp ground "
-    "and wall textures at minimal GPU cost compared to High/Extra.",
+    description="Anisotropic filtering for textures seen at an angle, the in-game Texture Filter Anisotropic "
+    "option. Normal (4x) keeps ground and wall texture sharp at a fraction of High's cost.",
     cst_key="TextureFilterAnisotropic:0.0",
     choices=("Low", "Normal", "High", "Extra"),
     default_value="Normal",
@@ -1950,9 +1936,9 @@ MW3_PAUSE_RENDERING = SettingExecutor(
     category=SettingCategory.GAME_CONFIG,
     display_name="MW3 Pause Game Rendering",
     short_name="MW3 Pause Game Rendering",
-    description="Pauses GPU rendering whenever the game window loses focus, not only when it is "
-    "minimized. On a multi-monitor setup the still-visible MW3 window then freezes on a stale "
-    "frame while you work on another screen.",
+    description="Pauses rendering whenever the window loses focus, not only when minimized. On a "
+    "multi-monitor setup the still-visible MW3 window then freezes on a stale frame while you "
+    "work on another screen.",
     value_type=SettingValueType.CHOICE,
     choices=("false", "true"),
     default_value="false",
@@ -2014,9 +2000,8 @@ MW3_FPS_CAP_OUT_OF_FOCUS = _make_mw3_cst_setting(
     setting_id="game_config:mw3:fps_cap_out_of_focus",
     display_name="MW3 Unfocused Frame Rate Limit",
     short_name="MW3 Unfocused Frame Rate Limit",
-    description="Maximum frames per second while the game window does not have focus. "
-    "Reclaims the GPU for whatever you alt-tabbed to without freezing the game window, "
-    "which is what pausing rendering outright does instead.",
+    description="Frame cap while the game window is not focused. It reclaims the GPU for whatever you "
+    "alt-tabbed to without freezing the game window, which pausing rendering outright would do.",
     cst_key="MaxFpsOutOfFocus:0.0",
     choices=(),
     value_type=SettingValueType.INT,
@@ -2065,8 +2050,8 @@ MW3_PATH_TRACING = _make_mw3_cst_setting(
     setting_id="game_config:mw3:path_tracing",
     display_name="MW3 Path Tracing",
     short_name="MW3 Path Tracing",
-    description="Full hardware path tracing — experimental key, active only in Gunsmith, Firing Range, and lobby, not during matches. "
-    "Costs significant GPU power in non-match areas; no effect on in-match FPS or competitive advantage.",
+    description="Full hardware path tracing, active only in Gunsmith, the Firing Range and the lobby, never "
+    "in a match. It costs GPU power there and changes nothing in-match.",
     cst_key="PathTracing:0.0",
     choices=("true", "false"),
     default_value="false",
@@ -2140,9 +2125,8 @@ MW3_WATER_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:water_quality",
     display_name="MW3 Water Quality",
     short_name="MW3 Water Quality",
-    description="Simulation detail for water surfaces including reflections, displacement, and caustics. "
-    "Per-option benchmarking measured no performance impact from lowering it, so the game "
-    "default is kept — there is no frame rate to win here.",
+    description="Simulation detail for water surfaces, including reflections, displacement and caustics. "
+    "Per-option benchmarking measured no gain from lowering it, so the game default is kept.",
     cst_key="WaterQuality:0.0",
     choices=("Low", "Medium", "High", "Very High"),
     default_value="High",
@@ -2202,8 +2186,8 @@ MW3_DLSS_MODE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:dlss_mode",
     display_name="MW3 DLSS Mode",
     short_name="MW3 DLSS Mode",
-    description="DLSS sub-mode when DLSS is the active upscaler. "
-    "DLSS gives upscaling + AA for the best FPS gain. DLAA provides full-resolution AA only (no FPS gain). DLSS-D enables Ray Reconstruction alongside DLSS.",
+    description="Which DLSS sub-mode runs when DLSS is the upscaler. DLSS upscales and anti-aliases for the "
+    "fps gain; DLAA anti-aliases at full resolution with no gain; DLSS-D adds Ray Reconstruction.",
     cst_key="DLSSMode:0.0",
     choices=("DLSS", "DLAA", "DLSS-D"),
     default_value="DLSS",
@@ -2222,9 +2206,9 @@ MW3_SUN_SHADOW_CASCADE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:sun_shadow_cascade",
     display_name="MW3 Sun Shadow Cascades",
     short_name="MW3 Sun Shadow Cascades",
-    description="How far sun shadows are still drawn. Cascades are distance bands, so dropping to "
-    "one keeps shadows near you and stops drawing them further out — including the shadow of "
-    "someone standing where you cannot yet see them.",
+    description="How far out sun shadows are still drawn, in distance bands. Dropping to one band keeps "
+    "shadows near you and stops drawing the shadow of someone standing where you cannot yet see "
+    "them.",
     cst_key="SunShadowCascade:0.0",
     choices=("Low    (1 cascade)", "Medium (1-2 cascades)", "High   (2-3 cascades)"),
     default_value="High   (2-3 cascades)",
@@ -2294,9 +2278,9 @@ MW3_VSYNC = _make_mw3_cst_setting(
     setting_id="game_config:mw3:vsync",
     display_name="MW3 VSync (In-Game)",
     short_name="MW3 VSync (In-Game)",
-    description="Vertical sync inside the game engine (in-game UI label: 'VSync'), which is a "
-    "different switch from the driver's. MW3's own sync loop is not VRR-aware: it queues frames "
-    "and charges a frame of input lag whether or not G-Sync is pacing the display.",
+    description="Vertical sync inside the game engine, separate from the driver's. MW3's own sync loop is not "
+    "VRR-aware: it queues frames and charges a frame of input lag even while G-Sync is pacing the "
+    "display.",
     cst_key="VSync:0.1",
     choices=("disabled", "100%", "50%", "33%", "25%"),
     default_value="disabled",
@@ -2338,8 +2322,9 @@ MW3_CLOUD_SAVEGAME = _make_mw3_cst_setting(
     setting_id="game_config:mw3:cloud_savegame",
     display_name="MW3 Cloud Config Savegame",
     short_name="MW3 Cloud Config Savegame",
-    description="Syncs player config files to Activision cloud on game launch. "
-    "When enabled, the game downloads cloud-saved settings on startup and overwrites local changes — causing optimised settings to revert after every restart.",
+    description="Syncs the config files to the Activision cloud on launch. When on, the cloud copy is "
+    "downloaded at startup and overwrites local changes, so tuned settings revert after every "
+    "restart.",
     cst_key="ConfigCloudSavegameEnabled:0.0",
     choices=("false", "true"),
     default_value="true",
@@ -2450,8 +2435,9 @@ MW3_SHADER_CACHE_CLEANUP = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="MW3 Shader Cache Cleanup",
     short_name="MW3 Shader Cache Cleanup",
-    description="Deletes MW3 PSO shader cache, telescope cache, and xpak cache from the game install directory. "
-    "Fixes launch crashes and black screens caused by stale shaders after driver updates. Shaders recompile on next launch (5-15 min).",
+    description="Deletes MW3's PSO shader cache and its telescope and xpak caches from the install folder. "
+    "Fixes launch crashes and black screens after a driver update; shaders recompile on next "
+    "launch, 5-15 min.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2512,9 +2498,8 @@ MW3_PREFERRED_DISPLAY_MODE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:preferred_display_mode",
     display_name="MW3 Preferred Display Mode",
     short_name="MW3 Preferred Display Mode",
-    description="The mode MW3 returns to when it re-enters fullscreen, stored separately from "
-    "the active Display Mode. If the two disagree the game drifts back to the preferred one, so "
-    "this must match Display Mode or the chosen mode silently reverts.",
+    description="The mode MW3 returns to when it re-enters fullscreen, stored apart from the active Display "
+    "Mode. If the two disagree the game drifts back to this one, so it must match Display Mode.",
     cst_key="PreferredDisplayMode:0.0",
     choices=("Fullscreen", "Fullscreen borderless window", "Fullscreen borderless extended window"),
     default_value="Fullscreen borderless window",
@@ -2534,9 +2519,9 @@ MW3_HW_CHANGE_DETECTION = _make_mw3_cst_setting(
     setting_id="game_config:mw3:hw_change_detection",
     display_name="MW3 Hardware Change Autodetect",
     short_name="MW3 Hardware Change Autodetect",
-    description="Re-runs MW3's automatic settings detection whenever it sees a hardware or GPU "
-    "driver change, overwriting every graphics option with its own guesses. Disabling it is what "
-    "keeps applied tweaks from silently reverting after a driver update.",
+    description="Re-runs MW3's automatic settings detection on any hardware or driver change, overwriting "
+    "every graphics option with its own guesses. Off keeps applied tweaks from reverting after a "
+    "driver update.",
     cst_key="DisableHWChangeDetection:0.0",
     choices=("false", "true"),
     default_value="false",

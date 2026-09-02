@@ -674,3 +674,81 @@ class TestDuplicationCeiling:
             f"the duplication shrank (steam={steam}, devmode={devmode}) — lower "
             "the ceilings so the consolidation is on the record"
         )
+
+
+class TestNoRuntimeCompile:
+    """#83 gap 0: shipped code never compiles C# inside PowerShell.
+
+    Eight ``Add-Type`` P/Invoke sites reached kernel32, user32, ntdll and wlanapi
+    that way. Windows Defender flagged the pattern as trojan behaviour on the
+    developer machine on 2026-09-02 — it is the shape of a malware loader whatever
+    the code inside does — and every call also paid a C# compile. Native calls go
+    through ``utils/winapi`` (ctypes). The word may survive in a comment that
+    records why; the compile forms may not.
+    """
+
+    _COMPILE_FORMS = (
+        "Add-Type @'",
+        "Add-Type -TypeDefinition",
+        "Add-Type -AssemblyName",
+        "DllImport(",
+    )
+
+    def test_no_shipped_module_compiles_code_at_run_time(self) -> None:
+        offenders = []
+        for path in (ROOT / "src" / "fpstune").rglob("*.py"):
+            text = path.read_text(encoding="utf-8")
+            for form in self._COMPILE_FORMS:
+                if form in text:
+                    offenders.append(f"{path.relative_to(ROOT).as_posix()}: {form}")
+        assert not offenders, (
+            "run-time compilation in shipped code — port the call to utils/winapi "
+            "(ctypes): " + "; ".join(offenders)
+        )
+
+
+class TestNoLocalizedTextParsing:
+    """#83 Phase 4: a detect or apply path never matches text Windows localizes.
+
+    ``Select-String`` and ``findstr`` over a tool's output are the recurring shape
+    of the defect (netsh wlan labels, fsutil's TRIM line, netsh's congestion
+    label); ``wmic`` no longer exists on 24H2. Each surviving use is listed with
+    the reason it is safe — a GUID is not a word — and anything new is red on
+    arrival.
+    """
+
+    _FORBIDDEN = ("Select-String", "findstr", "wmic")
+    # (relative path, substring that must be on the same line) -> why it is allowed.
+    _ALLOWED = {
+        (
+            "src/fpstune/api/routes/system_audio.py",
+            "d04e05a6",
+        ): "matches a property GUID, not a word",
+    }
+
+    def test_no_new_text_matching_on_tool_output(self) -> None:
+        offenders = []
+        for path in (ROOT / "src" / "fpstune").rglob("*.py"):
+            relative = path.relative_to(ROOT).as_posix()
+            for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+                stripped = line.strip()
+                if stripped.startswith("#"):
+                    continue
+                for token in self._FORBIDDEN:
+                    if token not in line:
+                        continue
+                    if any(rel == relative and marker in line for rel, marker in self._ALLOWED):
+                        continue
+                    offenders.append(f"{relative}:{number}: {token}")
+        assert not offenders, (
+            "text matching on localized tool output — read the API, the registry or a "
+            "numeric field instead: " + "; ".join(offenders)
+        )
+
+    def test_the_allowlist_is_not_stale(self) -> None:
+        """An allowlisted line that no longer exists is a rule nobody checks."""
+        for (relative, marker), _reason in self._ALLOWED.items():
+            text = (ROOT / relative).read_text(encoding="utf-8")
+            assert marker in text, (
+                f"{relative} no longer contains {marker!r}; drop the allowlist entry"
+            )

@@ -31,6 +31,17 @@ vi.mock("../SelfCheckNotice", () => ({
   SelfCheckNotice: () => null,
 }));
 
+// HomeTab asks the headroom API on mount. Left unmocked, that is a real fetch
+// against no server in jsdom, rejected after the test has finished; vitest
+// reported it as an unhandled error in the full pre-commit run on 2026-09-02.
+vi.mock("../../lib/api", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../lib/api")>();
+  return {
+    ...actual,
+    headroomApi: { list: () => Promise.resolve({ games: [] }) },
+  };
+});
+
 vi.mock("../../hooks/useBulkApply", () => ({
   useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
 }));
@@ -107,7 +118,9 @@ describe("HomeTab empty states", () => {
     render(<HomeTab />);
 
     expect(screen.queryByText(/already optimized/i)).not.toBeInTheDocument();
-    expect(screen.getAllByText(/Reading your current settings/i)).toHaveLength(3);
+    expect(screen.getAllByText(/Reading your current settings/i)).toHaveLength(
+      3,
+    );
   });
 
   it("the scan shows real progress, not just a spinner (E5)", () => {
@@ -147,7 +160,9 @@ describe("HomeTab empty states", () => {
     setStore([], false);
     render(<HomeTab />);
 
-    expect(screen.queryByRole("button", { name: /apply all/i })).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: /apply all/i }),
+    ).not.toBeInTheDocument();
   });
 
   it("says sizes are being measured while a cleanup is still calculating", () => {
@@ -164,7 +179,9 @@ describe("HomeTab empty states", () => {
     setStore([], false);
     render(<HomeTab />);
 
-    expect(screen.getByText(/Nothing to reclaim right now/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/Nothing to reclaim right now/i),
+    ).toBeInTheDocument();
     expect(
       screen.queryByText(/Measuring what can be reclaimed/i),
     ).not.toBeInTheDocument();
@@ -175,6 +192,8 @@ describe("HomeTab empty states", () => {
     setStore([pendingCleanup()], true);
     render(<HomeTab />);
 
-    expect(screen.queryByText(/or nothing to reclaim/i)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/or nothing to reclaim/i),
+    ).not.toBeInTheDocument();
   });
 });

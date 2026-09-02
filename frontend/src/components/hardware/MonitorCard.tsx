@@ -360,7 +360,7 @@ export function MonitorCard({
       <div className="flex items-center gap-1.5">
         <ScreenShare
           className={cn(
-            "w-3 h-3 flex-shrink-0",
+            "w-3 h-3 shrink-0",
             isActive ? "text-muted-foreground" : "text-muted-foreground/50",
           )}
         />
@@ -375,17 +375,17 @@ export function MonitorCard({
             `Display ${displayIndex + 1}`}
         </span>
         {!isActive && (
-          <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium flex-shrink-0">
+          <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium shrink-0">
             {t("monitor.disconnected")}
           </span>
         )}
         {monitor.is_primary && (
-          <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium flex-shrink-0">
+          <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium shrink-0">
             {t("monitor.primary")}
           </span>
         )}
         {monitor.supports_vrr && (
-          <span className="text-xs px-1 py-0.5 rounded bg-success/20 text-success font-medium flex-shrink-0">
+          <span className="text-xs px-1 py-0.5 rounded bg-success/20 text-success font-medium shrink-0">
             VRR
           </span>
         )}

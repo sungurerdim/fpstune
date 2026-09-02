@@ -85,7 +85,7 @@ function Toast({
       )}
     >
       <Icon className="w-4 h-4 shrink-0 mt-0.5" aria-hidden="true" />
-      <p className="text-xs text-foreground flex-1 break-words">
+      <p className="text-xs text-foreground flex-1 wrap-break-word">
         {/* Severity travels as a word as well as a colour: the icon is
             decorative and the accent is invisible to a screen reader. */}
         <span className="sr-only">{t(config.labelKey)}: </span>

@@ -172,7 +172,7 @@ export function CleanupPanel({
                     />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm break-words min-w-0">
+                        <span className="font-medium text-sm wrap-break-word min-w-0">
                           {localizedName(setting)}
                         </span>
                         {(() => {
@@ -208,7 +208,7 @@ export function CleanupPanel({
                       {/* Show warning for long operations */}
                       {setting.name === "dism_cleanup" && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                           <span>{t("cleanup.dismWarning")}</span>
                         </div>
                       )}
@@ -217,14 +217,14 @@ export function CleanupPanel({
                       {(setting.name === "docker_prune" ||
                         setting.name === "docker_prune_all") && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                           <span>{t("cleanup.dockerShutdownWarning")}</span>
                         </div>
                       )}
                       {/* Show warning for the disruptive WSL shutdown */}
                       {setting.name === "wsl_compact" && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                           <span>{t("cleanup.wslWarning")}</span>
                         </div>
                       )}
@@ -233,7 +233,7 @@ export function CleanupPanel({
                           if the cleanup had already happened. */}
                       {setting.effect && (
                         <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
-                          <Info className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                           <span>{setting.effect}</span>
                         </div>
                       )}

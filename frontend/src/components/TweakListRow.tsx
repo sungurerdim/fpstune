@@ -47,8 +47,8 @@ export function TweakListRow({
         // Same accent language as the full tweak row, so a setting looks the
         // same whether you meet it on Home or in the category list.
         setting.isOptimized
-          ? "border-l-success/70 bg-success/[0.08]"
-          : "border-l-destructive/70 bg-destructive/[0.08]",
+          ? "border-l-success/70 bg-success/8"
+          : "border-l-destructive/70 bg-destructive/8",
       )}
     >
       <div className="flex-1 min-w-0">
@@ -58,7 +58,7 @@ export function TweakListRow({
               {categoryLabel}
             </span>
           )}
-          <span className="font-medium text-sm break-words min-w-0">
+          <span className="font-medium text-sm wrap-break-word min-w-0">
             {localizedName(setting)}
           </span>
           <RiskWarningBadge setting={setting} />

@@ -121,25 +121,25 @@ export function Meter({
 
 const ALERT_TONES = {
   info: {
-    frame: "border-primary/40 bg-primary/[0.06]",
+    frame: "border-primary/40 bg-primary/6",
     text: "text-primary",
     icon: Info,
     role: "status" as const,
   },
   success: {
-    frame: "border-success/40 bg-success/[0.06]",
+    frame: "border-success/40 bg-success/6",
     text: "text-success",
     icon: CheckCircle2,
     role: "status" as const,
   },
   warning: {
-    frame: "border-warning/40 bg-warning/[0.06]",
+    frame: "border-warning/40 bg-warning/6",
     text: "text-warning",
     icon: AlertTriangle,
     role: "alert" as const,
   },
   error: {
-    frame: "border-destructive/40 bg-destructive/[0.06]",
+    frame: "border-destructive/40 bg-destructive/6",
     text: "text-destructive",
     icon: XCircle,
     role: "alert" as const,

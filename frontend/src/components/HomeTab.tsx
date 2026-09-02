@@ -513,7 +513,7 @@ export function HomeTab() {
             {actionableAdvisories.map((s) => (
               <div
                 key={s.id}
-                className="p-3 rounded-md border border-warning/30 border-l-4 border-l-warning bg-warning/[0.06]"
+                className="p-3 rounded-md border border-warning/30 border-l-4 border-l-warning bg-warning/6"
               >
                 <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-medium text-sm">
@@ -556,7 +556,7 @@ export function HomeTab() {
           "grid gap-4 items-start",
           suboptimal.length > 0 &&
             cleanups.length > 0 &&
-            "lg:grid-cols-2 2xl:grid-cols-[2fr,1fr]",
+            "lg:grid-cols-2 2xl:grid-cols-[2fr_1fr]",
         )}
       >
         {/* LEFT: what still needs applying, split by where it lives.
@@ -989,9 +989,9 @@ function Group({
 }) {
   const border =
     tone === "warning"
-      ? "border-warning/30 bg-warning/[0.05]"
+      ? "border-warning/30 bg-warning/5"
       : tone === "success"
-        ? "border-success/30 bg-success/[0.05]"
+        ? "border-success/30 bg-success/5"
         : "border-border bg-muted/30";
   const text =
     tone === "warning"

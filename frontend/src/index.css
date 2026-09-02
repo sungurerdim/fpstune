@@ -1,6 +1,73 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+
+@custom-variant dark (&:is(.dark *));
+
+@theme {
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-elevated: hsl(var(--card-elevated));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-success: hsl(var(--success));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-score-low: hsl(var(--score-low));
+  --color-score-mid: hsl(var(--score-mid));
+  --color-score-high: hsl(var(--score-high));
+  --color-domain-hardware: hsl(var(--domain-hardware));
+  --color-domain-software: hsl(var(--domain-software));
+  --color-domain-game: hsl(var(--domain-game));
+
+  --radius-lg: 0.5rem;
+  --radius-md: calc(0.5rem - 2px);
+  --radius-sm: calc(0.5rem - 4px);
+
+  --shadow-raised: 0 1px 2px 0 rgb(0 0 0 / 0.25);
+  --shadow-overlay: 0 4px 12px -2px rgb(0 0 0 / 0.35);
+  --shadow-modal: 0 12px 32px -4px rgb(0 0 0 / 0.45);
+
+  --z-index-sticky: 20;
+  --z-index-dropdown: 40;
+  --z-index-overlay: 50;
+  --z-index-modal: 60;
+  --z-index-toast: 70;
+
+  --transition-duration-quick: 150ms;
+  --transition-duration-deliberate: 300ms;
+}
+
+/*
+  The default border color has changed to `currentcolor` in Tailwind CSS v4,
+  so we've added these compatibility styles to make sure everything still
+  looks the same as it did with Tailwind CSS v3.
+
+  If we ever want to remove these styles, we need to add an explicit border
+  color utility to any element that depends on these defaults.
+*/
+@layer base {
+  *,
+  ::after,
+  ::before,
+  ::backdrop,
+  ::file-selector-button {
+    border-color: var(--color-gray-200, currentcolor);
+  }
+}
 
 /*
  * The design tokens (E1). Every colour the app uses is a CSS custom property

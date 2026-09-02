@@ -132,7 +132,7 @@ export function SelectionToolbar() {
       <div
         className={cn(
           "fixed bottom-0 left-0 right-0 z-50",
-          "bg-card/95 backdrop-blur-sm border-t border-border",
+          "bg-card/95 backdrop-blur-xs border-t border-border",
           "px-6 py-3 flex items-center gap-3 shadow-lg",
         )}
       >

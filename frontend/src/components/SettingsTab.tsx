@@ -252,7 +252,7 @@ export function SettingsTab({
       ) : (
         <>
           <NeedsBand rows={needs} />
-          <section className="rounded-lg border border-success/30 bg-success/[0.04] p-4 space-y-3">
+          <section className="rounded-lg border border-success/30 bg-success/4 p-4 space-y-3">
             <button
               type="button"
               onClick={() => setShowOptimized(!showOptimized)}
@@ -311,7 +311,7 @@ function NeedsBand({ rows }: { rows: TweakRow[] }) {
   };
 
   return (
-    <section className="rounded-lg border border-warning/30 bg-warning/[0.04] p-4 space-y-3">
+    <section className="rounded-lg border border-warning/30 bg-warning/4 p-4 space-y-3">
       <div className="flex items-center gap-2">
         <AlertCircle className="w-4 h-4 text-warning" />
         <h2 className="text-sm font-bold uppercase tracking-wider text-warning">

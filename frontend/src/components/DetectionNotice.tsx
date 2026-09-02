@@ -54,7 +54,7 @@ export function DetectionNotice({
             className="flex w-full items-center gap-1.5 text-left text-xs font-medium text-warning"
             aria-expanded={failuresOpen}
           >
-            <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0" />
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
             {failures.length === 1
               ? t("detection.failedOne")
               : t("detection.failedMany", { count: failures.length })}
@@ -84,7 +84,7 @@ export function DetectionNotice({
             className="flex w-full items-center gap-1.5 text-left text-xs text-muted-foreground"
             aria-expanded={absentOpen}
           >
-            <EyeOff className="h-3 w-3 flex-shrink-0" />
+            <EyeOff className="h-3 w-3 shrink-0" />
             {absent.length === 1
               ? t("detection.absentOne")
               : t("detection.absentMany", { count: absent.length })}

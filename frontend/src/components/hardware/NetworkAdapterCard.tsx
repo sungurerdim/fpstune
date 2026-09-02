@@ -144,9 +144,9 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         />
 
         {isWiFi ? (
-          <Wifi className="w-3 h-3 text-primary flex-shrink-0" />
+          <Wifi className="w-3 h-3 text-primary shrink-0" />
         ) : (
-          <Network className="w-3 h-3 text-muted-foreground flex-shrink-0" />
+          <Network className="w-3 h-3 text-muted-foreground shrink-0" />
         )}
         <CopyableText
           value={adapter.name}
@@ -159,7 +159,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
             onClick={() => connectionMutation.mutate()}
             disabled={connectionMutation.isPending}
             className={cn(
-              "p-1 rounded transition-colors flex-shrink-0",
+              "p-1 rounded transition-colors shrink-0",
               adapter.is_connected
                 ? "text-warning hover:bg-warning/10"
                 : "text-success hover:bg-success/10",
@@ -195,7 +195,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         <span
           id={isPhantom ? phantomReasonId : undefined}
           className={cn(
-            "text-xs px-1 py-0.5 rounded flex-shrink-0",
+            "text-xs px-1 py-0.5 rounded shrink-0",
             isPhantom
               ? "bg-destructive/20 text-destructive"
               : adapter.is_connected
@@ -219,7 +219,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         {lacksIdentifier && (
           <span
             id={identifierReasonId}
-            className="text-xs px-1 py-0.5 rounded flex-shrink-0 bg-warning/20 text-warning"
+            className="text-xs px-1 py-0.5 rounded shrink-0 bg-warning/20 text-warning"
           >
             Not controllable
           </span>

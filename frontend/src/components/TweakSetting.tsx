@@ -97,8 +97,8 @@ export function TweakSetting({
     : isInitialLoading
       ? "bg-muted/20"
       : isOptimal
-        ? "bg-success/[0.08] hover:bg-success/[0.14]"
-        : "bg-destructive/[0.08] hover:bg-destructive/[0.14]";
+        ? "bg-success/8 hover:bg-success/[0.14]"
+        : "bg-destructive/8 hover:bg-destructive/[0.14]";
 
   // The bar is what the eye follows down a long list, so it is drawn for BOTH
   // states. Only marking the bad ones left "everything here is fine" as an
@@ -139,7 +139,7 @@ export function TweakSetting({
         )}
         <SettingInfoTooltip setting={setting} />
 
-        <div className="flex items-center gap-1.5 min-w-0 flex-shrink">
+        <div className="flex items-center gap-1.5 min-w-0 shrink">
           <span
             className={cn(
               "text-xs font-medium leading-tight",
@@ -231,7 +231,7 @@ export function TweakSetting({
                   that there is one. */}
               <SettingValueState
                 setting={setting}
-                className="mr-1 max-w-[28rem]"
+                className="mr-1 max-w-md"
               />
               <span
                 className={cn(
@@ -259,7 +259,7 @@ export function TweakSetting({
             <>
               <SettingValueState
                 setting={setting}
-                className="mr-1 max-w-[14rem]"
+                className="mr-1 max-w-56"
               />
               <InlineControl
                 setting={setting}
@@ -354,7 +354,7 @@ export function TweakSetting({
             <span className="text-muted-foreground/50 text-xs shrink-0">
               {t("row.default")}
             </span>
-            <span className="text-muted-foreground font-medium break-words min-w-0">
+            <span className="text-muted-foreground font-medium wrap-break-word min-w-0">
               {valueLabel(setting, setting.defaultValue)}
             </span>
           </span>
@@ -364,7 +364,7 @@ export function TweakSetting({
             </span>
             <span
               className={cn(
-                "font-medium break-words min-w-0",
+                "font-medium wrap-break-word min-w-0",
                 isOptimal ? "text-success" : "text-warning",
               )}
             >
@@ -375,7 +375,7 @@ export function TweakSetting({
             <span className="text-muted-foreground/50 text-xs shrink-0">
               {t("row.target")}
             </span>
-            <span className="text-primary font-medium break-words min-w-0">
+            <span className="text-primary font-medium wrap-break-word min-w-0">
               {valueLabel(setting, profileTarget)}
             </span>
           </span>

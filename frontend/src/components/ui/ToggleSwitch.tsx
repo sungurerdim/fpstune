@@ -79,7 +79,7 @@ export function ToggleSwitch({
     <button
       onClick={onToggle}
       disabled={disabled}
-      className="flex-shrink-0 rounded-full"
+      className="shrink-0 rounded-full"
       title={title}
       aria-label={title}
       aria-describedby={describedBy}
@@ -98,7 +98,7 @@ export function ToggleSwitch({
         <div
           className={cn(
             sizeClasses.thumb,
-            "rounded-full bg-white shadow transition-transform",
+            "rounded-full bg-white shadow-sm transition-transform",
             enabled ? sizeClasses.translate : "translate-x-0",
           )}
         />

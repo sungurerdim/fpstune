@@ -34,7 +34,7 @@ export function SelfCheckNotice() {
   const disagreements = report.findings.filter((finding) => !finding.agrees);
 
   return (
-    <div className="rounded-lg border border-warning/40 bg-warning/[0.06] p-3 space-y-2">
+    <div className="rounded-lg border border-warning/40 bg-warning/6 p-3 space-y-2">
       <div className="flex items-center gap-2">
         <ShieldAlert className="w-4 h-4 text-warning" aria-hidden="true" />
         <p className="text-sm font-medium text-warning">

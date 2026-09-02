@@ -85,7 +85,7 @@ export function CleanupListRow({
     <div className="flex items-start gap-3 p-3 rounded-md border border-border hover:border-muted-foreground/50 transition-colors">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium text-sm break-words min-w-0">
+          <span className="font-medium text-sm wrap-break-word min-w-0">
             {localizedName(setting)}
           </span>
           {sizeBadge()}
@@ -100,7 +100,7 @@ export function CleanupListRow({
         </p>
         {isDockerCleanup(setting) && (
           <div className="flex items-start gap-1.5 mt-1.5 text-xs text-warning">
-            <AlertTriangle className="w-3 h-3 mt-0.5 flex-shrink-0" />
+            <AlertTriangle className="w-3 h-3 mt-0.5 shrink-0" />
             <span>{t("cleanup.dockerWarning")}</span>
           </div>
         )}

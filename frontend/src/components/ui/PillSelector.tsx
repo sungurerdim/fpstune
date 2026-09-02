@@ -48,7 +48,7 @@ export function PillSelector({
             className={cn(
               "px-2 py-0.5 text-xs rounded transition-all font-medium",
               isActive
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-xs"
                 : isTarget
                   ? "text-primary bg-primary/10 ring-1 ring-primary/30"
                   : "text-muted-foreground hover:text-foreground hover:bg-muted",

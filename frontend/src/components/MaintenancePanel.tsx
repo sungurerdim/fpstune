@@ -115,7 +115,7 @@ export function MaintenancePanel() {
               {/* Kept: this one is a precondition, not a restatement. */}
               {setting.name === "dism_health" && (
                 <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
                   <span>{t("maintenance.dismHealthWarning")}</span>
                 </div>
               )}

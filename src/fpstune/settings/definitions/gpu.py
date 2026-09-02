@@ -1077,20 +1077,27 @@ AMD_VSYNC = SettingExecutor(
 # === AMD Radeon Boost (T1 AMD Source) ===
 # Dynamically lowers resolution during motion for FPS gains.
 # T1 evidence: AMD official documentation confirms 5-15% FPS improvement.
+# Scope is COMPLETE, not RECOMMENDED (decided 2026-09-02): the resolution drop
+# lands exactly while the camera moves fast, which is the moment a player is
+# tracking a target. That is a perceptible cost to an information channel, so
+# consequence 5 puts it where it is offered with the cost in the copy, never
+# applied by the safe button. Chill sits in the same category for the same
+# reason. No lab measurement of the tracking cost exists either way; Calypto's
+# competitive-latency guide lists Boost off.
 AMD_RADEON_BOOST = SettingExecutor(
     id="gpu-amd:radeon_boost",
     category=SettingCategory.GPU,
     display_name="Radeon Boost",
     short_name="Radeon Boost",
-    description="Dynamically lowers resolution during fast motion for FPS gains (5-15%). Visual quality impact minimal due to motion blur.",
+    description="Lowers the render resolution while the camera moves fast and restores it when the view settles, for 5-15% more frames. The cost lands exactly during target tracking, so the extra frames are bought with sharpness at the moment it matters most.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
     recommended_value="enabled",
     requires_reboot=False,
-    current_impact="Disabled: Full resolution at all times",
-    recommended_impact="Enabled: Dynamic resolution during motion → 5-15% higher FPS",
-    scope=SettingScope.RECOMMENDED,  # Significant FPS benefit
+    current_impact="Disabled: Full resolution at all times, including while tracking a target",
+    recommended_impact="Enabled: 5-15% more frames during motion, at the cost of a softer image while you track a target",
+    scope=SettingScope.COMPLETE,  # Perceptible cost during tracking: offered, never assumed
     category_order=4,  # After Anti-Lag and Shader Cache
     effect="Enables dynamic resolution scaling during motion for higher FPS",
     impact_scores={"fps": "+10-25%", "latency_ms": -2, "stability": "high"},

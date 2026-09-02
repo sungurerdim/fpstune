@@ -445,7 +445,7 @@ export const settingsTr: Record<
   "gpu-amd:radeon_boost": {
     name: "Radeon Boost",
     description:
-      "Hızlı hareket sırasında çözünürlüğü dinamik düşürerek FPS kazandırır (%5-15). Hareket bulanıklığı sayesinde görsel etkisi azdır.",
+      "Kamera hızlı hareket ederken render çözünürlüğünü düşürür ve görüntü durulunca geri yükler, böylece %5-15 daha fazla kare verir. Bedeli tam hedef takibi anında ödenir: fazladan kareler, en çok gerektiği anda netlik karşılığında alınır.",
   },
   "gpu-amd:enhanced_sync": {
     name: "Enhanced Sync",

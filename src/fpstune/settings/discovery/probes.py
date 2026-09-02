@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import logging
 import subprocess
+import sys
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
@@ -139,6 +140,44 @@ class HardwareProbes:
                     future.result()
                 except Exception as e:  # pragma: no cover - environment dependent
                     logger.debug("A hardware probe failed during warm-up: %s", e)
+
+    def adapter_guids(self) -> dict[int, str]:
+        """InterfaceIndex -> InterfaceGuid (lowercase, no braces), for every adapter.
+
+        The WLAN API addresses a radio by GUID while every per-adapter setting is
+        keyed by index; this is the join, read once. Both fields are the
+        adapter's own identifiers (C5), and nothing here is text a language
+        changes.
+        """
+        return self.probe_once("adapter_guids", self._read_adapter_guids)
+
+    def _read_adapter_guids(self) -> dict[int, str]:
+        if sys.platform != "win32":
+            return {}
+        try:
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-NoProfile",
+                    "-Command",
+                    "Get-NetAdapter -IncludeHidden | ForEach-Object { "
+                    '"$($_.InterfaceIndex)|$([string]$_.InterfaceGuid)" }',
+                ],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=self.adapter_discovery_timeout,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            logger.debug("adapter GUID probe failed: %s", exc)
+            return {}
+        guids: dict[int, str] = {}
+        for line in result.stdout.splitlines():
+            index_text, _, guid = line.strip().partition("|")
+            if index_text.isdigit() and guid:
+                guids[int(index_text)] = guid.lower().strip("{}")
+        return guids
 
     def active_adapters(self) -> list[tuple[int, str, str]]:
         """Memoised; the real query is _query_active_adapters."""

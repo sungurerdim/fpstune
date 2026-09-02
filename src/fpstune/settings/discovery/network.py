@@ -257,3 +257,35 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
 
     logger.debug("Discovered %d network adapter(s)", len(valid_adapters))
     return len(valid_adapters)
+
+
+def discover_wifi_link_quality(registry: Registrar, probes: HardwareProbes) -> int:
+    """Register the Wi-Fi link-quality advisory on every Wi-Fi adapter.
+
+    Runs after the per-adapter settings so it reads the same memoised adapter
+    list. An adapter whose GUID the probe could not pair is skipped rather than
+    registered blind: without the GUID the detector has nothing to ask the WLAN
+    API for.
+
+    Returns:
+        Number of advisories registered.
+    """
+    from fpstune.settings.definitions.network import create_wifi_link_quality_setting
+
+    adapters = filter_valid_adapters(probes.active_adapters())
+    wifi = [(index, name) for index, name, media in adapters if "802.11" in (media or "")]
+    if not wifi:
+        return 0
+
+    guids = probes.adapter_guids()
+    count = 0
+    for index, name in wifi:
+        guid = guids.get(index)
+        if not guid:
+            logger.debug(
+                "No InterfaceGuid for Wi-Fi adapter %d; link-quality advisory skipped", index
+            )
+            continue
+        registry.register(create_wifi_link_quality_setting(index, guid, name))
+        count += 1
+    return count

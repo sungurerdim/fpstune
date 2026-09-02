@@ -3375,6 +3375,60 @@ def create_mtu_setting(interface_index: int, display_name: str, path_mtu: int) -
     )
 
 
+def create_wifi_link_quality_setting(
+    interface_index: int, interface_guid: str, display_name: str
+) -> SettingExecutor:
+    """A read-only advisory on the Wi-Fi link itself: how strong, and on which band.
+
+    The Ethernet sibling (`create_link_capability_setting`) reports a link below the
+    adapter's ceiling; this is the same fact for a radio, where the ceiling is set
+    by signal and band rather than by a cable. Both are things fpstune can read and
+    cannot fix, and both are the largest network finding on the machines that have
+    them — no adapter keyword recovers a -75 dBm link or a crowded 2.4 GHz channel.
+
+    Everything is a number from wlanapi (signal quality, BSS centre frequency),
+    read through ``utils/winapi/wlan.py``; nothing is parsed from ``netsh`` text.
+    The interface index keys the id so the Hardware page attaches it to its
+    adapter; the GUID is what the WLAN API addresses.
+    """
+    return SettingExecutor(
+        id=f"network:{interface_index}:wifi_link_quality",
+        category=SettingCategory.NETWORK,
+        display_name=f"Wi-Fi Link Quality ({display_name})",
+        short_name=f"Wi-Fi signal check ({display_name})",
+        description="How strong the Wi-Fi link is and which band it runs on. A weak signal or "
+        "the 2.4 GHz band caps throughput and adds the latency spikes no adapter setting can "
+        "remove.",
+        value_type=SettingValueType.CHOICE,
+        choices=("good", "weak_signal", "on_2_4ghz"),
+        default_value="good",
+        recommended_value="good",
+        requires_reboot=False,
+        evidence_level="proven",
+        risk_level="safe",
+        sources=[
+            "https://learn.microsoft.com/en-us/windows/win32/api/wlanapi/ns-wlanapi-wlan_association_attributes",
+        ],
+        current_impact="Weak signal or 2.4 GHz: the line is capped by radio conditions, not by "
+        "the adapter",
+        recommended_impact="Good: a strong signal on the 5 GHz or 6 GHz band",
+        scope=SettingScope.RECOMMENDED,
+        category_order=25,
+        effect="Move closer to the access point or remove what stands between; join the "
+        "router's 5 GHz or 6 GHz network if it offers one; a cable beats both",
+        impact_scores={
+            "latency_ms": "spikes of tens of milliseconds on a weak or crowded 2.4 GHz link",
+            "bandwidth": "up to the gap between the band's rate and the link's",
+        },
+        is_readonly=True,
+        detect_type=DetectType.POWERSHELL,
+        # A Python detector key, not a script: see executors/python_actions.py.
+        detect_command="wifi_link_quality",
+        detect_args={"interface_guid": interface_guid},
+        value_map={},
+    )
+
+
 def create_link_capability_setting(interface_index: int, display_name: str) -> SettingExecutor:
     """Create a read-only advisory comparing the negotiated link to the adapter's own ceiling.
 

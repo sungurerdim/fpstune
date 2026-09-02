@@ -60,10 +60,15 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         discover_mw4_display_settings,
     )
     from fpstune.settings.discovery.headroom import apply_headroom_bands
-    from fpstune.settings.discovery.network import discover_network_adapter_settings
+    from fpstune.settings.discovery.network import (
+        discover_network_adapter_settings,
+        discover_wifi_link_quality,
+    )
 
     return (
         discover_network_adapter_settings,
+        # Reads the adapter list the pass above memoised; one advisory per radio.
+        discover_wifi_link_quality,
         discover_mpo_setting,
         discover_mw3_display_settings,
         discover_mw4_display_settings,

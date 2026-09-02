@@ -17,9 +17,11 @@ from __future__ import annotations
 from collections.abc import Callable
 from typing import Any
 
+from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.utils.winapi.memory import purge_standby_list
 
 PythonAction = Callable[[dict[str, Any]], tuple[bool, str | None]]
+PythonDetector = Callable[[dict[str, Any]], str]
 
 
 def purge_standby(_args: dict[str, Any]) -> tuple[bool, str | None]:
@@ -40,4 +42,47 @@ def purge_standby(_args: dict[str, Any]) -> tuple[bool, str | None]:
 
 PYTHON_ACTIONS: dict[str, PythonAction] = {
     "purge_standby": purge_standby,
+}
+
+
+# Windows reports Wi-Fi signal quality on a 0–100 scale that maps linearly onto
+# -100..-50 dBm (WLAN_ASSOCIATION_ATTRIBUTES.wlanSignalQuality). 60 is about
+# -70 dBm: below it, rate adaptation drops the PHY rate and retries climb, which
+# a player feels as latency spikes before any throughput figure moves.
+WEAK_SIGNAL_PERCENT = 60
+
+# The 2.4 GHz band, by the connected BSS's centre frequency in kHz.
+_BAND_2_4_GHZ = (2_400_000, 2_500_000)
+
+
+def classify_wifi_link(signal_percent: int, center_khz: int) -> str:
+    """One word for the link: ``weak_signal``, ``on_2_4ghz`` or ``good``.
+
+    Signal first: a weak 5 GHz link is the bigger problem and the nearer fix.
+    A centre frequency of 0 means no BSS entry matched the connected BSSID, so
+    the band is unknown and only the signal is judged.
+    """
+    if signal_percent < WEAK_SIGNAL_PERCENT:
+        return "weak_signal"
+    if _BAND_2_4_GHZ[0] <= center_khz < _BAND_2_4_GHZ[1]:
+        return "on_2_4ghz"
+    return "good"
+
+
+def wifi_link_quality(args: dict[str, Any]) -> str:
+    """The connected radio's link quality, or the absent sentinel when it is not connected."""
+    from fpstune.utils.winapi import wlan
+
+    guid = str(args.get("interface_guid", "")).lower().strip("{}")
+    for record in wlan.query_connected():
+        if record.interface_guid == guid:
+            return classify_wifi_link(record.signal_percent, record.center_khz)
+    return NOT_AVAILABLE
+
+
+# Detect counterparts of PYTHON_ACTIONS: a reading taken through a native API
+# (wlanapi here) rather than a script. The executor consults this table by the
+# setting's ``detect_command`` key before it builds any command line.
+PYTHON_DETECTORS: dict[str, PythonDetector] = {
+    "wifi_link_quality": wifi_link_quality,
 }

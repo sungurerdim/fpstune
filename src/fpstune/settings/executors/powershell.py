@@ -169,6 +169,33 @@ def _start_bg_cleanup_detection(setting_id: str, cmd: str) -> None:
     threading.Thread(target=_compute, daemon=True, name=f"cleanup-{setting_id}").start()
 
 
+def _scriptless_reading(setting: SettingExecutor, cmd_key: str) -> Any | None:
+    """A detect answer that needs no PowerShell, or None when a script must run.
+
+    Two tables answer here. ``PYTHON_DETECTORS`` holds readings taken in Python
+    through a native API (wlanapi for the Wi-Fi link) — the detect counterpart of
+    ``PYTHON_ACTIONS``. ``CONSTANT_STATUS_ACTIONS`` holds action commands with no
+    state to read: their detect script was the literal ``Write-Output $true``, so
+    running it started a PowerShell process to learn a constant (measured: three of
+    the twenty-five a cold scan spawned). Both answers still go through
+    ``value_map``, so it is the same value by the same route, without the process.
+    """
+    from fpstune.settings.executors.python_actions import PYTHON_DETECTORS
+    from fpstune.utils.debug import debug_log
+
+    detector = PYTHON_DETECTORS.get(cmd_key)
+    if detector is not None:
+        raw = detector(setting.detect_args)
+        debug_log("powershell", f"DETECT PYTHON {setting.id}: {cmd_key} → {raw!r}")
+        return map_raw_to_display(setting.value_map, raw)
+
+    constant = CONSTANT_STATUS_ACTIONS.get(cmd_key)
+    if constant is not None:
+        debug_log("powershell", f"DETECT CONSTANT {setting.id}: {cmd_key} → {constant!r}")
+        return map_raw_to_display(setting.value_map, constant)
+    return None
+
+
 class PowerShellExecutor(BaseExecutor):
     """Execute PowerShell commands for network adapter and other settings.
 
@@ -314,16 +341,9 @@ class PowerShellExecutor(BaseExecutor):
         # Check for special action commands
         cmd_key = setting.detect_command.strip()
 
-        # Some action commands have no state to read: the operation is simply
-        # always available. Their detect script is the literal `Write-Output
-        # $true`, so running it started a PowerShell process to learn a constant
-        # — measured, three of the twenty-five a cold scan spawned. The answer
-        # still goes through `value_map`, so it is the same value by the same
-        # route, just without the process.
-        constant = CONSTANT_STATUS_ACTIONS.get(cmd_key)
-        if constant is not None:
-            debug_log("powershell", f"DETECT CONSTANT {setting.id}: {cmd_key} → {constant!r}")
-            return map_raw_to_display(setting.value_map, constant), None
+        scriptless = _scriptless_reading(setting, cmd_key)
+        if scriptless is not None:
+            return scriptless, None
 
         # Cleanup status: serve from background cache; kick off PS in a daemon thread on miss.
         if cmd_key == "cleanup_status":

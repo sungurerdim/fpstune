@@ -27,11 +27,12 @@ from typing import Any
 HARNESS_ERROR = "HARNESS_ERROR"
 
 
-def run_shipped_command(script: str, payload: dict[str, Any]) -> str:
+def run_shipped_script(script: str, payload: dict[str, Any]) -> str:
     """Run `script` with `payload` exposed as JSON via $env:FPSTUNE_FAKE_HOST.
 
-    Returns the last non-empty stdout line, which is what the executor reads as
-    the detected value.
+    Returns the whole of stdout. Use this for a script whose answer is a document
+    (ConvertTo-Json output, a table); `run_shipped_command` is the one-line form
+    executors read.
     """
     with tempfile.TemporaryDirectory() as tmp:
         payload_path = Path(tmp) / "host.json"
@@ -59,9 +60,18 @@ def run_shipped_command(script: str, payload: dict[str, Any]) -> str:
         )
 
     assert result.returncode == 0, f"harness failed: {result.stderr[:1500]}"
-    lines = [line.strip() for line in result.stdout.splitlines() if line.strip()]
-    assert lines, f"command produced no output. stderr: {result.stderr[:500]}"
+    assert result.stdout.strip(), f"script produced no output. stderr: {result.stderr[:500]}"
+    return result.stdout
 
+
+def run_shipped_command(script: str, payload: dict[str, Any]) -> str:
+    """Run `script` and hand back the last non-empty stdout line.
+
+    That line is what the executor reads as the detected value.
+    """
+    lines = [
+        line.strip() for line in run_shipped_script(script, payload).splitlines() if line.strip()
+    ]
     answer = lines[-1]
     assert not answer.startswith(HARNESS_ERROR), (
         f"The command threw instead of evaluating, so this result proves nothing: {answer}"

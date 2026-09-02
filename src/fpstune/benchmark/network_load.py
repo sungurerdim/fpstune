@@ -248,6 +248,17 @@ class NetworkLoadBench:
         puller = threading.Thread(target=pull, daemon=True)
         puller.start()
         try:
+            # The first loaded probe is taken unconditionally. The download has
+            # just started, so the sample is under load however quickly the pull
+            # ends — and if the pull ended without bytes, the checks below refuse
+            # the pass before this sample is ever read. Waiting on `stop` first
+            # made the measurement depend on thread scheduling: on a busy machine
+            # a fast download set the event before this thread took one sample,
+            # and a pass that had downloaded fine was declined as "no loaded
+            # probe". Seen in the test suite under pre-commit load, 2026-09-02.
+            host, port = self.probe
+            loaded.append(_tcp_rtt_ms(host, port, DEFAULT_PROBE_TIMEOUT))
+            time.sleep(self.probe_interval)
             while not stop.is_set() and len(loaded) < ceiling:
                 loaded.extend(self._probe_series(1, stop))
         finally:

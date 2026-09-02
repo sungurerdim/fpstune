@@ -31,11 +31,11 @@ def offline(monkeypatch):
     socket — the failure would be a slow, confusing timeout rather than a clear
     one.
 
-    The stub download takes real time, and it has to. An instant one sets the
-    stop event before the probe loop has taken a single sample, and the bench
-    then has nothing measured under load — which is a state it declines rather
-    than reports, so the tests would be exercising the refusal instead of the
-    measurement.
+    The stub download takes a little real time so the loaded series usually
+    holds more than one sample. It no longer *has* to: the bench takes its first
+    loaded probe unconditionally, because waiting on the stop event first made
+    the measurement depend on thread scheduling (see the regression test on an
+    instant download below).
     """
 
     def _slow_download(_url: str, cap: int, _seconds: float) -> tuple[int, float]:
@@ -138,6 +138,29 @@ class TestWhatItMeasures:
         assert readings["latency_under_load_ms"].improves_upward is False
         assert readings["bufferbloat_ms"].improves_upward is False
         assert readings["packet_loss_under_load"].improves_upward is False
+
+    def test_a_download_faster_than_the_first_probe_still_measures_under_load(
+        self, monkeypatch
+    ) -> None:
+        """The pass used to be declined for a scheduling accident.
+
+        An instant download set the stop event before the probe loop had taken
+        one sample, so a pass that had downloaded fine reported "no loaded
+        probe" — seen under pre-commit load on 2026-09-02, where the autouse
+        stub's 50 ms head start was not enough. The first loaded probe is now
+        taken unconditionally.
+        """
+        monkeypatch.setattr(network_load, "_download", lambda _url, cap, _s: (cap, cap / 1_000_000))
+
+        result = _bench().run(1)
+
+        assert result.ran is True, result.reason
+        assert set(result.readings) == {
+            "download_throughput",
+            "latency_under_load_ms",
+            "bufferbloat_ms",
+            "packet_loss_under_load",
+        }
 
     def test_one_sample_per_repeat(self) -> None:
         for reading in _bench().run(3).readings.values():

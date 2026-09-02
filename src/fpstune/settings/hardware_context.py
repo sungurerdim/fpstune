@@ -21,10 +21,10 @@ from __future__ import annotations
 
 import ctypes
 import logging
-import os
 import sys
 
 from fpstune.settings.applicability import HardwareContext
+from fpstune.settings.virtualization import virtualization_features
 from fpstune.utils.admin import is_admin
 from fpstune.utils.detect import get_gpu_info
 from fpstune.utils.hardware_manager import hardware_manager
@@ -33,7 +33,10 @@ logger = logging.getLogger(__name__)
 
 # Presence of a virtualization stack changes what is safe to recommend, so it is
 # part of the machine's description rather than a check buried in one setting.
-_DOCKER_DESKTOP = r"C:\Program Files\Docker\Docker\Docker Desktop.exe"
+# The probing lives in `settings.virtualization`, which discovers each consumer
+# rather than asserting where it lives — this used to be one hardcoded
+# `C:\Program Files\Docker\...` path and missed a per-user Docker install
+# entirely, so the machine running Docker was told to disable Hyper-V (C9).
 
 # BatteryFlag values from GetSystemPowerStatus that mean "no battery to speak of".
 _NO_BATTERY = 128
@@ -116,9 +119,7 @@ def build_hardware_context() -> HardwareContext:
 
     gpu_vendors = [gpu_vendor] if gpu_vendor and gpu_vendor != "unknown" else []
 
-    features: set[str] = set()
-    if os.path.exists(_DOCKER_DESKTOP):
-        features.add("docker")
+    features, feature_labels = virtualization_features()
     # A class of machine the product had no notion of, which matters because two
     # NVIDIA features exist purely to cap frame rate on one.
     if has_battery():
@@ -150,4 +151,5 @@ def build_hardware_context() -> HardwareContext:
         is_admin=is_admin(),
         has_vrr_monitor=has_vrr,
         features=features,
+        feature_labels=feature_labels,
     )

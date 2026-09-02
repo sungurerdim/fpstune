@@ -15,6 +15,7 @@ from fpstune.settings.base import (
     SettingScope,
     SettingValueType,
 )
+from fpstune.settings.virtualization import VIRTUALIZATION_IN_USE
 
 # =============================================================================
 # Memory Settings
@@ -1832,7 +1833,11 @@ SYSTEM_HYPER_V = SettingExecutor(
     category_order=51,
     effect="Disables Hyper-V hypervisor to remove SLAT overhead from gaming workloads",
     impact_scores={"fps_cpu_bound": "+3-8%", "fps_1_percent_low": "+2-5%", "latency_ms": -1},
-    applicable_conditions={"requires_admin": True, "feature_absent": "docker"},
+    # Gated on *anything* using virtualization, not on Docker alone. Docker was
+    # the only consumer this ever checked, and it checked it by hardcoded path —
+    # so a per-user Docker install, and every WSL distribution ever, went unseen
+    # and this setting recommended pulling the floor out from under them.
+    applicable_conditions={"requires_admin": True, "feature_absent": VIRTUALIZATION_IN_USE},
     detect_type=DetectType.POWERSHELL,
     # `Get-WindowsOptionalFeature -Online` needs elevation, and unelevated it
     # raises rather than answering. The old form swallowed that with
@@ -1879,7 +1884,10 @@ SYSTEM_VM_PLATFORM = SettingExecutor(
     category_order=51,
     effect="Disables VirtualMachinePlatform when WSL2 and Android apps are not in use",
     impact_scores={"fps_cpu_bound": "+0-2%", "latency_ms": -0.3},
-    applicable_conditions={"requires_admin": True, "feature_absent": "docker"},
+    # See Hyper-V above. VirtualMachinePlatform is the feature WSL2 and Docker
+    # Desktop both sit directly on top of, so this one is the more damaging of
+    # the two to recommend blind.
+    applicable_conditions={"requires_admin": True, "feature_absent": VIRTUALIZATION_IN_USE},
     detect_type=DetectType.POWERSHELL,
     # Same as Hyper-V above: unelevated this raises, and reporting 'disabled'
     # for "could not read" told the user a platform that was on was off.

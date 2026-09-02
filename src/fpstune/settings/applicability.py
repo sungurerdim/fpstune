@@ -88,6 +88,21 @@ class HardwareContext:
     features: set[str] = field(default_factory=set)
     # Examples: "hyper_v", "wsl", "docker", "xbox_game_bar", "game_mode"
 
+    # What a feature *is*, in words the person reading the reason understands.
+    #
+    # A feature key is an internal token, and it used to reach the user intact:
+    # blocking `system:vm_platform` produced "Not recommended:
+    # virtualization_in_use is installed (would break it)". There is nothing on
+    # the machine called that, so the sentence names no consequence — the user
+    # cannot tell whether it is protecting something they care about or
+    # something they have never used.
+    #
+    # Populated only where a discoverer can say something concrete: the
+    # virtualization probes fill this with "Docker Desktop, WSL (2
+    # distributions)" because they found those by name. A key with no label
+    # falls back to the key, which is what every other feature does today.
+    feature_labels: dict[str, str] = field(default_factory=dict)
+
     # Monitor capabilities. None = the panels could not be read (or declared
     # nothing), which must never collapse into "no VRR panel" — the two produce
     # different applicability reasons.
@@ -105,6 +120,7 @@ class HardwareContext:
             "is_windows_11": self.is_windows_11,
             "is_admin": self.is_admin,
             "features": list(self.features),
+            "feature_labels": dict(self.feature_labels),
             "has_vrr_monitor": self.has_vrr_monitor,
         }
 
@@ -218,7 +234,11 @@ class ApplicabilityChecker:
         if "feature_absent" in conditions:
             absent_feature = conditions["feature_absent"]
             if absent_feature in self.context.features:
-                return False, f"Not recommended: {absent_feature} is installed (would break it)"
+                # Name what would break, not the token that stands for it. The
+                # user's question here is "am I losing something I use?", and
+                # "virtualization_in_use is installed" cannot answer it.
+                what = self.context.feature_labels.get(absent_feature, absent_feature)
+                return False, f"Not recommended: would break {what}"
 
         # Any of features check
         if "features_any" in conditions:

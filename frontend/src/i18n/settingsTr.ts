@@ -250,7 +250,7 @@ export const settingsTr: Record<
   "network:dns_security": {
     name: "Güvenli DNS",
     description:
-      "Alan adı sorgularını hangi çözümleyicinin yanıtladığını ve zararlı ile oltalama alanlarının daha çözümlenmeden engellenip engellenmediğini belirler. Quad9 bu alanları süzer ve oyun CDN'inin yakın sunucu seçmesini sağlayan istemci-alt-ağ ipucunu döndürür.",
+      "Alan adı sorgularını hangi çözümleyicinin yanıtladığını ve zararlı ile oltalama alanlarının daha çözümlenmeden engellenip engellenmediğini belirler. Quad9 bu alanları süzer; burada sunulan çözümleyicilerin hiçbiri oyun CDN'inin daha yakın indirme sunucusu seçmesini sağlayan istemci-alt-ağ ipucunu göndermez.",
   },
   "network:dns_over_https": {
     name: "HTTPS üzerinden DNS",

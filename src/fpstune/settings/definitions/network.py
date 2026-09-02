@@ -651,23 +651,22 @@ DNS_SECURITY = SettingExecutor(
     display_name="Secure DNS (Quad9)",
     short_name="Secure DNS",
     description="Which resolver answers name lookups, and whether malware and phishing domains "
-    "are blocked before they resolve. Quad9 filters those domains and returns the client-subnet "
-    "hint a game CDN uses to pick a nearer edge for patch downloads, which the Cloudflare "
-    "resolvers offered here do not send.",
+    "are blocked before they resolve. Quad9 filters those domains; none of the resolvers offered "
+    "here sends the client-subnet hint a game CDN uses to pick a nearer download edge.",
     value_type=SettingValueType.CHOICE,
     choices=("isp", "cloudflare", "cloudflare_security", "cloudflare_family", "quad9"),
     default_value="isp",
     # Quad9 over Cloudflare Security, by user decision. The two are level on
     # lookup speed — measured here at median 7 ms against 8 ms over 25 domains
     # x 2 rounds with the servers interleaved, which is noise — and both filter
-    # malware. Quad9 answers with EDNS Client Subnet where Cloudflare does not,
-    # and that hint is what a CDN uses to pick an edge, so patch and asset
-    # downloads steer to a nearer server. That is the tiebreak.
+    # malware. The tiebreak this used to cite - Quad9 sending EDNS Client Subnet -
+    # was wrong: per quad9.net's service table 9.9.9.9 is the no-ECS service and
+    # only 9.9.9.11 sends ECS. The recommendation stands on filtering alone until
+    # a resolver benchmark on the user's own line exists (issue J5).
     recommended_value="quad9",
     requires_reboot=False,
     current_impact="ISP resolver: No malware filtering, and the provider sees every name resolved",
-    recommended_impact="Quad9 9.9.9.9: Blocks malware and phishing domains, median lookup 7 ms, "
-    "and sends the client-subnet hint a game CDN uses to pick a nearer edge",
+    recommended_impact="Quad9 9.9.9.9: Blocks malware and phishing domains before they resolve",
     scope=SettingScope.RECOMMENDED,  # Security benefit
     category_order=7,  # DNS security
     effect="Blocks malware and phishing domains at the resolver",
@@ -686,12 +685,13 @@ DNS_SECURITY = SettingExecutor(
     # behind when the recommendation moved, so the file argued both sides at
     # once. The speed case is still a tie: measured in the same run at median
     # 7 ms against 1.1.1.2's 8 ms, which is noise, so speed is not the reason.
-    # It wins on answering with EDNS Client Subnet where Cloudflare does not,
-    # and that hint is what a CDN uses to pick an edge — a measurement
-    # study across 10,923 hosts in 99 countries found ECS cut Akamai's median
-    # latency by 40%, which is patch-download speed, not in-game ping.
-    # Deliberately NOT offered: Quad9's ECS endpoint 9.9.9.11, measured p90
-    # 267 ms here.
+    # It does NOT answer with EDNS Client Subnet either: per quad9.net's service
+    # table, 9.9.9.9 is the no-ECS service and only 9.9.9.11 sends ECS. The ECS
+    # case — a measurement study across 10,923 hosts in 99 countries found ECS
+    # cut Akamai's median latency by 40%, patch-download speed, not in-game ping —
+    # therefore argues for 9.9.9.11, which is deliberately NOT offered: measured
+    # p90 267 ms here. Choosing an ECS-capable resolver by measurement on the
+    # user's own line is issue J5.
     impact_scores={"latency_ms": 0.0, "security": "high", "privacy": "improved"},
     # Detection - Get current DNS servers via PowerShell
     # IMPORTANT: Must use same filter as apply (physical adapters only) for consistent verification

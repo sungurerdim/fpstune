@@ -76,6 +76,18 @@ export function HomeTab() {
     queryFn: headroomApi.list,
     staleTime: 30_000,
   });
+
+  // Several checks read data Windows only hands to an elevated caller — the
+  // ACPI thermal class returns nothing at all otherwise, measured on this
+  // machine as zero zones unelevated against two elevated. When a check read
+  // nothing and fpstune is not elevated, that is the likeliest reason and the
+  // only one the user can act on, so the row says it rather than leaving the
+  // space blank. Phrased as the likely cause, never as a certainty.
+  const isAdmin = useQuery({
+    queryKey: ["system"],
+    queryFn: api.getSystemInfo,
+    staleTime: Infinity,
+  }).data?.is_admin;
   const measured = useMemo(
     () => headroom?.games.filter((game) => game.is_measured) ?? [],
     [headroom],
@@ -717,7 +729,9 @@ export function HomeTab() {
                     ? t("home.advisoryUnreadReason", {
                         reason: s.detectionError,
                       })
-                    : t("home.advisoryUnreadNoReason")}
+                    : isAdmin === false
+                      ? t("home.advisoryUnreadNeedsAdmin")
+                      : t("home.advisoryUnreadNoReason")}
                 </p>
               </div>
             ))}

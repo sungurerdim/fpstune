@@ -1,27 +1,52 @@
+# Two lanes, not seven commands at once.
+#
+# `parallel: true` over every command started ruff, mypy, pytest, eslint, tsc
+# and vitest together on the same machine, and vitest is the one that cannot
+# survive it: its workers are separate processes that must answer a handshake
+# within a timeout, and under that much contention they do not. The failure
+# reads `[vitest-pool]: Failed to start ... worker ... Timeout waiting for
+# worker to respond`, and a run that loses workers reports the suites that did
+# start — 12 of 57 in one observed run — with zero failing tests. A gate that
+# can pass without having run is worse than a slow one.
+#
+# Both pools show it under the hook, so it is not the pool: measured with the
+# machine otherwise idle, forks started all 57 suites in 6 of 6 runs and
+# threads in 3 of 6, which is why `vitest.config.ts` prefers forks — but inside
+# the old parallel hook even forks lost twelve workers.
+#
+# So the checks are grouped: Python and frontend still run at the same time,
+# because they contend for different tools, and within each group the steps run
+# one after another. The wall clock is set by the Python group, which ends in
+# the full pytest run either way.
 pre-commit:
   parallel: true
-  commands:
-    py-lint:
+  jobs:
+    - name: python
       glob: "*.py"
-      run: ruff check src tests
-    py-format:
-      glob: "*.py"
-      run: ruff format --check src tests
-    py-types:
-      glob: "*.py"
-      run: mypy src
-    py-test:
-      glob: "*.py"
-      run: pytest --no-cov -x -q --tb=short
-    fe-lint:
+      group:
+        piped: true
+        jobs:
+          - name: py-lint
+            run: ruff check src tests
+          - name: py-format
+            run: ruff format --check src tests
+          - name: py-types
+            run: mypy src
+          - name: py-test
+            run: pytest --no-cov -x -q --tb=short
+
+    - name: frontend
       glob: "frontend/*"
-      run: cd frontend && npm run lint
-    fe-types:
-      glob: "frontend/*"
-      run: cd frontend && npx tsc --noEmit
-    fe-test:
-      glob: "frontend/*"
-      run: cd frontend && npm run test:run
+      root: frontend/
+      group:
+        piped: true
+        jobs:
+          - name: fe-lint
+            run: npm run lint
+          - name: fe-types
+            run: npx tsc --noEmit
+          - name: fe-test
+            run: npm run test:run
 
 commit-msg:
   commands:

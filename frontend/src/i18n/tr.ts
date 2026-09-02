@@ -171,6 +171,8 @@ export const tr: Record<keyof typeof en, string> = {
   "home.advisoriesUnreadHint":
     "bunlar bu makine hakkında hiçbir şey söylemiyor",
   "home.advisoryUnreadReason": "Hiçbir değer okunamadı: {reason}",
+  "home.advisoryUnreadNeedsAdmin":
+    "Hiçbir değer okunamadı. fpstune yönetici olarak çalışmıyor; birkaç denetim bunu gerektiriyor.",
   "home.advisoryUnreadNoReason":
     "Hiçbir değer okunamadı, dolayısıyla burada eyleme geçilecek bir bulgu yok.",
   "home.alreadyOptimized": "Zaten en iyi durumda",

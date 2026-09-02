@@ -10,28 +10,45 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.{test,spec}.{ts,tsx}'],
-    // Worker threads, not forked processes (#29).
+    // Forked processes, not worker threads — and this reverses #29, which chose
+    // threads on its own measurement. Both notes are kept, because the reason it
+    // reversed is the toolchain moving underneath the earlier one.
     //
-    // `testTimeout` is a wall-clock budget, and `@vitest/runner`'s `withTimeout`
-    // spends it twice: a `setTimeout` for async bodies, and — after a *synchronous*
-    // body has already run to completion with every assertion passing — a
-    // `now() - startTime >= timeout` check that fails the test anyway. So a test
-    // whose body costs about a millisecond of CPU is failed as "Test timed out in
-    // 5000ms" purely because its process was descheduled. No query, `waitFor` or
-    // `userEvent` rewrite can reach that: the body ran and passed.
+    // What #29 measured, on the previous vitest: `testTimeout` is a wall-clock
+    // budget, and `@vitest/runner`'s `withTimeout` spent it twice — a
+    // `setTimeout` for async bodies, and, after a *synchronous* body had already
+    // run to completion with every assertion passing, a
+    // `now() - startTime >= timeout` check that failed the test anyway. Under a
+    // machine held at 100% CPU, forks failed 6 of 14 runs with those phantom
+    // timeouts and threads failed 0 of 14.
     //
-    // Vitest 4 defaults to `pool: 'forks'`, which with `isolate` spawns a node
-    // process per test file — the most expensive thing Windows can be asked to do
-    // repeatedly, and the thing that starves the other workers. Measured over full
-    // suite runs with the machine held at 100% CPU by 16 busy loops: forks failed
-    // 6 of 14 runs with 1-5 of these phantom timeouts each, in a different file
-    // every time; threads failed 0 of 14, over 344 tests. Nothing is paid for it:
-    // alternating the two pools back to back on the same machine, threads ran the
-    // full suite in 23.5s and 24.5s against forks' 27.0s and 27.7s.
+    // What the current vitest does instead is fail to start its workers at all:
+    // `[vitest-pool]: Failed to start threads worker ... Timeout waiting for
+    // worker to respond`. Measured here, six full-suite runs per pool on the
+    // upgraded toolchain:
     //
-    // This is a determinism fix, not a speed one — capping `maxWorkers` was tried
-    // first and left 3 of 5 runs red, so it is deliberately not part of the fix.
-    pool: 'threads',
+    //   threads  started all 57 suites in 3 of 6 runs; fully green in 2 of 6.
+    //            The bad runs started 12, 17 and 47 suites — and two of them
+    //            reported zero failing tests while running a fraction of the
+    //            suite, which is a gate that looks passed without having run.
+    //   forks    started all 57 suites in 6 of 6; fully green in 5 of 6, the
+    //            sixth a single flaky test rather than a missing suite.
+    //
+    // A suite that never starts is the failure worth avoiding, so the pool that
+    // always starts wins. Capping `maxWorkers` is still not part of this — #29
+    // tried it and it left 3 of 5 runs red.
+    pool: 'forks',
+    // Four workers, not one per core.
+    //
+    // Even alone on this 16-core machine, and even after the rest of the
+    // pre-commit hook had finished, vitest kept losing workers to
+    // `Timeout waiting for worker to respond` — the handshake with a freshly
+    // spawned process, not the tests. Measured, three full-suite runs each:
+    // 8 workers started all 57 suites once (55, 53, 57), 4 workers started all
+    // 57 every time. #29 rejected a worker cap, but that was against the old
+    // vitest and a different failure — phantom test timeouts, not workers that
+    // never answer.
+    maxWorkers: 4,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

@@ -180,6 +180,8 @@ export const en = {
   "home.advisoriesUnreadHint":
     "these say nothing about this machine either way",
   "home.advisoryUnreadReason": "Nothing was read: {reason}",
+  "home.advisoryUnreadNeedsAdmin":
+    "Nothing was read. fpstune is not running as Administrator, which several checks need.",
   "home.advisoryUnreadNoReason":
     "Nothing was read, so there is no finding here to act on.",
   "home.alreadyOptimized": "Already optimized",

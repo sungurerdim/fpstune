@@ -20,6 +20,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { http, HttpResponse } from "msw";
+import { server } from "../../test/mocks/server";
 import { render, screen } from "../../test/utils";
 import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
@@ -240,6 +242,30 @@ describe("Home separates advisories that found something", () => {
       "Nothing was read",
     );
     expect(screen.queryByText("Needs your attention")).not.toBeInTheDocument();
+  });
+
+  it("names elevation as the likely reason when fpstune is not elevated", async () => {
+    // Measured on a real machine: the ACPI thermal class returns zero zones
+    // unelevated and two elevated. An unread check with no error attached is
+    // most often that, and it is the only cause the user can act on.
+    server.use(
+      http.get("*/api/system", () =>
+        HttpResponse.json({
+          os_platform: "win32",
+          os_edition: "Windows 11 Pro",
+          os_version: "10.0.22621",
+          cpu_name: "test cpu",
+          gpu_vendor: "nvidia",
+          is_admin: false,
+        }),
+      ),
+    );
+    setStore([{ ...SLOW_LINK, currentValue: null, isOptimized: false }]);
+    render(<HomeTab />);
+
+    expect(
+      await screen.findByText(/not running as Administrator/),
+    ).toBeInTheDocument();
   });
 
   it("does not count an unread check among the clear ones either", () => {

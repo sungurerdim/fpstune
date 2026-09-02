@@ -1,4 +1,10 @@
-"""What get_cpu_detailed_info() makes of the detection script's report."""
+"""What get_cpu_detailed_info() makes of the detection script's report.
+
+The P/E split is no longer a line in that report: it comes from
+``winapi.cpu_topology.core_split`` (ctypes), so these tests stub that call
+and keep the WMI half as text. The contract that matters is unchanged: no
+answer from the kernel is *unknown*, never "not hybrid".
+"""
 
 from __future__ import annotations
 
@@ -10,22 +16,26 @@ import pytest
 
 import fpstune.utils.detect as detect
 from fpstune.utils.detect import CpuDetailedInfo
+from fpstune.utils.winapi.cpu_topology import CoreSplit
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
 FULL = (
     "Name=Xeon Gold 6338\nSockets=2\nPhysicalCores=64\nLogicalCores=128\n"
-    "BaseClock=2000\nL3Cache=49152\nPCores=64\nECores=0\nHybrid=False\n"
+    "BaseClock=2000\nL3Cache=49152\n"
 )
 HYBRID = (
     "Name=Core i7-12700H\nSockets=1\nPhysicalCores=14\nLogicalCores=20\n"
-    "BaseClock=2300\nL3Cache=24576\nPCores=6\nECores=8\nHybrid=True\n"
+    "BaseClock=2300\nL3Cache=24576\n"
 )
 NO_TOPOLOGY = "Name=Some CPU\nSockets=1\nPhysicalCores=8\nLogicalCores=16\nBaseClock=3000\n"
 
 
-def _cpu(monkeypatch: pytest.MonkeyPatch, stdout: str) -> CpuDetailedInfo:
+def _cpu(
+    monkeypatch: pytest.MonkeyPatch, stdout: str, split: CoreSplit | None = None
+) -> CpuDetailedInfo:
     monkeypatch.setattr(detect, "_cpu_detailed_cache", None)
+    monkeypatch.setattr(detect, "core_split", lambda: split)
     monkeypatch.setattr(
         subprocess,
         "run",
@@ -50,7 +60,7 @@ class TestTheDeletedDuplicateStaysDeleted:
 
 class TestTopology:
     def test_a_hybrid_cpu_reports_its_split(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        info = _cpu(monkeypatch, HYBRID)
+        info = _cpu(monkeypatch, HYBRID, split=CoreSplit(p_cores=6, e_cores=8))
         assert (info.p_cores, info.e_cores, info.is_hybrid) == (6, 8, True)
 
     def test_no_topology_answer_is_unknown_not_non_hybrid(
@@ -58,9 +68,11 @@ class TestTopology:
     ) -> None:
         """B2 must refuse to place the RSS base without this answer, so
         "could not read" and "not hybrid" may never collapse into one."""
-        info = _cpu(monkeypatch, NO_TOPOLOGY)
+        info = _cpu(monkeypatch, NO_TOPOLOGY, split=None)
         assert info.is_hybrid is None
+        assert (info.p_cores, info.e_cores) == (0, 0)
 
     def test_a_dual_socket_report_is_carried_whole(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        info = _cpu(monkeypatch, FULL)
+        info = _cpu(monkeypatch, FULL, split=CoreSplit(p_cores=64, e_cores=0))
         assert (info.sockets, info.physical_cores, info.logical_cores) == (2, 64, 128)
+        assert info.is_hybrid is False

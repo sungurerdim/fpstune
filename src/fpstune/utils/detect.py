@@ -14,6 +14,7 @@ from dataclasses import dataclass
 from enum import StrEnum
 
 from fpstune.utils.edid import parse_edid
+from fpstune.utils.winapi.cpu_topology import core_split
 
 # GPU cache with TTL
 _gpu_cache: GpuInfo | None = None
@@ -685,63 +686,17 @@ def get_ram_info() -> dict[str, int]:
     return {"total_mb": 0, "available_mb": 0}
 
 
-# The P/E-core split comes from GetLogicalProcessorInformationEx
-# (RelationProcessorCore): each core record carries an EfficiencyClass byte,
-# where the highest class present is the performance tier. The walk lives
-# inside the C# class — the A1 lesson: a variable-length native buffer never
-# crosses PowerShell's binder. One efficiency class means not hybrid; an empty
-# answer means unknown, which the caller reports as unknown rather than "not
-# hybrid".
-_CPU_TOPOLOGY_CSHARP = r"""
-Add-Type @'
-using System;
-using System.Runtime.InteropServices;
-public class CpuTopology {
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool GetLogicalProcessorInformationEx(
-        int relationshipType, IntPtr buffer, ref uint returnedLength);
-    public static string Summarize() {
-        uint len = 0;
-        GetLogicalProcessorInformationEx(0, IntPtr.Zero, ref len);
-        if (len == 0) { return ""; }
-        IntPtr buf = Marshal.AllocHGlobal((int)len);
-        try {
-            if (!GetLogicalProcessorInformationEx(0, buf, ref len)) { return ""; }
-            var counts = new System.Collections.Generic.Dictionary<byte, int>();
-            int offset = 0;
-            while (offset < (int)len) {
-                int relationship = Marshal.ReadInt32(buf, offset);
-                int size = Marshal.ReadInt32(buf, offset + 4);
-                if (size <= 0) { break; }
-                if (relationship == 0) {
-                    byte efficiency = Marshal.ReadByte(buf, offset + 9);
-                    if (!counts.ContainsKey(efficiency)) { counts[efficiency] = 0; }
-                    counts[efficiency]++;
-                }
-                offset += size;
-            }
-            if (counts.Count == 0) { return ""; }
-            byte top = 0;
-            foreach (byte k in counts.Keys) { if (k > top) { top = k; } }
-            int p = 0, e = 0;
-            foreach (var kv in counts) {
-                if (kv.Key == top) { p += kv.Value; } else { e += kv.Value; }
-            }
-            string hybrid = counts.Count > 1 ? "True" : "False";
-            return "PCores=" + p + "\nECores=" + e + "\nHybrid=" + hybrid;
-        } finally { Marshal.FreeHGlobal(buf); }
-    }
-}
-'@
-"""
-
 # All sockets are read and their core counts summed — Select-Object -First 1
 # silently halved a dual-socket machine. The one clock WMI has is MaxClockSpeed,
 # which reports the *rated* clock (live: 2304 on a CPU whose boost is 4.6 GHz);
 # it is emitted as the base clock and nothing invents a boost figure from it.
-_CPU_DETECT_PS = (
-    _CPU_TOPOLOGY_CSHARP
-    + r"""
+#
+# The P/E-core split is deliberately not in here. It comes from
+# GetLogicalProcessorInformationEx through `utils/winapi/cpu_topology.py`
+# (ctypes). It used to be a C# class compiled at run time with Add-Type, the
+# pattern Windows Defender flagged as trojan behaviour on 2026-09-02 — see the
+# winapi package docstring.
+_CPU_DETECT_PS = r"""
 $cpus = @(Get-CimInstance -ClassName Win32_Processor)
 if ($cpus.Count -gt 0) {
     "Name=$($cpus[0].Name)"
@@ -751,9 +706,7 @@ if ($cpus.Count -gt 0) {
     "BaseClock=$($cpus[0].MaxClockSpeed)"
     "L3Cache=$(($cpus | Measure-Object -Property L3CacheSize -Sum).Sum)"
 }
-try { [CpuTopology]::Summarize() } catch { }
 """
-)
 
 
 def get_cpu_detailed_info() -> CpuDetailedInfo | None:
@@ -818,14 +771,6 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
                 elif line.startswith("Sockets="):
                     with contextlib.suppress(ValueError, TypeError):
                         sockets = int(line.split("=", 1)[1].strip()) or 1
-                elif line.startswith("PCores="):
-                    with contextlib.suppress(ValueError, TypeError):
-                        p_cores = int(line.split("=", 1)[1].strip())
-                elif line.startswith("ECores="):
-                    with contextlib.suppress(ValueError, TypeError):
-                        e_cores = int(line.split("=", 1)[1].strip())
-                elif line.startswith("Hybrid="):
-                    is_hybrid = line.split("=", 1)[1].strip().lower() == "true"
                 elif line.startswith("L3Cache="):
                     try:
                         # L3 cache is in KB, convert to MB
@@ -838,8 +783,11 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
             logger.debug("Failed to get detailed CPU info: %s", e)
             return None
 
-        if is_hybrid is None:
+        split = core_split()
+        if split is None:
             logger.debug("CPU P/E topology unknown: GetLogicalProcessorInformationEx gave nothing")
+        else:
+            p_cores, e_cores, is_hybrid = split.p_cores, split.e_cores, split.is_hybrid
 
         _cpu_detailed_cache = CpuDetailedInfo(
             name=name,

@@ -15,6 +15,7 @@ import pytest
 from tests.test_windows_contract.conftest import run_shipped_command
 
 from fpstune.utils.detect import _CPU_DETECT_PS
+from fpstune.utils.winapi.cpu_topology import core_split
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
@@ -78,10 +79,12 @@ class TestOneClockOneName:
 
 class TestTopologyIsReadFromTheKernel:
     def test_the_real_machine_reports_a_coherent_split(self) -> None:
-        """kernel32 cannot be shadowed, so the C# walk runs for real here: the
-        split must exist and add up, whatever machine runs the suite."""
-        fields = _detect([XEON])
-        assert "PCores" in fields and "ECores" in fields and "Hybrid" in fields
-        p, e = int(fields["PCores"]), int(fields["ECores"])
-        assert p >= 1 and e >= 0
-        assert fields["Hybrid"] == ("True" if e > 0 else "False")
+        """The split comes from GetLogicalProcessorInformationEx through ctypes,
+        not from a C# class PowerShell compiles: it must exist and add up on
+        whatever machine runs the suite, and the shipped script compiles nothing."""
+        split = core_split()
+        assert split is not None
+        assert split.p_cores >= 1 and split.e_cores >= 0
+        assert split.is_hybrid == (split.e_cores > 0)
+        assert "Add-Type" not in _CPU_DETECT_PS
+        assert "CpuTopology" not in _CPU_DETECT_PS

@@ -102,10 +102,32 @@ def test_a_failed_run_is_unavailable_not_zero() -> None:
     )
 
 
-def test_both_shipped_scripts_use_the_one_function() -> None:
-    """Detect and apply cannot disagree about the size if they share the parser."""
+def test_the_detect_script_uses_the_one_parser() -> None:
+    """Only one place parses DISM's report, so no second reading can disagree."""
     assert _DISM_RECLAIMABLE_FUNCTION in _CLEANUP_STATUS
-    assert ACTION_COMMANDS["dism_cleanup"].startswith(_DISM_RECLAIMABLE_FUNCTION)
     # Defined once, called from the 'dism' branch; no private parser survives.
     assert _CLEANUP_STATUS.count("Get-DismReclaimableMB") >= 2
     assert "$line -match 'Reclaimable" not in _CLEANUP_STATUS
+
+
+def test_the_cleanup_measures_nothing_of_its_own() -> None:
+    """The apply used to bracket the run with two AnalyzeComponentStore passes.
+
+    Measured elevated on the reporting machine: 43.0 s for the first and 34.7 s
+    for the second, inside a run the user timed at about 108 s. Three quarters
+    of the wait was measuring — and measuring something the app already has,
+    since the row's own detect supplies the before and `_finalize_apply_response`
+    re-detects after. Freed is the difference between two readings that are
+    taken either way.
+    """
+    cleanup = ACTION_COMMANDS["dism_cleanup"]
+    assert "AnalyzeComponentStore" not in cleanup
+    assert "Get-DismReclaimableMB" not in cleanup
+    assert "StartComponentCleanup" in cleanup
+
+
+def test_the_cleanup_reports_a_failure_instead_of_claiming_success() -> None:
+    """Exit 740 (needs elevation) must not read as a completed cleanup."""
+    cleanup = ACTION_COMMANDS["dism_cleanup"]
+    assert "$LASTEXITCODE -ne 0" in cleanup
+    assert "exit 1" in cleanup

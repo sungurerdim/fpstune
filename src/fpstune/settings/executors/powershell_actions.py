@@ -608,17 +608,25 @@ ACTION_COMMANDS: dict[str, str] = {
         }
     """,
     # Cleanup actions
-    "dism_cleanup": _DISM_RECLAIMABLE_FUNCTION
-    + r"""
-        $before = Get-DismReclaimableMB
+    # The cleanup, and nothing else. It used to bracket the run with two
+    # AnalyzeComponentStore passes to work out how much it had freed, and those
+    # passes are what the wait was made of: measured elevated on the reporting
+    # machine, 43.0 s before and 34.7 s after, against a run the user timed at
+    # about 108 s end to end. Three quarters of it was measuring.
+    #
+    # None of that measuring was needed. The row already shows the reclaimable
+    # figure from its own detect, the frontend snapshots it before the run
+    # (useCleanupRunner's pendingFreed), and `_finalize_apply_response` detects
+    # again afterwards — so freed is the difference between two readings the app
+    # takes regardless. Computing it a second time inside the apply bought
+    # nothing and cost more than the cleanup.
+    "dism_cleanup": r"""
         Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
-        $after = Get-DismReclaimableMB
-        if ($null -ne $before -and $null -ne $after) {
-            $freed = $before - $after
-            Write-Output "DISM cleanup freed: $freed MB (reboot may be required for full reclaim)"
-        } else {
-            Write-Output 'DISM cleanup completed (reboot may be required for full reclaim)'
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output "DISM cleanup failed with exit code $LASTEXITCODE"
+            exit 1
         }
+        Write-Output 'DISM cleanup completed (reboot may be required for full reclaim)'
     """,
     # Two rules this script exists to keep, both learned from cleanup:prefetch
     # timing out on a real machine (2026-09-02):

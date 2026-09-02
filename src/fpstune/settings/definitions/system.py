@@ -2004,12 +2004,18 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     detect_type=DetectType.POWERSHELL,
     # Two sources, and a verdict that is a fact rather than an inference.
     #
-    # MSAcpi_ThermalZoneTemperature is absent on a great many machines — measured
-    # absent on the development laptop — and that used to end the reading. The
-    # performance counter reads the same ACPI zones through a different provider
-    # and answered on that machine (`\_TZ.TZ00` and `\_SB.ECTZ`, both live: three
-    # samples four seconds apart moved 354.2 K, 355.2 K, 354.2 K), so it is the
-    # fallback.
+    # MSAcpi_ThermalZoneTemperature answers only to an elevated caller. Measured
+    # on the same machine within minutes: zero zones unelevated, two zones
+    # elevated. fpstune runs elevated, so this is the reading it normally gets —
+    # and the earlier note here, that the class was simply absent on this
+    # hardware, was drawn from an unelevated probe and was wrong about why.
+    #
+    # The performance counter stays as the fallback, because it needs no
+    # elevation and reads the same ACPI zones through another provider
+    # (`\_TZ.TZ00` and `\_SB.ECTZ`, both live: three samples four seconds apart
+    # moved 354.2 K, 355.2 K, 354.2 K). It is what keeps the advisory answering
+    # when the app is started without administrator rights, instead of the whole
+    # check going quiet for a reason nobody could see.
     #
     # The verdict comes from ThrottleReasons and PercentPassiveLimit, not from a
     # temperature threshold, because those two *state* whether the firmware is
@@ -2026,14 +2032,19 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
         "$perf = Get-CimInstance "
         "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA SilentlyContinue "
         "| Sort-Object HighPrecisionTemperature -Descending | Select-Object -First 1; "
-        "$celsius = $null; "
-        "if ($acpi) { $celsius = [math]::Round(($acpi.CurrentTemperature / 10) - 273.15, 0) } "
+        "$celsius = $null; $zone = ''; "
+        # The zone label names whichever source supplied the temperature. It used
+        # to prefer the counter's name whenever the counter existed, so an
+        # elevated run reading the ACPI class still reported the counter's zone —
+        # a label describing a different sensor from the number beside it.
+        "if ($acpi) { $celsius = [math]::Round(($acpi.CurrentTemperature / 10) - 273.15, 0); "
+        "  $zone = $acpi.InstanceName } "
         "elseif ($perf -and $perf.HighPrecisionTemperature) { "
-        "  $celsius = [math]::Round(($perf.HighPrecisionTemperature / 10) - 273.15, 0) } "
+        "  $celsius = [math]::Round(($perf.HighPrecisionTemperature / 10) - 273.15, 0); "
+        "  $zone = $perf.Name } "
         "$throttling = $null; "
         "if ($perf) { $throttling = ($perf.ThrottleReasons -ne 0) -or ($perf.PercentPassiveLimit -lt 100) } "
         "if ($null -eq $celsius -and $null -eq $throttling) { 'not_available' } else { "
-        "  $zone = if ($perf) { $perf.Name } elseif ($acpi) { $acpi.InstanceName } else { '' }; "
         "  Write-Output ('FPSTUNE_FINDING: ' + (@{kind='thermal'; celsius=$celsius; "
         "throttling=$throttling; zone=$zone} | ConvertTo-Json -Compress)); "
         "  if ($throttling -eq $true) { 'throttling' } else { 'not_throttling' } "

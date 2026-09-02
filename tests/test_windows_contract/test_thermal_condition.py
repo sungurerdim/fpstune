@@ -105,6 +105,15 @@ class TestTheFallbackThatMakesItWork:
         assert value == "not_throttling"
         assert finding is not None
         assert finding["celsius"] == 50  # 323.1 K
+        # The label must name the sensor the number came from. It used to prefer
+        # the counter's name whenever the counter existed, so an elevated run
+        # reading the ACPI class reported a zone belonging to a different source.
+        assert finding["zone"] == r"ACPI\ThermalZone\TZ00"
+
+    def test_the_zone_names_the_counter_when_the_counter_is_the_source(self) -> None:
+        _, finding = _detect(acpi=None, perf=THIS_MACHINE_PERF)
+        assert finding is not None
+        assert finding["zone"] == THIS_MACHINE_PERF["Name"]
 
 
 class TestTheVerdictIsAFactNotAThreshold:

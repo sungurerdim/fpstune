@@ -621,11 +621,14 @@ RYZEN_BALANCED_PLAN = SettingExecutor(
     impact_scores={"fps_cpu_bound": "+0-5%"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$active = ((powercfg /getactivescheme 2>$null) "
-        "-split ' ')[3]; "
+        # The GUID is taken by pattern, never by word position: powercfg's label
+        # is localized, and in French it is four words long before the GUID —
+        # the fourth token there is 'de', which matches every line of the list.
+        "$active = ([regex]::Match(((powercfg /getactivescheme 2>$null) | Out-String), "
+        "'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')).Value; "
         "$list = powercfg /list 2>$null; "
         "$activeIsRyzen = $list | Where-Object { "
-        "$_ -match $active -and $_ -match 'AMD Ryzen' }; "
+        "$active -and $_ -match $active -and $_ -match 'AMD Ryzen' }; "
         "if ($activeIsRyzen) { 'ryzen_balanced' } "
         "elseif ($list -match 'AMD Ryzen') "
         "{ 'not_using_ryzen_plan' } "

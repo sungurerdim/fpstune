@@ -19,6 +19,7 @@ from fpstune.utils.admin import is_admin
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
 from fpstune.utils.logger import activity_log
+from fpstune.utils.winapi import wlan
 
 router = APIRouter()
 
@@ -315,55 +316,46 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
     detect_cmd = f"""
     $adapter = Get-NetAdapter -Name '{safe_name}' -ErrorAction SilentlyContinue
     if (-not $adapter) {{ Write-Output 'NOT_FOUND'; exit }}
-    if ($adapter.MediaType -like '*802.11*') {{ Write-Output 'WIFI' }}
+    if ($adapter.MediaType -like '*802.11*') {{ Write-Output "WIFI|$([string]$adapter.InterfaceGuid)" }}
     else {{ Write-Output 'ETHERNET' }}
     """
     success, output = await _run_powershell_async(detect_cmd)
-    adapter_type = output.strip() if success else "ETHERNET"
+    verdict = output.strip() if success else "ETHERNET"
+    adapter_type, _, wifi_guid = verdict.partition("|")
+    wifi_guid = wifi_guid.strip().strip("{}")
 
     if adapter_type == "NOT_FOUND":
         raise HTTPException(status_code=404, detail=f"Adapter '{adapter_name}' not found")
 
     if adapter_type == "WIFI":
-        # WiFi: Use netsh wlan disconnect/connect
+        # wlanapi through ctypes, in this process: no netsh text is parsed. The
+        # reconnect used to regex `netsh wlan show profiles` for the English
+        # label "All User Profile"; on a Turkish or German Windows the label
+        # differs, no profile was found, and the radio stayed disconnected.
+        # The service's own profile list is in preference order on every
+        # language, so the first entry is the one Windows itself would join.
+        if not wifi_guid:
+            raise HTTPException(
+                status_code=500, detail=f"Adapter '{adapter_name}' reported no interface GUID"
+            )
         if action == "disconnect":
-            ps_command = f"""
-            try {{
-                $result = netsh wlan disconnect interface='{safe_name}' 2>&1
-                if ($LASTEXITCODE -eq 0 -or $result -match 'successfully') {{
-                    Write-Output 'OK'
-                }} else {{
-                    Write-Output "ERROR: $result"
-                }}
-            }} catch {{
-                Write-Output "ERROR: $($_.Exception.Message)"
-            }}
-            """
-        else:  # connect
-            # Try to reconnect to the last used profile
-            ps_command = f"""
-            try {{
-                # Get the last connected profile for this interface
-                $profiles = netsh wlan show profiles interface='{safe_name}' 2>&1
-                $lastProfile = ($profiles | Select-String 'All User Profile\\s+:\\s+(.+)' |
-                    Select-Object -First 1).Matches.Groups[1].Value.Trim()
-
-                if ($lastProfile) {{
-                    $result = netsh wlan connect interface='{safe_name}' name="$lastProfile" 2>&1
-                    if ($LASTEXITCODE -eq 0 -or $result -match 'successfully') {{
-                        Write-Output "OK:$lastProfile"
-                    }} else {{
-                        Write-Output "ERROR: $result"
-                    }}
-                }} else {{
-                    Write-Output 'ERROR: No saved WiFi profiles found'
-                }}
-            }} catch {{
-                Write-Output "ERROR: $($_.Exception.Message)"
-            }}
-            """
+            code = await asyncio.to_thread(wlan.disconnect, wifi_guid)
+            output = "OK" if code == 0 else f"ERROR: WlanDisconnect failed with Win32 error {code}"
+        else:
+            profiles = await asyncio.to_thread(wlan.profile_names, wifi_guid)
+            if not profiles:
+                output = "ERROR: No saved WiFi profiles found"
+            else:
+                code = await asyncio.to_thread(wlan.connect, wifi_guid, profiles[0])
+                output = (
+                    f"OK:{profiles[0]}"
+                    if code == 0
+                    else f"ERROR: WlanConnect to '{profiles[0]}' failed with Win32 error {code}"
+                )
+        success = True
     else:
-        # Ethernet: Use ipconfig /release and /renew
+        # Ethernet: Use ipconfig /release and /renew. The verdict is the exit
+        # code, never ipconfig's text — it answers in the system language.
         if action == "disconnect":
             ps_command = f"""
             try {{
@@ -378,7 +370,7 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
             ps_command = f"""
             try {{
                 $result = ipconfig /renew '{safe_name}' 2>&1
-                if ($result -match 'error|failed') {{
+                if ($LASTEXITCODE -ne 0) {{
                     Write-Output "ERROR: $result"
                 }} else {{
                     Write-Output 'OK'
@@ -387,8 +379,7 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
                 Write-Output "ERROR: $($_.Exception.Message)"
             }}
             """
-
-    success, output = await _run_powershell_async(ps_command, timeout=30)
+        success, output = await _run_powershell_async(ps_command, timeout=30)
 
     if not success:
         logger.warning(f"PowerShell failed for connection toggle '{adapter_name}': {output}")

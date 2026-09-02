@@ -346,6 +346,9 @@ class TestToggleNetworkAdapter:
 # ---------------------------------------------------------------------------
 
 
+WIFI_GUID = "aaaabbbb-cccc-dddd-eeee-ffff00001111"
+
+
 def _post_connection(client: TestClient, adapter_name: str, action: str) -> Any:
     return client.post(f"/api/network/adapter/{quote(adapter_name, safe='')}/connection/{action}")
 
@@ -387,12 +390,15 @@ class TestToggleNetworkConnection:
         assert response.status_code == 404
 
     def test_wifi_disconnect_answers_with_the_wifi_shape(self, client: TestClient) -> None:
-        """WiFi goes through netsh wlan, Ethernet through DHCP release — the
+        """WiFi goes through wlanapi, Ethernet through DHCP release — the
         response must say which path was taken or the UI shows the wrong verbs."""
-        ps = _ps([(True, "WIFI"), (True, "OK")])
+        ps = _ps([(True, f"WIFI|{{{WIFI_GUID.upper()}}}")])
         with (
             _windows(),
             patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+            patch(
+                "fpstune.api.routes.system_network.wlan.disconnect", return_value=0
+            ) as disconnect,
         ):
             response = _post_connection(client, "Wi-Fi", "disconnect")
 
@@ -401,13 +407,22 @@ class TestToggleNetworkConnection:
         assert data["success"] is True
         assert data["adapter_type"] == "wifi"
         assert data["is_connected"] is False
-        assert "wlan disconnect" in ps.call_args_list[1][0][0]
+        # The GUID reaches the API without the braces the inventory quotes it with.
+        disconnect.assert_called_once_with(WIFI_GUID.upper())
+        assert ps.call_count == 1, "no second PowerShell process for a wlanapi call"
 
     def test_wifi_reconnect_reports_the_profile_it_joined(self, client: TestClient) -> None:
-        ps = _ps([(True, "WIFI"), (True, "OK:HomeNet-5G")])
+        """The profile comes from WlanGetProfileList, in the service's own order —
+        not from a regex over netsh output that only matched English labels."""
+        ps = _ps([(True, f"WIFI|{WIFI_GUID}")])
         with (
             _windows(),
             patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+            patch(
+                "fpstune.api.routes.system_network.wlan.profile_names",
+                return_value=["HomeNet-5G", "Office"],
+            ),
+            patch("fpstune.api.routes.system_network.wlan.connect", return_value=0) as connect,
         ):
             response = _post_connection(client, "Wi-Fi", "connect")
 
@@ -415,6 +430,7 @@ class TestToggleNetworkConnection:
         data = response.json()
         assert data["is_connected"] is True
         assert data["profile"] == "HomeNet-5G"
+        connect.assert_called_once_with(WIFI_GUID, "HomeNet-5G")
 
     def test_ethernet_connect_renews_the_lease(self, client: TestClient) -> None:
         ps = _ps([(True, "ETHERNET"), (True, "OK")])
@@ -428,16 +444,21 @@ class TestToggleNetworkConnection:
         data = response.json()
         assert data["adapter_type"] == "ethernet"
         assert data["is_connected"] is True
-        assert "ipconfig /renew" in ps.call_args_list[1][0][0]
+        renew = ps.call_args_list[1][0][0]
+        assert "ipconfig /renew" in renew
+        # The verdict is the exit code: ipconfig's text is localized.
+        assert "$LASTEXITCODE" in renew
+        assert "error|failed" not in renew
 
     def test_a_unicode_adapter_name_survives_the_round_trip(self, client: TestClient) -> None:
         """Windows localises adapter names, so a non-ASCII name is the normal
         case abroad, not an edge case."""
         name = "Drahtlos-Netzwerkverbindung 2"
-        ps = _ps([(True, "WIFI"), (True, "OK")])
+        ps = _ps([(True, f"WIFI|{WIFI_GUID}")])
         with (
             _windows(),
             patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+            patch("fpstune.api.routes.system_network.wlan.disconnect", return_value=0),
         ):
             response = _post_connection(client, name, "disconnect")
 
@@ -462,7 +483,33 @@ class TestToggleNetworkConnection:
         assert hostile.replace("'", "''") in detect_command
 
     def test_a_connect_that_failed_is_500_with_the_reason(self, client: TestClient) -> None:
-        ps = _ps([(True, "WIFI"), (True, "ERROR: No saved WiFi profiles found")])
+        ps = _ps([(True, f"WIFI|{WIFI_GUID}")])
+        with (
+            _windows(),
+            patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+            patch("fpstune.api.routes.system_network.wlan.profile_names", return_value=[]),
+        ):
+            response = _post_connection(client, "Wi-Fi", "connect")
+
+        assert response.status_code == 500
+        assert "No saved WiFi profiles" in response.json()["detail"]
+
+    def test_a_service_refusal_carries_its_win32_code(self, client: TestClient) -> None:
+        """WlanConnect said no; the code is the only diagnosis a user can search for."""
+        ps = _ps([(True, f"WIFI|{WIFI_GUID}")])
+        with (
+            _windows(),
+            patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+            patch("fpstune.api.routes.system_network.wlan.profile_names", return_value=["HomeNet"]),
+            patch("fpstune.api.routes.system_network.wlan.connect", return_value=1168),
+        ):
+            response = _post_connection(client, "Wi-Fi", "connect")
+
+        assert response.status_code == 500
+        assert "1168" in response.json()["detail"]
+
+    def test_a_wifi_adapter_without_a_guid_is_refused_not_guessed(self, client: TestClient) -> None:
+        ps = _ps([(True, "WIFI|")])
         with (
             _windows(),
             patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
@@ -470,7 +517,7 @@ class TestToggleNetworkConnection:
             response = _post_connection(client, "Wi-Fi", "connect")
 
         assert response.status_code == 500
-        assert "No saved WiFi profiles" in response.json()["detail"]
+        assert "GUID" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------

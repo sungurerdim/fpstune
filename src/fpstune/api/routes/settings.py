@@ -21,6 +21,7 @@ if TYPE_CHECKING:
 from fastapi import APIRouter, HTTPException
 
 import fpstune.settings.registry_cache as registry_cache
+from fpstune.api.definitions_view import setting_to_response
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -58,7 +59,6 @@ from fpstune.settings.base import (
     get_all_modules_metadata,
 )
 from fpstune.settings.hardware_context import build_hardware_context
-from fpstune.settings.impact_categories import derive_impact_categories
 from fpstune.utils.logger import log_activity, tweak_label
 
 logger = logging.getLogger(__name__)
@@ -146,63 +146,6 @@ async def _context_and_applicability(
 # =============================================================================
 
 
-def _setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
-    """Convert SettingExecutor to response model."""
-    from fpstune.settings.base import MaintenanceExecutor
-    from fpstune.settings.groups import group_for
-
-    # Check if this is a MaintenanceExecutor for additional fields
-    is_maintenance = isinstance(s, MaintenanceExecutor)
-    group = group_for(s.id)
-
-    return SettingDefinitionResponse(
-        id=s.id,
-        category=s.category.value,
-        display_name=s.display_name,
-        description=s.description,
-        value_type=s.value_type.value,
-        choices=list(s.choices),
-        default_value=s.default_value,
-        recommended_value=s.recommended_value,
-        requires_reboot=s.requires_reboot,
-        is_action=s.is_action,
-        current_impact=s.current_impact,
-        recommended_impact=s.recommended_impact,
-        scope=s.scope.value,
-        short_name=s.short_name,
-        icon=s.icon,
-        color=s.color,
-        category_order=s.category_order,
-        min_value=s.min_value,
-        max_value=s.max_value,
-        applicable_conditions=s.applicable_conditions,
-        evidence_level=s.evidence_level,
-        sources=s.sources,
-        effect=s.effect,
-        impact_scores=s.impact_scores,
-        impact_categories=derive_impact_categories(s.impact_scores),
-        risk_level=s.risk_level,
-        risk_warning=s.risk_warning,
-        perceptible_cost=s.perceptible_cost,
-        is_drift_guard=(
-            not s.is_action
-            and not s.is_readonly
-            and s.recommended_value is not None
-            and s.default_value is not None
-            and values_equal(s.recommended_value, s.default_value)
-        ),
-        # MaintenanceExecutor fields (use getattr for type safety)
-        duration_estimate=getattr(s, "duration_estimate", "") if is_maintenance else "",
-        supports_streaming=getattr(s, "supports_streaming", False) if is_maintenance else False,
-        progress_pattern=getattr(s, "progress_pattern", None) if is_maintenance else None,
-        is_readonly=s.is_readonly,
-        value_hints=s._derive_value_hints(),
-        group_id=group.id if group else None,
-        group_label=group.label if group else None,
-        group_order=group.order if group else None,
-    )
-
-
 @router.get("/definitions", response_model=list[SettingDefinitionResponse])
 async def get_definitions() -> list[SettingDefinitionResponse]:
     """Get all setting definitions (static, instant).
@@ -211,7 +154,7 @@ async def get_definitions() -> list[SettingDefinitionResponse]:
     No detection is performed - returns immediately.
     """
     registry = await _get_registry_async()
-    return [_setting_to_response(s) for s in registry.get_all()]
+    return [setting_to_response(s) for s in registry.get_all()]
 
 
 @router.get("/cleanup-sizes")
@@ -603,11 +546,17 @@ def _apply_one(
     activity_label: str,
     *,
     skip_when_inapplicable: bool,
+    on_line: Callable[[str, bool], None] | None = None,
 ) -> tuple[str, ApplyResponse]:
     """Apply one setting's value and verify. Shared core for the bulk helpers.
 
     When the setting is not applicable to the current hardware, bulk apply treats
     it as a benign skip (success), while reset/optimize report it as a failure.
+
+    `on_line` asks for the command's output while it runs, for the callers that
+    can show it. Everything else about the run is identical — same applicability
+    check, same validation, same `_finalize_apply_response` afterwards — because
+    a streamed apply that took a different path would be a second apply.
     """
     if hardware_context:
         is_applicable, reason = ApplicabilityChecker(hardware_context).is_applicable(setting)
@@ -640,7 +589,7 @@ def _apply_one(
         )
 
     engine = DetectionEngine(hardware_context=hardware_context)
-    success, error = CommandExecutor.apply(setting, value)
+    success, error = CommandExecutor.apply(setting, value, on_line)
     return setting.id, _finalize_apply_response(
         setting, value, engine, success, error, activity_label
     )
@@ -650,9 +599,17 @@ def _apply_single_setting(
     setting: SettingExecutor,
     value: Any,
     hardware_context: HardwareContext | None = None,
+    on_line: Callable[[str, bool], None] | None = None,
 ) -> tuple[str, ApplyResponse]:
     """Apply a single setting and verify. Returns (setting_id, ApplyResponse)."""
-    return _apply_one(setting, value, hardware_context, "Applied", skip_when_inapplicable=True)
+    return _apply_one(
+        setting,
+        value,
+        hardware_context,
+        "Applied",
+        skip_when_inapplicable=True,
+        on_line=on_line,
+    )
 
 
 def _reset_single_setting(

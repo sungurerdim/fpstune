@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.applicability import is_absent_reading
@@ -153,6 +154,11 @@ def map_raw_to_display(value_map: dict[Any, Any], raw: Any) -> Any:
 class BaseExecutor(ABC):
     """Base class for command executors."""
 
+    #: Whether `apply` accepts an `on_line` callback and delivers the command's
+    #: output through it as it runs. A registry write has nothing to say while it
+    #: happens; a half-hour DISM repair has everything to say.
+    streams_output: bool = False
+
     @abstractmethod
     def detect(self, setting: SettingExecutor) -> tuple[Any | None, str | None]:
         """Detect the current value of a setting.
@@ -221,8 +227,20 @@ class CommandExecutor:
         return value, error
 
     @classmethod
-    def apply(cls, setting: SettingExecutor, value: Any) -> tuple[bool, str | None]:
-        """Execute apply and return (success, error)."""
+    def apply(
+        cls,
+        setting: SettingExecutor,
+        value: Any,
+        on_line: Callable[[str, bool], None] | None = None,
+    ) -> tuple[bool, str | None]:
+        """Execute apply and return (success, error).
+
+        `on_line` asks for the command's output as it is printed. Only the
+        PowerShell executor can answer that — a registry write has no output to
+        stream — so it is passed on where it means something and ignored where it
+        does not, rather than making every executor carry a parameter it cannot
+        honour.
+        """
         from fpstune.settings.base import SettingValueType
         from fpstune.utils.debug import debug_log
 
@@ -244,7 +262,12 @@ class CommandExecutor:
             debug_log("executor", f"Unknown apply_type: {setting.apply_type} for {setting.id}")
             return False, f"Unknown apply type: {setting.apply_type}"
 
-        success, error = executor.apply(setting, value)
+        if on_line is not None and executor.streams_output:
+            # Narrowed by the flag the executor sets for itself, not by an
+            # isinstance on a concrete class the dispatcher should not know.
+            success, error = executor.apply(setting, value, on_line)  # type: ignore[call-arg]
+        else:
+            success, error = executor.apply(setting, value)
         debug_log("executor", f"APPLY RESULT {setting.id}: success={success}, error={error}")
         if success:
             logger.info("[OK]   %s → applied", tweak_label(setting.id))

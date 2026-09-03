@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from fpstune.settings.base import (
     MASK,
+    PERCENT_PROGRESS,
     UNMAPPED,
     DetectType,
     SettingCategory,
@@ -2301,6 +2302,8 @@ CLEANUP_DISM = SettingExecutor(
     apply_args={},
     apply_value_map={},
     apply_timeout=900,
+    duration_estimate="5-15 min",
+    progress_pattern=PERCENT_PROGRESS,
 )
 
 CLEANUP_TEMP = SettingExecutor(
@@ -3059,6 +3062,15 @@ MAINTENANCE_SFC = SettingExecutor(
     apply_command="sfc_scan",
     apply_args={},
     apply_value_map={},
+    duration_estimate="5-15 min",
+    progress_pattern=PERCENT_PROGRESS,
+    # A full system-file verification pass, not a check that can be hurried: the
+    # 300 s the slow-apply heuristic gives is shorter than the scan itself, and a
+    # timeout there does not stop the scan — it stops fpstune watching it, so the
+    # run is reported failed while it is still repairing. Measured on this
+    # machine 2026-09-03: `maintenance:dism_health` timed out at 300 s twice and
+    # left `Dism.exe` running both times, with no parent left to read it.
+    apply_timeout=1800,
 )
 
 MAINTENANCE_DISM_HEALTH = SettingExecutor(
@@ -3092,6 +3104,12 @@ MAINTENANCE_DISM_HEALTH = SettingExecutor(
     apply_command="dism_health",
     apply_args={},
     apply_value_map={},
+    duration_estimate="10-30 min",
+    progress_pattern=PERCENT_PROGRESS,
+    # `/RestoreHealth` verifies the whole component store and fetches replacement
+    # payloads from Windows Update; half an hour is a normal run, not a stuck
+    # one. See MAINTENANCE_SFC's note for what the old 300 s cap actually did.
+    apply_timeout=3600,
 )
 
 # All system settings

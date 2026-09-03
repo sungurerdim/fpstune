@@ -159,7 +159,9 @@ class TestBulkApplySharesSingleApplyValidation:
 
         assert result.status_code == 200
         assert result.json()["success_count"] == 1
-        apply_cmd.assert_called_once_with(setting, "on")
+        # The third argument is the line callback a streamed run passes; a bulk
+        # apply has nowhere to stream to, so it passes None.
+        apply_cmd.assert_called_once_with(setting, "on", None)
 
 
 class TestFreeStringValidation:

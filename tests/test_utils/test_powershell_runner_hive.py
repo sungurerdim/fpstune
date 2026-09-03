@@ -11,7 +11,6 @@ module that spawns powershell.exe itself and names ``HKCU:``.
 
 from __future__ import annotations
 
-import subprocess
 import sys
 
 import pytest
@@ -26,14 +25,32 @@ PLAYER = "S-1-5-21-1000-2000-3000-1001"
 STEAM = "(Get-ItemProperty -Path 'HKCU:\\Software\\Valve\\Steam' -Name 'StartupMode').StartupMode"
 
 
+class _FakeProcess:
+    """Stands in for the PowerShell the runner starts, answering "0"."""
+
+    def __init__(self, argv: list[str]) -> None:
+        self.args = argv
+        self.returncode = 0
+
+    # Named `timeout` because the runner passes it by keyword; nothing here waits.
+    def communicate(self, timeout: float | None = None) -> tuple[str, str]:  # noqa: ARG002
+        return "0\n", ""
+
+    def kill(self) -> None:  # pragma: no cover - nothing here ever times out
+        pass
+
+
 def _capture_argv(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
     seen: list[list[str]] = []
 
-    def fake_run(argv: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+    def fake_popen(argv: list[str], **_kwargs: object) -> _FakeProcess:
         seen.append(argv)
-        return subprocess.CompletedProcess(argv, 0, stdout="0\n", stderr="")
+        return _FakeProcess(argv)
 
-    monkeypatch.setattr(powershell.subprocess, "run", fake_run)
+    # The runner drives the process itself rather than through `subprocess.run`,
+    # because that call reaps a timed-out child with a wait it cannot bound —
+    # see utils.powershell._reap_in_background.
+    monkeypatch.setattr(powershell.subprocess, "Popen", fake_popen)
     return seen
 
 

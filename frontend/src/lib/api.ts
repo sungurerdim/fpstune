@@ -229,6 +229,7 @@ function postEventStream(
   label: string,
   onEvent: (event: Record<string, unknown>) => void,
   onDone?: () => void,
+  onError?: (error: unknown) => void,
 ): () => void {
   const controller = new AbortController();
   (async () => {
@@ -266,8 +267,12 @@ function postEventStream(
       }
       onDone?.();
     } catch (err) {
-      if ((err as Error).name !== "AbortError")
-        log.error(`${label} error`, err);
+      // A caller awaiting this stream needs to hear that it died, or it waits
+      // for a `done` that is never coming — the button stays busy for the rest
+      // of the session. Aborts are the caller's own doing and stay quiet.
+      if ((err as Error).name === "AbortError") return;
+      log.error(`${label} error`, err);
+      onError?.(err);
     }
   })();
   return () => controller.abort();
@@ -586,6 +591,7 @@ export const settingsApi = {
     ids: string[],
     onEvent: (event: Record<string, unknown>) => void,
     onDone?: () => void,
+    onError?: (error: unknown) => void,
   ): (() => void) =>
     postEventStream(
       "/settings/bulk/stream-apply",
@@ -593,6 +599,7 @@ export const settingsApi = {
       "bulkStreamApply",
       onEvent,
       onDone,
+      onError,
     ),
 
   /**

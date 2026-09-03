@@ -67,6 +67,13 @@ def _make_setting(
     s.default_value = default_value
     s.requires_reboot = requires_reboot
     s.apply_args = {}
+    # The `started` event names the setting and says how long it takes, so the
+    # row can label itself before the command has printed anything. These have to
+    # be real values: a MagicMock reaches json.dumps and takes the whole stream
+    # down with it.
+    s.display_name = setting_id.rsplit(":", 1)[-1].replace("_", " ").title()
+    s.duration_estimate = ""
+    s.progress_pattern = None
     return s
 
 

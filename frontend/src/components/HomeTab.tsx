@@ -37,6 +37,7 @@ import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { TweakListRow } from "./TweakListRow";
 import { CleanupListRow } from "./CleanupListRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
+import { RunPanel } from "./RunPanel";
 import { DetectionNotice } from "./DetectionNotice";
 import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
@@ -649,6 +650,12 @@ export function HomeTab() {
             >
               Run All
             </Button>
+          </div>
+          {/* A cleanup started from here reports here too. The panel renders
+              nothing until something has been run, so it costs no space on a
+              page whose whole job is the summary. */}
+          <div className="px-3 pt-3">
+            <RunPanel />
           </div>
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}

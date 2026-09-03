@@ -5,6 +5,7 @@ import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { CleanupPanel } from "./CleanupPanel";
 import { CleanupResults } from "./CleanupResults";
 import { MaintenancePanel } from "./MaintenancePanel";
+import { RunPanel } from "./RunPanel";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 
 /**
@@ -42,6 +43,11 @@ export function DiskCleanupTab() {
               : t("cleanup.runCleanup")}
         </Button>
       </div>
+
+      {/* Directly under the Run button, above the lists: while something is
+          running this is the only thing on the page the user is waiting on, and
+          it is the answer to "what is it doing right now". */}
+      <RunPanel />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <CleanupPanel initialCollapsed={false} />

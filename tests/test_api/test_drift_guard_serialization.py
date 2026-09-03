@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 
-from fpstune.api.routes.settings import _setting_to_response
+from fpstune.api.definitions_view import setting_to_response
 from fpstune.settings.definitions import get_all_static_settings
 
 
@@ -26,19 +26,19 @@ class TestTheGuardVerdictIsValuesEquals:
         setting = replace(
             _sample(), default_value=0, recommended_value="0.0", is_action=False, is_readonly=False
         )
-        assert _setting_to_response(setting).is_drift_guard is True
+        assert setting_to_response(setting).is_drift_guard is True
         assert str(setting.recommended_value) != str(setting.default_value)  # the old heuristic
 
     def test_a_real_change_is_not_a_guard(self) -> None:
         setting = replace(_sample(), default_value="enabled", recommended_value="disabled")
-        assert _setting_to_response(setting).is_drift_guard is False
+        assert setting_to_response(setting).is_drift_guard is False
 
     def test_an_action_is_never_a_guard(self) -> None:
         setting = replace(_sample(), default_value="x", recommended_value="x", is_action=True)
-        assert _setting_to_response(setting).is_drift_guard is False
+        assert setting_to_response(setting).is_drift_guard is False
 
     def test_the_registry_carries_the_documented_guard_population(self) -> None:
         """The ~163 recommended==default settings serialize as guards — the
         count Home stops presenting as pending changes."""
-        guards = sum(1 for s in get_all_static_settings() if _setting_to_response(s).is_drift_guard)
+        guards = sum(1 for s in get_all_static_settings() if setting_to_response(s).is_drift_guard)
         assert guards > 100  # a population, not an accident

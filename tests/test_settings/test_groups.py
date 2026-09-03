@@ -102,10 +102,10 @@ def test_the_group_reaches_the_wire(all_settings):
     Checked against the response builder rather than a live request, because the
     endpoint's own registry does hardware discovery this assertion has no use for.
     """
-    from fpstune.api.routes.settings import _setting_to_response
+    from fpstune.api.definitions_view import setting_to_response
 
     game_setting = next(s for s in all_settings if s.module == "game_config")
-    response = _setting_to_response(game_setting)
+    response = setting_to_response(game_setting)
     expected = group_for(game_setting.id)
     assert expected is not None
     assert response.group_id == expected.id
@@ -113,7 +113,7 @@ def test_the_group_reaches_the_wire(all_settings):
     assert response.group_order == expected.order
 
     flat = next(s for s in all_settings if s.module == "power")
-    flat_response = _setting_to_response(flat)
+    flat_response = setting_to_response(flat)
     assert flat_response.group_id is None
     assert flat_response.group_label is None
     assert flat_response.group_order is None

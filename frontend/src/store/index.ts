@@ -10,6 +10,41 @@ export type TabId =
   "home" | "settings" | "hardware" | "games" | "cleanup" | "benchmarks";
 export type OperationStatus = "queued" | "running" | "verified" | "failed";
 
+/**
+ * One action inside a run, as it happens.
+ *
+ * The row this drives is the answer to "what is it doing": a thirty-minute DISM
+ * repair used to be one spinner, indistinguishable from a wedged one. Progress
+ * is only ever a number the command itself printed — a step whose command
+ * reports none shows elapsed time and its latest line, never an invented bar
+ * (C11).
+ */
+export interface RunStep {
+  id: string;
+  /** The backend's own display name; the frontend never re-titles a setting. */
+  name: string;
+  status: "queued" | "running" | "done" | "failed" | "skipped";
+  /** The exact command being run, verbatim — never a paraphrase of it. */
+  command: string;
+  /** 0-100 from the command's own output, or null when it prints none. */
+  percent: number | null;
+  /** Whether this command reports progress at all, known before it prints any. */
+  reportsProgress: boolean;
+  /** How long the backend says this takes ("10-30 min"), or "" when unknown. */
+  durationEstimate: string;
+  /** Every line the command printed, redraws collapsed. Capped. */
+  lines: string[];
+  startedAt: number;
+  endedAt: number | null;
+  error?: string;
+}
+
+/**
+ * Enough of a command's output to read what it did, few enough that a repair
+ * printing a line a second for half an hour cannot grow the tab without bound.
+ */
+const MAX_RUN_LINES = 400;
+
 /** Outcome of a single cleanup/maintenance action for the results summary. */
 export interface CleanupResult {
   id: string;
@@ -38,6 +73,14 @@ interface AppSlice {
   // Cleanup/maintenance run results (keyed by setting id) for the summary panel
   cleanupResults: Record<string, CleanupResult>;
   recordCleanupResults: (results: CleanupResult[]) => void;
+
+  // The live run: what was selected, in run order, and how far each one is.
+  // Kept after the run finishes — it is the record of what happened, and the
+  // freed figure lands beside it from cleanupResults rather than being copied.
+  runSteps: RunStep[];
+  beginRun: (steps: Array<Pick<RunStep, "id" | "name">>) => void;
+  updateRunStep: (id: string, patch: Partial<RunStep>) => void;
+  appendRunOutput: (id: string, text: string, replaces: boolean) => void;
 
   // The last before/after the measurement suite took, so the Verify panel can
   // judge the settings' claims against it. Verify used to collect its own pair
@@ -147,6 +190,49 @@ export const useStore = create<FpstuneStore>()((...args) => {
         for (const r of results) next[r.id] = r;
         return { cleanupResults: next };
       }),
+
+    runSteps: [],
+    // A run replaces the last one rather than appending to it: the panel shows
+    // this run, and a list that grew all session would bury the row the user is
+    // waiting on under the rows they already read.
+    beginRun: (steps) =>
+      set({
+        runSteps: steps.map(({ id, name }) => ({
+          id,
+          name,
+          status: "queued" as const,
+          command: "",
+          percent: null,
+          reportsProgress: false,
+          durationEstimate: "",
+          lines: [],
+          startedAt: 0,
+          endedAt: null,
+        })),
+      }),
+    updateRunStep: (id, patch) =>
+      set((state) => ({
+        runSteps: state.runSteps.map((step) =>
+          step.id === id ? { ...step, ...patch } : step,
+        ),
+      })),
+    // `replaces` is a carriage return without a line feed — a progress bar
+    // redrawing itself. Appending those would turn one DISM bar into hundreds of
+    // near-identical rows, which is the difference between a log and a wall.
+    appendRunOutput: (id, text, replaces) =>
+      set((state) => ({
+        runSteps: state.runSteps.map((step) => {
+          if (step.id !== id) return step;
+          const lines =
+            replaces && step.lines.length > 0
+              ? [...step.lines.slice(0, -1), text]
+              : [...step.lines, text];
+          return {
+            ...step,
+            lines: lines.slice(-MAX_RUN_LINES),
+          };
+        }),
+      })),
 
     suiteBefore: null,
     suiteAfter: null,

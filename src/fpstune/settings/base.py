@@ -515,6 +515,19 @@ class SettingExecutor:
     detect_timeout: int | None = None
     apply_timeout: int | None = None
 
+    # === What a long action says while it runs ===
+    # How long this takes, in the words the row shows: "~30s", "1-5 min". An
+    # action that runs for half an hour behind an unlabelled spinner is
+    # indistinguishable from one that has hung.
+    duration_estimate: str = ""
+    # The regex that finds this command's own progress in its own output, or None
+    # when the command reports none — in which case the UI shows elapsed time and
+    # the latest line, never a percentage nothing measured (C11). Set it to
+    # PERCENT_PROGRESS for a command that prints one; it is deliberately opt-in,
+    # so a delete script that happens to print "50%" in a path is not mistaken
+    # for a progress report.
+    progress_pattern: str | None = None
+
     # === Validation ===
     validate_pattern: str | None = None  # Regex for validation
     min_value: int | float | None = None  # Minimum value for INT/FLOAT types
@@ -680,46 +693,16 @@ class DetectionResult:
         }
 
 
-@dataclass
-class MaintenanceExecutor(SettingExecutor):
-    """Extended executor for maintenance actions with streaming support.
-
-    Inherits all SettingExecutor fields and adds maintenance-specific ones.
-    All instances have is_action=True by design.
-
-    Example:
-        DISM_CLEANUP = MaintenanceExecutor(
-            id="maintenance:dism_cleanup",
-            category=SettingCategory.MAINTENANCE,
-            display_name="DISM Cleanup",
-            description="Cleans Windows component store...",
-            duration_estimate="5-15 min",
-            supports_streaming=True,
-            progress_pattern=r"(\\d+\\.?\\d*)%",
-            ...
-        )
-    """
-
-    # === Maintenance-specific ===
-    duration_estimate: str = ""  # "~30s", "1-5 min", "5-15 min"
-    supports_streaming: bool = True  # Enable live console output
-    progress_pattern: str | None = None  # Regex to extract progress % from output
-
-    def __post_init__(self) -> None:
-        """Validate and ensure is_action=True for maintenance tasks."""
-        # Call parent validation
-        super().__post_init__()
-        # Maintenance executors are always actions
-        object.__setattr__(self, "is_action", True)
-
-    def to_dict(self) -> dict[str, Any]:
-        """Convert to dictionary including maintenance fields."""
-        base = super().to_dict()
-        base.update(
-            {
-                "duration_estimate": self.duration_estimate,
-                "supports_streaming": self.supports_streaming,
-                "progress_pattern": self.progress_pattern,
-            }
-        )
-        return base
+# A percentage printed by a command that reports its own progress, with the
+# number on either side of the sign.
+#
+# Both orders, because the sign moves with the display language and the number
+# does not: this machine's `sfc.exe.mui` holds "Verification %1!u!%% complete.",
+# a Turkish one puts the sign first. Read out of the resource rather than assumed
+# — and matched next to the sign rather than next to any translated word, which
+# is the same reason every other locale-sensitive reading in this codebase keys
+# off a number instead of the text around it (C4).
+#
+# DISM needs no resource: its bar is drawn, not formatted — "[====  71.0%  ]" in
+# every language — which is why the decimal is optional here.
+PERCENT_PROGRESS = r"(?:(\d{1,3}(?:[.,]\d+)?)\s*%|%\s*(\d{1,3}(?:[.,]\d+)?))"

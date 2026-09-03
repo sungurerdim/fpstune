@@ -20,7 +20,6 @@ from __future__ import annotations
 
 import re
 import sys
-from pathlib import Path
 
 import pytest
 from tests.test_windows_contract.conftest import run_shipped_script
@@ -240,10 +239,14 @@ def test_the_freed_figure_is_a_difference_not_a_sum(name: str, script: str) -> N
 
 
 def test_temp_cleanup_is_given_more_than_the_default_apply_timeout() -> None:
-    """Two recursive sizing passes over a real Temp measured 2.8 s each."""
-    from fpstune.settings.executors import powershell
+    """Two recursive sizing passes over a real Temp measured 2.8 s each.
 
-    text = Path(powershell.__file__).read_text(encoding="utf-8")
-    start = text.index("_medium_apply = {")
-    medium = text[start : text.index("}", start)]
-    assert '"temp_cleanup"' in medium
+    Asked of the resolver rather than of the source text: the table stopped being
+    a local variable when the streamed and quiet runs came to share one timeout
+    resolution, and reading it out of the file was only ever a way to reach a
+    local.
+    """
+    from fpstune.settings.definitions.system import CLEANUP_TEMP
+    from fpstune.settings.executors.powershell import _apply_timeout
+
+    assert _apply_timeout(CLEANUP_TEMP, "temp_cleanup") > 30

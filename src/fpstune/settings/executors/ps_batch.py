@@ -298,6 +298,16 @@ _CLEANUP_KEY = "cleanup_sizes"
 _CLEANUP_CALL = "Get-CleanupStatus '%type%'"
 
 
+def cleanup_batch_timeout(types: tuple[str, ...]) -> int:
+    """How long the batch may take for `types`. Folder sizing dominates.
+
+    Exposed because the cache entry each claimed setting gets must expire *after*
+    the worker that claimed it has given up, and a second copy of this arithmetic
+    would be the first thing to drift.
+    """
+    return 30 + 12 * len(types)
+
+
 def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
     """Ask one PowerShell session for every cleanup type's reclaimable size.
 
@@ -346,7 +356,9 @@ def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
 
     # Folder sizing dominates: a large npm or shader cache takes real seconds,
     # and this now carries every type in one call.
-    success, output = run_powershell(script, timeout=30 + 12 * len(types), component="ps_batch")
+    success, output = run_powershell(
+        script, timeout=cleanup_batch_timeout(types), component="ps_batch"
+    )
     if not (success and output and output.strip()):
         logger.debug("cleanup size batch produced nothing")
         return {}

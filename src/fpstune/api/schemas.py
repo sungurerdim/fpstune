@@ -388,9 +388,10 @@ class SettingDefinitionResponse(BaseModel):
     # surface promises work that will not happen. Computed here so the frontend
     # never re-implements the one comparison truth (C6).
     is_drift_guard: bool = False
-    # MaintenanceExecutor fields
+    # What a long action tells the user while it runs: how long it takes, and how
+    # to read its own progress out of its own output (None = it reports none, and
+    # the UI shows elapsed time instead of a percentage nothing measured).
     duration_estimate: str = ""
-    supports_streaming: bool = False
     progress_pattern: str | None = None
     # Advisory/detect-only settings
     is_readonly: bool = False

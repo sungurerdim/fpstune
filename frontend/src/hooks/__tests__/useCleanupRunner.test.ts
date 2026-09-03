@@ -69,21 +69,34 @@ function makeWrapper() {
   return { Wrapper, queryClient };
 }
 
-const bulkSuccessResponse = {
-  results: {
-    "cleanup:temp_files": {
-      setting_id: "cleanup:temp_files",
-      success: true,
-      error: null,
-      new_value: null,
-      requires_reboot: false,
-      skipped: false,
-    },
-  },
-  success_count: 1,
-  error_count: 0,
-  requires_reboot: false,
-};
+/**
+ * The run goes through the SSE endpoint now, because the events are what tell
+ * the user which command is running and how far it has got. These helpers speak
+ * that wire format so the tests exercise the path the app takes.
+ */
+function sseBody(events: Array<Record<string, unknown>>): string {
+  return events.map((event) => `data: ${JSON.stringify(event)}\n\n`).join("");
+}
+
+function streamHandler(events: Array<Record<string, unknown>>) {
+  return http.post(
+    "/api/settings/bulk/stream-apply",
+    () =>
+      new HttpResponse(sseBody(events), {
+        headers: { "Content-Type": "text/event-stream" },
+      }),
+  );
+}
+
+/** One cleanup that ran, reported its command, and verified. */
+const successEvents = (id = "cleanup:temp_files") => [
+  { event: "started", id, name: "Temp Files", duration_estimate: "", reports_progress: false },
+  { event: "output", id, text: "Remove-Item -Recurse -Force $env:TEMP\\*", replaces: false },
+  { event: "output", id, text: "Cleaned 400 MB", replaces: false },
+  { event: "applied", id, success: true, current_value: null, requires_reboot: false },
+  { event: "verified", id, matches: true, current_value: null },
+  { event: "done", total: 1, succeeded: 1, failed: 0 },
+];
 
 describe("useCleanupRunner", () => {
   beforeEach(() => {
@@ -118,11 +131,7 @@ describe("useCleanupRunner", () => {
       cleanupResults: {},
     });
 
-    server.use(
-      http.post("/api/settings/bulk/apply", () =>
-        HttpResponse.json(bulkSuccessResponse),
-      ),
-    );
+    server.use(streamHandler(successEvents()));
   });
 
   it("returns correct initial state", () => {
@@ -262,25 +271,7 @@ describe("useCleanupRunner", () => {
   });
 
   it("confirmRun() starts the run after confirmation", async () => {
-    server.use(
-      http.post("/api/settings/bulk/apply", () =>
-        HttpResponse.json({
-          results: {
-            "cleanup:docker_prune": {
-              setting_id: "cleanup:docker_prune",
-              success: true,
-              error: null,
-              new_value: null,
-              requires_reboot: false,
-              skipped: false,
-            },
-          },
-          success_count: 1,
-          error_count: 0,
-          requires_reboot: false,
-        }),
-      ),
-    );
+    server.use(streamHandler(successEvents("cleanup:docker_prune")));
 
     const settings = new Map(useStore.getState().settings);
     settings.set(
@@ -312,6 +303,72 @@ describe("useCleanupRunner", () => {
 
     await waitFor(() => {
       expect(result.current.isRunning).toBe(false);
+    });
+  });
+
+  // The freed-space figure is the product this feature exists to show, and it
+  // used to be delivered only by the size poll noticing a *change*. Everything
+  // below is a way for that change to be missed.
+  describe("freed space always arrives", () => {
+    const sizes = (bytes: number) =>
+      http.get("/api/settings/cleanup-sizes", () =>
+        HttpResponse.json({
+          "cleanup:temp_files": { bytes, status: "ready" },
+        }),
+      );
+
+    it("reports the difference when the new size is ready before the run returns", async () => {
+      // A small cleanup is re-measured in the time the bulk request takes, so by
+      // the time the run reports there is no change left for the poll to notice.
+      // The row spun on a spinner forever waiting for one.
+      server.use(sizes(100 * 1024 * 1024));
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["cleanup"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["cleanup:temp_files"]);
+      });
+
+      await waitFor(() => {
+        const recorded =
+          useStore.getState().cleanupResults["cleanup:temp_files"];
+        // The fixture's pre-run size is 500 MB.
+        expect(recorded?.freedMB).toBe(400);
+      });
+    });
+
+    it("closes the row out when the new size cannot be measured", async () => {
+      // Docker down, target gone, scan abandoned: the cleanup still ran, so the
+      // row reports that rather than spinning on a number nobody can produce.
+      server.use(
+        http.get("/api/settings/cleanup-sizes", () =>
+          HttpResponse.json({
+            "cleanup:temp_files": { bytes: 0, status: "unavailable" },
+          }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["cleanup"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["cleanup:temp_files"]);
+      });
+
+      await waitFor(() => {
+        const recorded =
+          useStore.getState().cleanupResults["cleanup:temp_files"];
+        expect(recorded?.success).toBe(true);
+        expect(recorded?.sized).toBe(false);
+        expect(recorded?.freedMB).toBeNull();
+      });
     });
   });
 });

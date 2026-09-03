@@ -612,7 +612,6 @@ class TestFunctionLengthCeiling:
         ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
         ("src/fpstune/settings/executors/powershell.py", "detect"): 233,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
-        ("src/fpstune/api/routes/settings_stream.py", "_stream_grouped"): 214,
         ("src/fpstune/api/main.py", "create_app"): 197,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
         ("src/fpstune/core/nv_profile.py", "read_applied_settings"): 146,
@@ -668,7 +667,7 @@ class TestRouteModuleCeiling:
 
     # Frozen at the H1 audit (2026-08-26), in lines; lowered as modules shrink.
     _CEILING = {
-        "src/fpstune/api/routes/settings.py": 1190,
+        "src/fpstune/api/routes/settings.py": 1147,
         "src/fpstune/api/routes/display.py": 613,
         "src/fpstune/api/routes/debug.py": 501,
     }

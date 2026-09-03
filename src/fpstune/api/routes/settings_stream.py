@@ -67,6 +67,29 @@ def _percent(pattern: str | None, line: str) -> float | None:
     return max(0.0, min(100.0, value))
 
 
+def apply_target(setting: SettingExecutor, action: str) -> Any:
+    """The value this run writes.
+
+    An action is *run*, and the only value that means run is True. Its
+    `recommended_value` answers a different question — whether fpstune suggests
+    running it unprompted — and for 24 of the 38 actions this ships, including
+    both repairs and every developer cache, the answer is False. Deriving the
+    target from it made `CommandExecutor.apply` take its own falsy-value branch,
+    which skips the action and reports success: measured on the reporting machine
+    as `[APPLY] maintenance:sfc_scan → False` followed immediately by
+    `Applied System File Checker`, with nothing having run.
+
+    The quiet bulk endpoint never had to know this, because its callers send
+    explicit values (`{id: True}`). The stream derives them, so it must.
+
+    A reset is unchanged: writing an action's `default_value` is False by design,
+    a cleanup cannot be un-run, and the falsy branch skipping it is correct.
+    """
+    if action != "apply":
+        return setting.default_value
+    return True if setting.is_action else setting.recommended_value
+
+
 def _started(setting: SettingExecutor, *, reports_progress: bool | None = None) -> str:
     """The event that opens a setting's row, before it has anything to report.
 
@@ -209,7 +232,7 @@ async def _stream_nvidia(
         return
 
     updates: dict[str, Any] = {
-        s.apply_args["setting"]: (s.recommended_value if action == "apply" else s.default_value)
+        s.apply_args["setting"]: apply_target(s, action)
         for s in applicable
         if s.apply_args.get("setting")
     }
@@ -224,7 +247,7 @@ async def _stream_nvidia(
     activity_label = "Applied" if action == "apply" else "Reset"
 
     for s in applicable:
-        target = s.recommended_value if action == "apply" else s.default_value
+        target = apply_target(s, action)
         response = await asyncio.to_thread(
             _finalize_apply_response,
             s,
@@ -268,7 +291,7 @@ async def _stream_each(
                     _, response = await asyncio.to_thread(
                         _apply_single_setting,
                         setting,
-                        setting.recommended_value,
+                        apply_target(setting, action),
                         hardware_context,
                         _output_pump(setting, event_queue, loop),
                     )

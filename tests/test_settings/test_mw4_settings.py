@@ -75,16 +75,76 @@ class TestEveryKeyIsUnambiguous:
     def test_a_named_compound_shares_one_value_list(self) -> None:
         """C8 allows several keys only when they are one concept.
 
-        `SSRQuality@0` and `@1` qualify because they hold the same list.
-        `DxrMode@0` (Off/On) and `@1` (Off..Ultra) do not, which is why they ship
-        as two settings — writing `Ultra` into the master switch would be a value
-        the game rejects.
+        Two shapes qualify. `SSRQuality@0` and `@1` repeat one cvar across
+        scopes — same name, different scope. `ADS2xZoomSensitivity@1` and its
+        five siblings are the other shape: distinct cvars at one shared scope
+        whose names differ only in the middle, because that shared spelling is
+        what says they are the same concept per zoom level.
+
+        A shared scope index alone proves nothing and must not be accepted on
+        its own: nearly every profile key sits at `@1`, so `Fov@1` bundled with
+        `MouseFilter@1` would pass such a check while being exactly the
+        unrelated-subsystem bundle C8 forbids. The second shape therefore also
+        requires the names to agree on a prefix and a suffix that together cover
+        most of the shortest name.
+
+        `DxrMode@0` (Off/On) and `@1` (Off..Ultra) qualify for neither shape —
+        same name, but also different scopes with different value lists — which
+        is why they ship as two settings: writing `Ultra` into the master
+        switch would be a value the game rejects.
         """
+
+        def _shared_edges(names: list[str]) -> int:
+            """How many characters every name agrees on, at both ends."""
+            first, last = min(names), max(names)
+            prefix = 0
+            while prefix < min(len(first), len(last)) and first[prefix] == last[prefix]:
+                prefix += 1
+            suffix = 0
+            while (
+                suffix < min(len(first), len(last)) - prefix
+                and first[-1 - suffix] == last[-1 - suffix]
+            ):
+                suffix += 1
+            return prefix + suffix
+
         compounds = [s for s in MW4_SETTINGS if len(_keys_of(s)) > 1]
         assert compounds, "the SSR compound should be in this set"
         for setting in compounds:
-            names = {k.rpartition("@")[0] for k in _keys_of(setting)}
-            assert len(names) == 1, f"{setting.id} compounds unrelated keys: {names}"
+            parts = [k.rpartition("@") for k in _keys_of(setting)]
+            names = sorted({p[0] for p in parts})
+            scopes = {p[2] for p in parts}
+            if len(names) == 1:
+                continue
+            shortest = min(len(n) for n in names)
+            assert len(scopes) == 1 and _shared_edges(names) * 2 >= shortest, (
+                f"{setting.id} compounds unrelated keys: {_keys_of(setting)}"
+            )
+
+    def test_a_shared_scope_alone_does_not_make_a_compound(self) -> None:
+        """The guard above must reject the bundle it was written to reject.
+
+        Without this, relaxing that assertion to `len(scopes) == 1` reads as a
+        passing test while admitting any two keys that happen to sit at the same
+        scope — which is most of the profile file.
+        """
+        names = ["Fov", "MouseFilter"]
+        shortest = min(len(n) for n in names)
+
+        def _shared_edges(values: list[str]) -> int:
+            first, last = min(values), max(values)
+            prefix = 0
+            while prefix < min(len(first), len(last)) and first[prefix] == last[prefix]:
+                prefix += 1
+            suffix = 0
+            while (
+                suffix < min(len(first), len(last)) - prefix
+                and first[-1 - suffix] == last[-1 - suffix]
+            ):
+                suffix += 1
+            return prefix + suffix
+
+        assert _shared_edges(names) * 2 < shortest
 
         dxr = {s.id for s in MW4_SETTINGS if "DxrMode" in str(s.detect_args["batch_key"])}
         assert dxr == {"game_config:mw4:dxr_mode", "game_config:mw4:dxr_quality"}
@@ -189,6 +249,9 @@ class TestTheJudgementsThatAreEasyToInvert:
         "screen_space_shadows": "held at its lowest drawn tier rather than off, because MW3 "
         "and MW4 disagree in writing about whether this key carries a silhouette and "
         "nobody has measured which is right — 3% is the price of not guessing",
+        "fov": "the owner's decision (tasks.md decision 3): not seeing an enemy beside you "
+        "costs more than a missed shot, so the file's own maximum is recommended in COMPLETE "
+        "with the cost — a smaller apparent target and a small render cost — written into the copy",
     }
 
     def test_every_remaining_frame_cost_is_one_we_argued_for(self) -> None:
@@ -592,11 +655,16 @@ class TestInputGuardsProtectMuscleMemory:
             == "Sprint Assist Delay KBM@1"
         )
 
-    def test_field_of_view_is_left_as_a_preference(self) -> None:
-        """Wider sees more and shrinks targets. Nothing measured here says which
-        side a given player should take, so it is guarded rather than moved."""
+    def test_field_of_view_recommends_the_files_maximum(self) -> None:
+        """Owner decision (tasks.md decision 3, 2026-09-09): not seeing an enemy
+        beside you costs more than a missed shot, so the recommendation moved
+        from the 90 guard to the file's own maximum of 120, in COMPLETE where
+        the cost — a smaller apparent target and a small render cost — is
+        written into the copy rather than assumed. `default_value` stays at
+        the game's own default so a machine that has not opted in keeps it."""
         setting = self._by_name("fov")
-        assert setting.recommended_value == setting.default_value
+        assert setting.default_value == "90.000000"
+        assert setting.recommended_value == "120.000000"
         assert setting.scope.name == "COMPLETE"
 
     def test_the_three_that_break_aim_are_guards_not_preset_entries(self) -> None:
@@ -609,6 +677,55 @@ class TestInputGuardsProtectMuscleMemory:
             setting = self._by_name(name)
             assert setting.scope.name == "RECOMMENDED", name
             assert str(setting.recommended_value) == str(setting.default_value), name
+
+
+class TestAdsSensitivityFamily:
+    """The ADS/mouse sensitivity settings added alongside sprint assist delay:
+    each is a guard at the neutral multiplier, except the two real tweaks."""
+
+    def _by_name(self, name: str):
+        return next(s for s in MW4_SETTINGS if s.id == f"game_config:mw4:{name}")
+
+    def test_sprint_assist_delay_gamepad_is_the_kbm_settings_sibling(self) -> None:
+        setting = self._by_name("sprint_assist_delay_gamepad")
+        assert setting.recommended_value == 0
+        assert setting.detect_args["batch_key"] == "Sprint Assist Delay Gamepad@1"
+
+    def test_ads_timing_sensitivity_recommends_immediately(self) -> None:
+        """Same defect class as mouse acceleration: the on-screen result of a
+        given movement should not depend on where the ADS animation is."""
+        setting = self._by_name("ads_timing_sensitivity")
+        assert setting.default_value == "interpolated"
+        assert setting.recommended_value == "immediately"
+        assert set(setting.choices) == {"immediately", "interpolated", "delayed"}
+
+    @pytest.mark.parametrize(
+        "name",
+        [
+            "ads_sensitivity",
+            "ads_zoom_sensitivity",
+            "ads_hold_breath_sensitivity",
+            "tactical_ads_sensitivity",
+            "mouse_vertical_sensibility",
+        ],
+    )
+    def test_the_sensitivity_multipliers_guard_at_neutral(self, name: str) -> None:
+        setting = self._by_name(name)
+        assert setting.recommended_value == setting.default_value == "1.000000"
+
+    def test_monitor_distance_coefficient_guards_at_the_files_own_value(self) -> None:
+        """tasks.md decision 2: a drift guard fpstune must never move."""
+        setting = self._by_name("mouse_monitor_distance_coeff")
+        assert setting.recommended_value == setting.default_value == "1.333333"
+
+    def test_zoom_sensitivity_is_a_six_key_compound_at_one_scope(self) -> None:
+        setting = self._by_name("ads_zoom_sensitivity")
+        keys = _keys_of(setting)
+        assert len(keys) == 6
+        names = {k.rpartition("@")[0] for k in keys}
+        scopes = {k.rpartition("@")[2] for k in keys}
+        assert len(names) == 6, "each zoom level is a distinct cvar"
+        assert scopes == {"1"}
 
 
 @pytest.mark.usefixtures("scan_cache")

@@ -1799,6 +1799,200 @@ MW4_SPRINT_ASSIST_DELAY = _make_mw4_setting(
     evidence_level="proven",
 )
 
+MW4_SPRINT_ASSIST_DELAY_GAMEPAD = _make_mw4_setting(
+    setting_id="game_config:mw4:sprint_assist_delay_gamepad",
+    display_name="MW4 Sprint Assist Delay (Gamepad)",
+    short_name="MW4 Sprint Assist Delay (Gamepad)",
+    description="How long the player must hold a direction before sprint engages automatically on a "
+    "gamepad. Any delay is time spent walking while intending to run, at the start of every rotation.",
+    key="Sprint Assist Delay Gamepad@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.INT,
+    default_value=0,
+    recommended_value=0,
+    min_value=0,
+    max_value=12750,
+    current_impact="0: Sprint engages immediately — the correct state",
+    recommended_impact="0: Guards against a delay between intent and movement",
+    effect="Keeps sprint engaging without a wait on a gamepad",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=103,
+    evidence_level="proven",
+)
+
+MW4_ADS_TIMING_SENSITIVITY = _make_mw4_setting(
+    setting_id="game_config:mw4:ads_timing_sensitivity",
+    display_name="MW4 ADS Timing Sensitivity",
+    short_name="MW4 ADS Timing Sensitivity",
+    description="How closely aim tracks the mouse during the aim-down-sights transition. Interpolated and "
+    "delayed both make an identical movement land differently depending on how far into the animation it "
+    "lands.",
+    key="ADSTimingSensitivity@1",
+    source_file="profile",
+    choices=("immediately", "interpolated", "delayed"),
+    default_value="interpolated",
+    recommended_value="immediately",
+    current_impact="interpolated: Aim response is stretched across the ADS animation",
+    recommended_impact="immediately: Aim tracks the mouse instantly — no animation-dependent lag",
+    effect="Makes aim response immediate through the ADS transition",
+    # Same defect class as mouse acceleration and smoothing, which this file
+    # already guards against: the on-screen result of a given mouse movement
+    # depends on something other than the movement itself.
+    impact_scores={"input_precision": "improved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_ADS_SENSITIVITY = _make_mw4_setting(
+    setting_id="game_config:mw4:ads_sensitivity",
+    display_name="MW4 ADS Sensitivity Multiplier",
+    short_name="MW4 ADS Sensitivity Multiplier",
+    description="Multiplier applied to mouse sensitivity while aiming down sights. At 1.0 the multiplier "
+    "is neutral and the player feels exactly what the game's own monitor-distance scaling produces.",
+    key="ADSSensitivity@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.000000",
+    recommended_value="1.000000",
+    min_value=0.1,
+    max_value=4.0,
+    current_impact="1.000000: The multiplier layer is neutral — the correct state",
+    recommended_impact="1.000000: Guards against an offset that has to be re-learned per zoom level",
+    effect="Keeps the ADS sensitivity multiplier neutral",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_ADS_ZOOM_SENSITIVITY = _make_mw4_setting(
+    setting_id="game_config:mw4:ads_zoom_sensitivity",
+    display_name="MW4 Per-Zoom ADS Sensitivity",
+    short_name="MW4 Per-Zoom ADS Sensitivity",
+    description="Sensitivity multiplier for each individual optic zoom level. All six share one value and "
+    "one meaning — a per-zoom offset the player has to re-learn — so they move together or not at all.",
+    # Named-compound (C8): six differently-named cvars at the same scope
+    # index, one concept. `SSRQuality@0`/`@1` repeat one cvar across two
+    # scopes; these are six distinct cvars — one per zoom level — that all
+    # mean the same thing (a per-zoom sensitivity offset) and must carry the
+    # same guard value together, or a drifted zoom level would hide behind
+    # five correct ones the same way SSR's second scope could.
+    key=[
+        "ADS2xZoomSensitivity@1",
+        "ADS4xZoomSensitivity@1",
+        "ADS6xZoomSensitivity@1",
+        "ADS8xZoomSensitivity@1",
+        "ADSHighZoomSensitivity@1",
+        "ADSLowZoomSensitivity@1",
+    ],
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.000000",
+    recommended_value="1.000000",
+    min_value=0.1,
+    max_value=4.0,
+    current_impact="1.000000: Every zoom level neutral — the correct state",
+    recommended_impact="1.000000: Guards all six zoom levels against drifting apart",
+    effect="Keeps every per-zoom ADS sensitivity neutral",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_ADS_HOLD_BREATH_SENSITIVITY = _make_mw4_setting(
+    setting_id="game_config:mw4:ads_hold_breath_sensitivity",
+    display_name="MW4 Hold-Breath ADS Sensitivity",
+    short_name="MW4 Hold-Breath ADS Sensitivity",
+    description="Sensitivity multiplier while holding breath to steady aim. At 1.0 holding breath changes "
+    "nothing about how the mouse translates to aim, only the sway it removes.",
+    key="ADSHoldBreathSensitivity@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.000000",
+    recommended_value="1.000000",
+    min_value=0.1,
+    max_value=4.0,
+    current_impact="1.000000: Aim response unchanged while holding breath — the correct state",
+    recommended_impact="1.000000: Guards against an offset that appears only while steadying aim",
+    effect="Keeps hold-breath sensitivity neutral",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_TACTICAL_ADS_SENSITIVITY = _make_mw4_setting(
+    setting_id="game_config:mw4:tactical_ads_sensitivity",
+    display_name="MW4 Tactical Stance ADS Sensitivity",
+    short_name="MW4 Tactical Stance ADS Sensitivity",
+    description="Sensitivity multiplier while aiming from the tactical stance. At 1.0 the stance changes "
+    "nothing about how the mouse translates to aim.",
+    key="TacticalAdsMouseSensitivityMultiplier@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.000000",
+    recommended_value="1.000000",
+    min_value=0.1,
+    max_value=4.0,
+    current_impact="1.000000: Aim response unchanged in tactical stance — the correct state",
+    recommended_impact="1.000000: Guards against an offset that appears only in tactical stance",
+    effect="Keeps tactical stance ADS sensitivity neutral",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_MOUSE_MONITOR_DISTANCE_COEFF = _make_mw4_setting(
+    setting_id="game_config:mw4:mouse_monitor_distance_coeff",
+    display_name="MW4 Mouse Monitor-Distance Coefficient",
+    short_name="MW4 Mouse Monitor-Distance Coefficient",
+    description="The game's own scaling factor between mouse movement and aim, tuned for its monitor-"
+    "distance model. Owner decision: this stays exactly where the game sets it and fpstune never moves it.",
+    key="MouseMonitorDistanceCoeff@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.333333",
+    recommended_value="1.333333",
+    min_value=0.0,
+    max_value=5.0,
+    current_impact="1.333333: The game's own scaling factor — the correct state",
+    recommended_impact="1.333333: Guards the one number every other sensitivity setting scales against",
+    effect="Leaves the monitor-distance coefficient untouched",
+    # Drift guard only (tasks.md decision 2, owner-confirmed 2026-09-09):
+    # every other sensitivity setting in this file is a multiplier layered on
+    # top of this coefficient, so moving it would silently rescale all of
+    # them at once. fpstune never changes this value, in either direction.
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
+MW4_MOUSE_VERTICAL_SENSIBILITY = _make_mw4_setting(
+    setting_id="game_config:mw4:mouse_vertical_sensibility",
+    display_name="MW4 Mouse Vertical Sensitivity Ratio",
+    short_name="MW4 Mouse Vertical Sensitivity Ratio",
+    description="Vertical aim sensitivity as a ratio of horizontal. At 1.0 the vertical axis matches the "
+    "horizontal, so a diagonal flick lands where the hand aimed.",
+    key="MouseVerticalSensibility@1",
+    source_file="profile",
+    choices=(),
+    value_type=SettingValueType.FLOAT,
+    default_value="1.000000",
+    recommended_value="1.000000",
+    min_value=0.01,
+    max_value=4.0,
+    current_impact="1.000000: Vertical matches horizontal — the correct state",
+    recommended_impact="1.000000: Guards a diagonal flick against landing off-axis",
+    effect="Keeps vertical sensitivity matched to horizontal",
+    impact_scores={"input_precision": "preserved", "latency_ms": 0.0},
+    category_order=104,
+    evidence_level="proven",
+)
+
 MW4_ADS_FOV_SCALING = _make_mw4_setting(
     setting_id="game_config:mw4:ads_fov_scaling",
     display_name="MW4 ADS Field of View Scaling",
@@ -1861,25 +2055,28 @@ MW4_FOV = _make_mw4_setting(
     setting_id="game_config:mw4:fov",
     display_name="MW4 Field of View",
     short_name="MW4 Field of View",
-    description="How much of the world is visible at once, from 60 to 120 degrees. A wider view shows more "
-    "beside the player and makes everything smaller and further away, so no one value is right "
-    "for everyone.",
+    description="How much of the world is visible at once, from 60 to 120 degrees. Wider shows more beside "
+    "the player, at the cost of a smaller apparent target and a small render cost.",
     key="Fov@1",
     source_file="profile",
     choices=(),
     value_type=SettingValueType.FLOAT,
     default_value="90.000000",
-    recommended_value="90.000000",
+    recommended_value="120.000000",
     min_value=60.0,
     max_value=120.0,
-    current_impact="90.000000: A middle setting — more than the console default, short of the maximum",
-    recommended_impact="90.000000: Left where it is; the trade here is a preference, not a defect",
-    effect="Leaves the field of view as a deliberate choice",
-    # Guarded rather than recommended in either direction. Raising it gains
-    # peripheral information and costs target size and frames; nothing measured
-    # here says which side a given player should take, and consequence 5 says a
-    # setting like that is offered, never assumed.
-    impact_scores={"target_visibility": "preserved", "fps": "0%"},
+    current_impact="90.000000: The narrower default — movement beside the player can go unseen",
+    recommended_impact="120.000000: The file's own maximum — nothing beside the player goes unseen",
+    effect="Widens field of view to the file's own maximum",
+    # Owner decision (tasks.md decision 3, 2026-09-09), replacing the earlier
+    # "left as a preference" guard at 90. Not seeing an enemy beside you costs
+    # more than a missed shot: peripheral information is what a wider view
+    # buys, and a smaller apparent target plus a small render cost is what
+    # pays for it. COMPLETE, never RECOMMENDED — it changes what the screen
+    # shows and costs frames, and consequence 5 says such a setting is
+    # offered, never assumed. default_value stays the game's own default so a
+    # machine that has not opted in keeps it.
+    impact_scores={"target_visibility": "improved", "fps": "0 to -3%"},
     category_order=107,
     perceptible_cost=(
         "A wider view renders more of the world — targets appear smaller at the same distance."
@@ -2878,6 +3075,14 @@ MW4_SETTINGS: list[SettingExecutor] = [
     MW4_MOUSE_FILTER,
     MW4_MOUSE_SMOOTHING,
     MW4_SPRINT_ASSIST_DELAY,
+    MW4_SPRINT_ASSIST_DELAY_GAMEPAD,
+    MW4_ADS_TIMING_SENSITIVITY,
+    MW4_ADS_SENSITIVITY,
+    MW4_ADS_ZOOM_SENSITIVITY,
+    MW4_ADS_HOLD_BREATH_SENSITIVITY,
+    MW4_TACTICAL_ADS_SENSITIVITY,
+    MW4_MOUSE_MONITOR_DISTANCE_COEFF,
+    MW4_MOUSE_VERTICAL_SENSIBILITY,
     MW4_ADS_FOV_SCALING,
     MW4_FREE_LOOK,
     MW4_GAMEPAD_AIM,

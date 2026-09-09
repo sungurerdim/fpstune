@@ -22,6 +22,9 @@ def get_all_static_settings() -> list[SettingExecutor]:
     from fpstune.settings.definitions.display import DISPLAY_SETTINGS
     from fpstune.settings.definitions.game import GAME_SETTINGS
     from fpstune.settings.definitions.game_configs import GAME_CONFIG_SETTINGS
+    from fpstune.settings.definitions.game_configs_mw3_profile import (
+        MW3_PROFILE_SETTINGS,
+    )
     from fpstune.settings.definitions.game_configs_mw4 import (
         MW4_CLEANUP_SETTINGS,
         MW4_SETTINGS,
@@ -50,6 +53,7 @@ def get_all_static_settings() -> list[SettingExecutor]:
         *AUDIO_SETTINGS,
         *LAUNCHER_SETTINGS,
         *GAME_CONFIG_SETTINGS,
+        *MW3_PROFILE_SETTINGS,
         *MW4_SETTINGS,
         *MW4_CLEANUP_SETTINGS,
     ]

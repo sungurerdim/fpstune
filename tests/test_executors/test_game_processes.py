@@ -268,3 +268,53 @@ class TestTheMessageReachesTheUser:
         assert len(message) < 220, f"too long for the banner: {len(message)}"
         assert gp.GAME_LABELS[game] in message, "must name the game, not its process"
         assert message.endswith("."), "reads as a sentence, not a diagnostic"
+
+
+class TestTheNameIsTheOneWindowsActuallyReports:
+    """A process name that is merely close never fires, because matching is exact.
+
+    Regression for 2026-09-09. MW3's entry read `("cod", "ModernWarfareIII")`
+    while the game runs as `cod23-cod.exe`, and `game_is_running` tests
+    `name.casefold() in running` — exact membership in a set of stems, not a
+    prefix or substring test. So the answer was False with MW3 open and holding
+    its config, and it had always been False: every MW3 config write went in
+    behind the running game, apply reported success, verify agreed against the
+    file fpstune had just written, and the game overwrote all of it on exit.
+
+    The failure is silent by construction, which is why it needs a test rather
+    than a careful reading. A wrong name produces no warning and no error — it
+    produces the behaviour fpstune had before the guard existed.
+    """
+
+    @pytest.mark.parametrize(
+        ("game", "observed_stem"),
+        [
+            pytest.param("mw3", "cod23-cod", id="mw3-cod23-cod"),
+            pytest.param("mw4", "cod26-cod", id="mw4-cod26-cod"),
+        ],
+    )
+    def test_the_measured_stem_fires_the_guard(
+        self, monkeypatch, game: str, observed_stem: str
+    ) -> None:
+        """Both stems were read off `tasklist` with that game running."""
+        _fake_processes(monkeypatch, {observed_stem})
+
+        assert gp.game_is_running(game) is True, (
+            f"{game} is open under {observed_stem}.exe and the guard did not fire"
+        )
+
+    def test_a_name_that_is_only_a_prefix_never_fires(self, monkeypatch) -> None:
+        """The exact shape of the bug, pinned so it cannot return unnoticed."""
+        _fake_processes(monkeypatch, {"cod23-cod"})
+        monkeypatch.setitem(gp.GAME_PROCESSES, "mw3", ("cod", "ModernWarfareIII"))
+
+        assert gp.game_is_running("mw3") is False
+
+    def test_the_crash_handler_is_not_mistaken_for_the_game(self, monkeypatch) -> None:
+        """`codCrashHandler` was still running after MW3 had exited, so treating
+        it as "the game is open" would block every apply on a machine that had
+        launched MW3 once."""
+        _fake_processes(monkeypatch, {"codcrashhandler", "battle.net"})
+
+        assert gp.game_is_running("mw3") is False
+        assert gp.game_is_running("mw4") is False

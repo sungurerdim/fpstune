@@ -32,19 +32,29 @@ logger = get_logger()
 
 # Which running process means "this game has the config file in memory".
 #
-# Only MW4's entry is measured. The rest are the names those games are commonly
-# known to run under, and each is unverified here because the game was not
-# running when this was written — the honest consequence is that a missing or
-# wrong name means no warning, i.e. today's behaviour, never a false block.
+# Matching is exact against a running process stem (`game_is_running`), not a
+# prefix or a substring — which is what made MW3's entry silently useless. It
+# read `("cod", "ModernWarfareIII")` and the game actually runs as
+# `cod23-cod.exe`, so `game_is_running("mw3")` answered False with MW3 open and
+# holding its config. The guard never fired once, for the 61 graphics settings
+# as much as for anything added since: a write landed, apply reported success,
+# verify agreed, and the game overwrote all of it on exit. Measured 2026-09-09
+# with the game running; the pattern is `cod<flavor>-cod`, matching MW4.
+#
+# The rest stay unverified because those games were not running — the honest
+# consequence of a wrong name is no warning, i.e. today's behaviour, never a
+# false block. That is exactly why the MW3 entry could be wrong for so long, so
+# treat "unverified" here as "unproven", not as "probably fine".
 #
 # Deliberately excluded: `CODBrokerService` and `codCrashHandler`, which were
-# both running alongside MW4. They outlive the game, so treating either as "the
-# game is open" would block every apply on a machine that had launched it once.
+# both running alongside MW4 — and `codCrashHandler` was still running after
+# MW3 exited. They outlive the game, so treating either as "the game is open"
+# would block every apply on a machine that had launched it once.
 GAME_PROCESSES: dict[str, tuple[str, ...]] = {
     # measured: seen running while MW4 held its config open
     "mw4": ("cod26-cod",),
-    # unverified
-    "mw3": ("cod", "ModernWarfareIII"),
+    # measured: seen running while MW3 held its config open
+    "mw3": ("cod23-cod",),
     # unverified
     "cs2": ("cs2",),
     # unverified

@@ -400,14 +400,23 @@ src/fpstune/
                          objects and declares no router — under api/ because of the
                          schemas, outside routes/ because nothing here is a route
   settings/
-    definitions/         395 SettingExecutor instances across 14 category files
+    definitions/         418 SettingExecutor instances across 15 category files
     definitions/game_configs_mw4.py  MW4 (cod26); keys carry their `@scope` index, ranges
                          are adopted from the installed build at startup, not declared
+    definitions/game_configs_mw3_profile.py  MW3 (cod23) gamerprofile — audio, input, aim;
+                         the game's *second* config file, kept apart from the graphics one
+                         in `game_configs.py` because a key name can appear in both
     executors/           Registry, PowerShell, Netsh, POWERCFG, NvProfile
     executors/nvidia_app.py  the NVIDIA App's own Battery Boost criteria — support, never state
-    executors/mw4_config.py  MW4 (cod26) writer: one `Name@scope` line, byte-level so the
-                         file's LF endings and absent BOM survive; rejects a value the
-                         file's own `// range` comment does not allow
+    executors/game_config_writer.py  the one `Name@scope` line rewriter, shared by both
+                         Call of Duty titles: LF endings, BOM round-trip, read-only clear,
+                         atomic replace with retry, the whole read-modify-write under one
+                         lock, and a refusal of any value the line's own `// range` forbids
+    executors/mw4_config.py  MW4 (cod26) target for that writer; the scope digit is required
+                         because `DxrMode@0` (Off/On) and `@1` (Off..Ultra) are two controls
+    executors/mw3_profile.py  MW3 (cod23) gamerprofile target; the scope digit is *optional*
+                         because that file ships in two live schemas — `Name@0 = v // range`
+                         and the older `Name@ v // range` with a BOM, one per account dir
     executors/game_processes.py  refuses a config write while that game is running —
                          games flush settings from memory on exit, so such a write is
                          undone after apply AND verify have both reported success
@@ -547,7 +556,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(14 files, 395 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(7); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(15 files, 418 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(7); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVIDIA Profile Inspector(nv driver profiles); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

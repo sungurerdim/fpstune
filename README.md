@@ -35,11 +35,11 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**395 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**418 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
-| Game Configs | 174 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm) |
+| Game Configs | 197 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm) |
 | System | 65 | Services, privacy, telemetry, scheduler |
 | Maintenance | 38 | SFC, DISM, temp/cache cleanup |
 | GPU | 30 | NVIDIA and AMD driver profile optimizations |
@@ -360,7 +360,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
                     system*.py, display.py, gpu.py, benchmark*.py, safety.py, debug.py
   settings/         Settings engine
-    definitions/    14 category files producing the 395 settings in 13 categories —
+    definitions/    15 category files producing the 418 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal

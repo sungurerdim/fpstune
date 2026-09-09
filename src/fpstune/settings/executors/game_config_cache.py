@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from fpstune.settings.applicability import NOT_INSTALLED as _NOT_INSTALLED
+from fpstune.settings.executors.game_config_writer import key_prefix
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
 from fpstune.utils.logger import get_logger
 
@@ -31,7 +32,28 @@ logger = get_logger()
 # this module does not emit — or, as happened, fail to know one it does.
 NOT_INSTALLED = _NOT_INSTALLED
 
-MW3_RELATIVE_PATH = Path("Call of Duty MWIII/players/options.4.cod23.cst")
+MW3_PLAYERS_DIR = Path("Call of Duty MWIII/players")
+MW3_RELATIVE_PATH = MW3_PLAYERS_DIR / "options.4.cod23.cst"
+
+# MW3's *second* config file: graphics live in options.4.cod23.cst above, while
+# audio, input, aim and FOV live in a per-account gamerprofile one level down.
+# Neither the account directory nor the filename is stable, so neither is
+# spelled here (C9) — one machine carries `<activisionId>/gamerprofile.0.BASE.cst`
+# beside `<liveId>/gamerprofile.pc.0.BASE.cst`, and which of the two the game
+# reads is decided by modification time.
+#
+# Two things the glob has to get right:
+#
+# * **`mw3fix_backup` is excluded.** A third-party fixer leaves stale copies of
+#   the profile under directories carrying that name. Writing to one changes
+#   nothing for the game while reporting success — the same self-confirming trap
+#   the PowerShell writer of this file already avoids, and it must be avoided
+#   the same way here or the two writers would disagree about which file is live.
+# * **Only `.cst`.** The `.cst0` sibling is a rolling text backup and the
+#   `.csb0`/`.csb1` siblings are binary stores; `*.cst` matches none of them.
+MW3_PROFILE_GLOB = "*/gamerprofile*.cst"
+MW3_PROFILE_BACKUP_MARK = "mw3fix_backup"
+
 CS2_CFG_DIR = Path("steamapps/common/Counter-Strike Global Offensive/game/csgo/cfg")
 # Heroes of the Storm keeps display and graphics options in the Documents-level
 # file. There is a second Variables.txt under Accounts/<id>/, but it holds only
@@ -174,6 +196,46 @@ def _newest(candidates: Iterable[Path]) -> Path | None:
     return max(files, key=lambda p: (_schema_version(p), p.stat().st_mtime))
 
 
+def _newest_by_mtime(candidates: Iterable[Path]) -> Path | None:
+    """Pick the most recently written file, or None.
+
+    Deliberately *not* `_newest`: that one orders on the schema version MW4
+    stamps into its own filenames, which is a measured property of MW4's files
+    and of nothing else. MW3's gamerprofile carries a number too
+    (``gamerprofile.0.BASE.cst``), but nothing states it is a schema version, so
+    ordering on it would be a guess about which file the game reads. Modification
+    time is what the PowerShell writer of this same file already sorts on, and
+    the two must agree or they would write to different files.
+    """
+    files = [p for p in candidates if p.is_file()]
+    if not files:
+        return None
+    return max(files, key=lambda p: p.stat().st_mtime)
+
+
+def mw3_profile_path() -> Path | None:
+    """Discover MW3's per-account gamerprofile. Never a held path or id (C9)."""
+    documents = _documents_dir()
+    if documents is None:
+        return None
+
+    players = documents / MW3_PLAYERS_DIR
+    if not players.is_dir():
+        return None
+
+    try:
+        candidates = [
+            path
+            for path in players.glob(MW3_PROFILE_GLOB)
+            if MW3_PROFILE_BACKUP_MARK not in str(path).casefold()
+        ]
+    except OSError as exc:  # pragma: no cover - environment dependent
+        logger.debug("MW3 profile discovery failed under %s: %s", players, exc)
+        return None
+
+    return _newest_by_mtime(candidates)
+
+
 def mw4_config_paths() -> tuple[Path | None, Path | None]:
     """Discover MW4's global and profile config files. Never a held path (C9)."""
     if sys.platform != "win32":
@@ -215,6 +277,10 @@ def _load_snapshot() -> dict[str, Any]:
     """
     snapshot: dict[str, Any] = {
         "mw3": None,
+        # MW3's second file, held apart from the first for the same reason MW4's
+        # two are: a key name can appear in both and a setting names which one
+        # it reads.
+        "mw3_profile": None,
         "cs2": None,
         "cs2_installed": False,
         "hots": None,
@@ -240,6 +306,10 @@ def _load_snapshot() -> dict[str, Any]:
         if hots_path.exists():
             snapshot["hots"] = _read_text(hots_path)
 
+    mw3_profile = mw3_profile_path()
+    if mw3_profile is not None:
+        snapshot["mw3_profile"] = _read_text(mw3_profile)
+
     for root in _steam_library_paths():
         cfg_dir = root / CS2_CFG_DIR
         if cfg_dir.is_dir():
@@ -250,9 +320,10 @@ def _load_snapshot() -> dict[str, Any]:
             break
 
     logger.debug(
-        "[scan] game configs: mw3=%s cs2_installed=%s cs2_autoexec=%s hots=%s "
+        "[scan] game configs: mw3=%s mw3_profile=%s cs2_installed=%s cs2_autoexec=%s hots=%s "
         "mw4_global=%s mw4_profile=%s",
         "found" if snapshot["mw3"] is not None else "absent",
+        "found" if snapshot["mw3_profile"] is not None else "absent",
         snapshot["cs2_installed"],
         "found" if snapshot["cs2"] is not None else "absent",
         "found" if snapshot["hots"] is not None else "absent",
@@ -268,6 +339,24 @@ def prefetch_game_configs() -> dict[str, Any]:
     if cache is not None:
         return cache_once(cache, _CACHE_KEY, _load_snapshot)
     return _load_snapshot()
+
+
+def refresh_cached_config(snapshot_key: str, content: str) -> None:
+    """Keep the per-scan snapshot in step with what a writer just put on disk.
+
+    Apply is followed immediately by a detect, and that detect reads this cache.
+    Without the refresh the verify step compares the new value against the
+    pre-apply snapshot and reports a mismatch fpstune itself created.
+
+    A no-op outside a scan: there is no snapshot to correct, and the next read
+    loads the file fresh anyway.
+    """
+    cache = _get_cache()
+    if cache is None:
+        return
+    snapshot = cache.get(_CACHE_KEY)
+    if isinstance(snapshot, dict):
+        snapshot[snapshot_key] = content
 
 
 def _snapshot() -> dict[str, Any]:
@@ -333,36 +422,154 @@ def get_hots_variable(key: str) -> Any:
     return match.group(1) if match else NOT_INSTALLED
 
 
-# MW4 writes one setting per line, and every line carries its own range or its
-# own value list:
+# Both Call of Duty titles write one setting per line, and every line carries
+# its own range or its own value list:
 #
-#     TextureQuality@0;61129;7764 = 1 // 0 to 3
+#     TextureQuality@0;61129;7764 = 1 // 0 to 3                 MW4
 #     AspectRatio@0;19775;7764 = auto // one of auto, standard, 5:4, wide 16:10
-#     Sprint Assist Delay KBM@1;23176;7764 = 0 // 0 to 12750
+#     Sprint Assist Delay KBM@1;23176;7764 = 0 // 0 to 12750    MW4
+#     Sprint Assist Delay KBM@0 = 400 // 0 to 12750             MW3 gamerprofile
 #
 # Three things the shape forces. The name can contain spaces, so it cannot be
 # tokenised on whitespace. The suffix after `@<scope>` is an opaque hash that is
-# matched loosely and never rebuilt. And the trailing `//` comment is the
-# authority on the range, which is why no MW4 setting declares one in Python.
-_MW4_ONE_OF = re.compile(r"^one\s+of\s+(?P<items>.+)$", re.IGNORECASE)
-_MW4_RANGE = re.compile(r"^(?P<low>-?[\d.]+)\s+to\s+(?P<high>-?[\d.]+)$", re.IGNORECASE)
+# matched loosely and never rebuilt — MW4 writes one and MW3's gamerprofile does
+# not, which is why it is optional rather than two patterns. And the trailing
+# `//` comment is the authority on the range, which is why no setting of either
+# game declares one in Python.
+_SCOPED_ONE_OF = re.compile(r"^one\s+of\s+(?P<items>.+)$", re.IGNORECASE)
+_SCOPED_RANGE = re.compile(r"^(?P<low>-?[\d.]+)\s+to\s+(?P<high>-?[\d.]+)$", re.IGNORECASE)
 
 
-def _mw4_line_pattern(key: str) -> re.Pattern[str] | None:
+def _scoped_line_pattern(key: str, *, scope_optional: bool = False) -> re.Pattern[str] | None:
     """Build the matcher for one ``Name@<scope>`` key.
 
     The scope index is part of the key because the same name appears twice with
     different ranges — ``DxrMode@0`` is Off/On while ``DxrMode@1`` is
     Off..Ultra. Writing the value of one into the other writes something the
     game will not accept.
+
+    The prefix comes from the writer's own builder rather than a second
+    spelling of it, so a line this reader accepts is a line the writer can put
+    back — including MW3's older scope-less schema, which ``scope_optional``
+    selects and which ``game_config_writer.key_prefix`` documents.
     """
-    name, sep, scope = key.rpartition("@")
-    if not sep or not scope.isdigit():
+    prefix = key_prefix(key, scope_optional=scope_optional)
+    if prefix is None:
         return None
-    return re.compile(
-        rf"(?m)^[ \t]*{re.escape(name)}@{scope}(?:;[^\s=]*)?[ \t]*=[ \t]*"
-        r"(?P<value>.*?)[ \t]*(?:\/\/[ \t]*(?P<meta>.*?)[ \t]*)?$"
-    )
+    return re.compile(rf"(?m)^{prefix}(?P<value>.*?)[ \t]*(?:\/\/[ \t]*(?P<meta>.*?)[ \t]*)?$")
+
+
+def _scoped_value(
+    content: str | None, key: str, label: str, *, scope_optional: bool = False
+) -> Any:
+    """Read one ``Name@<scope> = value`` entry out of already-loaded text."""
+    if content is None:
+        return NOT_INSTALLED
+
+    pattern = _scoped_line_pattern(key, scope_optional=scope_optional)
+    if pattern is None:
+        logger.debug("%s key %r has no @<scope> suffix; refusing to guess", label, key)
+        return NOT_INSTALLED
+
+    match = pattern.search(content)
+    return match.group("value") if match else NOT_INSTALLED
+
+
+def _scoped_metadata(
+    content: str | None, key: str, *, scope_optional: bool = False
+) -> dict[str, Any]:
+    """Return the choices or numeric range the line's own ``//`` comment states.
+
+    Empty when the key is absent or carries no trailing comment — the caller
+    then has no authority to state a range, and must not invent one.
+    """
+    if content is None:
+        return {}
+
+    pattern = _scoped_line_pattern(key, scope_optional=scope_optional)
+    if pattern is None:
+        return {}
+
+    match = pattern.search(content)
+    if match is None:
+        return {}
+
+    meta = (match.group("meta") or "").strip()
+    if not meta:
+        return {}
+
+    one_of = _SCOPED_ONE_OF.match(meta)
+    if one_of:
+        items = tuple(part.strip() for part in one_of.group("items").split(",") if part.strip())
+        return {"choices": items} if items else {}
+
+    numeric = _SCOPED_RANGE.match(meta)
+    if numeric:
+        low, high = numeric.group("low"), numeric.group("high")
+        # Integer when the file writes it as one: TextureQuality's 0..3 must not
+        # become 0.0..3.0, or the value written back stops matching the file.
+        cast_fn: Any = float if ("." in low or "." in high) else int
+        try:
+            return {"minimum": cast_fn(low), "maximum": cast_fn(high)}
+        except ValueError:  # pragma: no cover - the regex already constrains this
+            return {}
+
+    return {}
+
+
+def _agreed(values: list[Any], label: str, keys: list[str]) -> Any:
+    """Collapse a named-compound's readings into the one value it is at.
+
+    Several keys that hold the same value list and mean the same thing are one
+    setting, so the concept is only at a value when every key is. When they
+    disagree the *last* differing value is reported rather than the first: the
+    caller is a guard asking "has anything drifted from the recommendation", and
+    answering with the first key would let a drifted second key hide behind a
+    correct first one — the same failure MW3 had when it read only
+    ``PauseRenderingEnabled`` and kept pausing rendering anyway.
+    """
+    present = [v for v in values if v != NOT_INSTALLED]
+    if not present:
+        return NOT_INSTALLED
+    if len(set(present)) == 1:
+        return present[0]
+
+    logger.debug("%s compound %s disagrees across keys: %s", label, keys, present)
+    return present[-1]
+
+
+def get_mw3_profile_option(key: str) -> Any:
+    """Read one ``Name@<scope> = value`` entry from MW3's gamerprofile.
+
+    The second of MW3's two config files: audio, input, aim and FOV. Same line
+    shape as MW4's files minus the ``;hash`` suffix, so it goes through the same
+    parser rather than a second one.
+
+    ``scope_optional`` because this game ships two schemas of the same file and
+    both are live — the older one writes ``Name@ value`` with no scope digit
+    and no ``=``. See ``game_config_writer.key_prefix``.
+    """
+    return _scoped_value(_mw3_profile_content(), key, "MW3 profile", scope_optional=True)
+
+
+def get_mw3_profile_options_agreed(keys: list[str]) -> Any:
+    """Read a named-compound MW3 profile setting: several keys, one setting.
+
+    MW3 keeps one sensitivity multiplier per optic — ``ADS2xZoomSensitivity@0``
+    through ``ADSHighZoomSensitivity@0`` — which are one concept between them
+    (C8), so the concept is only at a value when every key is.
+    """
+    values = [get_mw3_profile_option(key) for key in keys]
+    return _agreed(values, "MW3 profile", keys)
+
+
+def get_mw3_profile_metadata(key: str) -> dict[str, Any]:
+    """Return the choices or numeric range MW3's gamerprofile documents for a key."""
+    return _scoped_metadata(_mw3_profile_content(), key, scope_optional=True)
+
+
+def _mw3_profile_content() -> str | None:
+    return cast("str | None", _snapshot().get("mw3_profile"))
 
 
 MW4_SOURCES = ("global", "profile")
@@ -390,25 +597,9 @@ def get_mw4_option(key: str, source: str = "global") -> Any:
     """
     if source == "both":
         values = [get_mw4_option(key, s) for s in MW4_SOURCES]
-        present = [v for v in values if v != NOT_INSTALLED]
-        if not present:
-            return NOT_INSTALLED
-        if len(set(present)) == 1:
-            return present[0]
-        logger.debug("MW4 %s differs between files: %s", key, present)
-        return present[-1]
+        return _agreed(values, "MW4", [key])
 
-    content = _mw4_content(source)
-    if content is None:
-        return NOT_INSTALLED
-
-    pattern = _mw4_line_pattern(key)
-    if pattern is None:
-        logger.debug("MW4 key %r has no @<scope> suffix; refusing to guess", key)
-        return NOT_INSTALLED
-
-    match = pattern.search(content)
-    return match.group("value") if match else NOT_INSTALLED
+    return _scoped_value(_mw4_content(source), key, "MW4")
 
 
 def get_mw4_options_agreed(keys: list[str], source: str = "global") -> Any:
@@ -424,14 +615,7 @@ def get_mw4_options_agreed(keys: list[str], source: str = "global") -> Any:
     only ``PauseRenderingEnabled`` and kept pausing rendering anyway.
     """
     values = [get_mw4_option(k, source) for k in keys]
-    present = [v for v in values if v != NOT_INSTALLED]
-    if not present:
-        return NOT_INSTALLED
-    if len(set(present)) == 1:
-        return present[0]
-
-    logger.debug("MW4 compound %s disagrees across scopes: %s", keys, present)
-    return present[-1]
+    return _agreed(values, "MW4", keys)
 
 
 def get_mw4_metadata(key: str, source: str = "global") -> dict[str, Any]:
@@ -448,39 +632,7 @@ def get_mw4_metadata(key: str, source: str = "global") -> dict[str, Any]:
                 return found
         return {}
 
-    content = _mw4_content(source)
-    if content is None:
-        return {}
-
-    pattern = _mw4_line_pattern(key)
-    if pattern is None:
-        return {}
-
-    match = pattern.search(content)
-    if match is None:
-        return {}
-
-    meta = (match.group("meta") or "").strip()
-    if not meta:
-        return {}
-
-    one_of = _MW4_ONE_OF.match(meta)
-    if one_of:
-        items = tuple(part.strip() for part in one_of.group("items").split(",") if part.strip())
-        return {"choices": items} if items else {}
-
-    numeric = _MW4_RANGE.match(meta)
-    if numeric:
-        low, high = numeric.group("low"), numeric.group("high")
-        # Integer when the file writes it as one: TextureQuality's 0..3 must not
-        # become 0.0..3.0, or the value written back stops matching the file.
-        cast_fn: Any = float if ("." in low or "." in high) else int
-        try:
-            return {"minimum": cast_fn(low), "maximum": cast_fn(high)}
-        except ValueError:  # pragma: no cover - the regex already constrains this
-            return {}
-
-    return {}
+    return _scoped_metadata(_mw4_content(source), key)
 
 
 def get_cs2_marker(name: str, present: str, absent: str) -> Any:

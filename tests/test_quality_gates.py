@@ -610,7 +610,7 @@ class TestFunctionLengthCeiling:
     # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
     _CEILING = {
         ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
-        ("src/fpstune/settings/executors/powershell.py", "detect"): 233,
+        ("src/fpstune/settings/executors/powershell.py", "detect"): 184,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/main.py", "create_app"): 197,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,

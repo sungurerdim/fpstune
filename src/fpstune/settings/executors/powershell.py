@@ -317,6 +317,80 @@ def _parse_finding(setting_id: str, text: str) -> dict[str, Any] | None:
     return parsed
 
 
+def _batch_config_reading(batch_config: str, setting: SettingExecutor) -> Any:
+    """Read one setting out of the per-scan game-config snapshot.
+
+    Game config files are read once per scan in Python: 47 MW3 settings share
+    one options file and 24 CS2 settings share one autoexec.cfg, and each used
+    to spawn its own PowerShell process.
+
+    Which file a setting reads is named by the setting, never guessed. A game
+    with two config files gets a name per file — ``mw3`` is MW3's graphics
+    ``options.4.cod23.cst`` and ``mw3_profile`` is its per-account gamerprofile
+    — because a key name can appear in both and the two have different line
+    shapes.
+    """
+    from fpstune.settings.executors.game_config_cache import (
+        get_cs2_marker,
+        get_hots_variable,
+        get_mw3_option,
+        get_mw3_options_any_true,
+        get_mw3_profile_option,
+        get_mw3_profile_options_agreed,
+        get_mw4_option,
+        get_mw4_options_agreed,
+    )
+
+    def declared_keys() -> tuple[list[str], bool]:
+        """The keys this setting names, and whether it named more than one.
+
+        A list is a named-compound: several keys that are one setting between
+        them. Read strictly — a file-backed setting with no ``batch_key`` is a
+        registry mistake to raise on, never a key literally named ``None`` to
+        look up and report absent.
+        """
+        declared = setting.detect_args["batch_key"]
+        if isinstance(declared, (list, tuple)):
+            return [str(k) for k in declared], True
+        return [str(declared)], False
+
+    if batch_config == "mw3":
+        keys, compound = declared_keys()
+        # MW3's compound is the other shape: keys that each switch the same
+        # behaviour on, so the concept is off only when all of them are.
+        return get_mw3_options_any_true(keys) if compound else get_mw3_option(keys[0])
+    if batch_config == "mw3_profile":
+        keys, compound = declared_keys()
+        return get_mw3_profile_options_agreed(keys) if compound else get_mw3_profile_option(keys[0])
+    if batch_config == "mw4":
+        # MW4 keeps two files and a key can appear in both, so the setting names
+        # which one it reads. Defaulting to the global file matches where all
+        # but a handful of keys live.
+        keys, compound = declared_keys()
+        source = str(setting.detect_args.get("batch_source", "global"))
+        if compound:
+            return get_mw4_options_agreed(keys, source)
+        return get_mw4_option(keys[0], source)
+    if batch_config == "hots":
+        return get_hots_variable(declared_keys()[0][0])
+    if batch_config == "nvidia_app":
+        # Not a game config, but the same shape: one file read in Python instead
+        # of a PowerShell process per setting that wants it.
+        from fpstune.settings.executors.nvidia_app import battery_boost_exposure
+
+        return battery_boost_exposure()
+    if batch_config == "cs2":
+        return get_cs2_marker(
+            str(setting.detect_args["batch_marker"]),
+            str(setting.detect_args["batch_present"]),
+            str(setting.detect_args["batch_absent"]),
+        )
+    # Named explicitly rather than falling through to CS2. The branch used to be
+    # `else: cs2`, so a new game whose args did not match would have been read as
+    # a CS2 marker lookup and reported against the wrong file.
+    raise KeyError(f"unknown batch_config {batch_config!r} on {setting.id}")
+
+
 class PowerShellExecutor(BaseExecutor):
     """Execute PowerShell commands for network adapter and other settings.
 
@@ -406,56 +480,7 @@ class PowerShellExecutor(BaseExecutor):
         # autoexec.cfg; each used to spawn its own PowerShell.
         batch_config = setting.detect_args.get("batch_config")
         if batch_config:
-            from fpstune.settings.executors.game_config_cache import (
-                get_cs2_marker,
-                get_hots_variable,
-                get_mw3_option,
-                get_mw3_options_any_true,
-                get_mw4_option,
-                get_mw4_options_agreed,
-            )
-
-            if batch_config == "mw3":
-                mw3_key = setting.detect_args["batch_key"]
-                # A list means a named-compound: several cst keys that each switch
-                # the same behaviour on, so the concept is off only when all are.
-                if isinstance(mw3_key, (list, tuple)):
-                    raw = get_mw3_options_any_true([str(k) for k in mw3_key])
-                else:
-                    raw = get_mw3_option(str(mw3_key))
-            elif batch_config == "mw4":
-                # MW4 keeps two files and a key can appear in both, so the
-                # setting names which one it reads. Defaulting to the global
-                # file matches where all but a handful of keys live.
-                mw4_key = setting.detect_args["batch_key"]
-                mw4_source = str(setting.detect_args.get("batch_source", "global"))
-                if isinstance(mw4_key, (list, tuple)):
-                    # A named-compound: scopes that hold the same value list and
-                    # mean the same thing, so the concept is only at a value
-                    # when every one of them is.
-                    raw = get_mw4_options_agreed([str(k) for k in mw4_key], mw4_source)
-                else:
-                    raw = get_mw4_option(str(mw4_key), mw4_source)
-            elif batch_config == "hots":
-                raw = get_hots_variable(str(setting.detect_args["batch_key"]))
-            elif batch_config == "nvidia_app":
-                # Not a game config, but the same shape: one file read in Python
-                # instead of a PowerShell process per setting that wants it.
-                from fpstune.settings.executors.nvidia_app import battery_boost_exposure
-
-                raw = battery_boost_exposure()
-            elif batch_config == "cs2":
-                raw = get_cs2_marker(
-                    str(setting.detect_args["batch_marker"]),
-                    str(setting.detect_args["batch_present"]),
-                    str(setting.detect_args["batch_absent"]),
-                )
-            else:
-                # Named explicitly rather than falling through to CS2. The branch
-                # used to be `else: cs2`, so a new game whose args did not match
-                # would have been read as a CS2 marker lookup and reported against
-                # the wrong file.
-                raise KeyError(f"unknown batch_config {batch_config!r} on {setting.id}")
+            raw = _batch_config_reading(str(batch_config), setting)
             debug_log("powershell", f"DETECT BATCH_CONFIG {setting.id}: → {raw!r}")
             return map_raw_to_display(setting.value_map, raw), None
 
@@ -600,34 +625,58 @@ class PowerShellExecutor(BaseExecutor):
             "powershell", f"APPLY {setting.id}: display={repr(value)} -> raw={repr(raw_value)}"
         )
 
-        # Fast path: MW4 rewrites one line of a text file, which Python does
-        # directly. Routing it through PowerShell would cost a process per
-        # setting and duplicate the suffix-preserving rewrite that mw4_config
-        # already owns — and a second implementation is a second thing to get
-        # wrong about `@scope`.
-        if setting.apply_args.get("batch_config") == "mw4":
+        # Fast path: MW4's two files and MW3's gamerprofile are rewritten one
+        # line at a time, which Python does directly. Routing them through
+        # PowerShell would cost a process per setting and duplicate the
+        # suffix-preserving rewrite that `game_config_writer` already owns — and
+        # a second implementation is a second thing to get wrong about `@scope`.
+        line_config = setting.apply_args.get("batch_config")
+        if line_config in ("mw4", "mw3_profile"):
             from fpstune.settings.applicability import NOT_INSTALLED
-            from fpstune.settings.executors.mw4_config import (
-                Mw4ValueRejected,
-                set_mw4_option,
-                set_mw4_options,
-            )
+            from fpstune.settings.executors.game_config_writer import ConfigValueRejected
 
-            mw4_key = setting.apply_args["batch_key"]
-            mw4_source = str(setting.apply_args.get("batch_source", "global"))
+            batch_key = setting.apply_args["batch_key"]
+            # A list is a named-compound: several keys that are one setting, so
+            # every one of them gets the value or none of them does.
+            compound = isinstance(batch_key, (list, tuple))
+            keys = [str(k) for k in batch_key] if compound else [str(batch_key)]
             try:
-                if isinstance(mw4_key, (list, tuple)):
-                    written = set_mw4_options([str(k) for k in mw4_key], str(raw_value), mw4_source)
+                if line_config == "mw4":
+                    from fpstune.settings.executors.mw4_config import (
+                        set_mw4_option,
+                        set_mw4_options,
+                    )
+
+                    # MW4 keeps two files and a key can appear in both, so the
+                    # setting names which one it writes. Defaulting to the global
+                    # file matches where all but a handful of keys live.
+                    source = str(setting.apply_args.get("batch_source", "global"))
+                    written = (
+                        set_mw4_options(keys, str(raw_value), source)
+                        if compound
+                        else set_mw4_option(keys[0], str(raw_value), source)
+                    )
+                    absent = "Modern Warfare IV config file not found"
                 else:
-                    written = set_mw4_option(str(mw4_key), str(raw_value), mw4_source)
-            except Mw4ValueRejected as exc:
+                    from fpstune.settings.executors.mw3_profile import (
+                        set_mw3_profile_option,
+                        set_mw3_profile_options,
+                    )
+
+                    written = (
+                        set_mw3_profile_options(keys, str(raw_value))
+                        if compound
+                        else set_mw3_profile_option(keys[0], str(raw_value))
+                    )
+                    absent = "Modern Warfare III profile config file not found"
+            except ConfigValueRejected as exc:
                 # The file's own range said no. Reported rather than written,
                 # because MW4 answers a value it dislikes by resetting the key.
                 debug_log("powershell", f"APPLY REJECTED {setting.id}: {exc}")
                 return False, str(exc)
             if written == NOT_INSTALLED:
-                return False, "Modern Warfare IV config file not found"
-            debug_log("powershell", f"APPLY MW4 {setting.id}: wrote {written!r}")
+                return False, absent
+            debug_log("powershell", f"APPLY {line_config} {setting.id}: wrote {written!r}")
             return True, None
 
         # Check for special action commands

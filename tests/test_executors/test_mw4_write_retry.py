@@ -16,15 +16,15 @@ from pathlib import Path
 
 import pytest
 
-from fpstune.settings.executors import mw4_config
-from fpstune.settings.executors.mw4_config import _REPLACE_ATTEMPTS, _write_atomically
+from fpstune.settings.executors import game_config_writer
+from fpstune.settings.executors.game_config_writer import _REPLACE_ATTEMPTS, _write_atomically
 
 
 @pytest.fixture
 def quiet_sleep(monkeypatch: pytest.MonkeyPatch) -> list[float]:
     """Record the backoff instead of waiting through it."""
     slept: list[float] = []
-    monkeypatch.setattr(mw4_config.time, "sleep", slept.append)
+    monkeypatch.setattr(game_config_writer.time, "sleep", slept.append)
     return slept
 
 
@@ -39,7 +39,7 @@ def _refusing_replace(monkeypatch: pytest.MonkeyPatch, refusals: int):
             raise PermissionError(5, "Access is denied")
         real(src, dst)
 
-    monkeypatch.setattr(mw4_config.os, "replace", replace)
+    monkeypatch.setattr(game_config_writer.os, "replace", replace)
     return calls
 
 
@@ -85,7 +85,7 @@ def test_other_errors_are_not_retried(tmp_path: Path, monkeypatch, quiet_sleep) 
     def replace(_src: object, _dst: object) -> None:
         raise FileNotFoundError(2, "gone")
 
-    monkeypatch.setattr(mw4_config.os, "replace", replace)
+    monkeypatch.setattr(game_config_writer.os, "replace", replace)
     with pytest.raises(FileNotFoundError):
         _write_atomically(target, b"y")
     assert quiet_sleep == []

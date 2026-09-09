@@ -576,13 +576,13 @@ class TestNumbersKeepTheFilesOwnFormat:
     )
     def test_values_that_only_look_numeric_are_untouched(self, existing: str, written: str) -> None:
         """`Auto:300.000` contains a decimal and is not one."""
-        from fpstune.settings.executors.mw4_config import _match_number_format
+        from fpstune.settings.executors.game_config_writer import _match_number_format
 
         assert _match_number_format(existing, written) == written
 
     def test_precision_follows_the_file_rather_than_a_constant(self) -> None:
         """A build that switches to three places should get three, not six."""
-        from fpstune.settings.executors.mw4_config import _match_number_format
+        from fpstune.settings.executors.game_config_writer import _match_number_format
 
         assert _match_number_format("0.750", "0.5") == "0.500"
         assert _match_number_format("0.75", "0.5") == "0.50"

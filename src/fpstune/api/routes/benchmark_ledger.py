@@ -64,11 +64,11 @@ AREAS: tuple[Area, ...] = (
     Area(
         key="fps",
         label="Frame rate",
-        instrument="presentmon",
-        metric="fps",
+        instrument="gpu_scene",
+        metric="fps_avg",
         absent_reason=(
-            "A frame rate needs a game rendering to measure. fpstune captures one "
-            "automatically while you play — see Frame-rate headroom."
+            "The frame-rate scene has not run on both sides of a change yet. It needs "
+            "Superposition Basic installed (a 1.3 GB download on first use) and no game running."
         ),
     ),
     Area(

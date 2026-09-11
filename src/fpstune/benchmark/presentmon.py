@@ -67,6 +67,9 @@ _BOTTLENECK_BAND = 1.1
 # where they do not — an unrecognized option makes PresentMon exit before
 # recording a frame — so `supported_flags()` asks the executable first.
 OPTIONAL_TRACKING_FLAGS = ("--track_pc_latency", "--track_hw_measurements")
+#: Takes over an ETW session a killed capture left behind; passed only when
+#: the build's own `--help` lists it, like every optional flag.
+SESSION_TAKEOVER_FLAG = "--stop_existing_session"
 
 HELP_TIMEOUT_SECONDS = 15
 
@@ -704,6 +707,15 @@ class PresentMonBenchmark:
         # frame, which is how `--no_top` once turned every capture into an empty
         # file. Asking `--help` is the derivation; assuming is the bug.
         cmd.extend(self.supported_tracking_flags())
+
+        # A capture that was terminated mid-run leaves its ETW trace session
+        # alive, and the next start is refused outright: `error: a trace
+        # session named "PresentMon" is already running. Use
+        # --stop_existing_session ...` (measured 2026-09-11, PresentMon 2.5.1,
+        # the second capture after `stop_capture()` had terminated the first).
+        # Take the leftover over, on builds that know how.
+        if SESSION_TAKEOVER_FLAG in self.supported_flags():
+            cmd.append(SESSION_TAKEOVER_FLAG)
 
         if process_name:
             cmd.extend(["--process_name", process_name])

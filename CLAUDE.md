@@ -330,7 +330,8 @@ src/fpstune/
             ledger.py (the resumable job + the two persisted runs, ~/.fpstune/bench) ·
             scheduler.py (when to measure: idle, no game, no apply, lock free) ·
             operation_lock.py (the one named mutex an apply, a cleanup and a bench share) ·
-            instruments: presentmon · headroom_watch · sensors (GPU and ACPI temperature, and
+            instruments: presentmon · gpu_scene (Superposition Basic driven windowed at the panel's
+            native res, a fixed 30 s slice; downloads on first use, never bundled) · headroom_watch · sensors (GPU and ACPI temperature, and
             the thermal claims FurMark used to carry) · cpu_bench · memory · disk_io ·
             network · network_load (both directions; skipped unasked on a metered line) ·
             frame_pacing · timing_bench · dpc · event_scan · storage_health · gpu_memory ·

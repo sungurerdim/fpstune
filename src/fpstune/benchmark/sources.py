@@ -119,6 +119,27 @@ SOURCES: tuple[Source, ...] = (
         units={"frame_time_ms": "ms", "input_latency_ms": "ms"},
     ),
     Source(
+        name="gpu_scene",
+        requires="Unigine Superposition Basic installed, and no game running",
+        fields={
+            # The one claim here, and the one metric this build had no
+            # instrument for at all: `gpu_performance` sat in NO_INSTRUMENT
+            # under the reason "no vendor-agnostic GPU throughput number", which
+            # was true until a fixed scene could be rendered on demand and
+            # captured with PresentMon — which reads all three vendors (C11
+            # rule 7). Deleting that line is what adding an instrument means.
+            #
+            # Only `fps_avg` is mapped. The bench also reads the two percentile
+            # lows, and they stay `presentmon`'s: `fps_1_percent_low` is claimed
+            # about a game, a game is what PresentMon captures, and a metric may
+            # have exactly one instrument here or `source_for` becomes
+            # order-dependent. A claim about the frames a player sees in a match
+            # is not answered by a synthetic scene, however steady that scene is.
+            "gpu_performance": "fps_avg",
+        },
+        units={"gpu_performance": "fps"},
+    ),
+    Source(
         name="network",
         requires="a reachable host to measure against",
         fields={
@@ -298,7 +319,6 @@ NO_INSTRUMENT: dict[str, str] = {
     "network_consistency": "expressed as a quality rather than a quantity",
     "stutter_reduction": "expressed as a quality rather than a quantity",
     "network_overhead": "no packet accounting in this build",
-    "gpu_performance": "no vendor-agnostic GPU throughput number",
     "audio_attenuation_removed": "no audio path measurement",
     "battery_life": "needs hours of discharge, not a benchmark round",
     # Measurable in principle and not by anything that runs inside a round.

@@ -110,7 +110,46 @@ class TestOnlyFlagsTheBuildAdmitsTo:
         monkeypatch.setattr(subprocess, "Popen", fake_popen)
         bench.start_capture(output_name="probe")
 
-        assert "--track_pc_latency" in started[0]
+        # The capture, not the `--help` probe that `subprocess.run` also
+        # starts through Popen on the way to it.
+        capture = next(cmd for cmd in started if "--output_file" in cmd)
+        assert "--track_pc_latency" in capture
+
+    def _capture_command(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, help_text: str
+    ) -> list[str]:
+        bench = _bench(tmp_path)
+        _with_help(help_text, monkeypatch)
+        started: list[list[str]] = []
+
+        def fake_popen(cmd, **_kwargs):
+            started.append(list(cmd))
+            process = MagicMock()
+            process.poll.return_value = None
+            return process
+
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        bench.start_capture(process_name="game.exe", output_name="probe")
+        return started[0]
+
+    def test_a_leftover_trace_session_is_taken_over(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A capture terminated mid-run leaves its ETW session alive, and the
+        next start is refused: `error: a trace session named "PresentMon" is
+        already running. Use --stop_existing_session ...` — measured 2026-09-11
+        on PresentMon 2.5.1, second capture after `stop_capture()` had
+        terminated the first. Every capture after the first would fail."""
+        help_text = _HELP_2_5_1 + "  --stop_existing_session       Stop the leftover session.\n"
+
+        assert "--stop_existing_session" in self._capture_command(tmp_path, monkeypatch, help_text)
+
+    def test_a_build_without_session_takeover_is_not_handed_a_fatal_option(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        assert "--stop_existing_session" not in self._capture_command(
+            tmp_path, monkeypatch, _HELP_WITHOUT_BETA
+        )
 
     def test_a_help_probe_that_fails_never_breaks_the_capture(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

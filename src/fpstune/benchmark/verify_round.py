@@ -81,6 +81,7 @@ _LOWER_IS_BETTER: frozenset[str] = frozenset(
 _HIGHER_IS_BETTER: frozenset[str] = frozenset(
     {
         "fps",
+        "fps_avg",
         "fps_gpu_bound",
         "fps_cpu_bound",
         "fps_1_percent_low",

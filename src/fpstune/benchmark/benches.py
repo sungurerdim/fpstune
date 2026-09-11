@@ -42,6 +42,7 @@ from fpstune.benchmark.disk_io import DiskIoBench
 from fpstune.benchmark.event_scan import EventScanBench
 from fpstune.benchmark.frame_pacing import FramePacingBench
 from fpstune.benchmark.gpu_memory import GpuMemoryBench
+from fpstune.benchmark.gpu_scene import GpuSceneBench, running_game_label
 from fpstune.benchmark.memory import MemoryBench
 from fpstune.benchmark.network_bench import NetworkIdleBench
 from fpstune.benchmark.network_load import NetworkLoadBench, unmetered_connection
@@ -88,6 +89,27 @@ def _network_load_entry() -> Entry:
     return Entry(NetworkLoadBench(), costs=costs, in_default_run=unmetered)
 
 
+def _gpu_scene_entry() -> Entry:
+    """The GPU ceiling, and whether now is a moment to take it.
+
+    The same judgement `_network_load_entry` makes about a metered line, over a
+    different currency. This one spends frames: it renders a 3D scene at full
+    speed for about a minute, and doing that beside a running game takes the
+    card away from the person playing on it. So the automatic run asks, live,
+    whether anybody is playing — a cached answer would be wrong at precisely the
+    moment it is expensive — and stays out while they are.
+
+    The 1.3 GB install is the other thing it could spend and never does: the
+    bench's `allow_download` is False here, so a machine without Superposition
+    reports that fact instead of downloading one.
+    """
+    playing = running_game_label()
+    costs = "renders a fixed 3D scene for about a minute"
+    if playing is not None:
+        costs = f"{costs}; not run automatically because {playing} is running"
+    return Entry(GpuSceneBench(), costs=costs, in_default_run=playing is None)
+
+
 def _entries() -> tuple[Entry, ...]:
     """Fresh instances per call.
 
@@ -119,6 +141,11 @@ def _entries() -> tuple[Entry, ...]:
         Entry(ProcessSamplerBench(), costs=""),
         # One counter query per repeat, and it reports which adapter it read.
         Entry(GpuMemoryBench(), costs=""),
+        # The only frame rate in the run that does not need a game. It costs a
+        # minute of the card's own time and nothing else, so it is in the
+        # automatic run — but only on a machine that already has the engine and
+        # nobody playing on it, both of which it answers for itself.
+        _gpu_scene_entry(),
         # Reads a log Windows wrote at the last boot, so it costs one query and
         # needs no boot of its own.
         Entry(BootTimeBench(), costs=""),
@@ -165,11 +192,17 @@ def benches_for(keys: list[str] | None) -> list[Bench]:
 def tool_executable_names() -> list[str]:
     """The external tools a bench can leave running, by their own file names.
 
-    Asked of the tools rather than listed here. `presentmon.py` and `furmark.py`
-    each already know what their executable is called — they have to, in order
-    to find it on disk after a download — so a second list in this module would
-    be a copy that goes stale the next time one of them is repackaged. That is
-    C9's rule about derived-not-declared applied to a process name.
+    Asked of the tools rather than listed here. `presentmon.py`, `furmark.py`
+    and `gpu_scene.py` each already know what their executable is called — they
+    have to, in order to find it on disk after a download — so a second list in
+    this module would be a copy that goes stale the next time one of them is
+    repackaged. That is C9's rule about derived-not-declared applied to a
+    process name.
+
+    The scene engine is on this list for the reason the sweep exists at all: it
+    never exits by itself, so an fpstune that died mid-bench leaves a 3D scene
+    rendering at full speed, and the next session's first measurement would be
+    taken against it.
 
     Lowercased because a Windows process name comes back in whatever case the
     image carries, and the sweep compares by equality.
@@ -189,6 +222,7 @@ def tool_executable_names() -> list[str]:
             presentmon.presentmon_path.name,
             furmark.furmark_cli_path.name,
             furmark.furmark_path.name,
+            GpuSceneBench().engine_path.name,
         ]
     except Exception:  # pragma: no cover - import guarded for packaging
         return []

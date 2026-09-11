@@ -1,8 +1,8 @@
 """What this CPU gets through, on one core and on all of them.
 
-`sources.py` has never carried a CPU throughput number, and the gap shows up
-twice. `gpu_performance` is listed as having no vendor-agnostic instrument and
-the CPU half of that question was never even asked; and every setting that
+`sources.py` never carried a CPU throughput number. `gpu_performance` has its
+instrument now (`gpu_scene`), but the CPU half of that question was never even
+asked; and every setting that
 claims to leave more of the processor for the game — core parking, the idle
 floor, the scheduler tweaks, a background service that stops running — is
 judged today by how *busy* the machine looks rather than by how much it gets

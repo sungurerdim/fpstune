@@ -118,6 +118,17 @@ def _emitted_keys(source_name: str) -> set[str]:
             patch("fpstune.benchmark.process_sampler.running_game", return_value=None),
         ):
             return set(ProcessSamplerBench(window_samples=1).run(2).readings)
+    if source_name == "gpu_scene":
+        from fpstune.benchmark.gpu_scene import fps_readings
+        from fpstune.benchmark.presentmon import PresentMonBenchmark
+
+        # `fps_readings` is the one place a capture becomes this bench's
+        # readings, so asking it is asking the bench — and it is the half that
+        # needs neither the 1.3 GB engine nor a GPU. Frame times a card
+        # plausibly produced on a fixed scene: about 200 fps with a scatter.
+        frametimes = [4.6 + (index % 11) * 0.15 for index in range(600)]
+        timestamps = [sum(frametimes[:index]) for index in range(600)]
+        return set(fps_readings(PresentMonBenchmark(), frametimes, timestamps, 2))
     if source_name == "storage_health":
         from unittest.mock import patch
 
@@ -303,15 +314,18 @@ class TestWhyAClaimCannotBeChecked:
         assert why_unmeasurable(parse_claim("s:x", "fps_menu_ceiling", 90)) == NO_DIRECTION
 
     def test_a_missing_instrument_says_which_one_is_missing(self) -> None:
-        """`gpu_performance` rather than `vram_mb`, which this used to say.
+        """`fps_sustained` rather than `gpu_performance`, which this used to say.
 
-        Video memory became measurable the day the GPU counter bench landed, and
-        an example that has an instrument passes this test for the wrong reason.
         The example has to be a metric that is quantified, directional, and still
-        unmeasured — which is what a real gap looks like.
+        unmeasured — which is what a real gap looks like. It has been rewritten
+        twice for the same happy reason: `vram_mb` became measurable when the GPU
+        counter bench landed, and `gpu_performance` when the GPU scene bench did.
+        An example that has an instrument passes this test for the wrong reason.
+        A frame rate held up over a long session still has none: the scene bench
+        renders for half a minute, which is not what "sustained" claims.
         """
-        reason = why_unmeasurable(parse_claim("s:x", "gpu_performance", "+5%"))
-        assert reason == NO_INSTRUMENT["gpu_performance"]
+        reason = why_unmeasurable(parse_claim("s:x", "fps_sustained", "+5%"))
+        assert reason == NO_INSTRUMENT["fps_sustained"]
         assert reason != NOT_QUANTIFIED
 
     def test_a_measurable_claim_returns_no_reason(self) -> None:
@@ -323,7 +337,7 @@ class TestCoverageCountsWhatItCannotDo:
         setting = _setting(
             "test:one",
             latency_ms=-3.0,  # measurable
-            gpu_performance="+5%",  # no instrument
+            fps_sustained="+5%",  # no instrument
             fps_menu_ceiling=90,  # no direction
             stability="high",  # never collected as a claim at all
         )
@@ -335,11 +349,11 @@ class TestCoverageCountsWhatItCannotDo:
         assert len(result.unmeasurable) == 2
 
     def test_the_summary_leads_with_the_shortfall(self) -> None:
-        result = coverage([_setting("test:one", latency_ms=-3.0, gpu_performance="+5%")])
+        result = coverage([_setting("test:one", latency_ms=-3.0, fps_sustained="+5%")])
         assert result.summary == "1 of 2 claims can be measured here; 1 are not"
 
     def test_measuring_nothing_says_so_plainly(self) -> None:
-        result = coverage([_setting("test:one", gpu_performance="+5%")])
+        result = coverage([_setting("test:one", fps_sustained="+5%")])
         assert result.summary == "None of the 1 claims can be measured on this machine"
 
     def test_a_setting_that_claims_nothing_measurable_is_not_an_error(self) -> None:
@@ -365,8 +379,8 @@ class TestCoverageCountsWhatItCannotDo:
 
     def test_the_dictionary_carries_the_reasons_and_not_just_the_counts(self) -> None:
         """The report renders from this, so the reasons have to survive it."""
-        payload = coverage([_setting("test:one", gpu_performance="+5%")]).to_dict()
-        assert payload["unmeasurable"][0]["reason"] == NO_INSTRUMENT["gpu_performance"]
+        payload = coverage([_setting("test:one", fps_sustained="+5%")]).to_dict()
+        assert payload["unmeasurable"][0]["reason"] == NO_INSTRUMENT["fps_sustained"]
 
 
 class TestAgainstTheRealRegistry:
@@ -430,7 +444,7 @@ class TestAQualitativeClaimIsNotAGap:
         result = coverage(
             [
                 _setting("t:1", privacy="improved"),
-                _setting("t:2", gpu_performance="+5%"),
+                _setting("t:2", fps_sustained="+5%"),
             ]
         )
 

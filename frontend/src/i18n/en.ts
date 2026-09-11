@@ -370,6 +370,10 @@ export const en = {
     "Nothing has been measured yet. fpstune renders a fixed test scene when the machine is idle, so no game has to be running — or press Measure now, which takes about a minute.",
   "headroom.needsDownload":
     "The test scene is Unigine Superposition Basic, a 1.3 GB one-time download. fpstune never starts it on its own.",
+  "headroom.installScene": "Install the scene (1.3 GB download)",
+  "headroom.installing": "Installing the scene — this can take about a minute…",
+  "headroom.installStartFailed": "The scene could not be installed.",
+  "headroom.installFailed": "The scene could not be installed: {reason}",
   "headroom.onePercentLow": "({value} at the 1% low)",
   "headroom.againstTarget": "against this panel's {target} fps target",
   "headroom.measuredAgo": "Measured {age}",

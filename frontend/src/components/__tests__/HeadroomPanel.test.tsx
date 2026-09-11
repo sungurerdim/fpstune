@@ -27,17 +27,23 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "../../test/utils";
 import { HeadroomPanel } from "../HeadroomPanel";
-import { headroomApi } from "../../lib/api";
+import { gpuSceneApi, headroomApi } from "../../lib/api";
 import type { MachineHeadroom } from "../../lib/api";
+import { useStore } from "../../store";
 
 vi.mock("../../lib/api", () => ({
   headroomApi: {
     list: vi.fn(),
     measure: vi.fn(),
   },
+  gpuSceneApi: {
+    status: vi.fn(),
+    install: vi.fn(),
+  },
 }));
 
 const mocked = vi.mocked(headroomApi);
+const mockedGpuScene = vi.mocked(gpuSceneApi);
 
 function reading(overrides: Partial<MachineHeadroom> = {}): MachineHeadroom {
   return {
@@ -72,7 +78,14 @@ const MEASURED = reading({
 
 beforeEach(() => {
   vi.clearAllMocks();
+  useStore.setState({ notifications: [] });
   mocked.list.mockResolvedValue({ headroom: reading() });
+  mockedGpuScene.status.mockResolvedValue({
+    installed: false,
+    download_size: "1.3 GB",
+    licence_note:
+      "Unigine Superposition Basic, downloaded from Unigine's own server for personal, non-commercial use under its own licence; fpstune bundles none of it and modifies nothing.",
+  });
 });
 
 describe("HeadroomPanel before anything is measured", () => {
@@ -97,6 +110,85 @@ describe("HeadroomPanel before anything is measured", () => {
     render(<HeadroomPanel />);
 
     expect(await screen.findByText(/1\.3 GB one-time download/i)).toBeInTheDocument();
+  });
+
+  it("shows the install button and the licence sentence once the scene is confirmed missing", async () => {
+    render(<HeadroomPanel />);
+
+    expect(
+      await screen.findByRole("button", { name: /install the scene \(1\.3 gb download\)/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/downloaded from unigine's own server/i),
+    ).toBeInTheDocument();
+  });
+
+  it("never shows the install button once the scene is already installed", async () => {
+    mockedGpuScene.status.mockResolvedValue({
+      installed: true,
+      download_size: "1.3 GB",
+      licence_note: "Unigine Superposition Basic, downloaded from Unigine's own server.",
+    });
+
+    render(<HeadroomPanel />);
+
+    await screen.findByText(/1\.3 GB one-time download/i);
+    expect(
+      screen.queryByRole("button", { name: /install the scene/i }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+describe("HeadroomPanel installing the scene", () => {
+  it("downloads and installs on the user's own press, then re-fetches the reading", async () => {
+    let resolveInstall!: (value: { installed: boolean; reason: string }) => void;
+    mockedGpuScene.install.mockReturnValue(
+      new Promise((resolve) => {
+        resolveInstall = resolve;
+      }),
+    );
+    mocked.list
+      .mockResolvedValueOnce({ headroom: reading() })
+      .mockResolvedValue({ headroom: MEASURED });
+
+    render(<HeadroomPanel />);
+    const button = await screen.findByRole("button", {
+      name: /install the scene \(1\.3 gb download\)/i,
+    });
+    fireEvent.click(button);
+
+    expect(await screen.findByText(/installing the scene/i)).toBeInTheDocument();
+    expect(button).toBeDisabled();
+    await waitFor(() => expect(mockedGpuScene.install).toHaveBeenCalledWith());
+
+    resolveInstall({ installed: true, reason: "" });
+
+    await waitFor(() => expect(mocked.list).toHaveBeenCalledTimes(2));
+    expect(useStore.getState().notifications).toHaveLength(0);
+  });
+
+  it("is refused while another fpstune operation holds the machine, and reports it as a notification rather than silently failing", async () => {
+    mockedGpuScene.install.mockRejectedValue(
+      new Error(
+        "API error: 409 Conflict - Another fpstune operation is running; the 1.3 GB install waits until it is done.",
+      ),
+    );
+
+    render(<HeadroomPanel />);
+    const button = await screen.findByRole("button", {
+      name: /install the scene \(1\.3 gb download\)/i,
+    });
+    fireEvent.click(button);
+
+    await waitFor(() => expect(mockedGpuScene.install).toHaveBeenCalled());
+    await waitFor(() =>
+      expect(useStore.getState().notifications.some((n) => n.type === "error")).toBe(true),
+    );
+    expect(useStore.getState().notifications[0].message).toMatch(
+      /1\.3 GB install waits until it is done/,
+    );
+    // The button must be usable again, not stuck disabled after a refusal.
+    expect(button).not.toBeDisabled();
   });
 });
 

@@ -1110,3 +1110,34 @@ export const headroomApi = {
   measure: () =>
     fetchJson<MeasureResult>("/benchmark/headroom/measure", { method: "POST" }),
 };
+
+/**
+ * Whether the fixed test scene is on this machine, and what installing it
+ * costs — read before the install button is ever shown, so the size and the
+ * licence sentence are on screen before anybody presses anything.
+ */
+export interface GpuSceneStatus {
+  installed: boolean;
+  download_size: string;
+  licence_note: string;
+}
+
+/** What one install attempt did. `reason` is empty on success. */
+export interface GpuSceneInstallResult {
+  installed: boolean;
+  reason: string;
+}
+
+export const gpuSceneApi = {
+  status: () => fetchJson<GpuSceneStatus>("/benchmark/gpu-scene"),
+
+  /**
+   * Download and silently install the scene. Only ever called from the
+   * user's own button press — nothing in this app calls it on a timer or a
+   * page load, because that press is the consent the 1.3 GB download needs.
+   */
+  install: () =>
+    fetchJson<GpuSceneInstallResult>("/benchmark/gpu-scene/install", {
+      method: "POST",
+    }),
+};

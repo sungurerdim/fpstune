@@ -350,6 +350,10 @@ export const tr: Record<keyof typeof en, string> = {
     "Henüz bir ölçüm yok. fpstune makine boştayken sabit bir test sahnesi çizer, yani bir oyunun açık olması gerekmez — ya da yaklaşık bir dakika süren Şimdi ölç'e basın.",
   "headroom.needsDownload":
     "Test sahnesi Unigine Superposition Basic'tir; tek seferlik 1,3 GB'lık bir indirme. fpstune bunu kendiliğinden başlatmaz.",
+  "headroom.installScene": "Sahneyi kur (1,3 GB indirme)",
+  "headroom.installing": "Sahne kuruluyor — bu yaklaşık bir dakika sürebilir…",
+  "headroom.installStartFailed": "Sahne kurulamadı.",
+  "headroom.installFailed": "Sahne kurulamadı: {reason}",
   "headroom.onePercentLow": "(%1 düşüklerde {value})",
   "headroom.againstTarget": "bu panelin {target} fps hedefine karşı",
   "headroom.measuredAgo": "Ölçüm: {age}",

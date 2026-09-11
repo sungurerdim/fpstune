@@ -3,10 +3,11 @@ import type { MessageKey } from "../i18n/en";
 import { Card } from "./ui/Card";
 import { Meter } from "./ui/Feedback";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Gauge, Loader2, RefreshCw } from "lucide-react";
-import { headroomApi } from "../lib/api";
+import { Download, Gauge, Loader2, RefreshCw } from "lucide-react";
+import { gpuSceneApi, headroomApi } from "../lib/api";
 import type { MachineHeadroom } from "../lib/api";
 import { formatAge } from "../lib/formatAge";
+import { useStore } from "../store";
 
 /**
  * What this machine actually reaches, and therefore what it can afford.
@@ -173,6 +174,7 @@ function Reading({ headroom }: { headroom: MachineHeadroom }) {
 export function HeadroomPanel() {
   const { t } = useT();
   const queryClient = useQueryClient();
+  const addNotification = useStore((s) => s.addNotification);
 
   const { data, isLoading } = useQuery({
     queryKey: ["headroom"],
@@ -183,10 +185,37 @@ export function HeadroomPanel() {
     refetchInterval: 30_000,
   });
 
+  // Whether the 1.3 GB scene is on this machine, and what installing it
+  // costs — read whenever nothing has been measured yet, so the size and the
+  // licence sentence sit on screen before the install button is ever pressed.
+  const gpuScene = useQuery({
+    queryKey: ["gpu-scene"],
+    queryFn: gpuSceneApi.status,
+    enabled: !isLoading && !data?.headroom.is_measured,
+  });
+
   const measure = useMutation({
     mutationFn: () => headroomApi.measure(),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["headroom"] });
+    },
+  });
+
+  const install = useMutation({
+    mutationFn: () => gpuSceneApi.install(),
+    onSuccess: (result) => {
+      if (result.installed) {
+        void queryClient.invalidateQueries({ queryKey: ["gpu-scene"] });
+        void queryClient.invalidateQueries({ queryKey: ["headroom"] });
+      } else {
+        addNotification(t("headroom.installFailed", { reason: result.reason }), "error");
+      }
+    },
+    onError: (error) => {
+      addNotification(
+        `${t("headroom.installStartFailed")} ${error instanceof Error ? error.message : ""}`.trim(),
+        "error",
+      );
     },
   });
 
@@ -258,6 +287,33 @@ export function HeadroomPanel() {
           <p className="text-sm text-muted-foreground">
             {t("headroom.needsDownload")}
           </p>
+          {/* The button is the consent the download needs (C11 rule 3): it
+              never appears until the scene's own status confirms it is
+              missing, and the licence sentence sits right beside it rather
+              than behind a tooltip. */}
+          {gpuScene.data && !gpuScene.data.installed && (
+            <div className="space-y-1.5 pt-1">
+              <p className="text-xs text-muted-foreground">
+                {gpuScene.data.licence_note}
+              </p>
+              <button
+                type="button"
+                onClick={() => install.mutate()}
+                disabled={install.isPending}
+                aria-label={t("headroom.installScene")}
+                className="flex items-center gap-2 px-3 py-2 rounded-md text-sm font-medium bg-muted hover:bg-muted/80 disabled:opacity-60"
+              >
+                {install.isPending ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Download className="w-4 h-4" />
+                )}
+                {install.isPending
+                  ? t("headroom.installing")
+                  : t("headroom.installScene")}
+              </button>
+            </div>
+          )}
         </>
       )}
     </Card>

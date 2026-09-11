@@ -153,6 +153,18 @@ INSTALLER_BYTES = 1_339_177_360
 DOWNLOAD_SIZE = "1.3 GB"
 """How large the install is, in the sentence a user reads before agreeing to it."""
 
+LICENCE_NOTE = (
+    "Unigine Superposition Basic, downloaded from Unigine's own server for personal, "
+    "non-commercial use under its own licence; fpstune bundles none of it and modifies "
+    "nothing."
+)
+"""The one sentence a user reads before the download starts.
+
+Says the four things the consent screen owes them: which edition, whose server
+it comes from, what use it is licensed for, and that fpstune ships none of it —
+see the module docstring's own "Licence" section for the EULA clauses this
+restates in one sentence."""
+
 INSTALLER_NAME = "Unigine_Superposition-1.1.exe"
 
 SCENE = "superposition/superposition"
@@ -516,6 +528,17 @@ class GpuSceneBench:
 
     def is_installed(self) -> bool:
         return self.engine_path.exists()
+
+    @property
+    def install_error(self) -> str:
+        """Why the last `install()` failed, or "" — the sentence a caller reports.
+
+        Public counterpart to `_install_error`: `run()` reads the private field
+        from inside the class, and a consent-path caller (the install route)
+        needs the same sentence from outside it, the same way
+        `PresentMonBenchmark.last_error` is read by this module.
+        """
+        return self._install_error
 
     # -- the command lines, kept where they can be read and tested --------
 

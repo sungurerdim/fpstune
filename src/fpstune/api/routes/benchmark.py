@@ -155,6 +155,71 @@ async def measure_headroom() -> dict[str, Any]:
     return payload
 
 
+def _gpu_scene_status() -> dict[str, Any]:
+    from fpstune.benchmark.gpu_scene import DOWNLOAD_SIZE, LICENCE_NOTE, GpuSceneBench
+
+    return {
+        "installed": GpuSceneBench().is_installed(),
+        "download_size": DOWNLOAD_SIZE,
+        "licence_note": LICENCE_NOTE,
+    }
+
+
+@router.get("/gpu-scene")
+async def get_gpu_scene() -> dict[str, Any]:
+    """Whether the test scene is on this machine, and what installing it costs.
+
+    Read before the install button is ever shown, so the panel can say the
+    1.3 GB and the licence sentence *before* anybody presses anything — consent
+    happens on this screen, not inside the download.
+    """
+    return await asyncio.to_thread(_gpu_scene_status)
+
+
+def _install_gpu_scene() -> dict[str, Any]:
+    """Take the machine-operation lock and run the install under it.
+
+    Non-blocking: a bench or an apply already holding the lock means the
+    install waits for the user to press the button again rather than queuing
+    behind it, the same "not now" contract `operation_lock` gives every other
+    caller.
+    """
+    from fpstune.benchmark.gpu_scene import GpuSceneBench
+    from fpstune.benchmark.operation_lock import operation_lock
+
+    bench = GpuSceneBench()
+    with operation_lock() as taken:
+        if not taken:
+            return {"busy": True, "installed": bench.is_installed(), "reason": ""}
+        installed = bench.install()
+        reason = "" if installed else bench.install_error
+    return {"busy": False, "installed": installed, "reason": reason}
+
+
+@router.post("/gpu-scene/install")
+async def install_gpu_scene() -> dict[str, Any]:
+    """Download and silently install the test scene, on the user's say-so.
+
+    The 1.3 GB download and the silent install both happen here, never on an
+    automatic run (`gpu_scene.GpuSceneBench.allow_download` stays False for
+    every scheduled or on-demand measurement) — this endpoint is the one place
+    a user's own button press is what starts it.
+
+    409 rather than waiting: an apply or a bench already holding the machine
+    means the install is not free to start right now, and a user who pressed
+    "install" is entitled to know that immediately rather than watch a spinner
+    for a lock this endpoint never waited on.
+    """
+    result = await asyncio.to_thread(_install_gpu_scene)
+    if result["busy"]:
+        raise HTTPException(
+            status_code=409,
+            detail="Another fpstune operation is running; the 1.3 GB install waits "
+            "until it is done.",
+        )
+    return {"installed": result["installed"], "reason": result["reason"]}
+
+
 @router.post("/verify/coverage")
 async def verify_coverage(request: CoverageRequest) -> dict[str, Any]:
     """What a verification round over these settings could and could not show.

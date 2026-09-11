@@ -52,11 +52,17 @@ class _FakeDpc:
 class TestItStaysAnAdapter:
     def test_every_reading_comes_from_the_underlying_benchmark(self) -> None:
         """Not recomputed here. Two places measuring "timing jitter" would
-        eventually disagree about what it is."""
+        eventually disagree about what it is.
+
+        `latency_spike_ms` is the one value that is not passed through verbatim,
+        and the exception is a unit rather than a second measurement: the stats
+        report 0.3 microseconds, the claim metric is milliseconds, so the sample
+        is 0.0003. See `timing_bench.US_PER_MS`.
+        """
         fake = _FakeDpc()
         readings = TimingBench(benchmark=fake).run(2).readings  # type: ignore[arg-type]
 
-        assert readings["latency_spike_ms"].samples == [0.3, 0.3]
+        assert readings["latency_spike_ms"].samples == [0.0003, 0.0003]
         assert readings["timing_jitter_avg_us"].samples == [0.05, 0.05]
         assert readings["sleep_accuracy_avg_us"].samples == [500.0, 500.0]
         assert readings["timer_resolution_ms"].samples == [0.5, 0.5]

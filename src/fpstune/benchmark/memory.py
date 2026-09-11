@@ -6,11 +6,28 @@ it was written without ever calling one. Both of those point at the same hole,
 and it is the hole under the largest single hardware claim fpstune makes: XMP/EXPO
 claims +5-15% in CPU-bound titles and nothing here has ever checked it.
 
-Two numbers, because memory fails in two different ways:
+Three numbers, because memory fails in more than one way:
 
-*Bandwidth* is what a large sequential copy gets — asset decompression, texture
-uploads staged through system RAM, a level's worth of data being moved. It is
-what a faster memory kit buys most obviously.
+*Copy bandwidth* is what a large sequential copy gets — asset decompression,
+texture uploads staged through system RAM, a level's worth of data being moved.
+It is what a faster memory kit buys most obviously, and it is one read and one
+write of every byte.
+
+*Write bandwidth* is the copy's other half on its own, measured with `memset`
+over the same working set. It is separated because the two halves are not
+symmetric on real hardware: write-combining, non-temporal stores and the write
+allocation policy all move this figure without touching the read side, and a
+memory setting that changed only one of them would be invisible in the copy
+number where the other half absorbed it.
+
+*Read bandwidth* is deliberately **not** reported, and that is a gap on the
+record rather than an omission (C11 rule 5). Nothing in the standard library
+reads a buffer without also doing per-byte work on it: `bytes.count` was measured
+here at 3.2 GB/s against `memset`'s 29 GB/s on the same machine and the same
+64 MB working set (2026-09-11), which is the counting loop's speed and not the
+memory's. Publishing it as a read bandwidth would be a number no instrument
+produced. Closing this needs a primitive that touches every byte and computes
+nothing — see `tasks.md`.
 
 *Latency* is the dependent load: the address of the next read is not known until
 the previous one returns, so nothing can be prefetched and nothing overlaps. This
@@ -49,13 +66,14 @@ the top of that range is resolvable here and the bottom is not.
 
 from __future__ import annotations
 
+import ctypes
 import gc
 import random
 import statistics
 import time
 from array import array
 
-from fpstune.benchmark.suite import BenchReading, BenchResult
+from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 
 DEFAULT_WORKING_SET_MB = 64
 """Past the last level of cache on anything consumer, so this is memory.
@@ -66,6 +84,17 @@ in `detail` is how a reader would know.
 """
 
 DEFAULT_CHASE_STEPS = 500_000
+
+_SLOW_FILL_SECONDS_PER_MB = 0.02
+"""A pessimistic fill rate: 50 MB/s, far below any DIMM this runs on."""
+
+_SLOW_CHASE_SECONDS = 500e-9
+"""A pessimistic dependent load: 500 ns, several times a real cache miss.
+
+Pessimistic on purpose. This figure only ever decides when to give up on a
+bench, so being wrong in the generous direction costs a longer wait for a
+genuinely hung bench, and being wrong the other way costs a working measurement.
+"""
 """How many dependent loads, and the number is about cache rather than duration.
 
 The chain always starts at index 0, so N steps walk the *same* N nodes of the
@@ -77,6 +106,14 @@ in L2, and the bench reported 48 ns while calling itself a memory latency.
 on anything consumer, so a second pass over the same nodes misses the way the
 first one did. Costs about 50 ms a pass, which is what makes the inner best-of
 affordable.
+"""
+
+_MEMSET_VALUE = 0xA5
+"""What the write pass writes. Anything but zero.
+
+A page of zeroes is a page Windows can hand back without touching memory, and a
+buffer memset to zero is the one case an operating system is entitled to make
+free. `0xA5` cannot be served that way, so the write is a write.
 """
 
 _SEED = 0xB16C4C
@@ -131,6 +168,20 @@ class MemoryBench:
         self.working_set_mb = working_set_mb
         self.chase_steps = chase_steps
 
+    def timeout_seconds(self, repeats: int) -> float:
+        """Derived from the working set it fills and the steps it chases.
+
+        There is no wall-clock parameter to read, so the estimate is built from
+        the two knobs that decide the work: filling the buffer, and one
+        dependent load per chase step. `_SLOW_CHASE_SECONDS` is a deliberately
+        pessimistic per-step figure — a full cache miss to main memory on a slow
+        DIMM — because a deadline a healthy bench trips is worse than none.
+        """
+        per_repeat = self.working_set_mb * _SLOW_FILL_SECONDS_PER_MB + (
+            self.chase_steps * _SLOW_CHASE_SECONDS
+        )
+        return deadline_for(per_repeat, repeats)
+
     def is_available(self) -> tuple[bool, str]:
         return True, ""
 
@@ -156,6 +207,25 @@ class MemoryBench:
             return 0.0
         # Read and written, so one copy moves the working set twice.
         return (2 * size_mb) / elapsed
+
+    def _write_mbps(self, address: int, size: int) -> float:
+        """Fill the working set once and report MB/s written.
+
+        `ctypes.memset` rather than anything in Python, for the same reason the
+        copy uses `bytearray`: what is wanted is the platform's own streaming
+        write, not the interpreter's iteration speed. It also releases the GIL
+        and does no per-byte work of its own, which is exactly what the read
+        side has no equivalent of.
+
+        Written once, not read and written: this is the half of the copy figure
+        that the copy figure cannot separate.
+        """
+        size_mb = size / (1024 * 1024)
+        started = time.perf_counter()
+        ctypes.memset(address, _MEMSET_VALUE, size)
+        elapsed = time.perf_counter() - started
+
+        return (size_mb / elapsed) if elapsed > 0 else 0.0
 
     def _latency_ns(self, chain: array[int]) -> float:
         """Nanoseconds per dependent load, averaged over the chase.
@@ -187,7 +257,16 @@ class MemoryBench:
         # Both allocated once: rebuilding them per repeat would time the
         # allocator and the shuffle rather than the memory.
         chain = _build_chain(self.working_set_mb)
-        payload = bytes(self.working_set_mb * 1024 * 1024)
+        size = self.working_set_mb * 1024 * 1024
+        payload = bytes(size)
+
+        # The write pass needs somewhere of its own to write. Both the buffer
+        # and the view over it are held for the whole run: `from_buffer` pins
+        # the bytearray, and letting either go while an address taken out of it
+        # is still in use is how a benchmark becomes a memory-corruption bug.
+        scratch = bytearray(size)
+        scratch_view = (ctypes.c_char * size).from_buffer(scratch)
+        scratch_address = ctypes.addressof(scratch_view)
 
         # One unmeasured pass first. Without it the first repeat carries the
         # cost of first-touching pages the allocator has not faulted in yet, and
@@ -196,13 +275,16 @@ class MemoryBench:
         # A comparison wants both sides in the same warm state, and this is how
         # they get there.
         self._bandwidth_mbps(payload)
+        self._write_mbps(scratch_address, size)
         self._latency_ns(chain)
 
         bandwidth: list[float] = []
+        write: list[float] = []
         latency: list[float] = []
 
         for _ in range(repeats):
             bandwidth.append(max(self._bandwidth_mbps(payload) for _ in range(_INNER_PASSES)))
+            write.append(max(self._write_mbps(scratch_address, size) for _ in range(_INNER_PASSES)))
             latency.append(min(self._latency_ns(chain) for _ in range(_INNER_PASSES)))
 
         return BenchResult(
@@ -213,6 +295,12 @@ class MemoryBench:
                 "memory_bandwidth": BenchReading(
                     "memory_bandwidth", bandwidth, "MB/s", higher_is_better=True
                 ),
+                # The copy's write half on its own. Not derived from the figure
+                # above and not derivable from it: a copy hides which of its two
+                # halves moved.
+                "memory_write_mbps": BenchReading(
+                    "memory_write_mbps", write, "MB/s", higher_is_better=True
+                ),
                 "memory_latency_ns": BenchReading(
                     "memory_latency_ns", latency, "ns", higher_is_better=False
                 ),
@@ -221,6 +309,12 @@ class MemoryBench:
                 "working_set_mb": self.working_set_mb,
                 "chase_steps": self.chase_steps,
                 "bandwidth_note": "read+write, one full copy of the working set",
+                "write_note": "one full memset of the working set — written only, never read",
+                "read_unmeasured": (
+                    "nothing in the standard library reads a buffer without doing "
+                    "per-byte work on it, so a read-only figure here would be the "
+                    "counting loop's speed rather than the memory's"
+                ),
                 "latency_note": "dependent loads — each address waits on the previous read",
                 "median_latency_ns": round(statistics.median(latency), 2),
             },

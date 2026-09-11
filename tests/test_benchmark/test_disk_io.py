@@ -41,6 +41,8 @@ def _tiny(tmp_path: Path, **kwargs: object) -> DiskIoBench:
         "file_mb": 2,
         "block_kb": 64,
         "random_reads": 25,
+        "random_writes": 20,
+        "queue_depth": 4,
         "directory": tmp_path,
     }
     defaults.update(kwargs)
@@ -153,6 +155,11 @@ class TestWhatItMeasures:
             "random_read_iops",
             "random_read_ms",
             "random_read_p99_ms",
+            "random_read_qd_p99_ms",
+            "random_write_iops",
+            "random_write_ms",
+            "random_write_p99_ms",
+            "random_write_qd_p99_ms",
         }
 
     def test_every_metric_knows_which_way_is_better(self, tmp_path: Path) -> None:
@@ -219,3 +226,137 @@ class TestThroughTheSuite:
 
         assert run.skipped[0].bench == "disk_io"
         assert "drive went away" in run.skipped[0].reason
+
+
+class TestTheWritePatterns:
+    """A write can be slow for a reason no read pattern shows — an SLC cache
+    that has run out, garbage collection, or write caching a "tweak" turned off.
+    None of that is visible in a read figure, so it needs its own."""
+
+    def test_the_write_handle_waits_for_the_media_rather_than_the_driver(self) -> None:
+        """Without WRITE_THROUGH a random write pattern measures how fast a
+        queue accepts work, which on any modern drive has no upper bound worth
+        reporting."""
+        from fpstune.benchmark.disk_io import _FILE_FLAG_NO_BUFFERING, _FILE_FLAG_WRITE_THROUGH
+
+        assert _FILE_FLAG_WRITE_THROUGH != _FILE_FLAG_NO_BUFFERING
+
+    def test_the_write_tail_is_never_better_than_its_median(self, tmp_path: Path) -> None:
+        readings = _tiny(tmp_path).run(2).readings
+
+        assert readings["random_write_p99_ms"].median >= readings["random_write_ms"].median
+
+    def test_every_write_metric_knows_which_way_is_better(self, tmp_path: Path) -> None:
+        readings = _tiny(tmp_path).run(2).readings
+
+        assert readings["random_write_iops"].improves_upward is True
+        assert readings["random_write_ms"].improves_upward is False
+        assert readings["random_write_p99_ms"].improves_upward is False
+        assert readings["random_write_qd_p99_ms"].improves_upward is False
+
+    def test_the_file_is_not_left_longer_or_shorter_by_the_writes(self, tmp_path: Path) -> None:
+        """Every write is 4K at a 4K-aligned offset inside the file that was
+        already written, so the pattern overwrites and never extends. A write
+        past the end would grow the file under the next repeat's sequential
+        read and quietly change what that read measured."""
+        bench = _tiny(tmp_path)
+        bench.run(2)
+
+        assert list(tmp_path.glob("fpstune-diskio-*.bin")) == []
+
+
+class TestTheDeepQueue:
+    """The queue kept full is a different question about the same drive: an SSD
+    answers many outstanding requests at once, and a setting that serialises the
+    path shows up here and nowhere else."""
+
+    def test_one_handle_and_one_lane_per_outstanding_request(self, tmp_path: Path) -> None:
+        """A Windows file handle carries its own file pointer, so two lanes
+        sharing one would seek each other's requests out from under them —
+        which would not fail, it would quietly read the wrong offsets."""
+        bench = _tiny(tmp_path, queue_depth=4)
+        import tempfile as tf
+        from pathlib import Path as P
+
+        handle, name = tf.mkstemp(dir=tmp_path, suffix=".bin")
+        import os
+
+        os.close(handle)
+        path = P(name)
+        bench._write_file(path)
+        try:
+            latencies, elapsed = bench._queued_pass(path, bench._offsets(path, 40), write=False)
+        finally:
+            path.unlink(missing_ok=True)
+
+        assert len(latencies) == 40
+        assert elapsed > 0
+
+    def test_every_lane_gets_enough_work_to_outweigh_starting_it(self, tmp_path: Path) -> None:
+        """Measured: 800 reads over eight lanes took 101 ms and reported 7,920
+        IOPS; 4,000 over the same lanes took 109 ms and reported 36,720 — almost
+        all of the first figure was the lanes starting up."""
+        bench = _tiny(tmp_path, queue_depth=8, random_reads=10)
+
+        assert bench._queued_count(10) >= 8 * 100
+
+    def test_the_queued_rate_is_reported_as_unmeasured_rather_than_as_a_number(
+        self, tmp_path: Path
+    ) -> None:
+        """Its spread was larger than its own value on the machine this was
+        written on, so it can never beat its own noise floor and can therefore
+        never report a change (C11 rule 2). The observed figure stays in detail
+        under a name that says it was not measurable."""
+        result = _tiny(tmp_path).run(2)
+
+        assert "random_read_qd_iops" not in result.readings
+        assert "random_write_qd_iops" not in result.readings
+        assert "lanes starting" in result.detail["queued_rate_unmeasured"]
+
+    def test_the_switch_interval_is_left_the_way_it_was_found(self, tmp_path: Path) -> None:
+        """It is lowered around the queued pass, and a bench that left it
+        lowered has changed the process it was only supposed to measure."""
+        import sys
+
+        before = sys.getswitchinterval()
+        _tiny(tmp_path).run(2)
+
+        assert sys.getswitchinterval() == before
+
+    def test_a_queue_depth_of_nothing_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="at least one to issue a request"):
+            DiskIoBench(queue_depth=0)
+
+
+class TestWhichDriveItMeasured:
+    def test_the_disk_is_identified_by_unique_id_and_never_by_a_letter(
+        self, tmp_path: Path
+    ) -> None:
+        """C5: a drive letter is a mount point a user can move and a friendly
+        name is a model string. Only `UniqueId` survives the drive being moved
+        to another port, and only `UniqueId` is free of this machine's own
+        hardware names (C9)."""
+        found = _tiny(tmp_path).physical_disk()
+
+        assert "unique_id" in found or "unknown" in found
+        assert "friendly_name" not in found
+
+    def test_a_disk_that_could_not_be_identified_says_why(
+        self, tmp_path: Path, monkeypatch
+    ) -> None:
+        """A benchmark that could not establish which drive it measured is still
+        a valid measurement of this machine's temp volume, so it never fails the
+        run — it says so instead (C11 rule 3)."""
+        from fpstune.benchmark import disk_io
+
+        monkeypatch.setattr(disk_io, "query_rows", lambda *_a, **_k: ([], "the query was refused"))
+
+        assert _tiny(tmp_path).physical_disk() == {"unknown": "the query was refused"}
+
+    def test_the_drive_letter_comes_from_the_directory_rather_than_the_source(self) -> None:
+        """A hardcoded letter is the same bug as a hardcoded buffer size (C1/C9):
+        it is right on the machine it was written on and wrong on the next one."""
+        from fpstune.benchmark.disk_io import DISK_SCRIPT
+
+        assert "__DIRECTORY__" in DISK_SCRIPT
+        assert "C:" not in DISK_SCRIPT

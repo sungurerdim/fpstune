@@ -65,7 +65,29 @@ class Source:
     units: dict[str, str] = field(default_factory=dict)
     """Display unit per claim metric, where one reads better than none."""
 
+    scales: dict[str, float] = field(default_factory=dict)
+    """What to multiply the raw field by to reach the claim metric's own unit.
 
+    Absent means 1.0, which is every mapping but one: a source normally names a
+    field that is already in the claim's unit, and a scale that could be omitted
+    is omitted so the exception stays visible.
+
+    The exception is `latency_spike_ms` over `timing_jitter_max_us`. The claim is
+    a millisecond figure — power.py's "20-100 eliminated" is 20-100 ms — and
+    `DpcStats` reports microseconds, so the raw field was published 1000x too
+    large under a name promising otherwise. Declaring the factor here rather
+    than dividing at the call site is what keeps this path and `timing_bench.py`
+    reaching the same number for the same machine.
+    """
+
+
+# FurMark is deliberately absent. It produces a temperature and a board power
+# figure, and a claim metric may have exactly one instrument — so listing it here
+# would either duplicate `sensors` or take the thermal claims back off the
+# performance path. C11 rule 6 decides which way that goes: a stress test is not
+# a performance test, and FurMark keeps its own panel and answers its own
+# question (how hot, how stable) without verifying anybody's claim.
+#
 # Only mappings where the two quantities are genuinely the same thing. The
 # temptation is to map loosely so the coverage number looks better, and a loose
 # mapping produces a verdict that reads as evidence while comparing two different
@@ -77,6 +99,12 @@ SOURCES: tuple[Source, ...] = (
         fields={
             "fps": "fps_avg",
             "fps_1_percent_low": "fps_1_percent_low",
+            # The same capture, the same parse, one percentile worse. It was
+            # computed in `FrameTimeStats` from the start and listed nowhere, so
+            # a claim about 0.1% lows could never be judged against the reading
+            # that was sitting right beside the 1% one — C11 rule 5's silent
+            # third state, neither a source nor a named gap.
+            "fps_0_1_percent_low": "fps_0_1_percent_low",
             "frame_time_ms": "frametime_avg",
             "stutter_count": "stutter_count",
             # Gated keys (#74): PresentMon emits `fps_gpu_bound` only from a run
@@ -101,11 +129,18 @@ SOURCES: tuple[Source, ...] = (
         units={"latency_ms": "ms", "jitter_ms": "ms", "packet_loss": "%"},
     ),
     Source(
-        name="furmark",
-        requires="a GPU load run, which heats the card on purpose",
+        name="sensors",
+        requires="an NVIDIA driver for the GPU readings; nothing for the system one",
         fields={
-            "gpu_temp_c": "gpu_temp_max",
-            "power_watts": "gpu_power_max",
+            # Heat is a performance category, not a comfort one (consequence 4),
+            # so these have to be readable under the load a bench actually
+            # applies. They used to be FurMark's, which answers a different
+            # question — how hot under a load nobody plays at — and answering
+            # it was the whole reason FurMark stays off the performance path
+            # (C11 rule 6). The sensor bench samples the same two quantities
+            # once a second, with no power virus and no kernel driver.
+            "gpu_temp_c": "gpu_temp_c",
+            "power_watts": "power_watts",
         },
         units={"gpu_temp_c": "C", "power_watts": "W"},
     ),
@@ -120,6 +155,7 @@ SOURCES: tuple[Source, ...] = (
             "latency_spike_ms": "timing_jitter_max_us",
         },
         units={"latency_spike_ms": "ms"},
+        scales={"latency_spike_ms": 1 / 1000.0},
     ),
     Source(
         name="disk_io",
@@ -156,6 +192,64 @@ SOURCES: tuple[Source, ...] = (
         fields={"memory_bandwidth": "memory_bandwidth"},
         units={"memory_bandwidth": "MB/s"},
     ),
+    Source(
+        name="boot_time",
+        requires="administrator rights, so Windows will open its boot diagnostics log",
+        fields={
+            # Only the shutdown half. The claims filed under `startup_speed` are
+            # mostly a game's own launch time, which this does not measure — see
+            # NO_INSTRUMENT below.
+            "shutdown_speed": "shutdown_time_s",
+        },
+        units={"shutdown_speed": "s"},
+    ),
+    Source(
+        name="gpu_memory",
+        requires="a display adapter whose driver publishes the Windows GPU counters",
+        fields={"vram_mb": "vram_mb"},
+        units={"vram_mb": "MB"},
+    ),
+    Source(
+        name="process_sampler",
+        requires="nothing — it reads counters Windows keeps anyway",
+        fields={
+            "cpu_usage": "cpu_usage",
+            # Both spellings of the same claim, and both answered by the memory
+            # the machine has free rather than by the working set it has spent:
+            # a claim that goes up is measured by a number that goes up.
+            "ram_saved": "ram_available_mb",
+            "ram_freed": "ram_available_mb",
+            "disk_io": "disk_io",
+        },
+        units={
+            "cpu_usage": "%",
+            "ram_saved": "MB",
+            "ram_freed": "MB",
+            "disk_io": "bytes/s",
+        },
+    ),
+    Source(
+        name="storage_health",
+        requires="administrator rights, so Windows will read the drive's own counters",
+        fields={
+            # Life remaining rather than wear used: the claim goes up when the
+            # setting works, so the measurement under its name has to as well.
+            "ssd_longevity": "ssd_longevity",
+        },
+        units={"ssd_longevity": "% remaining"},
+    ),
+    Source(
+        name="event_scan",
+        requires="nothing — it reads what Windows has already recorded",
+        fields={
+            # The one claim metric here. The scan's other readings — TDRs, WHEA
+            # records, disk faults — are a state a user can read and not a
+            # before/after gain: see `driver_stability` below for why counting
+            # a fault that has not happened yet cannot verify anything.
+            "crash_rate": "crash_rate",
+        },
+        units={"crash_rate": "per day"},
+    ),
 )
 
 # Metrics no benchmark adjudicates, and none ever will — each with what kind of
@@ -176,7 +270,12 @@ NOT_JUDGEABLE: dict[str, str] = {
     "security": "what an attacker could reach, which no timing run establishes",
     "system_integrity": "whether the system is intact, which is a state and not a rate",
     "system_control": "whether the user decides something Windows otherwise decides",
-    "driver_stability": "whether a driver misbehaves over weeks, not inside a round",
+    # The event scan counts the faults a driver leaves behind — display resets
+    # under event 4101, WHEA records, bug checks — so this machine's *state* is
+    # now readable. A verdict is still not: a fault count that has not grown
+    # says a driver has not faulted yet, and waiting improves it on its own, so
+    # any claim measured that way would eventually verify itself.
+    "driver_stability": "a driver that has not faulted yet is not a driver a change made stabler",
     "target_visibility": "whether an opponent can be told from the scenery",
     "target_clarity": "whether a shape at range resolves into something identifiable",
     "footstep_clarity": "whether a player can tell where a sound came from",
@@ -193,10 +292,6 @@ NOT_JUDGEABLE: dict[str, str] = {
 NO_INSTRUMENT: dict[str, str] = {
     "fps_sustained": "needs a long run under sustained load, which no benchmark here does",
     "fps_retained": "needs a long run under sustained load, which no benchmark here does",
-    "cpu_usage": "no sampler for process CPU time",
-    "ram_saved": "no sampler for working set",
-    "ram_freed": "no sampler for working set",
-    "vram_mb": "no sampler for video memory",
     "matchmaking_s": "depends on a game's servers rather than on this machine",
     "disk_freed": "measurable, but as a one-off reading rather than a before/after pair",
     "frame_time_consistency": "expressed as a quality rather than a quantity",
@@ -206,16 +301,19 @@ NO_INSTRUMENT: dict[str, str] = {
     "gpu_performance": "no vendor-agnostic GPU throughput number",
     "audio_attenuation_removed": "no audio path measurement",
     "battery_life": "needs hours of discharge, not a benchmark round",
-    "disk_io": "no sampler for a process's disk traffic",
-    # The four below are measurable in principle and not by anything that runs
-    # inside a round. Listed here rather than left to be reported as "states no
-    # number", because writing a number into them would change nothing: the
-    # missing half is the instrument, not the figure.
-    "shutdown_speed": "would need a shutdown to time, which a benchmark cannot take",
-    "startup_speed": "would need a boot to time, which a benchmark cannot take",
-    "crash_rate": "needs failures counted over weeks, not a benchmark round",
-    "ssd_writes": "needs write volume accumulated over weeks, not a benchmark round",
-    "ssd_longevity": "measured in years of endurance, which no run observes",
+    # Measurable in principle and not by anything that runs inside a round.
+    # Listed here rather than left to be reported as "states no number", because
+    # writing a number into them would change nothing: the missing half is the
+    # instrument, not the figure.
+    # Windows boot *is* timed now (event 100, see `boot_time.py`), and it is not
+    # what these claims are about: they are a game's own launch — a shader cache
+    # that stops being rebuilt, a config that stops being reparsed. Judging one by
+    # the other would compare two different quantities.
+    "startup_speed": "this times Windows booting, not the game these claims are about",
+    # The drive's counters report wear and errors, not host writes: wear is a
+    # consequence of writing rather than a count of it, and judging a claim about
+    # write volume by a wear figure is the loose mapping this module refuses.
+    "ssd_writes": "the drive reports the endurance it has spent, never how many bytes spent it",
 }
 
 NOT_QUANTIFIED = "the claim states no number, so there is nothing to compare"

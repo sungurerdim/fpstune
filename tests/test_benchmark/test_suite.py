@@ -22,6 +22,7 @@ from fpstune.benchmark.suite import (
     BenchResult,
     SuiteRun,
     compare_runs,
+    deadline_for,
     run_suite,
 )
 
@@ -51,6 +52,15 @@ class FakeBench:
 
     def is_available(self) -> tuple[bool, str]:
         return self._available, self._why
+
+    def timeout_seconds(self, repeats: int) -> float:
+        """Part of the protocol, so the fake declares one like any real bench.
+
+        A fake that could satisfy `Bench` without a deadline would let a real
+        bench ship without one too — and a bench with no deadline is one that
+        can hang the whole run.
+        """
+        return deadline_for(0.01, repeats)
 
     def run(self, repeats: int) -> BenchResult:
         self.repeats_seen = repeats

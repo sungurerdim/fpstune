@@ -25,7 +25,7 @@ from __future__ import annotations
 import time
 
 from fpstune.benchmark.network import NetworkBenchmark
-from fpstune.benchmark.suite import BenchReading, BenchResult
+from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 
 DEFAULT_PING_COUNT = 20
 """Fewer than `network.py`'s own default of 50.
@@ -36,6 +36,15 @@ turns a three-repeat suite into a two-minute wait for one of five benches.
 """
 
 DEFAULT_TCP_COUNT = 10
+
+_UNANSWERED_PROBE_SECONDS = 1.2
+"""What one probe costs in wall clock, which is a cadence rather than a latency.
+
+`ping.exe` waits about a second between echoes whatever the round trip is, so
+twenty pings take twenty seconds on a perfect line. Budgeting the round trip
+instead would produce a deadline the bench trips every single time it runs.
+"""
+
 
 _MEASUREMENT_FAILED = "the network benchmark returned nothing — the target did not answer"
 
@@ -59,6 +68,16 @@ class NetworkIdleBench:
         self.ping_count = ping_count
         self.tcp_count = tcp_count
         self._benchmark = benchmark or NetworkBenchmark()
+
+    def timeout_seconds(self, repeats: int) -> float:
+        """Derived from the pings and TCP connects one pass makes.
+
+        A ping that gets no answer costs its own timeout rather than its round
+        trip, so the per-probe figure is that timeout — a target that has gone
+        away is the case this deadline exists for.
+        """
+        per_repeat = (self.ping_count + self.tcp_count) * _UNANSWERED_PROBE_SECONDS
+        return deadline_for(per_repeat, repeats)
 
     def is_available(self) -> tuple[bool, str]:
         """Answered by running rather than guessed at.

@@ -65,6 +65,16 @@ _LOWER_IS_BETTER: frozenset[str] = frozenset(
         "vram_mb",
         "power_watts",
         "gpu_temp_c",
+        # Failures and the time the machine spends not being usable. Each is a
+        # count or a duration the machine produced, so fewer and shorter is the
+        # improvement — including `shutdown_speed`, whose name says speed and
+        # whose measurement is the seconds a shutdown takes. The claim
+        # ("faster") and the instrument (`shutdown_time_s`) agree that the
+        # number goes down when the setting works.
+        "crash_rate",
+        "shutdown_speed",
+        "shutdown_time_s",
+        "disk_io",
     }
 )
 
@@ -74,6 +84,7 @@ _HIGHER_IS_BETTER: frozenset[str] = frozenset(
         "fps_gpu_bound",
         "fps_cpu_bound",
         "fps_1_percent_low",
+        "fps_0_1_percent_low",
         "fps_sustained",
         "fps_retained",
         "throughput",
@@ -90,6 +101,12 @@ _HIGHER_IS_BETTER: frozenset[str] = frozenset(
         "storage_performance",
         "loading_speed",
         "audio_attenuation_removed",
+        # Memory the machine has back, and endurance the drive has left. Both
+        # are stated the way the claim is stated — a setting claiming
+        # `ram_saved` wants the free figure to rise, and `ssd_longevity` is the
+        # share of the drive's rated writes still unspent, not the share used.
+        "ram_available_mb",
+        "ssd_longevity",
     }
 )
 

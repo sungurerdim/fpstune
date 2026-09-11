@@ -145,6 +145,54 @@ class TestThroughTheSuite:
 
         assert {m.metric for m in comparison.measurements} == {
             "memory_bandwidth",
+            "memory_write_mbps",
             "memory_latency_ns",
         }
         assert comparison.unpaired == []
+
+
+class TestTheWriteHalfIsMeasuredOnItsOwn:
+    """A copy reads and writes every byte, so it cannot say which half moved.
+    Write-combining, non-temporal stores and the write allocation policy each
+    move one half without touching the other, and a memory setting that changed
+    only one of them would be invisible in the copy figure."""
+
+    def test_the_write_pass_reports_a_bandwidth(self) -> None:
+        reading = _tiny().run(2).readings["memory_write_mbps"]
+
+        assert reading.median > 0
+        assert reading.unit == "MB/s"
+
+    def test_more_bandwidth_is_the_improvement(self) -> None:
+        assert _tiny().run(2).readings["memory_write_mbps"].improves_upward is True
+
+    def test_writing_only_is_faster_than_reading_and_writing(self) -> None:
+        """The plausibility bound that catches the write pass silently becoming
+        another copy: a pass that only writes moves half the bytes a copy does,
+        so it cannot come out slower on any real machine. A small margin is left
+        for the run-to-run spread."""
+        readings = _tiny(working_set_mb=32).run(2).readings
+
+        assert readings["memory_write_mbps"].median > readings["memory_bandwidth"].median * 0.6
+
+    def test_one_sample_per_repeat(self) -> None:
+        assert len(_tiny().run(3).readings["memory_write_mbps"].samples) == 3
+
+    def test_the_write_does_not_fill_with_zeroes(self) -> None:
+        """A page of zeroes is a page Windows may hand back without touching
+        memory, which would make the fastest possible write bandwidth the one
+        that wrote nothing."""
+        from fpstune.benchmark.memory import _MEMSET_VALUE
+
+        assert _MEMSET_VALUE != 0
+
+    def test_the_missing_read_figure_says_why_rather_than_being_absent(self) -> None:
+        """C11 rule 5: an area we improve gets an instrument or the gap is on
+        the record. `bytes.count` measured 3.2 GB/s against `memset`'s 29 GB/s
+        on the same buffer here — the counting loop's speed, not the memory's —
+        so publishing it as a read bandwidth would be a number no instrument
+        produced."""
+        detail = _tiny().run(2).detail
+
+        assert "memory_read_mbps" not in _tiny().run(2).readings
+        assert "per-byte work" in detail["read_unmeasured"]

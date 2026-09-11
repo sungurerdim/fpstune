@@ -42,12 +42,25 @@ def offline(monkeypatch):
         time.sleep(0.05)
         return cap, cap / 1_000_000
 
+    def _slow_upload(_url: str, cap: int, _seconds: float) -> tuple[int, float]:
+        # Half the download's rate, which is what a consumer line does and what
+        # makes an accidentally-swapped reading visible rather than plausible.
+        time.sleep(0.05)
+        return cap, cap / 500_000
+
     monkeypatch.setattr(network_load, "_tcp_rtt_ms", lambda *_a, **_k: 10.0)
     monkeypatch.setattr(network_load, "_download", _slow_download)
+    monkeypatch.setattr(network_load, "_upload", _slow_upload)
 
 
 def _bench(**kwargs: object) -> NetworkLoadBench:
-    defaults: dict = {"cap_bytes": 1_000_000, "cap_seconds": 1.0, "probes": 3, "probe_interval": 0}
+    defaults: dict = {
+        "cap_bytes": 1_000_000,
+        "upload_cap_bytes": 500_000,
+        "cap_seconds": 1.0,
+        "probes": 3,
+        "probe_interval": 0,
+    }
     defaults.update(kwargs)
     return NetworkLoadBench(**defaults)  # type: ignore[arg-type]
 
@@ -155,12 +168,12 @@ class TestWhatItMeasures:
         result = _bench().run(1)
 
         assert result.ran is True, result.reason
-        assert set(result.readings) == {
+        assert {
             "download_throughput",
             "latency_under_load_ms",
             "bufferbloat_ms",
             "packet_loss_under_load",
-        }
+        } <= set(result.readings)
 
     def test_one_sample_per_repeat(self) -> None:
         for reading in _bench().run(3).readings.values():
@@ -209,3 +222,167 @@ class TestWhenAPassProducesNothing:
 
         assert len(run.results) == 1
         assert run.skipped[0].bench == "network_load"
+
+
+class TestTheUploadLeg:
+    """The queue a game's packets sit behind is almost always the upstream one:
+    a consumer line has ten times more download than upload, so the upload
+    saturates first. A bufferbloat figure taken only under download describes
+    the direction least likely to be the problem."""
+
+    def test_upload_throughput_is_bytes_over_seconds_in_megabits(self) -> None:
+        bench = _bench(upload_cap_bytes=500_000)
+
+        assert bench.run(1).readings["upload_throughput"].median == pytest.approx(4.0, rel=0.01)
+
+    def test_the_two_directions_are_not_the_same_number(self) -> None:
+        """Reading one leg's figure under the other's name is the mistake this
+        catches, and it would look entirely plausible on the panel."""
+        readings = _bench(cap_bytes=1_000_000, upload_cap_bytes=500_000).run(1).readings
+
+        assert readings["download_throughput"].median == pytest.approx(8.0, rel=0.01)
+        assert readings["upload_throughput"].median == pytest.approx(4.0, rel=0.01)
+
+    def test_latency_is_probed_while_the_upload_runs(self, monkeypatch) -> None:
+        """Three idle probes, then the download's, then the upload's. The last
+        window is the one that has to be reported here."""
+        answers = iter([5.0, 5.0, 5.0] + [12.0] * 4 + [40.0] * 60)
+        monkeypatch.setattr(network_load, "_tcp_rtt_ms", lambda *_a, **_k: next(answers, 40.0))
+
+        readings = _bench().run(1).readings
+
+        assert readings["latency_under_upload_ms"].median == pytest.approx(40.0)
+
+    def test_both_new_readings_know_which_way_is_better(self) -> None:
+        readings = _bench().run(1).readings
+
+        assert readings["upload_throughput"].improves_upward is True
+        assert readings["latency_under_upload_ms"].improves_upward is False
+
+    def test_an_upload_that_moved_nothing_leaves_the_download_standing(self, monkeypatch) -> None:
+        """Throwing the pass away over the half that failed would report nothing
+        about the half that worked."""
+        monkeypatch.setattr(network_load, "_upload", lambda *_a: (0, 0.5))
+
+        result = _bench().run(1)
+
+        assert result.ran is True, result.reason
+        assert "download_throughput" in result.readings
+        assert "upload_throughput" not in result.readings
+
+    def test_an_upload_that_moved_nothing_says_so_rather_than_going_quiet(
+        self, monkeypatch
+    ) -> None:
+        """C11 rule 3: what could not be measured says why."""
+        monkeypatch.setattr(network_load, "_upload", lambda *_a: (0, 0.5))
+
+        assert "no bytes" in _bench().run(1).detail["upload_unmeasured"]
+
+    def test_it_says_how_much_it_uploaded(self) -> None:
+        """The user paid for those bytes too."""
+        detail = _bench(upload_cap_bytes=1_000_000).run(2).detail
+
+        assert detail["megabytes_uploaded"] == pytest.approx(1.9, abs=0.1)
+
+    def test_the_upload_endpoint_is_a_parameter_rather_than_a_fact(self) -> None:
+        bench = _bench(upload_endpoint="https://example.invalid/push")
+
+        assert bench.upload_url == "https://example.invalid/push"
+
+    def test_an_upload_of_nothing_is_refused(self) -> None:
+        with pytest.raises(ValueError, match="positive to upload anything"):
+            NetworkLoadBench(upload_cap_bytes=0)
+
+    def test_the_deadline_covers_both_legs(self) -> None:
+        """One cap's worth of budget would call the second leg a hang."""
+        bench = _bench(cap_seconds=10.0, probes=3, probe_interval=0)
+
+        assert bench.timeout_seconds(1) >= 2 * 10.0
+
+
+class TestAMeteredLineIsNotSpentUnasked:
+    """The bytes are the user's, and being wrong is expensive in one direction
+    only — so anything short of "Windows says this line is unrestricted" keeps
+    the bench out of the run nobody asked for."""
+
+    def test_an_unrestricted_line_may_be_measured_unasked(self, monkeypatch) -> None:
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (network_load.COST_UNRESTRICTED, "")
+        )
+
+        allowed, why = network_load.unmetered_connection()
+
+        assert allowed is True
+        assert why == ""
+
+    @pytest.mark.parametrize(
+        "flag",
+        ["COST_FIXED", "COST_VARIABLE", "COST_OVER_DATA_LIMIT", "COST_ROAMING"],
+    )
+    def test_a_metered_line_is_refused_and_named(self, monkeypatch, flag: str) -> None:
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (getattr(network_load, flag), "")
+        )
+
+        allowed, why = network_load.unmetered_connection()
+
+        assert allowed is False
+        assert why
+
+    def test_a_cost_nothing_could_read_is_refused_with_that_reason(self, monkeypatch) -> None:
+        """ "We could not ask" and "it is free" are different answers, and only
+        one of them licenses spending somebody's data allowance."""
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (None, "the cost service is off")
+        )
+
+        allowed, why = network_load.unmetered_connection()
+
+        assert allowed is False
+        assert "cost service is off" in why
+
+    def test_a_metered_line_keeps_the_bench_out_of_the_automatic_run(self, monkeypatch) -> None:
+        """The scheduler's plan is `default_keys()`, so this is the whole
+        mechanism by which a daemon nobody asked stops spending an allowance."""
+        from fpstune.benchmark import benches
+
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (network_load.COST_FIXED, "")
+        )
+
+        assert "network_load" not in benches.default_keys()
+
+    def test_the_catalogue_says_why_it_is_not_in_the_automatic_run(self, monkeypatch) -> None:
+        """An absence with no reason reads as a broken bench (C11 rule 3)."""
+        from fpstune.benchmark import benches
+
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (network_load.COST_FIXED, "")
+        )
+
+        entry = next(item for item in benches.catalogue() if item["key"] == "network_load")
+
+        assert entry["in_default_run"] is False
+        assert "fixed data allowance" in entry["costs"]
+
+    def test_an_unrestricted_line_puts_it_in_the_automatic_run(self, monkeypatch) -> None:
+        """The other half of the same rule: a line that costs nothing to use is
+        a line the throughput question should be answered on without asking."""
+        from fpstune.benchmark import benches
+
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (network_load.COST_UNRESTRICTED, "")
+        )
+
+        assert "network_load" in benches.default_keys()
+
+    def test_windows_own_answer_is_read_rather_than_assumed(self) -> None:
+        """No stub: the flags come from `INetworkCostManager` on this machine.
+
+        A machine that cannot answer returns None with a reason, which is the
+        documented outcome — what this refuses to allow is a third state where
+        the call neither answered nor said why.
+        """
+        flags, why = network_load._connection_cost_flags()
+
+        assert (flags is None) == bool(why)

@@ -58,10 +58,6 @@ def _emitted_keys(source_name: str) -> set[str]:
         from fpstune.benchmark.network import LatencyStats
 
         return set(LatencyStats().to_dict())
-    if source_name == "furmark":
-        from fpstune.benchmark.furmark import FurMarkResult
-
-        return set(FurMarkResult(name="probe", timestamp="", duration_seconds=0).to_dict())
     if source_name == "dpc":
         from fpstune.benchmark.dpc import DpcStats
 
@@ -81,6 +77,92 @@ def _emitted_keys(source_name: str) -> set[str]:
         from fpstune.benchmark.memory import MemoryBench
 
         return set(MemoryBench(working_set_mb=1, chase_steps=1000).run(1).readings)
+    if source_name == "boot_time":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.boot_time import BootTimeBench
+
+        # The log is replaced because it needs administrator rights to read;
+        # what has to still exist is the reading `shutdown_speed` is mapped to.
+        rows = [
+            {"kind": "status", "access": "ok"},
+            {"kind": "100", "at": 1_789_000_000, "boot_ms": 42_000, "main_path_ms": 30_000},
+            {"kind": "200", "at": 1_788_900_000, "shutdown_ms": 9_500},
+        ]
+        with patch("fpstune.benchmark.boot_time.query_rows", return_value=(rows, "")):
+            return set(BootTimeBench().run(2).readings)
+    if source_name == "gpu_memory":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.gpu_memory import GpuMemoryBench
+
+        adapter = {"adapter": "luid_0x00000000_0x0679BD6A_phys_0", "dedicated": 939_376_640}
+        with patch("fpstune.benchmark.gpu_memory.query_rows", return_value=([adapter], "")):
+            return set(GpuMemoryBench().run(2).readings)
+    if source_name == "process_sampler":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.process_sampler import ProcessSamplerBench
+
+        # The counters are replaced, the bench is not: a machine whose WMI is
+        # slow would otherwise decide whether this test checked anything.
+        second = {
+            "total_cpu": 1653,
+            "idle_cpu": 1418,
+            "total_io": 4_016_661,
+            "available_mb": 17066,
+            "game_instances": 0,
+        }
+        with (
+            patch("fpstune.benchmark.process_sampler.query_rows", return_value=([second], "")),
+            patch("fpstune.benchmark.process_sampler.running_game", return_value=None),
+        ):
+            return set(ProcessSamplerBench(window_samples=1).run(2).readings)
+    if source_name == "storage_health":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.storage_health import StorageHealthBench
+
+        # Elevation and the drive are both replaced; the bench is not. What has
+        # to still exist is the reading, and on an unelevated machine the real
+        # cmdlet would answer nothing and this test would pass by not looking.
+        drive = {"unique_id": "eui.0025385A11B2C3D4", "wear": 4, "temperature": 41}
+        with (
+            patch("fpstune.benchmark.storage_health.is_admin", return_value=True),
+            patch("fpstune.benchmark.storage_health.query_rows", return_value=([drive], "")),
+        ):
+            return set(StorageHealthBench().run(2).readings)
+    if source_name == "event_scan":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.event_scan import EventScanBench
+
+        # The log query is replaced, the bench is not: what has to still exist
+        # is the reading `crash_rate` is mapped to, and only the bench can say
+        # whether it does. A machine with an empty log would otherwise decide
+        # whether this test checked anything.
+        row = {
+            "whea": 0,
+            "bugcheck": 1,
+            "unexpected_shutdown": 0,
+            "tdr": 0,
+            "disk_errors": 0,
+            "disk_providers": "",
+            "log_from": 0,
+        }
+        with patch("fpstune.benchmark.event_scan.query_rows", return_value=([row], "")):
+            return set(EventScanBench(window_days=1).run(2).readings)
+    if source_name == "sensors":
+        from unittest.mock import patch
+
+        from fpstune.benchmark.sensors import SensorBench
+
+        # The sampling window is replaced, the bench is not: a machine with no
+        # NVIDIA driver would otherwise decide whether this test looked at
+        # anything. The row is the shape `build_script` emits.
+        row = {"gpu_temp": 61.0, "gpu_power": 118.5, "zone_dk": 3452, "nvidia": True}
+        with patch("fpstune.benchmark.sensors.query_rows", return_value=([row], "")):
+            return set(SensorBench(window_samples=1).run(2).readings)
     if source_name == "network_load":
         # Run for real, with both ends of the network replaced. Listing the
         # reading names here instead would make this test agree with itself
@@ -94,11 +176,17 @@ def _emitted_keys(source_name: str) -> set[str]:
             time.sleep(0.05)  # long enough for one probe to land under load
             return cap, 0.05
 
+        # Both directions replaced. The upload leg reaches a third party too,
+        # and a test that quietly posted eight megabytes to measure a mapping
+        # would be spending the developer's line to check a dictionary.
         with (
             patch("fpstune.benchmark.network_load._tcp_rtt_ms", return_value=10.0),
             patch("fpstune.benchmark.network_load._download", _served),
+            patch("fpstune.benchmark.network_load._upload", _served),
         ):
-            bench = NetworkLoadBench(cap_bytes=1000, cap_seconds=1.0, probes=2, probe_interval=0)
+            bench = NetworkLoadBench(
+                cap_bytes=1000, upload_cap_bytes=500, cap_seconds=1.0, probes=2, probe_interval=0
+            )
             return set(bench.run(1).readings)
     raise AssertionError(f"no stats class known for source {source_name!r}")
 
@@ -137,6 +225,20 @@ class TestTheMappingStillPointsAtSomethingReal:
             overlap = seen & set(source.fields)
             assert not overlap, f"{source.name} also claims {overlap}"
             seen |= set(source.fields)
+
+    def test_the_thermal_claims_are_measured_by_the_sensor_bench(self) -> None:
+        """Heat is a performance category (consequence 4), so it has to be
+        readable under the load a bench actually applies. FurMark answers "how
+        hot under a load nobody plays at", which is a different question."""
+        for metric in ("gpu_temp_c", "power_watts"):
+            source = source_for(metric)
+            assert source is not None
+            assert source.name == "sensors", metric
+
+    def test_no_claim_is_measured_by_a_power_virus(self) -> None:
+        """C11 rule 6: a stress test is not a performance test. FurMark stays a
+        panel of its own and verifies nothing."""
+        assert "furmark" not in {source.name for source in SOURCES}
 
     def test_nothing_is_both_measurable_and_listed_as_having_no_instrument(self) -> None:
         for source in SOURCES:
@@ -201,8 +303,15 @@ class TestWhyAClaimCannotBeChecked:
         assert why_unmeasurable(parse_claim("s:x", "fps_menu_ceiling", 90)) == NO_DIRECTION
 
     def test_a_missing_instrument_says_which_one_is_missing(self) -> None:
-        reason = why_unmeasurable(parse_claim("s:x", "vram_mb", -200.0))
-        assert reason == NO_INSTRUMENT["vram_mb"]
+        """`gpu_performance` rather than `vram_mb`, which this used to say.
+
+        Video memory became measurable the day the GPU counter bench landed, and
+        an example that has an instrument passes this test for the wrong reason.
+        The example has to be a metric that is quantified, directional, and still
+        unmeasured — which is what a real gap looks like.
+        """
+        reason = why_unmeasurable(parse_claim("s:x", "gpu_performance", "+5%"))
+        assert reason == NO_INSTRUMENT["gpu_performance"]
         assert reason != NOT_QUANTIFIED
 
     def test_a_measurable_claim_returns_no_reason(self) -> None:
@@ -214,7 +323,7 @@ class TestCoverageCountsWhatItCannotDo:
         setting = _setting(
             "test:one",
             latency_ms=-3.0,  # measurable
-            vram_mb=-200.0,  # no instrument
+            gpu_performance="+5%",  # no instrument
             fps_menu_ceiling=90,  # no direction
             stability="high",  # never collected as a claim at all
         )
@@ -226,11 +335,11 @@ class TestCoverageCountsWhatItCannotDo:
         assert len(result.unmeasurable) == 2
 
     def test_the_summary_leads_with_the_shortfall(self) -> None:
-        result = coverage([_setting("test:one", latency_ms=-3.0, vram_mb=-1.0)])
+        result = coverage([_setting("test:one", latency_ms=-3.0, gpu_performance="+5%")])
         assert result.summary == "1 of 2 claims can be measured here; 1 are not"
 
     def test_measuring_nothing_says_so_plainly(self) -> None:
-        result = coverage([_setting("test:one", vram_mb=-1.0)])
+        result = coverage([_setting("test:one", gpu_performance="+5%")])
         assert result.summary == "None of the 1 claims can be measured on this machine"
 
     def test_a_setting_that_claims_nothing_measurable_is_not_an_error(self) -> None:
@@ -256,8 +365,8 @@ class TestCoverageCountsWhatItCannotDo:
 
     def test_the_dictionary_carries_the_reasons_and_not_just_the_counts(self) -> None:
         """The report renders from this, so the reasons have to survive it."""
-        payload = coverage([_setting("test:one", vram_mb=-1.0)]).to_dict()
-        assert payload["unmeasurable"][0]["reason"] == NO_INSTRUMENT["vram_mb"]
+        payload = coverage([_setting("test:one", gpu_performance="+5%")]).to_dict()
+        assert payload["unmeasurable"][0]["reason"] == NO_INSTRUMENT["gpu_performance"]
 
 
 class TestAgainstTheRealRegistry:
@@ -321,7 +430,7 @@ class TestAQualitativeClaimIsNotAGap:
         result = coverage(
             [
                 _setting("t:1", privacy="improved"),
-                _setting("t:2", vram_mb=-200.0),
+                _setting("t:2", gpu_performance="+5%"),
             ]
         )
 
@@ -366,15 +475,25 @@ class TestAQualitativeClaimIsNotAGap:
 class TestWhatIsMissingIsTheBindingThing:
     """When a claim lacks both a number and an instrument, say which matters.
 
-    `{"shutdown_speed": "faster"}` is missing both. Writing `-2s` into it would
-    change nothing, because nothing here times a shutdown — so reporting "states
-    no number" sends somebody to do work that closes no gap.
+    `{"startup_speed": "slower"}` is missing both. Writing `+2s` into it would
+    change nothing, because what those claims time is a game launching and what
+    this build times is Windows booting — so reporting "states no number" sends
+    somebody to do work that closes no gap.
+
+    The example used to be `shutdown_speed`, which stopped fitting the day the
+    boot log became an instrument: a machine's shutdown is timed now, so that
+    claim really is only missing its number.
     """
 
     def test_a_metric_with_no_instrument_says_so_rather_than_no_number(self) -> None:
-        reason = why_unmeasurable(parse_claim("t:1", "shutdown_speed", "faster"))
+        reason = why_unmeasurable(parse_claim("t:1", "startup_speed", "slower"))
 
-        assert reason == NO_INSTRUMENT["shutdown_speed"]
+        assert reason == NO_INSTRUMENT["startup_speed"]
+
+    def test_the_half_that_now_has_an_instrument_asks_for_its_number(self) -> None:
+        """`shutdown_speed` is timed by event 200, so "faster" is a real to-do."""
+        assert source_for("shutdown_speed") is not None
+        assert why_unmeasurable(parse_claim("t:1", "shutdown_speed", "faster")) == NOT_QUANTIFIED
 
     def test_a_metric_with_an_instrument_asks_for_the_number(self) -> None:
         """`throughput` is measurable since the network-load bench landed, so a

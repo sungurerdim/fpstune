@@ -87,7 +87,7 @@ import time
 from array import array
 from typing import Any
 
-from fpstune.benchmark.suite import BenchReading, BenchResult
+from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 
 
 def _load_kernel32() -> Any | None:
@@ -121,6 +121,9 @@ DEFAULT_WORKING_SET_MB = 8
 """Comfortably past any current L3, so the chase actually reaches memory."""
 
 DEFAULT_CHASE_STEPS = 4000
+
+_SETUP_SECONDS = 2.0
+"""Allocating the working set and warming the chase, before a frame is drawn."""
 """About a millisecond of dependent loads — a real cost inside an 8.3 ms budget,
 and small enough that the loop is measuring pacing rather than saturation."""
 
@@ -228,6 +231,15 @@ class FramePacingBench:
         self.seconds = seconds
         self.working_set_mb = working_set_mb
         self.chase_steps = chase_steps
+
+    def timeout_seconds(self, repeats: int) -> float:
+        """Its own render window, times the repeats, plus the grace factor.
+
+        `seconds` is exactly how long one pass draws for, so this bench knows
+        its own cost better than any table could — a caller who asks for a
+        60-second window gets a deadline that respects it.
+        """
+        return deadline_for(self.seconds + _SETUP_SECONDS, repeats)
 
     def is_available(self) -> tuple[bool, str]:
         """Always. That is the whole reason this bench exists."""

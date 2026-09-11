@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import csv
 import json
+import re
 import shutil
 import statistics
 import subprocess
@@ -56,6 +57,46 @@ STUTTER_THRESHOLD_FACTOR = 2.0
 # Two costs within this band of each other cannot be told apart — see
 # `FrameTimeStats.bottleneck`.
 _BOTTLENECK_BAND = 1.1
+
+# Optional per-frame tracking, passed only when the installed build lists it.
+#
+# Both are Beta options on PresentMon 2.5.1, and both need something the machine
+# has to supply: `--track_pc_latency` reads PC Latency events a game has to be
+# instrumented to emit, `--track_hw_measurements` reads a hardware latency or
+# power device (LMT, PCAT). Passing them is free where they exist and fatal
+# where they do not — an unrecognized option makes PresentMon exit before
+# recording a frame — so `supported_flags()` asks the executable first.
+OPTIONAL_TRACKING_FLAGS = ("--track_pc_latency", "--track_hw_measurements")
+
+HELP_TIMEOUT_SECONDS = 15
+
+# The display half of the pipeline, under every spelling PresentMon has used.
+# 1.x named these `MsBetweenDisplayChange`, `MsUntilDisplayed` and
+# `MsAnimationError`; 2.x renamed them `DisplayedTime`, `DisplayLatency` and
+# `AnimationError`, and a capture taken with `--v1_metrics` still uses the old
+# ones. Which arrived is read out of the CSV header rather than assumed from a
+# version number.
+DISPLAY_COLUMNS: dict[str, tuple[str, ...]] = {
+    "display_change": ("MsBetweenDisplayChange", "msBetweenDisplayChange", "DisplayedTime"),
+    "until_displayed": ("MsUntilDisplayed", "msUntilDisplayed", "DisplayLatency"),
+    "animation_error": ("MsAnimationError", "msAnimationError", "AnimationError"),
+}
+
+# Why a display column can be missing, said once per column.
+DISPLAY_COLUMN_REASONS: dict[str, str] = {
+    "display_change": (
+        "this capture did not track frames all the way to the screen, so the "
+        "cadence the panel showed is not in it"
+    ),
+    "until_displayed": (
+        "this capture carried no display latency column, so how long a frame "
+        "waited to be shown is not in it"
+    ),
+    "animation_error": (
+        "this capture carried no animation error column, which PresentMon "
+        "reports only for frames it could time against the display"
+    ),
+}
 
 
 @dataclass
@@ -102,6 +143,25 @@ class FrameTimeStats:
     # ("Hardware: Independent Flip", "Composed: Flip", ...). Empty when the
     # capture carried no PresentMode column. A fact about the run, not a score.
     present_mode: str = ""
+
+    # The display side of the pipeline, which is the half a player actually
+    # sees. `MsBetweenPresents` is the cadence the *application* submitted at;
+    # these three are what reached the panel:
+    #
+    #   display_change_ms  — the gap between two frames actually shown, so a
+    #                        game submitting 300 fps to a 60 Hz panel reports
+    #                        3.3 ms of frame time and 16.7 ms of this;
+    #   until_displayed_ms — how long a submitted frame waited to be shown;
+    #   animation_error_ms — how far the frame's animation time drifted from
+    #                        the moment it was displayed, which is what makes a
+    #                        technically smooth frame rate look uneven.
+    #
+    # All three are zero when the capture did not carry them, and `unmeasured`
+    # then says why rather than leaving a zero to be read as a measurement.
+    display_change_ms: float = 0.0
+    until_displayed_ms: float = 0.0
+    animation_error_ms: float = 0.0
+    unmeasured: dict[str, str] = field(default_factory=dict)
 
     # Raw data for charts
     frametimes: list[float] = field(default_factory=list)
@@ -168,6 +228,22 @@ class FrameTimeStats:
             payload["fps_cpu_bound"] = round(self.fps_avg, 2)
         if self.present_mode:
             payload["present_mode"] = self.present_mode
+        # Gated for the same reason as the three above: a column the capture did
+        # not carry has to be absent, not zero. The cadence the panel showed and
+        # the cadence the app submitted are different quantities, and a zero
+        # under `display_change_ms` would read as a game presenting instantly.
+        if self.display_change_ms > 0:
+            payload["display_change_ms"] = round(self.display_change_ms, 3)
+            payload["fps_displayed"] = round(1000.0 / self.display_change_ms, 2)
+        if self.until_displayed_ms > 0:
+            payload["until_displayed_ms"] = round(self.until_displayed_ms, 3)
+        if self.animation_error_ms > 0:
+            payload["animation_error_ms"] = round(self.animation_error_ms, 3)
+        if self.unmeasured:
+            # Why each of those is missing, in the same voice `sources.py` uses
+            # for a claim it cannot check. A capture that quietly dropped half
+            # its columns is indistinguishable from one that had none to drop.
+            payload["unmeasured"] = dict(self.unmeasured)
         return payload
 
 
@@ -389,6 +465,10 @@ class PresentMonBenchmark:
         self._store = ResultStore(self._data_dir, self._logger)
         self._process: subprocess.Popen[bytes] | None = None
         self._current_output: Path | None = None
+        #: The options this build accepts, read from `--help` the first time
+        #: anything asks. None until then; a frozenset afterwards, including the
+        #: empty one for a build whose help could not be read.
+        self._supported_flags: frozenset[str] | None = None
         #: Whatever PresentMon printed to stderr on the last capture. Its
         #: refusals name their own cause ("requires administrative privileges",
         #: "unrecognized option") and a caller reporting an empty capture should
@@ -399,6 +479,22 @@ class PresentMonBenchmark:
     def presentmon_path(self) -> Path:
         """Path to PresentMon executable."""
         return self._presentmon_dir / "PresentMon.exe"
+
+    def terminate_child(self) -> None:
+        """Kill the capture process, for a caller that has given up waiting.
+
+        Satisfies `suite.SpawnsProcess`, which the deadline path uses after a
+        bench misses its deadline. `stop_capture` is the orderly route and reads
+        stderr on the way out; this is the one for when there is nobody left to
+        read it, so it kills rather than terminates and never blocks.
+        """
+        process = self._process
+        if process is None or process.poll() is not None:
+            return
+        try:
+            process.kill()
+        except OSError as exc:  # pragma: no cover - the process is already gone
+            self._logger.debug("PresentMon would not be killed: %s", exc)
 
     def is_installed(self) -> bool:
         """Check if PresentMon is installed."""
@@ -505,6 +601,62 @@ class PresentMonBenchmark:
             self._logger.error(f"Failed to install PresentMon: {e}")
             return False
 
+    def supported_flags(self) -> frozenset[str]:
+        """Every option this build of PresentMon accepts, from its own help.
+
+        Cached per instance: the executable does not grow options between two
+        captures, and `--help` is a process start-up.
+
+        An empty set is a real answer — PresentMon not installed, or a help
+        output nothing could be read out of — and it means no optional flag is
+        passed, which is exactly today's behaviour rather than a broken capture.
+        """
+        if self._supported_flags is not None:
+            return self._supported_flags
+
+        flags: set[str] = set()
+        if self.is_installed():
+            try:
+                completed = subprocess.run(
+                    [str(self.presentmon_path), "--help"],
+                    capture_output=True,
+                    timeout=HELP_TIMEOUT_SECONDS,
+                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                )
+                text = (completed.stdout or b"").decode("utf-8", errors="replace")
+                text += (completed.stderr or b"").decode("utf-8", errors="replace")
+                flags = set(re.findall(r"--[a-z0-9_]+", text))
+            except Exception as exc:  # noqa: BLE001 - a help probe must never break a capture
+                # Deliberately every exception. This runs on the path to a
+                # capture, and the worst an unreadable option list may cost is
+                # the optional flags — never the recording itself.
+                self._logger.debug("Could not read PresentMon's option list: %s", exc)
+
+        self._supported_flags = frozenset(flags)
+        return self._supported_flags
+
+    def supported_tracking_flags(self) -> list[str]:
+        """The optional tracking flags this build has, in a stable order."""
+        available = self.supported_flags()
+        return [flag for flag in OPTIONAL_TRACKING_FLAGS if flag in available]
+
+    def tracking_flag_gaps(self) -> dict[str, str]:
+        """Why an optional flag was not passed, per flag it does not have.
+
+        Read against PresentMon 2.5.1 on the machine this was written on: both
+        flags exist there and both are Beta options that need something the
+        machine has to supply — `--track_pc_latency` needs a game instrumented
+        with PC Latency events, `--track_hw_measurements` needs an LMT or PCAT
+        measurement device wired up. So having the flag is not having the
+        reading, and the columns are what settle it, one capture at a time.
+        """
+        available = self.supported_flags()
+        return {
+            flag: f"this build of PresentMon does not accept {flag}"
+            for flag in OPTIONAL_TRACKING_FLAGS
+            if flag not in available
+        }
+
     def start_capture(
         self,
         process_name: str | None = None,
@@ -545,6 +697,13 @@ class PresentMonBenchmark:
             "--terminate_on_proc_exit",
             "--no_console_stats",
         ]
+
+        # Only flags this build says it has. Measured against PresentMon 2.5.1:
+        # an unknown flag is not ignored, it is fatal — `error: unrecognized
+        # option '--not_a_real_flag'` and the process exits before recording a
+        # frame, which is how `--no_top` once turned every capture into an empty
+        # file. Asking `--help` is the derivation; assuming is the bug.
+        cmd.extend(self.supported_tracking_flags())
 
         if process_name:
             cmd.extend(["--process_name", process_name])
@@ -660,6 +819,9 @@ class PresentMonBenchmark:
             "gpu_time": [],
             "gpu_wait": [],
             "input_latency": [],
+            "display_change": [],
+            "until_displayed": [],
+            "animation_error": [],
         }
         present_modes: Counter[str] = Counter()
         breakdown_columns = {
@@ -671,7 +833,29 @@ class PresentMonBenchmark:
                 "MsClickToPhotonLatency",
                 "MsRenderPresentLatency",
             ),
+            **DISPLAY_COLUMNS,
         }
+        header: list[str] = []
+
+        def _magnitude(row: dict[str, str], names: tuple[str, ...]) -> float | None:
+            """The size of a signed column, ignoring which way it drifted.
+
+            Animation error is signed — a frame shown early and one shown late
+            are equally wrong — so the sign is dropped rather than the sample.
+            `_read` below drops negatives on purpose, because PresentMon writes
+            them as "could not attribute this frame" for the cost columns; doing
+            that here would keep only the half of the errors that happen to be
+            positive and report a machine drifting one way as smoother than it is.
+            """
+            for name in names:
+                raw = row.get(name)
+                if raw is None or raw in ("", "NA"):
+                    continue
+                try:
+                    return abs(float(raw))
+                except (ValueError, TypeError):
+                    continue
+            return None
 
         def _read(row: dict[str, str], names: tuple[str, ...]) -> float | None:
             for name in names:
@@ -691,6 +875,12 @@ class PresentMonBenchmark:
         try:
             with open(capture_file, newline="", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
+                # What this capture actually carried, which is the only thing
+                # entitled to decide whether a column exists. PresentMon renamed
+                # every one of these between 1.x and 2.x and gates several on
+                # flags whose prerequisites live outside this machine, so a
+                # version check would be a guess where the header is a fact.
+                header = list(reader.fieldnames or [])
 
                 for row in reader:
                     # PresentMon columns vary by version
@@ -701,7 +891,11 @@ class PresentMonBenchmark:
                         frametimes.append(frametime)
 
                         for key, names in breakdown_columns.items():
-                            value = _read(row, names)
+                            value = (
+                                _magnitude(row, names)
+                                if key == "animation_error"
+                                else _read(row, names)
+                            )
                             if value is not None:
                                 breakdown[key].append(value)
 
@@ -727,7 +921,29 @@ class PresentMonBenchmark:
         if not frametimes:
             return None
 
-        return self._calculate_stats(frametimes, timestamps, breakdown, present_modes)
+        stats = self._calculate_stats(frametimes, timestamps, breakdown, present_modes)
+        stats.unmeasured = self._display_gaps(header, breakdown)
+        return stats
+
+    def _display_gaps(self, header: list[str], breakdown: dict[str, list[float]]) -> dict[str, str]:
+        """Why each display reading is missing, for the ones that are.
+
+        Two different absences, and they are not the same fix: a column the
+        capture never carried, and a flag this build of PresentMon does not
+        accept. Both are named, so a screen never has to show a zero standing in
+        for either.
+        """
+        gaps = dict(self.tracking_flag_gaps())
+        for key, names in DISPLAY_COLUMNS.items():
+            if breakdown.get(key):
+                continue
+            present = [name for name in names if name in header]
+            gaps[key] = (
+                f"the capture carried {present[0]} and no usable values in it"
+                if present
+                else DISPLAY_COLUMN_REASONS[key]
+            )
+        return gaps
 
     def _calculate_stats(
         self,
@@ -766,6 +982,12 @@ class PresentMonBenchmark:
                 stats.gpu_wait_ms = statistics.mean(breakdown["gpu_wait"])
             if breakdown.get("input_latency"):
                 stats.input_latency_ms = statistics.mean(breakdown["input_latency"])
+            if breakdown.get("display_change"):
+                stats.display_change_ms = statistics.mean(breakdown["display_change"])
+            if breakdown.get("until_displayed"):
+                stats.until_displayed_ms = statistics.mean(breakdown["until_displayed"])
+            if breakdown.get("animation_error"):
+                stats.animation_error_ms = statistics.mean(breakdown["animation_error"])
 
         if not frametimes:
             return stats

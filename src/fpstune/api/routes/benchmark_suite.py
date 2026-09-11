@@ -39,6 +39,7 @@ from fpstune.benchmark.suite import (
     BenchResult,
     SuiteRun,
     compare_runs,
+    run_bench_with_deadline,
 )
 from fpstune.settings.impact_categories import derive_impact_categories
 from fpstune.utils.logger import get_logger, log_activity
@@ -138,18 +139,16 @@ async def _stream_suite(keys: list[str] | None, label: str, repeats: int) -> Asy
         if not available:
             result = BenchResult(bench=bench.key, label=bench.label, ran=False, reason=why)
         else:
-            started = time.perf_counter()
-            try:
-                result = await asyncio.to_thread(bench.run, repeats)
-            except Exception as exc:  # noqa: BLE001 — one bench must not end the run
-                logger.warning("Bench %s failed: %s", bench.key, exc)
-                result = BenchResult(
-                    bench=bench.key,
-                    label=bench.label,
-                    ran=False,
-                    reason=f"the measurement failed partway through: {exc}",
-                    duration_seconds=time.perf_counter() - started,
-                )
+            # `run_bench_with_deadline` rather than `bench.run` directly, and the
+            # same call `run_suite` makes: a bench that raises and a bench that
+            # never returns both come back as `ran=False` with a reason. Without
+            # it this stream stayed open indefinitely behind a hung bench, and
+            # the only symptom was a progress bar that stopped moving.
+            #
+            # The deadline lives inside the worker thread, so the `to_thread`
+            # here returns on time even though the abandoned bench thread does
+            # not — which is exactly why that one is a daemon.
+            result = await asyncio.to_thread(run_bench_with_deadline, bench, repeats)
 
         # A bench that could not run says so at the moment it drops out, not
         # only in the summary at the end (C11 rule 3).

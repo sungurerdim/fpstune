@@ -59,7 +59,11 @@ class TestTheCommandLine:
         bench.presentmon_path.parent.mkdir(parents=True, exist_ok=True)
         bench.presentmon_path.write_bytes(b"stub")
         bench.start_capture(process_name="game.exe", output_name="probe", duration_seconds=10)
-        return calls
+        # The capture, not whatever else the module ran the executable for. It
+        # also asks `--help` once per session to find out which optional flags
+        # this build accepts, and a fixture keyed to "the first process started"
+        # would silently start testing that instead.
+        return [cmd for cmd in calls if "--output_file" in cmd]
 
     def test_no_flag_from_presentmon_1x_survives(self, spawned) -> None:
         """`--no_top` is rejected outright by 2.x, so the capture records nothing."""

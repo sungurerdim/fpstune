@@ -120,6 +120,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from fpstune.benchmark.headroom_watch import start_headroom_watch
 
     start_headroom_watch()
+    # And the other half of the same idea. The headroom watch measures a game
+    # when one is running; this one measures the machine itself when nothing
+    # is — a baseline before any tweak lands, and an "after" once a bulk apply
+    # finishes, so a comparison exists without the user having known to take a
+    # "before" first. It refuses to start anything while a game is running, the
+    # machine is in use, or another fpstune operation holds the lock.
+    from fpstune.benchmark.scheduler import start_bench_scheduler
+
+    start_bench_scheduler()
     yield
     # Shutdown
     get_logger().info("fpstune API shutting down...")
@@ -130,6 +139,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from fpstune.benchmark.headroom_watch import stop_headroom_watch
 
         stop_headroom_watch()
+    with contextlib.suppress(Exception):
+        from fpstune.benchmark.scheduler import stop_bench_scheduler
+
+        stop_bench_scheduler()
     # Brief grace window for in-flight GPU detection
     with contextlib.suppress(Exception):
         from fpstune.utils.detect import is_gpu_detecting

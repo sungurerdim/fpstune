@@ -8,18 +8,27 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from fpstune.api.routes.benchmark_ledger import router as ledger_router
 from fpstune.benchmark.headroom_watch import (
     POLL_INTERVAL_SECONDS,
     last_results,
     measure_now,
 )
-from fpstune.benchmark.sources import NO_INSTRUMENT, SOURCES, coverage
+from fpstune.benchmark.sources import NO_INSTRUMENT, SOURCES, Source, coverage
 from fpstune.benchmark.verify_round import measure_pair, run_round
 from fpstune.settings.executors.game_processes import GAME_LABELS, game_is_running
 from fpstune.settings.performance_headroom import PerformanceHeadroom
 from fpstune.utils.logger import log_activity
 
 router = APIRouter()
+
+# The ledger endpoints hang off this router rather than being mounted separately.
+# This one is already registered at `/api/benchmark`, and the ledger asks the
+# same family of question: what did this machine measure. Nesting the routers is
+# what lets the ledger keep its own module — that file is about the ledger, this
+# one about headroom and verification — without a second `include_router` in
+# `main.py`.
+router.include_router(ledger_router)
 
 # Which instruments a caller may start on demand, and what running one costs.
 #
@@ -308,9 +317,23 @@ async def verify_sample(request: SampleRequest) -> dict[str, Any]:
     return {
         "instrument": source.name,
         "requires": source.requires,
-        "metrics": {
-            metric: float(raw[field])
-            for metric, field in source.fields.items()
-            if raw.get(field) is not None
-        },
+        "metrics": scaled_metrics(source, raw),
+    }
+
+
+def scaled_metrics(source: Source | None, raw: dict[str, Any]) -> dict[str, float]:
+    """One instrument's raw reading, keyed and scaled into claim metrics.
+
+    Split out of the route because it is the *second* path a reading takes into
+    `judge` — `timing_bench.py` is the first — and the two disagreeing is how
+    `latency_spike_ms` came to mean microseconds on one and milliseconds on the
+    other. A shared function is what makes "same machine, same number" testable
+    rather than asserted.
+    """
+    if source is None:
+        return {}
+    return {
+        metric: float(raw[field]) * source.scales.get(metric, 1.0)
+        for metric, field in source.fields.items()
+        if raw.get(field) is not None
     }

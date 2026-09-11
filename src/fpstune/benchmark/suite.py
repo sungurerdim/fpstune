@@ -38,6 +38,7 @@ suite.
 from __future__ import annotations
 
 import statistics
+import threading
 import time
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
@@ -266,6 +267,143 @@ class Bench(Protocol):
         """Measure `repeats` times and return every sample, not a summary."""
         ...
 
+    def timeout_seconds(self, repeats: int) -> float:
+        """How long this many repeats may take before it counts as hung.
+
+        Derived by each bench from its own configuration — the seconds it
+        renders for, the megabytes it writes, the pings it sends — and never a
+        flat number shared across all of them. A single constant would be
+        correct for the bench it was measured against and wrong for the one
+        configured to do ten times the work, which is the hardcoded-buffer bug
+        (C1) wearing a stopwatch.
+
+        Use `deadline_for` to turn a per-repeat estimate into this.
+        """
+        ...
+
+
+@runtime_checkable
+class SpawnsProcess(Protocol):
+    """A bench that starts a child process, and can be made to let it go.
+
+    Optional, and deliberately a separate protocol rather than a member of
+    `Bench` with a default: most benches here are pure Python, and a no-op
+    `terminate_child` on all of them would be five implementations of nothing
+    plus one that matters, with no way to tell which was which.
+
+    A bench that spawns and does *not* implement this is a bench whose child
+    survives its own deadline — see `run_bench_with_deadline`.
+    """
+
+    def terminate_child(self) -> None:
+        """Kill whatever this bench started. Called after a deadline is missed."""
+        ...
+
+
+TIMEOUT_GRACE = 2.5
+"""How much longer than its own estimate a bench may take before it is hung.
+
+Two and a half times, on top of estimates that are already written for a slow
+machine rather than a fast one. A cold cache, a scan starting mid-run or a
+laptop dropping to its power-saving clocks can each stretch a pass that is
+working perfectly, and a deadline a healthy bench trips is worse than no
+deadline — it turns a slow reading into a missing one. Kept this side of
+enormous all the same: the scheduler waits behind it, so a deadline measured in
+tens of minutes is a hang with extra steps.
+"""
+
+TIMEOUT_FLOOR_SECONDS = 30.0
+"""No bench is called hung before this, however little work it claims.
+
+Process start-up, a first-touch page fault storm and PresentMon's own
+initialisation are all fixed costs that a per-repeat estimate does not see.
+"""
+
+
+def deadline_for(per_repeat_seconds: float, repeats: int) -> float:
+    """Turn a bench's own estimate of one pass into a deadline for the run.
+
+    The one place the grace factor and the floor are applied, so every bench's
+    deadline is generous in the same way and a reader comparing two of them is
+    comparing the estimates rather than two different policies.
+    """
+    return max(TIMEOUT_FLOOR_SECONDS, per_repeat_seconds * max(repeats, 1) * TIMEOUT_GRACE)
+
+
+def _timeout_for(bench: Bench, repeats: int) -> float:
+    """This bench's deadline, or the floor if it does not declare one.
+
+    A bench without `timeout_seconds` is a bug rather than a configuration —
+    every shipped one is asserted to have it — but defaulting to the floor is
+    what keeps an out-of-tree bench from hanging the suite forever while the
+    assertion is still being written.
+    """
+    declared = getattr(bench, "timeout_seconds", None)
+    if declared is None:
+        logger.warning("Bench %s declares no deadline; using the floor", bench.key)
+        return TIMEOUT_FLOOR_SECONDS
+    return float(declared(repeats))
+
+
+def run_bench_with_deadline(bench: Bench, repeats: int) -> BenchResult:
+    """Run one bench, and take control back on time whatever it does.
+
+    The bench runs on a daemon thread rather than through a pooled executor for
+    one reason: a thread that misses its deadline is *abandoned*, and a
+    non-daemon one would then hold the interpreter open at shutdown — turning a
+    bench that hangs a run into a bench that hangs the exit. Abandoning it is
+    the honest outcome; the child process it started is what actually holds the
+    resources, and that is killed.
+
+    The `finally` is the half `_stream_suite` never had. A bench that raises was
+    always handled; a bench that never returns left the stream open, and the
+    only symptom was a progress bar that stopped moving.
+    """
+    deadline = _timeout_for(bench, repeats)
+    outcome: list[BenchResult] = []
+    failure: list[BaseException] = []
+    started = time.perf_counter()
+
+    def _work() -> None:
+        try:
+            outcome.append(bench.run(repeats))
+        except BaseException as exc:  # noqa: BLE001 — carried back to the caller
+            failure.append(exc)
+
+    worker = threading.Thread(target=_work, name=f"bench-{bench.key}", daemon=True)
+    worker.start()
+    worker.join(timeout=deadline)
+
+    if worker.is_alive():
+        # Ask the bench to let its child go before giving up on it. Without
+        # this the deadline only frees *us*: the tool keeps running, keeps its
+        # handles, and is still there competing with the next bench.
+        if isinstance(bench, SpawnsProcess):
+            try:
+                bench.terminate_child()
+            except Exception as exc:  # noqa: BLE001 — a failed kill must not mask the timeout
+                logger.warning("Bench %s could not be stopped: %s", bench.key, exc)
+        logger.warning("Bench %s timed out after %.1fs", bench.key, deadline)
+        return BenchResult(
+            bench=bench.key,
+            label=bench.label,
+            ran=False,
+            reason=f"timed out after {deadline:.0f} s",
+            duration_seconds=time.perf_counter() - started,
+        )
+
+    if failure:
+        logger.warning("Bench %s failed: %s", bench.key, failure[0])
+        return BenchResult(
+            bench=bench.key,
+            label=bench.label,
+            ran=False,
+            reason=f"the measurement failed partway through: {failure[0]}",
+            duration_seconds=time.perf_counter() - started,
+        )
+
+    return outcome[0]
+
 
 @dataclass
 class SuiteRun:
@@ -379,20 +517,10 @@ def run_suite(
             )
             continue
 
-        started = time.perf_counter()
-        try:
-            run.results.append(bench.run(repeats))
-        except Exception as exc:  # noqa: BLE001 — one bench must not end the suite
-            logger.warning("Bench %s failed: %s", bench.key, exc)
-            run.results.append(
-                BenchResult(
-                    bench=bench.key,
-                    label=bench.label,
-                    ran=False,
-                    reason=f"the measurement failed partway through: {exc}",
-                    duration_seconds=time.perf_counter() - started,
-                )
-            )
+        # Both endings — a raise and a hang — come back as `ran=False` with a
+        # reason, so a caller that asked for eight benches still gets eight
+        # results however badly one of them behaved.
+        run.results.append(run_bench_with_deadline(bench, repeats))
 
     return run
 

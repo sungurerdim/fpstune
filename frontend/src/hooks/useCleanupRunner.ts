@@ -1,10 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { settingsApi, type BulkApplyResponse } from "../lib/api";
+import { parseActionReading } from "../lib/actionReading";
 import { detectionManager } from "../lib/detection-manager";
 import { createLogger } from "../lib/logger";
 import { useStore, type CleanupResult } from "../store";
-import { parseSizeToMB } from "../lib/cleanupSize";
 import type { Setting, SettingId } from "../types/setting";
 
 const log = createLogger("CleanupRunner");
@@ -13,71 +13,10 @@ const log = createLogger("CleanupRunner");
 const SIZE_MODULES = new Set(["cleanup", "game_cleanup"]);
 
 /**
- * Module-level state so a cleanup started on one tab still resolves its freed
- * space after the user navigates away, and the one-time size detection fires
- * exactly once per session regardless of which tab mounted first.
- *
- * An id is in `pendingFreed` only once the run that armed it has reported
- * success, because that is the moment the backend has invalidated its cached
- * size — see the mutation's onMutate/onSuccess pair.
+ * Module-level state so the one-time size detection fires exactly once per
+ * session regardless of which tab mounted first.
  */
-const pendingFreed: Record<string, { beforeMB: number; armedAt: number }> = {};
 let detectTriggered = false;
-
-type CleanupSizes = Awaited<ReturnType<typeof settingsApi.getCleanupSizes>>;
-
-/**
- * How long a freed-space report may wait for its new size before the row is
- * closed out without one.
- *
- * Longer than any answer the backend can owe: it settles a claimed size within
- * the claiming worker's own deadline (cleanup_cache.mark_calculating), and the
- * longest of those is the batch's timeout — 30 s plus 12 s per cleanup type,
- * about five minutes for the twenty this ships. So this only ever fires when the
- * backend stopped answering at all, which is a restart mid-wait, and the row
- * then reports the cleanup as done rather than spinning on a number that is
- * never coming.
- */
-const PENDING_FREED_TIMEOUT_MS = 7 * 60 * 1000;
-
-/**
- * Report freed space for every pending run whose new size has landed, and give
- * up on any whose size never will.
- *
- * Called from both the poll's change-effect and the run itself, because the two
- * can happen in either order: a small cleanup is often re-measured before the
- * bulk request that ran it has even returned, and a resolution driven only by
- * the poll would then wait for a change that has already happened — leaving the
- * row spinning on a number that was ready all along.
- */
-function resolvePendingFreed(sizes: CleanupSizes): void {
-  const resolved: CleanupResult[] = [];
-  const now = Date.now();
-  for (const [id, pending] of Object.entries(pendingFreed)) {
-    const entry = sizes[id];
-    const waiting = !entry || entry.status === "calculating";
-    if (waiting && now - pending.armedAt < PENDING_FREED_TIMEOUT_MS) continue;
-    delete pendingFreed[id];
-    const setting = useStore.getState().settings.get(id as SettingId);
-    const name = setting?.displayName ?? id;
-    if (!entry || entry.status !== "ready") {
-      // No new size is coming — still measuring past its deadline, the service
-      // is down, or the target is gone. The cleanup itself succeeded, so the row
-      // says that instead of spinning on a figure nothing measured (C11 rule 3).
-      resolved.push({ id, name, success: true, sized: false, freedMB: null });
-      continue;
-    }
-    const mb = Math.round(entry.bytes / (1024 * 1024));
-    resolved.push({
-      id,
-      name,
-      success: true,
-      sized: true,
-      freedMB: Math.max(0, pending.beforeMB - mb),
-    });
-  }
-  if (resolved.length > 0) useStore.getState().recordCleanupResults(resolved);
-}
 
 /** Docker prune actions restart Docker + WSL, so they need a confirm gate. */
 export function isDockerCleanup(s: Setting): boolean {
@@ -150,7 +89,17 @@ function runStreamed(ids: string[]): Promise<BulkApplyResponse> {
             }
             return;
           }
-          case "applied":
+          case "applied": {
+            // Both figures are byte counts the backend measured either side of
+            // the cleanup it just ran. Absent means it could not measure — a
+            // repair, or a size that never came back — and absent is reported
+            // as absent rather than as a zero (C11 rule 3).
+            const freedBytes =
+              typeof event.freed_bytes === "number" ? event.freed_bytes : null;
+            const sizeAfterBytes =
+              typeof event.size_after_bytes === "number"
+                ? event.size_after_bytes
+                : null;
             results[id] = {
               setting_id: id,
               success: true,
@@ -162,6 +111,8 @@ function runStreamed(ids: string[]): Promise<BulkApplyResponse> {
               // the rows read it there; this shape exists for the freed-space
               // bookkeeping, which asks only whether the cleanup ran.
               verified: null,
+              freed_bytes: freedBytes,
+              size_after_bytes: sizeAfterBytes,
             };
             if (event.requires_reboot === true) requiresReboot = true;
             updateRunStep(id, {
@@ -169,7 +120,44 @@ function runStreamed(ids: string[]): Promise<BulkApplyResponse> {
               endedAt: Date.now(),
               percent: 100,
             });
+            // What the row can still reclaim, now, from the same reading — so a
+            // finished cleanup stops advertising the size it had before it ran
+            // without waiting for the next poll to notice.
+            if (sizeAfterBytes !== null) {
+              useStore
+                .getState()
+                .setSettingDetectionResult(
+                  id as SettingId,
+                  `ready|${Math.round(sizeAfterBytes / 1048576)} MB`,
+                  false,
+                  true,
+                );
+            } else {
+              // An action that reports a state rather than a byte count: the
+              // SSD retrim answers `ok|0 days` the moment it finishes. Only
+              // `size_after_bytes` used to reach the store, so a retrim the
+              // user had just watched succeed carried on saying it was overdue
+              // until the next full detection pass.
+              //
+              // It is the backend's own post-run reading, stored verbatim — and
+              // an event that carried none leaves the previous one alone, which
+              // is a stale reading the next pass corrects rather than a state
+              // nobody read (C11 rule 3).
+              const currentValue = asText(event.current_value);
+              const reading = parseActionReading(currentValue);
+              if (reading !== null) {
+                useStore
+                  .getState()
+                  .setSettingDetectionResult(
+                    id as SettingId,
+                    currentValue,
+                    reading.kind === "ok",
+                    true,
+                  );
+              }
+            }
             return;
+          }
           case "skipped":
             results[id] = {
               setting_id: id,
@@ -213,9 +201,15 @@ function runStreamed(ids: string[]): Promise<BulkApplyResponse> {
 
 /**
  * Mounted once via <CleanupRunnerProvider/>: kicks off the one-time size
- * detection for every size-bearing cleanup, polls ["cleanup-sizes"], syncs the
- * results into the store, and resolves freed space (before − after) for any run
- * that snapshotted a pre-size. Runs regardless of the active tab.
+ * detection for every size-bearing cleanup, polls ["cleanup-sizes"] until every
+ * size has settled, and syncs the results into the store. Runs regardless of
+ * the active tab.
+ *
+ * It measures the *opening* state and nothing else. Freed space is no longer
+ * inferred here from a before/after pair the frontend held: the backend takes
+ * both readings around the cleanup it runs and reports the difference on the
+ * `applied` event, which is the only place both sides of it are known to belong
+ * to the same run.
  */
 export function useCleanupSizePolling(): void {
   const settings = useStore((s) => s.settings);
@@ -262,11 +256,6 @@ export function useCleanupSizePolling(): void {
     queryKey: ["cleanup-sizes"],
     queryFn: settingsApi.getCleanupSizes,
     refetchInterval: (query) => {
-      // A run waiting for its freed-space figure keeps the poll alive on its own
-      // account. Reading only the last response would stop it in the gap between
-      // a cleanup being applied and its size being claimed again — and a poll
-      // that stops there never delivers the number the row is spinning for.
-      if (Object.keys(pendingFreed).length > 0) return 3000;
       const data = query.state.data;
       if (data && Object.values(data).some((v) => v.status === "calculating"))
         return 3000;
@@ -275,7 +264,7 @@ export function useCleanupSizePolling(): void {
     },
   });
 
-  // Sync completed sizes into the store + resolve pending freed-space results.
+  // Sync completed sizes into the store.
   useEffect(() => {
     if (!cleanupSizes) return;
     for (const [id, entry] of Object.entries(cleanupSizes)) {
@@ -304,7 +293,6 @@ export function useCleanupSizePolling(): void {
       const mb = Math.round(entry.bytes / (1024 * 1024));
       setSettingDetectionResult(id as SettingId, `ready|${mb} MB`, false, true);
     }
-    resolvePendingFreed(cleanupSizes);
   }, [cleanupSizes, setSettingDetectionResult]);
 }
 
@@ -328,9 +316,10 @@ export interface CleanupRunner {
 
 /**
  * Owns cleanup/maintenance execution for a set of modules. Selection comes from
- * the shared store (maintenanceSelection); freed-space tracking is resolved by
- * <CleanupRunnerProvider/>. Docker prune runs are gated behind a confirm because
- * they restart Docker + WSL.
+ * the shared store (maintenanceSelection); the opening size scan belongs to
+ * <CleanupRunnerProvider/>, and how much each run freed comes back on its own
+ * `applied` event. Docker prune runs are gated behind a confirm because they
+ * restart Docker + WSL.
  */
 export function useCleanupRunner({
   modules,
@@ -390,45 +379,31 @@ export function useCleanupRunner({
         }
       }
     },
-    onMutate: (ids: string[]) => {
+    onMutate: () => {
       // The store's busy flag, so the hardware re-read on window focus stays off
       // the machine while a cleanup holds PowerShell. A DISM run takes minutes.
       useStore.getState().beginOperation();
-      // Snapshot pre-cleanup sizes — but keep the snapshot to this run rather
-      // than arming pendingFreed with it. Until the apply has invalidated a
-      // cleanup's cached size, the only reading the poller can see is the one
-      // this snapshot was taken from, so a poll landing mid-run would resolve
-      // "0 MB freed" for a cleanup that had not run yet and consume the pending
-      // entry, leaving the real figure with nothing to report against.
-      const before: Record<string, number> = {};
-      for (const id of ids) {
-        const setting = settings.get(id as SettingId);
-        if (!setting || !SIZE_MODULES.has(setting.module)) continue;
-        const mb = parseSizeToMB(setting.currentValue);
-        if (mb !== null) before[id] = mb;
-      }
-      return { before };
     },
-    onSuccess: (data, _ids, context) => {
-      const before = context?.before ?? {};
+    onSuccess: (data) => {
       const runResults: CleanupResult[] = [];
       const failedOps: string[] = [];
-      let armed = false;
       for (const [id, result] of Object.entries(data.results)) {
         const setting = settings.get(id as SettingId);
         const name = setting?.displayName ?? id;
-        const sizeBearing = SIZE_MODULES.has(setting?.module ?? "");
         if (result.success) {
-          // The apply invalidated this cleanup's cached size before answering,
-          // so from here every reading is a post-run one and arming is safe.
-          const sized = sizeBearing && before[id] !== undefined;
-          if (sized) {
-            pendingFreed[id] = { beforeMB: before[id], armedAt: Date.now() };
-            armed = true;
-          }
-          runResults.push({ id, name, success: true, sized, freedMB: null });
+          // `freed_bytes` is the backend's own before/after difference around
+          // the run it just did. No figure means nothing measured one — a
+          // repair frees nothing, and a cleanup whose new size never came back
+          // says "done" rather than a number nobody read (C11 rule 3).
+          const freedBytes = result.freed_bytes ?? null;
+          runResults.push({
+            id,
+            name,
+            success: true,
+            sized: freedBytes !== null,
+            freedMB: freedBytes !== null ? freedBytes / 1048576 : null,
+          });
         } else {
-          delete pendingFreed[id];
           failedOps.push(`${id}: ${result.error}`);
           runResults.push({
             id,
@@ -456,24 +431,6 @@ export function useCleanupRunner({
         );
       }
 
-      // Re-read the sizes now rather than waiting for the next poll tick, and
-      // resolve against what comes back: a fast cleanup is often re-measured
-      // before this handler runs, and the poll's effect only fires when the
-      // sizes *change* — which, for a size that has already settled, they never
-      // will again. `staleTime: 0` because the cached copy is the pre-run one
-      // and the whole question is what the machine holds now.
-      void queryClient
-        .query({
-          queryKey: ["cleanup-sizes"],
-          queryFn: settingsApi.getCleanupSizes,
-          staleTime: 0,
-        })
-        .then((sizes) => {
-          if (armed) resolvePendingFreed(sizes);
-        })
-        .catch(() => {
-          /* the poll picks the sizes up on its next tick */
-        });
       queryClient.invalidateQueries({ queryKey: ["activity"] });
     },
     onError: (error) => {

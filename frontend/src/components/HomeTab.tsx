@@ -34,13 +34,14 @@ import {
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { describeFinding } from "../lib/finding";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
+import { parseActionReading } from "../lib/actionReading";
 import { TweakListRow } from "./TweakListRow";
-import { CleanupListRow } from "./CleanupListRow";
+import { ActionRow } from "./ActionRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
-import { RunPanel } from "./RunPanel";
 import { DetectionNotice } from "./DetectionNotice";
 import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
+import { HomeMeasuredCard } from "./MeasuredLedger";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
@@ -95,8 +96,11 @@ export function HomeTab() {
   );
 
   const { apply, isApplying } = useBulkApply();
+  // Maintenance is in scope because Home's to-do card lists upkeep that is
+  // overdue beside the cleanups — a runner that did not name the module would
+  // still run the id it was handed, and would be lying about what it covers.
   const cleanupRunner = useCleanupRunner({
-    modules: ["cleanup", "game_cleanup"],
+    modules: ["cleanup", "game_cleanup", "maintenance"],
   });
 
   const categoryLabel = (id: string) => categories.get(id)?.displayName ?? id;
@@ -160,6 +164,32 @@ export function HomeTab() {
     return rows;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settings, settingsVersion]);
+
+  // Upkeep that is late. `maintenance:ssd_retrim` detects that Windows' own
+  // weekly optimization has not run, and it reclaims nothing — so the size
+  // filter above dropped it and the only place it appeared on Home was the
+  // repair panel at the foot of the page, under a heading about SFC and DISM.
+  // It is something to do, so it belongs with the things to do.
+  //
+  // Only the overdue ones. A retrim that ran last week is a fact about the
+  // machine, not a row on a to-do list, and it stays where facts live.
+  const overdueUpkeep = useMemo(() => {
+    const rows: Setting[] = [];
+    for (const s of settings.values()) {
+      if (!s.isAction || !s.isApplicable) continue;
+      if (s.module !== "maintenance") continue;
+      if (parseActionReading(s.currentValue)?.kind !== "overdue") continue;
+      rows.push(s);
+    }
+    return rows.sort((a, b) => a.categoryOrder - b.categoryOrder);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+  }, [settings, settingsVersion]);
+
+  // Handed to <MaintenancePanel/> below so this page carries each action once.
+  const overdueUpkeepIds = useMemo(
+    () => overdueUpkeep.map((s) => s.id),
+    [overdueUpkeep],
+  );
 
   // Advisory findings: things fpstune can detect but only the user can change
   // (BIOS toggles, physical facts). is_readonly kept them out of every Home
@@ -305,9 +335,24 @@ export function HomeTab() {
     </label>
   );
 
+  // Every row under the button, upkeep included. A to-do row that Run All
+  // skipped would still be overdue after the user had run everything the card
+  // offered — and a retrim is what Windows' own weekly schedule would have done
+  // unattended, so there is nothing here to hold back for a separate decision.
   const runAllCleanups = () => {
-    cleanupRunner.run(cleanups.map((s) => s.id));
+    cleanupRunner.run([
+      ...overdueUpkeep.map((s) => s.id),
+      ...cleanups.map((s) => s.id),
+    ]);
   };
+
+  const todoCount = cleanups.length + overdueUpkeep.length;
+
+  // Whether the tweak groups and the cleanup card share the row. When they do,
+  // the cleanup card is the narrow third of it and its rows stay in one column;
+  // when it is alone it has the whole page, and a single column there is thirty
+  // rows down a screen that is mostly empty either side of them.
+  const splitInTwo = suboptimal.length > 0 && todoCount > 0;
 
   return (
     <div className="space-y-4 pb-8">
@@ -522,7 +567,10 @@ export function HomeTab() {
               {t("home.advisoriesHint")}
             </span>
           </div>
-          <div className="p-3 space-y-2">
+          <div
+            data-testid="home-advisory-grid"
+            className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3"
+          >
             {actionableAdvisories.map((s) => (
               <div
                 key={s.id}
@@ -561,15 +609,22 @@ export function HomeTab() {
         </Card>
       )}
 
+      {/* What the claims above are worth, on this machine, measured.
+          The block above counts what fpstune *claims*; this one is the only
+          thing on the page an instrument produced. It sits next to the claims
+          rather than at the foot of the page because the answer to "did any of
+          that help" is the one a user comes back for — and it never adds two
+          areas together, which is how the three headlines this product got
+          wrong were built (C11 rule 1). */}
+      <HomeMeasuredCard />
+
       {/* Two columns only when both halves have something in them. A fixed split
           gave an empty card with a disabled button half of a 1600px screen while
           the other half scrolled eighteen rows. */}
       <div
         className={cn(
           "grid gap-4 items-start",
-          suboptimal.length > 0 &&
-            cleanups.length > 0 &&
-            "lg:grid-cols-2 2xl:grid-cols-[2fr_1fr]",
+          splitInTwo && "lg:grid-cols-2 2xl:grid-cols-[2fr_1fr]",
         )}
       >
         {/* LEFT: what still needs applying, split by where it lives.
@@ -633,10 +688,17 @@ export function HomeTab() {
             <div className="flex items-center gap-2">
               <HardDrive className="w-4 h-4 text-primary" />
               <h2 className="font-semibold text-sm">
-                {t("home.cleanupTitle")}
+                {/* A TRIM run reclaims nothing, so the cleanup-only heading
+                    would misname its own rows the moment one is in the card. */}
+                {overdueUpkeep.length > 0
+                  ? t("home.cleanupUpkeepTitle")
+                  : t("home.cleanupTitle")}
               </h2>
-              <span className="text-xs text-muted-foreground">
-                {cleanups.length}
+              <span
+                data-testid="home-cleanup-count"
+                className="text-xs text-muted-foreground"
+              >
+                {todoCount}
               </span>
               {sizesCalculating && (
                 <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
@@ -644,23 +706,26 @@ export function HomeTab() {
             </div>
             <Button
               onClick={runAllCleanups}
-              disabled={cleanups.length === 0}
+              disabled={todoCount === 0}
               busy={cleanupRunner.isRunning}
               icon={<Trash2 className="w-3.5 h-3.5" />}
             >
-              Run All
+              {t("action.runAll")}
             </Button>
-          </div>
-          {/* A cleanup started from here reports here too. The panel renders
-              nothing until something has been run, so it costs no space on a
-              page whose whole job is the summary. */}
-          <div className="px-3 pt-3">
-            <RunPanel />
           </div>
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}
-          <div className="p-3 space-y-2">
-            {cleanups.length === 0 && measuringCleanups.length === 0 ? (
+          <div
+            data-testid="home-cleanup-rows"
+            className={cn(
+              "p-3 grid grid-cols-1 gap-2 items-start",
+              // Only when this card has the page to itself. Sharing the row it
+              // is already the narrow third, and a second column inside a third
+              // of the width is narrower than the row needs.
+              !splitInTwo && "lg:grid-cols-2 2xl:grid-cols-3",
+            )}
+          >
+            {todoCount === 0 && measuringCleanups.length === 0 ? (
               // The old copy said "Calculating… or nothing to reclaim", admitting in
               // one sentence that it did not know which state it was in — while
               // `sizesCalculating` knew all along.
@@ -671,12 +736,21 @@ export function HomeTab() {
               </p>
             ) : (
               <>
-                {cleanups.map((s) => (
-                  <CleanupListRow
+                {/* Overdue first: it is late, and it does not compete with the
+                    cleanups on size because it reclaims nothing. */}
+                {overdueUpkeep.map((s) => (
+                  <ActionRow
                     key={s.id}
                     setting={s}
                     runner={cleanupRunner}
+                    accent="warning"
                   />
+                ))}
+                {/* A cleanup started from here reports here too: the row is
+                    the one place it exists, so its progress and its outcome
+                    land in it rather than in a second list of copies. */}
+                {cleanups.map((s) => (
+                  <ActionRow key={s.id} setting={s} runner={cleanupRunner} />
                 ))}
                 {/* Named while still measuring: a scan in progress is a
                     different fact from nothing to reclaim. */}
@@ -719,7 +793,7 @@ export function HomeTab() {
               {t("home.advisoriesUnreadHint")}
             </span>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
             {unreadAdvisories.map((s) => (
               <div
                 key={s.id}
@@ -760,7 +834,7 @@ export function HomeTab() {
               {t("home.advisoriesClearHint")}
             </span>
           </div>
-          <div className="p-3 space-y-2">
+          <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
             {clearAdvisories.map((s) => (
               <div
                 key={s.id}
@@ -804,7 +878,7 @@ export function HomeTab() {
             </span>
           </button>
           {showOptimized && (
-            <div className="p-3 pt-0 space-y-2">
+            <div className="p-3 pt-0 grid grid-cols-1 gap-2 items-start xl:grid-cols-2 3xl:grid-cols-3">
               {optimized.map((s) => (
                 <TweakListRow
                   key={s.id}
@@ -818,8 +892,9 @@ export function HomeTab() {
       )}
 
       {/* Repair actions (SFC, DISM) — the panel renders nothing when the
-          registry holds no maintenance action. */}
-      <MaintenancePanel />
+          registry holds no maintenance action. What the to-do card above has
+          already listed is left out, so no action is on this page twice. */}
+      <MaintenancePanel excludeIds={overdueUpkeepIds} />
 
       {/* The device inventory and its eleven mutations. The Hardware tab
           remains the focused view; Home is the door that always opens. */}
@@ -983,7 +1058,10 @@ function TweakGroup({
           {detecting ? t("home.readingSettings") : t("home.allOptimized")}
         </p>
       ) : (
-        <div className="p-3 space-y-2">
+        <div
+          data-testid="tweak-group-rows"
+          className="p-3 grid grid-cols-1 gap-2 items-start 2xl:grid-cols-2"
+        >
           {settings.map((s) => (
             <TweakListRow
               key={s.id}

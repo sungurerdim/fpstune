@@ -161,6 +161,20 @@ describe("VerifyPanel before anything is measured", () => {
     expect(screen.getByText(/2 cannot/i)).toBeInTheDocument();
   });
 
+  it("sets the two things you read first beside each other, not above", async () => {
+    // "What a round could show" and "what the suite has recorded" are both a few
+    // lines long. Stacked, they put the button that does the judging below the
+    // fold on a wide window — the width was there and the layout spent it going
+    // downwards. The narrow half of the contract is asserted too: this must stay
+    // a single column on a phone.
+    render(<VerifyPanel />);
+
+    const columns = await screen.findByTestId("verify-context-columns");
+    expect(columns).toHaveClass("grid");
+    expect(columns).toHaveClass("grid-cols-1");
+    expect(columns).toHaveClass("lg:grid-cols-2");
+  });
+
   it("names what the user would have to arrange", async () => {
     render(<VerifyPanel />);
 

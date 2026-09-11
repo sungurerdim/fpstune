@@ -1,13 +1,11 @@
 import { useT } from "../i18n";
-import { localizedDescription, localizedName } from "../i18n/settings";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { useMemo } from "react";
-import { Wrench, AlertTriangle } from "lucide-react";
+import { Wrench } from "lucide-react";
 import { useStore } from "../store";
-import { cn } from "../lib/utils";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
-import { CleanupResults } from "./CleanupResults";
+import { ActionRow } from "./ActionRow";
 import type { Setting } from "../types/setting";
 
 /**
@@ -21,15 +19,33 @@ import type { Setting } from "../types/setting";
  * twice — "Scan and repair Windows system files." and then, with an info icon,
  * "Scans and repairs corrupted Windows system files" — because `effect` restates
  * `description` for an action, where "what it does" and "what running it does" are
- * the same sentence.
+ * the same sentence. <ActionRow/> keeps that third one fixed: it suppresses the
+ * effect line under the `warning` accent, which is what marks a repair.
+ *
+ * The results readout is gone from the header too, and not because it was
+ * unwanted: each repair now reports its own outcome in its own row, so a second
+ * list of copies beside them said the same thing twice. Repairs free nothing,
+ * so there is no total to keep.
+ *
+ * `excludeIds` is the other half of that rule, across panels rather than within
+ * one. Home lists maintenance that is *overdue* in its own to-do card — an SSD
+ * retrim that has not run is something to do, not something to look up — and a
+ * page holding both surfaces would otherwise carry that action twice, with two
+ * Run buttons and two checkboxes under one name. The page that already listed
+ * it says so; the Cleanup & Repair tab passes nothing and lists everything.
  */
-export function MaintenancePanel() {
+export function MaintenancePanel({
+  excludeIds = [],
+}: {
+  /** Action ids this page has already listed elsewhere. */
+  excludeIds?: readonly string[];
+} = {}) {
   const { t } = useT();
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
-  const selection = useStore((state) => state.maintenanceSelection);
-  const toggleSelection = useStore((state) => state.toggleMaintenanceSelection);
   const runner = useCleanupRunner({ modules: ["maintenance"] });
+
+  const excluded = useMemo(() => new Set(excludeIds), [excludeIds]);
 
   const maintenanceSettings = useMemo(() => {
     const result: Setting[] = [];
@@ -37,14 +53,15 @@ export function MaintenancePanel() {
       if (
         setting.module === "maintenance" &&
         setting.isAction &&
-        setting.isApplicable
+        setting.isApplicable &&
+        !excluded.has(setting.id)
       ) {
         result.push(setting);
       }
     }
     return result.sort((a, b) => a.categoryOrder - b.categoryOrder);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [settings, settingsVersion]);
+  }, [settings, settingsVersion, excluded]);
 
   if (maintenanceSettings.length === 0) {
     return null;
@@ -61,9 +78,6 @@ export function MaintenancePanel() {
           </p>
         </div>
         <div className="ml-auto flex items-center gap-3 min-w-0">
-          <div className="w-48 max-w-full min-w-0">
-            <CleanupResults compact />
-          </div>
           <Button
             size="md"
             className="shrink-0"
@@ -81,46 +95,20 @@ export function MaintenancePanel() {
         </div>
       </div>
 
-      <div className="p-4 space-y-3">
+      {/* SFC and DISM are two self-contained cards; on a wide window they sat one
+          under the other with the whole right half empty. */}
+      <div
+        data-testid="maintenance-rows"
+        className="p-4 grid grid-cols-1 gap-3 items-start lg:grid-cols-2"
+      >
         {maintenanceSettings.map((setting) => (
-          <label
+          <ActionRow
             key={setting.id}
-            className={cn(
-              "flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors",
-              selection[setting.id]
-                ? "border-warning bg-warning/5"
-                : "border-border hover:border-muted-foreground/50",
-            )}
-          >
-            <input
-              type="checkbox"
-              checked={selection[setting.id] ?? false}
-              onChange={() => toggleSelection(setting.id)}
-              className="mt-1 h-4 w-4 rounded border-border text-warning"
-            />
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">
-                  {localizedName(setting)}
-                </span>
-                {setting.durationEstimate && (
-                  <span className="text-xs text-muted-foreground">
-                    ({setting.durationEstimate})
-                  </span>
-                )}
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {localizedDescription(setting)}
-              </p>
-              {/* Kept: this one is a precondition, not a restatement. */}
-              {setting.name === "dism_health" && (
-                <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                  <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                  <span>{t("maintenance.dismHealthWarning")}</span>
-                </div>
-              )}
-            </div>
-          </label>
+            setting={setting}
+            runner={runner}
+            selectable
+            accent="warning"
+          />
         ))}
       </div>
     </Card>

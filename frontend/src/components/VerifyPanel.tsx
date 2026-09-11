@@ -191,6 +191,15 @@ export function VerifyPanel() {
         </p>
       </div>
 
+      {/* The two things you read before judging anything — what a round could
+          show, and what the suite has actually recorded — are both short, and
+          stacked they pushed the button that does the judging below the fold.
+          Side by side on a wide window; the stack is unchanged when narrow, and
+          so is the order they are read in. */}
+      <div
+        data-testid="verify-context-columns"
+        className="grid grid-cols-1 gap-6 items-start lg:grid-cols-2"
+      >
       {/* 1 — what a round could show at all, answered before anything runs */}
       <section className="space-y-2" aria-labelledby="verify-coverage-heading">
         <h4 id="verify-coverage-heading" className="font-medium">
@@ -256,6 +265,7 @@ export function VerifyPanel() {
           </>
         )}
       </section>
+      </div>
 
       {/* 3 — the verdict, which is the backend's to give */}
       <section className="space-y-2" aria-labelledby="verify-round-heading">

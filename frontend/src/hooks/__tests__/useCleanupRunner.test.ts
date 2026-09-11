@@ -88,12 +88,31 @@ function streamHandler(events: Array<Record<string, unknown>>) {
   );
 }
 
-/** One cleanup that ran, reported its command, and verified. */
-const successEvents = (id = "cleanup:temp_files") => [
+/**
+ * One cleanup that ran, reported its command, and verified.
+ *
+ * `applied` carries the backend's own readings either side of the run:
+ * `freed_bytes` is the difference it measured, `size_after_bytes` what is still
+ * reclaimable. Both default to absent — the shape of an action that reclaims
+ * nothing, or one whose size could not be re-read.
+ */
+const successEvents = (
+  id = "cleanup:temp_files",
+  applied: Record<string, unknown> = {},
+) => [
   { event: "started", id, name: "Temp Files", duration_estimate: "", reports_progress: false },
   { event: "output", id, text: "Remove-Item -Recurse -Force $env:TEMP\\*", replaces: false },
   { event: "output", id, text: "Cleaned 400 MB", replaces: false },
-  { event: "applied", id, success: true, current_value: null, requires_reboot: false },
+  {
+    event: "applied",
+    id,
+    success: true,
+    current_value: null,
+    requires_reboot: false,
+    freed_bytes: null,
+    size_after_bytes: null,
+    ...applied,
+  },
   { event: "verified", id, matches: true, current_value: null },
   { event: "done", total: 1, succeeded: 1, failed: 0 },
 ];
@@ -306,22 +325,21 @@ describe("useCleanupRunner", () => {
     });
   });
 
-  // The freed-space figure is the product this feature exists to show, and it
-  // used to be delivered only by the size poll noticing a *change*. Everything
-  // below is a way for that change to be missed.
-  describe("freed space always arrives", () => {
-    const sizes = (bytes: number) =>
-      http.get("/api/settings/cleanup-sizes", () =>
-        HttpResponse.json({
-          "cleanup:temp_files": { bytes, status: "ready" },
-        }),
-      );
+  // The freed-space figure is the product this feature exists to show, and the
+  // frontend no longer computes it. It used to snapshot the size before a run,
+  // wait for the size poll to notice a change, and subtract — which missed the
+  // change whenever the re-measure landed first, leaving the row spinning on a
+  // number that had already settled. Only the backend knows both readings
+  // belong to the same run, so it takes them and reports the difference.
+  describe("the freed figure is the backend's measurement", () => {
+    const MB = 1024 * 1024;
 
-    it("reports the difference when the new size is ready before the run returns", async () => {
-      // A small cleanup is re-measured in the time the bulk request takes, so by
-      // the time the run reports there is no change left for the poll to notice.
-      // The row spun on a spinner forever waiting for one.
-      server.use(sizes(100 * 1024 * 1024));
+    it("records what the run itself reported freeing", async () => {
+      server.use(
+        streamHandler(
+          successEvents("cleanup:temp_files", { freed_bytes: 400 * MB }),
+        ),
+      );
 
       const { Wrapper } = makeWrapper();
       const { result } = renderHook(
@@ -336,19 +354,44 @@ describe("useCleanupRunner", () => {
       await waitFor(() => {
         const recorded =
           useStore.getState().cleanupResults["cleanup:temp_files"];
-        // The fixture's pre-run size is 500 MB.
+        expect(recorded?.sized).toBe(true);
         expect(recorded?.freedMB).toBe(400);
       });
     });
 
-    it("closes the row out when the new size cannot be measured", async () => {
-      // Docker down, target gone, scan abandoned: the cleanup still ran, so the
-      // row reports that rather than spinning on a number nobody can produce.
+    it("keeps a fractional figure rather than rounding it away", async () => {
+      // Half a megabyte freed is still a measurement; the row's formatter is
+      // what rounds it for display, so the store keeps what was measured.
       server.use(
-        http.get("/api/settings/cleanup-sizes", () =>
-          HttpResponse.json({
-            "cleanup:temp_files": { bytes: 0, status: "unavailable" },
-          }),
+        streamHandler(
+          successEvents("cleanup:temp_files", { freed_bytes: 1536 * 1024 }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["cleanup"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["cleanup:temp_files"]);
+      });
+
+      await waitFor(() => {
+        expect(
+          useStore.getState().cleanupResults["cleanup:temp_files"]?.freedMB,
+        ).toBe(1.5);
+      });
+    });
+
+    it("closes the row out when the run measured no difference", async () => {
+      // Docker down, target gone, scan abandoned — or an action that reclaims
+      // nothing at all. The cleanup still ran, so the row reports that rather
+      // than a zero nobody measured (C11 rule 3).
+      server.use(
+        streamHandler(
+          successEvents("cleanup:temp_files", { freed_bytes: null }),
         ),
       );
 
@@ -369,6 +412,148 @@ describe("useCleanupRunner", () => {
         expect(recorded?.sized).toBe(false);
         expect(recorded?.freedMB).toBeNull();
       });
+    });
+
+    it("re-sizes the row from the reading taken after the run", async () => {
+      // Otherwise a finished cleanup keeps advertising the size it had before
+      // it ran until the next poll happens to notice.
+      server.use(
+        streamHandler(
+          successEvents("cleanup:temp_files", {
+            freed_bytes: 400 * MB,
+            size_after_bytes: 100 * MB,
+          }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["cleanup"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["cleanup:temp_files"]);
+      });
+
+      await waitFor(() => {
+        expect(
+          useStore.getState().settings.get("cleanup:temp_files")?.currentValue,
+        ).toBe("ready|100 MB");
+      });
+    });
+
+    it("leaves the row's size alone when nothing re-read it", async () => {
+      server.use(
+        streamHandler(
+          successEvents("cleanup:temp_files", { size_after_bytes: null }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["cleanup"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["cleanup:temp_files"]);
+      });
+
+      await waitFor(() => {
+        expect(result.current.isRunning).toBe(false);
+      });
+      // The fixture's pre-run size, untouched: a stale reading the poll will
+      // correct beats a fabricated one it cannot.
+      expect(
+        useStore.getState().settings.get("cleanup:temp_files")?.currentValue,
+      ).toBe("ready|500 MB");
+    });
+  });
+
+  /**
+   * A maintenance action reports a state, not a byte count.
+   *
+   * `maintenance:ssd_retrim` answers `overdue|23 days` before it runs and
+   * `ok|0 days` after — and until this existed the runner stored neither, so a
+   * retrim the user had just watched succeed carried on saying it was overdue
+   * until the next full detection pass. Only `size_after_bytes` reached the
+   * store, which no maintenance action ever sends.
+   */
+  describe("the reading a maintenance action reports when it finishes", () => {
+    beforeEach(() => {
+      const settings = useStore.getState().settings;
+      settings.set(
+        "maintenance:ssd_retrim",
+        makeActionSetting(
+          "maintenance:ssd_retrim",
+          "maintenance",
+          "ssd_retrim",
+          { category: "maintenance", currentValue: "overdue|23 days" },
+        ),
+      );
+      useStore.setState({ settings: new Map(settings), _settingsVersion: 1 });
+    });
+
+    it("stores the state the run reported, so the row stops saying overdue", async () => {
+      server.use(
+        streamHandler(
+          successEvents("maintenance:ssd_retrim", {
+            current_value: "ok|0 days",
+            freed_bytes: null,
+            size_after_bytes: null,
+          }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["maintenance"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["maintenance:ssd_retrim"]);
+      });
+
+      await waitFor(() => {
+        expect(
+          useStore.getState().settings.get("maintenance:ssd_retrim")
+            ?.currentValue,
+        ).toBe("ok|0 days");
+      });
+    });
+
+    it("says nothing about a state the run did not report", async () => {
+      // C11 rule 3: an action that came back without a reading leaves the last
+      // one it had, rather than being credited with a state nobody read.
+      server.use(
+        streamHandler(
+          successEvents("maintenance:ssd_retrim", {
+            current_value: null,
+            freed_bytes: null,
+            size_after_bytes: null,
+          }),
+        ),
+      );
+
+      const { Wrapper } = makeWrapper();
+      const { result } = renderHook(
+        () => useCleanupRunner({ modules: ["maintenance"] }),
+        { wrapper: Wrapper },
+      );
+
+      await act(async () => {
+        result.current.run(["maintenance:ssd_retrim"]);
+      });
+
+      await waitFor(() => {
+        expect(result.current.isRunning).toBe(false);
+      });
+      expect(
+        useStore.getState().settings.get("maintenance:ssd_retrim")
+          ?.currentValue,
+      ).toBe("overdue|23 days");
     });
   });
 });

@@ -108,6 +108,21 @@ describe("SuitePanel", () => {
     expect(screen.getByText("downloads about 25 MB")).toBeInTheDocument();
   });
 
+  it("tiles the instruments once the window is wide enough for two", async () => {
+    render(<SuitePanel />);
+    await userEvent.click(
+      await screen.findByRole("button", { name: /which instruments/i }),
+    );
+
+    // Each instrument is a checkbox with a label and two short lines about what
+    // it needs — self-contained, so on a wide window they belong side by side
+    // rather than running the fold down past the button that starts them.
+    const list = screen.getByTestId("suite-bench-list");
+    expect(list).toHaveClass("grid");
+    expect(list).toHaveClass("grid-cols-1");
+    expect(list).toHaveClass("xl:grid-cols-2");
+  });
+
   it("takes the baseline on the first press", async () => {
     run.mockImplementation(completeRun("before"));
     render(<SuitePanel />);

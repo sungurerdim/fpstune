@@ -32,7 +32,10 @@ vi.mock("../../hooks/useBulkApply", () => ({
   useBulkApply: () => ({ apply: applySpy, isApplying: false }),
 }));
 
-vi.mock("../../hooks/useCleanupRunner", () => ({
+// Only the runner: `isDockerCleanup` is a pure predicate the rows call, and a
+// mock that dropped it would fail on the export rather than on the behaviour.
+vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
   useCleanupRunner: () => ({
     selectedIds: [],
     selectedCount: 0,

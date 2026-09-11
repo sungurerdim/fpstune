@@ -18,6 +18,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { render, screen } from "../../test/utils";
 import userEvent from "@testing-library/user-event";
 import { CleanupPanel } from "../CleanupPanel";
+import { makeRunner } from "../../test/runner";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
@@ -91,7 +92,7 @@ describe("CleanupPanel measuring state", () => {
       cleanup("temp_files", "ready|1.2 GB", "Temp Files"),
       cleanup("yarn_cache", "ready|calculating", "Yarn Cache"),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     // The measured one is a real row with a checkbox; the pending one is named in
     // the measuring group and has none, so it cannot be selected on a size nobody
@@ -110,7 +111,7 @@ describe("CleanupPanel measuring state", () => {
       cleanup("pnpm_cache", "ready|calculating", "pnpm Cache"),
       cleanup("nuget_cache", "ready|calculating", "NuGet Cache"),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     expect(screen.getByText(/Measuring 3 more/i)).toBeInTheDocument();
   });
@@ -121,14 +122,14 @@ describe("CleanupPanel measuring state", () => {
       cleanup("temp_files", "ready|1.2 GB", "Temp Files"),
       cleanup("yarn_cache", "ready|calculating", "Yarn Cache"),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     expect(screen.getByText(/nothing to reclaim, or its software is not installed/i)).toBeInTheDocument();
   });
 
   it("drops the measuring group once every size is known", () => {
     setSettings([cleanup("temp_files", "ready|1.2 GB", "Temp Files")]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     expect(screen.queryByText(/Measuring/i)).not.toBeInTheDocument();
   });
@@ -140,7 +141,7 @@ describe("CleanupPanel measuring state", () => {
       cleanup("cargo_cache", "ready|900 MB", "Cargo Registry", DEVELOPER),
       cleanup("temp_files", "ready|1.2 GB", "Temp Files"),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     const headings = screen
       .getAllByRole("heading", { level: 4 })
@@ -154,7 +155,7 @@ describe("CleanupPanel measuring state", () => {
       cleanup("event_logs", "ready|40 MB", "Event Logs"),
       cleanup("cargo_cache", "ready|900 MB", "Cargo Registry", DEVELOPER),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     const selectWindows = screen.getByLabelText("Select all in Windows");
     await userEvent.click(selectWindows);
@@ -181,7 +182,7 @@ describe("CleanupPanel measuring state", () => {
       cleanup("event_logs", "ready|500 MB", "Event Logs"),
       cleanup("prefetch", "ready|unavailable", "Prefetch Files"),
     ]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     expect(screen.getByText("1.5 GB")).toBeInTheDocument();
   });
@@ -190,7 +191,7 @@ describe("CleanupPanel measuring state", () => {
     // Returning null here would make the whole panel pop in, which is the same
     // defect one level up.
     setSettings([cleanup("yarn_cache", "ready|calculating", "Yarn Cache")]);
-    render(<CleanupPanel initialCollapsed={false} />);
+    render(<CleanupPanel runner={makeRunner()} initialCollapsed={false} />);
 
     expect(screen.getByText(/Measuring 1 more/i)).toBeInTheDocument();
   });

@@ -134,7 +134,16 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
   }, []);
 
   return (
-    <div className="space-y-0.5">
+    // One column while a row still needs the whole line, then as many columns as
+    // the window can give a row its full width in. A row is self-contained —
+    // name, badges, state and its own controls — so nothing is read across the
+    // gap, and grid fills left-to-right in DOM order, which keeps reading order
+    // and tab order the same as the single column they came from. `items-start`
+    // so a row with an error banner does not stretch its neighbour to match.
+    <div
+      data-testid="tweak-rows"
+      className="grid grid-cols-1 gap-0.5 items-start 2xl:grid-cols-2 3xl:grid-cols-3"
+    >
       {rows.map(({ setting, contextLabel, contextIcon }) => (
         <TweakRowItem
           key={setting.id}

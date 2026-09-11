@@ -9,8 +9,8 @@
  * be got rid of without a mouse.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
-import { render, screen, act, within } from "@testing-library/react";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { render, screen, act, within, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NotificationToasts } from "../ui/NotificationToasts";
 import { useStore } from "../../store";
@@ -154,5 +154,89 @@ describe("the user stays in control of the keyboard", () => {
     expect(useStore.getState().notifications.map((n) => n.message)).toEqual([
       "1 cleanup operation failed",
     ]);
+  });
+});
+
+describe("a toast clears itself once it has had time to be read", () => {
+  beforeEach(() => {
+    useStore.setState({ notifications: [] });
+    vi.useFakeTimers();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("dismisses a success toast after 5 seconds", () => {
+    render(<NotificationToasts />);
+
+    raise("Cleanup complete: 3 operations succeeded", "success");
+    expect(screen.getByText(/Cleanup complete/)).toBeInTheDocument();
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(screen.queryByText(/Cleanup complete/)).toBeNull();
+    expect(useStore.getState().notifications).toHaveLength(0);
+  });
+
+  it("never auto-dismisses an error, however long it has been on screen", () => {
+    render(<NotificationToasts />);
+
+    raise("Cannot reach the backend — retrying in the background.", "error");
+
+    act(() => {
+      // Comfortably past every other type's delay (8s warning, 5s success/info).
+      vi.advanceTimersByTime(60_000);
+    });
+
+    expect(
+      screen.getByText("Cannot reach the backend — retrying in the background."),
+    ).toBeInTheDocument();
+    expect(useStore.getState().notifications).toHaveLength(1);
+  });
+
+  it("pauses the countdown while hovered and resumes once the pointer leaves", () => {
+    render(<NotificationToasts />);
+
+    raise("Cleanup complete: 3 operations succeeded", "success");
+    const toast = screen.getByText(/Cleanup complete/).closest("div")!;
+
+    fireEvent.mouseEnter(toast);
+
+    act(() => {
+      // The full delay elapses while hovered; a paused toast must survive it.
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByText(/Cleanup complete/)).toBeInTheDocument();
+
+    fireEvent.mouseLeave(toast);
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByText(/Cleanup complete/)).toBeNull();
+  });
+
+  it("pauses the countdown while a toast holds keyboard focus", () => {
+    render(<NotificationToasts />);
+
+    raise("Cleanup complete: 3 operations succeeded", "success");
+    const toast = screen.getByText(/Cleanup complete/).closest("div")!;
+
+    fireEvent.focus(toast);
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.getByText(/Cleanup complete/)).toBeInTheDocument();
+
+    fireEvent.blur(toast);
+
+    act(() => {
+      vi.advanceTimersByTime(5000);
+    });
+    expect(screen.queryByText(/Cleanup complete/)).toBeNull();
   });
 });

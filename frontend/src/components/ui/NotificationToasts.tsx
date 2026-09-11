@@ -2,6 +2,7 @@ import { useT } from "../../i18n";
 import type { MessageKey } from "../../i18n/en";
 import { AlertTriangle, CheckCircle2, Info, X, XCircle } from "lucide-react";
 import type { KeyboardEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore, type Notification } from "../../store";
 import { cn } from "../../lib/utils";
 
@@ -14,10 +15,23 @@ import { cn } from "../../lib/utils";
  * nobody. Both are actionable — start the backend, retry the prune — which is
  * why they are notifications rather than log lines.
  *
- * Nothing here auto-dismisses. A message that names a failure the user has to
- * act on must not expire while they are reading it, and there is no timing
- * fallback that makes a vanished error recoverable.
+ * A success or info toast clears itself once it has had time to be read; a
+ * warning gets longer because it usually names something to go verify. An
+ * error never expires on its own — a message that names a failure the user
+ * has to act on must not vanish while they are reading it, and there is no
+ * timing fallback that makes a vanished error recoverable. Hovering or
+ * focusing any toast pauses its own clock so a slow reader is never raced.
  */
+
+/**
+ * Milliseconds before a toast dismisses itself. A type with no entry here
+ * (error) never auto-dismisses.
+ */
+const AUTO_DISMISS_MS: Partial<Record<Notification["type"], number>> = {
+  success: 5000,
+  info: 5000,
+  warning: 8000,
+};
 
 /** Which live region a message belongs in, and how it is drawn. */
 const TYPE_CONFIG: Record<
@@ -66,6 +80,7 @@ function Toast({
   const { t } = useT();
   const config = TYPE_CONFIG[notification.type];
   const Icon = config.icon;
+  const delay = AUTO_DISMISS_MS[notification.type];
 
   // Escape dismisses whichever toast the keyboard is currently inside. Reaching
   // the button and pressing it works too; this is the shortcut for a user who
@@ -76,9 +91,33 @@ function Toast({
     onDismiss(notification.id);
   };
 
+  // Hovering or focusing pauses the clock: a `paused` toggle re-runs the effect
+  // below, whose cleanup banks whatever time was left in `remainingRef` so the
+  // next run picks up where this one stopped rather than restarting the delay.
+  const [paused, setPaused] = useState(false);
+  const remainingRef = useRef(delay ?? 0);
+  const startedAtRef = useRef(0);
+
+  useEffect(() => {
+    if (delay === undefined || paused) return;
+    startedAtRef.current = Date.now();
+    const timer = setTimeout(() => onDismiss(notification.id), remainingRef.current);
+    return () => {
+      clearTimeout(timer);
+      remainingRef.current -= Date.now() - startedAtRef.current;
+    };
+  }, [delay, paused, notification.id, onDismiss]);
+
+  const pause = () => setPaused(true);
+  const resume = () => setPaused(false);
+
   return (
     <div
       onKeyDown={handleKeyDown}
+      onMouseEnter={pause}
+      onMouseLeave={resume}
+      onFocus={pause}
+      onBlur={resume}
       className={cn(
         "pointer-events-auto flex items-start gap-2 rounded-lg border border-border border-l-4 bg-card px-3 py-2 shadow-lg",
         config.accent,

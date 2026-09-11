@@ -132,9 +132,17 @@ export function HardwarePanel() {
         )}
       </h3>
 
-      {/* Two-column layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 text-sm">
-        {/* Column 1: System Hardware */}
+      {/* Three columns of sections, not two, once the window can hold them.
+          The old split was System (six sections) beside Connectivity (two), so
+          the right half ran out two thirds of the way down and the left half
+          carried the rest alone. Connectivity spans the full row at `lg` and
+          becomes the third column at `2xl`, so no width is left empty at either
+          size. Column order is the reading order the single column had. */}
+      <div
+        data-testid="hardware-columns"
+        className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-3 gap-6 text-sm items-start"
+      >
+        {/* Column 1: the chip and what feeds it */}
         <div className="space-y-1">
           {/* CPU */}
           <HardwareSection
@@ -232,9 +240,10 @@ export function HardwarePanel() {
               <NotDetected />
             ) : null}
           </HardwareSection>
+        </div>
 
-          <div className="border-t border-border/50 my-2" />
-
+        {/* Column 2: what the frames come out on, and where they are stored */}
+        <div className="space-y-1">
           {/* Displays */}
           <HardwareSection
             icon={<ScreenShare className="w-4 h-4" />}
@@ -287,8 +296,9 @@ export function HardwarePanel() {
           </HardwareSection>
         </div>
 
-        {/* Column 2: Connectivity */}
-        <div className="space-y-1">
+        {/* Column 3: Connectivity. Full width at `lg`, where there is no third
+            column for it to be; its own two sections split that width. */}
+        <div className="space-y-1 lg:col-span-2 lg:grid lg:grid-cols-2 lg:gap-6 lg:space-y-0 2xl:col-span-1 2xl:block 2xl:space-y-1">
           {/* Network */}
           <HardwareSection
             icon={<Network className="w-4 h-4" />}
@@ -308,7 +318,10 @@ export function HardwarePanel() {
             ) : null}
           </HardwareSection>
 
-          <div className="border-t border-border/50 my-2" />
+          {/* The rule that separates two stacked sections. Where they are side
+              by side (`lg`) the gap already separates them, and a third grid
+              item would take one of the two cells. */}
+          <div className="border-t border-border/50 my-2 lg:hidden 2xl:block" />
 
           {/* Audio - Split by Output/Input */}
           <AudioSection

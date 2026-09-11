@@ -33,7 +33,10 @@ vi.mock("../../hooks/useApplySingle", () => ({
   }),
 }));
 
-vi.mock("../../hooks/useCleanupRunner", () => ({
+// Only the runner: `isDockerCleanup` is a pure predicate the rows call, and a
+// mock that dropped it would fail on the export rather than on the behaviour.
+vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
   useCleanupRunner: () => ({
     selectedIds: [],
     selectedCount: 0,
@@ -141,6 +144,15 @@ const REPRESENTATIVES: Setting[] = [
     displayName: "Maintenance action representative",
     isAction: true,
   }),
+  // Upkeep that is late — the SSD retrim's `overdue|<n> days` reading. It has
+  // no size, so the cleanup card's size filter dropped it, and its own module
+  // put it under the repair heading at the foot of the page.
+  makeSetting({
+    id: "maintenance:ssd_retrim" as `${string}:${string}`,
+    displayName: "Overdue upkeep representative",
+    isAction: true,
+    currentValue: "overdue|23 days",
+  }),
 ];
 
 describe("D6: Home completeness", () => {
@@ -168,6 +180,19 @@ describe("D6: Home completeness", () => {
         `unreachable from Home: ${setting.id} (${setting.displayName})`,
       ).toBeInTheDocument();
     }
+  });
+
+  it("an action Home has already listed is not listed a second time", () => {
+    // getByText above would throw on a duplicate; this states the rule the
+    // whole <ActionRow/> card exists for, so it cannot be lost in that throw.
+    render(<HomeTab />);
+
+    expect(
+      screen.getAllByText("Overdue upkeep representative"),
+    ).toHaveLength(1);
+    expect(
+      screen.getAllByText("Maintenance action representative"),
+    ).toHaveLength(1);
   });
 
   it("the device-mutation surface is reachable from Home", () => {

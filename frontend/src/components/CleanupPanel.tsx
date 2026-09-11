@@ -1,20 +1,18 @@
 import { useT } from "../i18n";
-import { localizedDescription, localizedName } from "../i18n/settings";
+import { localizedName } from "../i18n/settings";
 import { Card } from "./ui/Card";
 import { useState, useMemo } from "react";
 import {
   Trash2,
-  AlertTriangle,
   ChevronDown,
   ChevronRight,
-  Info,
-  HardDrive,
   Loader2,
   type LucideIcon,
 } from "lucide-react";
 import { useStore } from "../store";
-import { cn } from "../lib/utils";
 import { parseCleanupSize, parseSizeToMB, fmtMB } from "../lib/cleanupSize";
+import { ActionRow } from "./ActionRow";
+import type { CleanupRunner } from "../hooks/useCleanupRunner";
 import type { Setting } from "../types/setting";
 
 /** One heading's worth of cleanups: the games, the shader caches, the dev tools. */
@@ -33,16 +31,22 @@ interface CleanupGroup {
  *
  * Selection is shared via the store (maintenanceSelection) so the single
  * unified "Run Cleanup" button in the top band applies every selected action
- * across all panels. Size detection + freed-space tracking live in
- * MaintenanceActions; this panel only renders the list, badges, and checkboxes.
+ * across all panels. Each row is an <ActionRow/>, the one card an action has:
+ * this panel groups and orders them and owns nothing about how one renders.
+ *
+ * The runner is passed in rather than built here, so the tab's Run button, the
+ * per-row Run and the docker confirm are all one run — two runners would each
+ * hold their own busy flag and their own modal.
  */
 export function CleanupPanel({
+  runner,
   initialCollapsed = true,
   module = "cleanup",
   title,
   icon: HeaderIcon = Trash2,
   description,
 }: {
+  runner: CleanupRunner;
   initialCollapsed?: boolean;
   module?: string;
   title?: string;
@@ -55,8 +59,6 @@ export function CleanupPanel({
   const [isCollapsed, setIsCollapsed] = useState(initialCollapsed);
   const settings = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
-  const selection = useStore((state) => state.maintenanceSelection);
-  const toggleSelection = useStore((state) => state.toggleMaintenanceSelection);
 
   // Cleanups whose size is known, largest first — and separately the ones still
   // being measured.
@@ -154,92 +156,22 @@ export function CleanupPanel({
             {groups.map((group) => (
               <section key={group.id} className="space-y-2">
                 <GroupHeader group={group} />
-                {group.rows.map((setting) => (
-                  <label
-                    key={setting.id}
-                    className={cn(
-                      "flex items-start gap-3 p-3 rounded-md border cursor-pointer transition-colors",
-                      selection[setting.id]
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-muted-foreground/50",
-                    )}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selection[setting.id] ?? false}
-                      onChange={() => toggleSelection(setting.id)}
-                      className="mt-1 h-4 w-4 rounded border-border text-primary"
+                {/* Two panels already share the tab's width, so a row only gets a
+                    neighbour once the window is wide enough for the half-panel to
+                    hold two of them. */}
+                <div
+                  data-testid="cleanup-group-rows"
+                  className="grid grid-cols-1 gap-2 items-start 3xl:grid-cols-2"
+                >
+                  {group.rows.map((setting) => (
+                    <ActionRow
+                      key={setting.id}
+                      setting={setting}
+                      runner={runner}
+                      selectable
                     />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium text-sm wrap-break-word min-w-0">
-                          {localizedName(setting)}
-                        </span>
-                        {(() => {
-                          const size = parseCleanupSize(setting.currentValue);
-                          if (!size) return null;
-                          if (size === "unavailable") {
-                            return (
-                              <span
-                                title={t("cleanup.serviceDown")}
-                                className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-warning/10 text-warning"
-                              >
-                                <AlertTriangle className="w-3 h-3" />
-                                {t("cleanup.unavailable")}
-                              </span>
-                            );
-                          }
-                          return (
-                            <span className="flex items-center gap-1 text-xs px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium">
-                              <HardDrive className="w-3 h-3" />
-                              {size}
-                            </span>
-                          );
-                        })()}
-                        {setting.durationEstimate && (
-                          <span className="text-xs text-muted-foreground">
-                            ({setting.durationEstimate})
-                          </span>
-                        )}
-                      </div>
-                      <p className="text-sm text-muted-foreground mt-1">
-                        {localizedDescription(setting)}
-                      </p>
-                      {/* Show warning for long operations */}
-                      {setting.name === "dism_cleanup" && (
-                        <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>{t("cleanup.dismWarning")}</span>
-                        </div>
-                      )}
-                      {/* Docker prune now compacts the WSL2 vhdx so space truly
-                          returns — which restarts Docker + every WSL distro. */}
-                      {(setting.name === "docker_prune" ||
-                        setting.name === "docker_prune_all") && (
-                        <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>{t("cleanup.dockerShutdownWarning")}</span>
-                        </div>
-                      )}
-                      {/* Show warning for the disruptive WSL shutdown */}
-                      {setting.name === "wsl_compact" && (
-                        <div className="flex items-start gap-1.5 mt-2 text-xs text-warning">
-                          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>{t("cleanup.wslWarning")}</span>
-                        </div>
-                      )}
-                      {/* What running this does — present-tense, unambiguous (effect),
-                          instead of the state-style recommended_impact which read as
-                          if the cleanup had already happened. */}
-                      {setting.effect && (
-                        <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
-                          <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" />
-                          <span>{setting.effect}</span>
-                        </div>
-                      )}
-                    </div>
-                  </label>
-                ))}
+                  ))}
+                </div>
               </section>
             ))}
 

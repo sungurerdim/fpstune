@@ -3,6 +3,7 @@ import { Card } from "./ui/Card";
 import { useState } from "react";
 import { Scale, Activity } from "lucide-react";
 import { HeadroomPanel } from "./HeadroomPanel";
+import { LedgerPanel } from "./MeasuredLedger";
 import { SuitePanel } from "./SuitePanel";
 import { VerifyPanel } from "./VerifyPanel";
 
@@ -62,16 +63,37 @@ export function BenchmarksTab() {
         ))}
       </div>
 
-      {activeTab === "suite" && <SuitePanel />}
-      {activeTab === "verify" && (
-        <Card className="p-4">
-          <VerifyPanel />
-        </Card>
-      )}
+      {/* Below the instrument, or beside it. The result is the shorter of the
+          two panels and the instrument is the taller, so on a wide window they
+          sit side by side rather than leaving the right half of the tool empty
+          and pushing the result off the fold. Narrow keeps the stack, and the
+          instrument stays first in the DOM either way — it is what you press. */}
+      <div
+        data-testid="benchmarks-columns"
+        className="grid grid-cols-1 gap-4 items-start 2xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]"
+      >
+        <div>
+          {/* The persisted answer first, the manual instrument under it. The
+              suite's own before/after lived in the browser and was lost on
+              reload; the ledger is the same measurement kept on disk, taken by
+              the scheduler without anybody having known to press anything. The
+              panel stays because measuring on demand, with a chosen instrument
+              list, is still something only it can do. */}
+          {activeTab === "suite" && (
+            <div className="space-y-4">
+              <LedgerPanel />
+              <SuitePanel />
+            </div>
+          )}
+          {activeTab === "verify" && (
+            <Card className="p-4">
+              <VerifyPanel />
+            </Card>
+          )}
+        </div>
 
-      {/* Below the instrument, because it is the result rather than the tool:
-          what a game reached on this machine, against what the panel can show. */}
-      <HeadroomPanel />
+        <HeadroomPanel />
+      </div>
     </div>
   );
 }

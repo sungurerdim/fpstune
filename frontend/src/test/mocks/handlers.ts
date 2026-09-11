@@ -156,6 +156,20 @@ export const handlers = [
     });
   }),
 
+  // The measurement ledger: nothing measured yet, which is a real answer and
+  // not an empty state. Every surface that mounts the ledger card gets this
+  // unless the test overrides it with server.use().
+  http.get("/api/benchmark/ledger", () => {
+    return HttpResponse.json({
+      job: null,
+      baseline: null,
+      after: null,
+      areas: [],
+      bulk_apply_pending: false,
+      poll_interval_seconds: 60,
+    });
+  }),
+
   // Cleanup status
   http.get("/api/cleanup/status", () => {
     return HttpResponse.json({

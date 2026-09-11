@@ -167,6 +167,9 @@ export const en = {
   "home.readingSettings": "Reading your current settings…",
   "home.allOptimized": "Everything applicable is already optimized.",
   "home.cleanupTitle": "Available disk cleanup actions",
+  // The same card, once maintenance that is overdue is in it: a TRIM run
+  // reclaims nothing, so the cleanup-only heading would misname its own rows.
+  "home.cleanupUpkeepTitle": "Disk cleanup and upkeep",
   "home.measuringReclaim": "Measuring what can be reclaimed…",
   "home.nothingToReclaim": "Nothing to reclaim right now.",
   "home.rowMeasuring": "— measuring what can be reclaimed…",
@@ -209,11 +212,8 @@ export const en = {
   "cleanup.gameTitle": "Game Maintenance",
   "cleanup.gameDescription":
     "Clear game, GPU shader, and launcher caches. Deleted files cannot be recovered; games and drivers rebuild caches on next launch.",
-  "run.title": "Running",
   "run.percent": "{value}%",
-  "run.progress": "{done} / {total} operations",
   "run.queued": "queued",
-  "run.running": "running",
   "run.skipped": "Not applicable",
   "run.elapsed": "{seconds}s elapsed",
   "run.showOutput": "show output",
@@ -221,20 +221,22 @@ export const en = {
   "run.commandLabel": "Command being run",
   "run.stepProgress": "Progress of {name}",
   "run.noOutputYet": "No output yet.",
-  "run.empty": "Nothing has been run yet. What runs, and how far it has got, appears here.",
-  "cleanup.results": "Cleanup Results",
-  "cleanup.resultsEmpty":
-    "Select items below and run a cleanup to see freed space here.",
   "cleanup.calculating": "Calculating…",
   "cleanup.freed": "Freed {amount}",
-  "cleanup.failedCount": "{count} failed",
   "cleanup.failed": "Failed",
   "cleanup.done": "Done",
   "cleanup.serviceDown":
     "Service not running and could not be started. Start it, then reopen this tab.",
   "cleanup.unavailable": "Unavailable",
-  "cleanup.dockerWarning":
-    "Restarts Docker Desktop and all WSL distributions to compact the virtual disk; can take several minutes.",
+  // The readings `maintenance:ssd_retrim` reports. Named for TRIM because
+  // that is what the reading is of: a second action answering `overdue|` would
+  // bring its own copy rather than borrow this.
+  "cleanup.trimOverdueNever": "TRIM overdue: never run",
+  "cleanup.trimOverdueDays": "TRIM overdue: {days} days ago",
+  "cleanup.trimLastDays": "Last TRIM: {days} days ago",
+  // Under a day is what the backend rounds to 0, and "0 days ago" reads as
+  // nonsense on the row the user is watching finish.
+  "cleanup.trimLastUnderDay": "Last TRIM: less than a day ago",
   "cleanup.dismWarning":
     "Takes 5-15 minutes. Cannot uninstall updates removed by ResetBase. Reported size is reclaimable component store — actual free disk space may only appear after a reboot.",
   "cleanup.dockerShutdownWarning":
@@ -510,6 +512,46 @@ export const en = {
     "FPSTune cannot apply this automatically — monitor only.",
   "tooltip.sources": "Sources:",
   "tooltip.requiresRestart": "Requires system restart",
+
+  // What fpstune changed, measured (the benchmark ledger)
+  "ledger.homeTitle": "What fpstune changed, measured",
+  "ledger.homeHint": "One area, one instrument. Never a sum of the two.",
+  "ledger.panelTitle": "Measured on this machine",
+  "ledger.panelHint": "Kept on disk, so a reload does not lose the baseline.",
+  "ledger.area": "Area",
+  "ledger.instrument": "Instrument",
+  "ledger.before": "Before",
+  "ledger.after": "After",
+  "ledger.change": "Change",
+  "ledger.verdict": "Verdict",
+  "ledger.improved": "Improved",
+  "ledger.worse": "Worse",
+  "ledger.changed": "Changed",
+  "ledger.withinNoise": "Within this machine's own variation of {noise}{unit}, so nothing can be concluded either way",
+  "ledger.withinNoiseShort": "Within the machine's own variation",
+  "ledger.noise": "noise {noise}{unit}",
+  "ledger.noiseUnknown": "noise floor unknown",
+  "ledger.samples": "{before} and {after} readings",
+  "ledger.notMeasured": "Not measured",
+  "ledger.loading": "Reading what this machine has measured…",
+  "ledger.unreachable": "The measurement ledger could not be read.",
+  "ledger.noAreas": "No area has been reported yet.",
+  "ledger.triggerBaseline": "Baseline",
+  "ledger.triggerAfter": "After your changes",
+  "ledger.triggerManual": "Measurement",
+  "ledger.jobRunning": "{what} running: step {step}/{total} — {bench}",
+  "ledger.jobQueued": "{what} queued — waiting for the machine to be idle",
+  "ledger.jobFailed": "{what} could not finish; fpstune will try it again.",
+  "ledger.jobIdle": "Nothing is being measured right now.",
+  "ledger.bulkPending": "Tweaks were applied since the last measurement — fpstune will measure again once the machine is idle.",
+  "ledger.baselineRun": "Baseline: {summary} ({age})",
+  "ledger.afterRun": "After: {summary} ({age})",
+  "ledger.noRunYet": "Nothing has been measured on this machine yet.",
+  "ledger.measureNow": "Measure now",
+  "ledger.measureNowHint": "Queues a run; fpstune measures it once the machine is idle and no game is running.",
+  "ledger.queued": "Queued.",
+  "ledger.alreadyRunning": "A measurement is already in flight.",
+  "ledger.queueFailed": "The measurement could not be queued.",
 
   // Notifications
   "toast.errorsRegion": "Errors and warnings",

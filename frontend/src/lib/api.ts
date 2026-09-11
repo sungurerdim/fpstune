@@ -488,6 +488,19 @@ export interface ApplyResponse {
   //   false — value was read back and did not match (success is false too)
   //   null  — no check was possible (action, advisory/read-only, or not run)
   verified: boolean | null;
+  /**
+   * Bytes this action actually reclaimed: the backend's own reading of the
+   * target before the run minus its reading after it.
+   *
+   * Null when nothing measured one — a repair reclaims nothing, and a cleanup
+   * whose size could not be re-read afterwards has no difference to report. It
+   * is never a zero standing in for "unknown" (C11 rule 3), and never a
+   * before/after pair the frontend paired up itself: only the backend knows
+   * both readings belong to the same run.
+   */
+  freed_bytes?: number | null;
+  /** Bytes still reclaimable after the run, for the row's size badge. */
+  size_after_bytes?: number | null;
 }
 
 export interface BulkApplyResponse {
@@ -872,6 +885,140 @@ export const suiteApi = {
       method: "POST",
       body: JSON.stringify({ before, after }),
     }),
+};
+
+/**
+ * What this machine has measured, per area, and what it could not.
+ *
+ * `/suite/compare` answers "here are two runs, judge them" and keeps nothing,
+ * which is the right shape for a button a human presses twice in one sitting
+ * and the wrong one for the question a user actually has: *did any of that
+ * help?* The scheduler takes both halves unasked and writes them to disk; this
+ * reads them back, so a reload no longer loses the baseline.
+ *
+ * One area, one instrument, and never a total. There is no field here that adds
+ * two areas together, and nothing in the UI may invent one (C11 rule 1).
+ */
+export interface LedgerJob {
+  id: string;
+  /** Why this job opened: "baseline", "after" or "manual". */
+  trigger: string;
+  /** Which half of a comparison it is measuring: "baseline" or "after". */
+  label: string;
+  /** "queued" until the guards pass, then "running", then "done" or "failed". */
+  status: string;
+  /** Bench keys, in the order they will run. */
+  plan: string[];
+  /** How many of `plan` have their result on disk. Never more than that. */
+  step_index: number;
+  /** The bench being measured now, or null when the plan is finished. */
+  current_bench: string | null;
+  remaining: string[];
+  /** Per bench, how many times it has been tried and failed. */
+  attempts: Record<string, number>;
+  created_at: number;
+  updated_at: number;
+}
+
+/**
+ * A stored run, described in its own words.
+ *
+ * A summary, not the run: `metrics` names what was read, and the samples behind
+ * them stay on disk. Verify needs those samples, so it still reads the browser's
+ * own pair — see VerifyPanel.
+ */
+export interface LedgerRunSummary {
+  label: string;
+  started_at: number;
+  summary: string;
+  bench_count: number;
+  ran_count: number;
+  metrics: string[];
+}
+
+/**
+ * One kind of gain, and the single instrument entitled to speak to it.
+ *
+ * `measured: false` carries a `reason` and no numbers — not a zero, not "no
+ * change", a sentence saying why it could not be checked (C11 rule 3).
+ *
+ * `verdict` and `improves_upward` are optional: which direction counts as an
+ * improvement is the server's judgement, and the UI shows the size of a change
+ * without naming a winner when the server has not said which way is up.
+ */
+export interface LedgerArea {
+  /** The area key — fps, disk, network… Never assume the set; render the list. */
+  area: string;
+  label: string;
+  instrument: string;
+  metric: string | null;
+  measured: boolean;
+  reason: string;
+  before: number | null;
+  after: number | null;
+  delta: number | null;
+  percent_change: number | null;
+  unit: string;
+  /** Null when the noise floor is unknown, which is never "zero noise". */
+  noise: number | null;
+  exceeds_noise: boolean;
+  improves_upward?: boolean | null;
+  verdict?: string | null;
+  samples_before?: number | null;
+  samples_after?: number | null;
+}
+
+export interface BenchLedger {
+  job: LedgerJob | null;
+  baseline: LedgerRunSummary | null;
+  after: LedgerRunSummary | null;
+  areas: LedgerArea[];
+  /** A bulk apply has landed that no "after" run has measured yet. */
+  bulk_apply_pending: boolean;
+  poll_interval_seconds: number;
+}
+
+/** What asking for a measurement got: a new job, or the one already open. */
+export interface LedgerRunQueued {
+  queued: boolean;
+  job: LedgerJob | null;
+}
+
+/**
+ * Both persisted halves, whole — samples and all.
+ *
+ * `SuiteRun` and not a summary, because the caller that wants these is judging
+ * them: the comparison is over the samples, and a summary cannot carry those.
+ * Either half is null on a machine that has not measured it yet, which is the
+ * ordinary first state rather than an error.
+ */
+export interface LedgerRuns {
+  baseline: SuiteRun | null;
+  after: SuiteRun | null;
+}
+
+export const benchmarkApi = {
+  /** Everything the ledger screen shows, read off disk in one pass. */
+  ledger: () => fetchJson<BenchLedger>("/benchmark/ledger"),
+
+  /**
+   * Ask for a measurement now — enqueued, not run.
+   *
+   * The suite takes minutes and the guards that decide *when* it may run live
+   * in the scheduler, so this returns as soon as the job is on disk.
+   */
+  runLedgerJob: () =>
+    fetchJson<LedgerRunQueued>("/benchmark/ledger/run", { method: "POST" }),
+
+  /**
+   * The persisted baseline and after runs, in the shape `suiteApi.compare`
+   * takes back unchanged.
+   *
+   * Separate from `ledger()` because they answer different questions. That one
+   * is a panel's summary, small enough to poll; this one carries every sample,
+   * which is what judging a pair actually needs.
+   */
+  ledgerRuns: () => fetchJson<LedgerRuns>("/benchmark/ledger/runs"),
 };
 
 export const verifyApi = {

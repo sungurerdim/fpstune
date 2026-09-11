@@ -1,11 +1,12 @@
+import { useMemo } from "react";
 import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { Gamepad2, Trash2 } from "lucide-react";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
+import { useStore } from "../store";
+import { fmtMB } from "../lib/cleanupSize";
 import { CleanupPanel } from "./CleanupPanel";
-import { CleanupResults } from "./CleanupResults";
 import { MaintenancePanel } from "./MaintenancePanel";
-import { RunPanel } from "./RunPanel";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 
 /**
@@ -17,20 +18,41 @@ import { DockerConfirmModal } from "./DockerConfirmModal";
  * actions are not cleanups: SFC and DISM reclaim nothing and take minutes, so
  * folding them into "Run Cleanup" would hide a long repair behind a button whose
  * label promises disk space.
+ *
+ * What a run is doing, and what it did, is no longer a band of its own up here:
+ * a separate "running" panel listed a copy of every selected cleanup while the
+ * originals stayed in the lists below, so each one appeared twice. Every row
+ * now carries its own progress and its own outcome. All that is left at the top
+ * is the session total — the one number the rows cannot state between them.
  */
 export function DiskCleanupTab() {
   const { t } = useT();
   const runner = useCleanupRunner({ modules: ["cleanup", "game_cleanup"] });
+  const cleanupResults = useStore((s) => s.cleanupResults);
+
+  // Every addend is a byte count the backend measured either side of a cleanup
+  // it ran, so this total is a measurement rather than a sum of claims (C11
+  // rule 1). A run that freed nothing measurable contributes nothing.
+  const freedMB = useMemo(
+    () =>
+      Object.values(cleanupResults).reduce(
+        (sum, r) => (r.success && r.freedMB !== null ? sum + r.freedMB : sum),
+        0,
+      ),
+    [cleanupResults],
+  );
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between gap-3 flex-wrap">
-        <div className="w-72 max-w-full min-w-0">
-          <CleanupResults compact />
-        </div>
+        {freedMB > 0 && (
+          <p className="text-sm text-primary font-medium">
+            {t("cleanup.freed", { amount: fmtMB(freedMB) })}
+          </p>
+        )}
         <Button
           size="md"
-          className="shrink-0"
+          className="ml-auto shrink-0"
           busy={runner.isRunning}
           disabled={!runner.hasSelection}
           icon={<Trash2 className="w-4 h-4" />}
@@ -44,14 +66,10 @@ export function DiskCleanupTab() {
         </Button>
       </div>
 
-      {/* Directly under the Run button, above the lists: while something is
-          running this is the only thing on the page the user is waiting on, and
-          it is the answer to "what is it doing right now". */}
-      <RunPanel />
-
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <CleanupPanel initialCollapsed={false} />
+        <CleanupPanel runner={runner} initialCollapsed={false} />
         <CleanupPanel
+          runner={runner}
           initialCollapsed={false}
           module="game_cleanup"
           title={t("cleanup.gameTitle")}

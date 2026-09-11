@@ -255,7 +255,12 @@ export function SuitePanel() {
 
           {showAdvanced && (
             <div className="mt-3 space-y-3">
-              <div className="space-y-2">
+              {/* Each instrument is a checkbox with its own two lines of copy —
+                  self-contained, so they tile instead of running down the page. */}
+              <div
+                data-testid="suite-bench-list"
+                className="grid grid-cols-1 gap-x-4 gap-y-1 items-start xl:grid-cols-2"
+              >
                 {catalogue.benches.map((bench) => (
                   <BenchRow
                     key={bench.key}

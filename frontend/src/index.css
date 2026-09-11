@@ -33,6 +33,12 @@
   --color-domain-software: hsl(var(--domain-software));
   --color-domain-game: hsl(var(--domain-game));
 
+  /* One step past Tailwind's own 2xl (96rem). A 2560px panel is ordinary now,
+     and every list on every page stopped widening at 1920px — the width above
+     that went to margins. Tailwind v4 reads the `--breakpoint-*` namespace, so
+     declaring it here is what creates the `3xl:` variant the layouts use. */
+  --breakpoint-3xl: 120rem;
+
   --radius-lg: 0.5rem;
   --radius-md: calc(0.5rem - 2px);
   --radius-sm: calc(0.5rem - 4px);

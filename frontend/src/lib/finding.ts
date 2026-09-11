@@ -130,6 +130,20 @@ function thermal(finding: Record<string, unknown>): FindingText | null {
     : { summary: t("finding.thermal.notThrottling", { reading }), advice: "" };
 }
 
+function powerDcRail(finding: Record<string, unknown>): FindingText | null {
+  const dc = finding.dc_value;
+  const stock = finding.windows_dc_default;
+  if (dc === undefined || dc === null || stock === undefined || stock === null) return null;
+  // fpstune tunes the mains rail only; on battery Windows' own value is the
+  // answer, so a battery value that differs from it is drift (another
+  // optimizer, or an older fpstune that wrote both rails) and the next apply
+  // puts it back.
+  return {
+    summary: t("finding.powerDcRail.drift", { dc: String(dc), stock: String(stock) }),
+    advice: t("finding.powerDcRail.advice"),
+  };
+}
+
 /** The finding's sentence(s) for this setting, or null when it carries none. */
 export function describeFinding(setting: Setting): FindingText | null {
   const finding = setting.finding;
@@ -143,6 +157,8 @@ export function describeFinding(setting: Setting): FindingText | null {
       return wifiSecurity(finding, setting.currentValue);
     case "thermal":
       return thermal(finding);
+    case "power_dc_rail":
+      return powerDcRail(finding);
     default:
       return null;
   }

@@ -34,7 +34,7 @@ export const settingsTr: Record<
   "power:cpu_decrease_threshold": {
     name: "Yavaşlama tetik noktası",
     description:
-      "Frekansın düşürüldüğü CPU kullanım eşiği. Yüksek değerler CPU'yu daha uzun süre hızda tutar ve oyun sırasında frekansın inip çıkmasını azaltır.",
+      "Windows'un saati düşürdüğü CPU kullanım eşiği. Yüksek değerler boşta kalmayı daha erken fark eder, böylece iş biter bitmez makine ısı biriktirmeyi bırakır.",
   },
   "power:cpu_increase_policy": {
     name: "CPU'nun hızlanma biçimi",

@@ -132,6 +132,10 @@ export const en = {
     "The firmware is holding clocks down to stay cool; {reading}.",
   "finding.thermal.advice":
     "Clear dust from the heatsinks and fans, and replace thermal paste older than three years.",
+  "finding.powerDcRail.drift":
+    "On battery this reads {dc}; Windows' own battery value is {stock}.",
+  "finding.powerDcRail.advice":
+    "fpstune tunes the plugged-in value only; applying puts the battery value back to Windows' own.",
   // Advisory values, in words
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",

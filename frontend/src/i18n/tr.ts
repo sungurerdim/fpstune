@@ -125,6 +125,9 @@ export const tr: Record<keyof typeof en, string> = {
     "Ürün yazılımı serin kalmak için hızları düşürüyor; {reading}.",
   "finding.thermal.advice":
     "Soğutucu ve fanlardaki tozu temizleyin, üç yıldan eski termal macunu yenileyin.",
+  "finding.powerDcRail.drift": "Pilde bu değer {dc}; Windows'un kendi pil değeri {stock}.",
+  "finding.powerDcRail.advice":
+    "fpstune yalnız fişteki değeri ayarlar; uygulamak pil değerini Windows'un kendisine geri döndürür.",
   "choice.at_capability": "Bağdaştırıcının en yükseğinde",
   "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
   "choice.good": "İyi",

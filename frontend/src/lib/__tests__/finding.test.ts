@@ -240,3 +240,29 @@ describe("helpers", () => {
     expect(advisoryChoiceLabel(5)).toBeNull();
   });
 });
+
+describe("a power setting whose battery rail drifted", () => {
+  const drifted = advisory({
+    id: "power:cpu_min_parking" as `${string}:${string}`,
+    module: "power",
+    isReadonly: false,
+    finding: { kind: "power_dc_rail", dc_value: 100, windows_dc_default: 10 },
+  });
+
+  it("names both battery values, so a row does not show a mains number as the whole story", () => {
+    const text = describeFinding(drifted);
+    expect(text?.summary).toBe("On battery this reads 100; Windows' own battery value is 10.");
+    expect(text?.advice).toContain("plugged-in value only");
+  });
+
+  it("says nothing when the backend sent no battery numbers", () => {
+    expect(describeFinding(advisory({ finding: { kind: "power_dc_rail" } }))).toBeNull();
+  });
+
+  it("has the Turkish sentence too", () => {
+    setLocale("tr");
+    expect(describeFinding(drifted)?.summary).toBe(
+      "Pilde bu değer 100; Windows'un kendi pil değeri 10.",
+    );
+  });
+});

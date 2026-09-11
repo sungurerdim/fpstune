@@ -29,7 +29,13 @@ from unittest.mock import patch
 
 import pytest
 
-from fpstune.settings.base import DetectType, SettingCategory, SettingExecutor, SettingValueType
+from fpstune.settings.base import (
+    DetectType,
+    Reading,
+    SettingCategory,
+    SettingExecutor,
+    SettingValueType,
+)
 from fpstune.settings.executors.powercfg import PowerCfgExecutor
 
 ACTIVE = "f0b769e8-7b04-4cb9-ae25-9c2a28918d23"  # a custom plan, active
@@ -37,6 +43,7 @@ CUSTOM = "b76bc4cb-3219-417b-a2fb-682acfbabcdc"  # a tool's plan, not active
 BALANCED = "381b4222-f694-41f0-9685-ff5bb260df2e"  # Windows' own
 SUBGROUP = "54533251-82be-4824-96c1-47b60b740d00"
 SETTING = "0cc5b647-c1df-4637-891a-dec35c318583"
+_WINDOWS_DEFAULT = "fpstune.settings.executors.powercfg.windows_default_index"
 
 
 @pytest.fixture
@@ -139,9 +146,15 @@ class TestWhichPlansAreTargeted:
 class TestDetectAcrossPlans:
     def _detect(self, executor, readings: dict[str, int | None], setting=None):
         setting = setting or _setting()
+        # Each plan's reading is its mains index; the battery rail is read too
+        # (see TestTheBatteryRail) and left at Windows' own value here, so these
+        # cases stay about the mains value the product talks about.
         with (
             patch.object(executor, "_target_schemes", return_value=list(readings)),
-            patch.object(executor, "_scheme_index", side_effect=lambda s, _sub, _set: readings[s]),
+            patch.object(
+                executor, "_scheme_index", side_effect=lambda s, _sub, _set: (readings[s], None)
+            ),
+            patch(_WINDOWS_DEFAULT, return_value=None),
         ):
             return executor._detect_via_registry_key(setting)
 
@@ -289,3 +302,119 @@ class TestApplyAcrossPlans:
 
         assert success is True
         assert error and CUSTOM in error
+
+
+class TestTheBatteryRail:
+    """Owner decision, 2026-09-11: fpstune tunes mains; battery keeps Windows' own.
+
+    A laptop on battery is the clearest case of "performance is not wanted right
+    now": every thread unparked, fans active and the Wi-Fi radio awake cost heat
+    and runtime on a machine that is power-limited anyway. So an apply writes the
+    tweak to AC and Windows' own DC default to DC, which makes every apply a
+    consequence-6 guard on the rail it does not tune — including on machines that
+    are already carrying fpstune's old both-rails write.
+
+    The DC default is read from the machine (the Balanced DCSettingIndex under
+    DefaultPowerSchemeValues), never guessed: when it cannot be read, DC is left untouched.
+    Writing a remembered constant onto the battery rail is exactly the defect
+    this pass removed from `default_value`.
+    """
+
+    def _apply(self, executor, setting, value, dc_default):
+        calls: list[str] = []
+
+        def reader(_subgroup: str, _setting: str, rail: str = "AC"):
+            return dc_default if rail == "DC" else None
+
+        with (
+            patch.object(executor, "_target_schemes", return_value=[ACTIVE]),
+            patch.object(
+                executor, "_run", side_effect=lambda cmd: (calls.append(cmd), (True, ""))[1]
+            ),
+            patch(_WINDOWS_DEFAULT, side_effect=reader),
+        ):
+            success, error = executor.apply(setting, value)
+        writes = [c for c in calls if "valueindex" in c]
+        return writes, success, error
+
+    def test_a_tweak_lands_on_mains_and_windows_own_value_on_battery(self, executor) -> None:
+        writes, success, error = self._apply(executor, _setting(), "on", dc_default=0)
+
+        assert (success, error) == (True, None)
+        mains = [c for c in writes if "/setacvalueindex" in c]
+        battery = [c for c in writes if "/setdcvalueindex" in c]
+        assert len(mains) == 1 and len(battery) == 1
+        assert mains[0].split()[-1] == "1", "the tweak must reach the mains rail"
+        assert battery[0].split()[-1] == "0", "the battery rail must get Windows' own value"
+
+    def test_reset_writes_windows_own_value_on_both_rails(self, executor) -> None:
+        """Reset applies `default_value`, which is already Windows' mains default."""
+        writes, _success, _error = self._apply(executor, _setting(), "off", dc_default=1)
+
+        mains = [c for c in writes if "/setacvalueindex" in c][0]
+        battery = [c for c in writes if "/setdcvalueindex" in c][0]
+        assert mains.split()[-1] == "0"
+        assert battery.split()[-1] == "1"
+
+    def test_an_unreadable_battery_default_writes_nothing_to_battery(self, executor) -> None:
+        """Never a guess: a machine that publishes no DC default keeps whatever it has."""
+        writes, success, error = self._apply(executor, _setting(), "on", dc_default=None)
+
+        assert (success, error) == (True, None)
+        assert not [c for c in writes if "/setdcvalueindex" in c]
+        assert len([c for c in writes if "/setacvalueindex" in c]) == 1
+
+    def test_the_battery_default_is_read_once_for_the_whole_apply(self, executor) -> None:
+        """One registry read per apply, not one per plan."""
+        reads: list[str] = []
+
+        def reader(_subgroup: str, _setting: str, rail: str = "AC"):
+            reads.append(rail)
+            return 0
+
+        with (
+            patch.object(executor, "_target_schemes", return_value=[ACTIVE, CUSTOM]),
+            patch.object(executor, "_run", return_value=(True, "")),
+            patch(_WINDOWS_DEFAULT, side_effect=reader),
+        ):
+            executor.apply(_setting(), "on")
+
+        assert reads.count("DC") == 1
+
+    def _detect(self, executor, plans: dict[str, tuple[int | None, int | None]], windows_dc):
+        with (
+            patch.object(executor, "_target_schemes", return_value=list(plans)),
+            patch.object(executor, "_scheme_index", side_effect=lambda s, _sub, _set: plans[s]),
+            patch(_WINDOWS_DEFAULT, return_value=windows_dc),
+        ):
+            return executor._detect_via_registry_key(_setting())
+
+    def test_a_battery_rail_windows_would_not_recognise_is_reported(self, executor) -> None:
+        """The rail the product does not tune is still the rail it must report on."""
+        reading = self._detect(executor, {ACTIVE: (1, 1)}, windows_dc=0)
+
+        assert isinstance(reading, Reading)
+        assert reading.value == "on", "the value stays the mains reading"
+        assert reading.finding == {
+            "kind": "power_dc_rail",
+            "dc_value": "on",
+            "windows_dc_default": "off",
+        }
+
+    def test_a_battery_rail_at_windows_own_value_carries_no_note(self, executor) -> None:
+        reading = self._detect(executor, {ACTIVE: (1, 0)}, windows_dc=0)
+
+        assert reading == "on"
+        assert not isinstance(reading, Reading)
+
+    def test_a_plan_with_no_battery_override_is_not_drift(self, executor) -> None:
+        """No override means the plan inherits Windows' value, which is the target."""
+        reading = self._detect(executor, {ACTIVE: (1, None)}, windows_dc=0)
+
+        assert reading == "on"
+
+    def test_an_unreadable_windows_default_reports_no_drift(self, executor) -> None:
+        """Nothing to compare against is not evidence of drift."""
+        reading = self._detect(executor, {ACTIVE: (1, 3)}, windows_dc=None)
+
+        assert reading == "on"

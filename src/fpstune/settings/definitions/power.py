@@ -11,6 +11,7 @@ All use powercfg executor with locale-independent GUID-based commands.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 
 from fpstune.settings.base import (
@@ -20,6 +21,8 @@ from fpstune.settings.base import (
     SettingScope,
     SettingValueType,
 )
+from fpstune.settings.executors import map_raw_to_display
+from fpstune.settings.executors.powercfg import windows_default_index
 
 # Power setting GUIDs
 # Subgroup: USB settings
@@ -122,25 +125,33 @@ WLAN_POWER_SAVING = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="WiFi Power Saving",
     short_name="Wi-Fi power saving",
-    description="Puts WiFi adapter to sleep between packets. Causes ping spikes of 20-100ms during gaming.",
+    description="Whether the Wi-Fi radio sleeps between packets. Windows' own mains value keeps "
+    "it awake; fpstune puts that back when something puts the radio to sleep.",
     value_type=SettingValueType.CHOICE,
     choices=("maximum_performance", "low", "medium", "maximum"),
-    default_value="medium",
+    # Windows' own mains default, measured 2026-09-11: Maximum Performance. The
+    # shipped "medium" was the *battery* default, so reset wrote a worse value
+    # than Windows ships onto the rail the user games on.
+    default_value="maximum_performance",
     recommended_value="maximum_performance",
     requires_reboot=False,
-    current_impact="Power saving active: WiFi sleeps → ping spikes (20-100ms), packet loss",
-    recommended_impact="Maximum Performance: WiFi always active → stable ping, no lag spikes",
+    current_impact="Power saving active: The radio sleeps between packets → ping spikes, loss",
+    recommended_impact="Windows' own value: The radio stays awake on mains, so ping stays flat",
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for WiFi users
     category_order=3,  # WiFi stability improvement
-    effect="Disables WiFi power saving for stable network latency",
+    effect="Restores Windows' own mains value, keeping the Wi-Fi radio awake",
     # Not `latency_ms: -12.0`. That was the deterministic cap the impact_scores
     # sweep applied, and worse, it was a *mean* — this setting's own copy
     # describes occasional spikes of 20-100 ms, which is jitter. A mean of 12 ms
     # describes neither the quiet state nor the spike, and it fed the
     # user-visible latency total as though the connection were 12 ms better all
     # the time. The figure the copy already states is the honest one.
+    # A guard now that the default is read from the machine: Windows already
+    # ships Maximum Performance on mains here, so the 20-100 ms spikes the old
+    # score claimed belong to a machine something else put to sleep. Zero, and
+    # the size of the spike stays in the sentence where it is conditional.
     impact_scores={
-        "latency_spike_ms": "20-100 eliminated",
+        "latency_spike_ms": 0.0,
         "network_consistency": "high",
         "stability": "high",
     },
@@ -250,32 +261,61 @@ POWER_CPU_BOOST = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Boost Mode",
     short_name="CPU boost behaviour",
-    description="Controls how aggressively the CPU ramps to higher frequencies under load. "
-    "Efficient Aggressive gives near-maximum performance with lower power overshoot.",
+    description="How the processor picks a boost level above its rated clock. The efficient "
+    "variants reach the same boost while accounting for efficiency, so the frames cost less heat.",
     value_type=SettingValueType.CHOICE,
-    choices=("disabled", "enabled", "efficient_enabled", "efficient_aggressive"),
-    default_value="enabled",
+    # All seven states Windows publishes here, read off this machine's own
+    # catalogue (PowerSettings\<SUB_PROCESSOR>\<PERFBOOSTMODE>\<n>\FriendlyName,
+    # 2026-09-11) and named after Windows' own English names:
+    #   0 Disabled · 1 Enabled · 2 Aggressive · 3 Efficient Enabled ·
+    #   4 Efficient Aggressive · 5 Aggressive At Guaranteed ·
+    #   6 Efficient Aggressive At Guaranteed
+    # The map used to stop at 4 and spell 5 as "efficient_aggressive", so a stock
+    # machine — Windows ships 2 here — detected a value outside `choices`, which
+    # is the C6 breach, and a machine on 5 read as though it were on 4.
+    # Microsoft documents the behaviour of the first five per performance-state
+    # interface at
+    # learn.microsoft.com/en-us/windows-hardware/customize/power-settings/options-for-perf-state-engine-perfboostmode
+    # (fetched 2026-09-11): under CPPC/PEP, 2 is Aggressive and 4 behaves as 2.
+    choices=(
+        "disabled",
+        "enabled",
+        "aggressive",
+        "efficient_enabled",
+        "efficient_aggressive",
+        "aggressive_at_guaranteed",
+        "efficient_aggressive_at_guaranteed",
+    ),
+    default_value="aggressive",
     recommended_value="efficient_aggressive",
     requires_reboot=False,
     evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning",
+        "https://learn.microsoft.com/en-us/windows-hardware/customize/power-settings/options-for-perf-state-engine-perfboostmode",
     ],
-    current_impact="Enabled: Normal boost ramp-up speed",
-    recommended_impact="Efficient Aggressive: Near-maximum boost with less power overshoot",
+    current_impact="Aggressive: Maximum boost is requested whenever conditions allow it",
+    recommended_impact="Efficient Aggressive: Same boost ceiling, chosen with efficiency in mind",
     scope=SettingScope.RECOMMENDED,
     category_order=6,
-    effect="Sets CPU boost to Efficient Aggressive for fastest frequency scaling",
-    impact_scores={"fps_cpu_bound": "+1-3%", "latency_ms": -0.5},
+    effect="Picks the efficiency-aware boost mode, which reaches the same ceiling",
+    # Not frames. Microsoft's own table says index 4 behaves as index 2, and 2 is
+    # what Windows ships here — so the ceiling is unchanged and what the
+    # efficiency-aware pick saves is heat, which consequence 4 counts as
+    # performance. The magnitude is 0.0 because no instrument here has measured
+    # the watts (C11); the claim is the category, not a number.
+    impact_scores={"power_watts": 0.0, "stability": "high"},
     detect_type=DetectType.POWERCFG,
     detect_command="",
     detect_args={"subgroup": CPU_SUBGROUP, "setting": "be337238-0d82-4146-a960-4f3749d470c7"},
     value_map={
         0: "disabled",
         1: "enabled",
+        2: "aggressive",
         3: "efficient_enabled",
         4: "efficient_aggressive",
-        5: "efficient_aggressive",
+        5: "aggressive_at_guaranteed",
+        6: "efficient_aggressive_at_guaranteed",
     },
     apply_type=DetectType.POWERCFG,
     apply_command="",
@@ -283,8 +323,11 @@ POWER_CPU_BOOST = SettingExecutor(
     apply_value_map={
         "disabled": 0,
         "enabled": 1,
+        "aggressive": 2,
         "efficient_enabled": 3,
         "efficient_aggressive": 4,
+        "aggressive_at_guaranteed": 5,
+        "efficient_aggressive_at_guaranteed": 6,
     },
 )
 
@@ -298,14 +341,16 @@ POWER_CPU_INCREASE_THRESHOLD = SettingExecutor(
     "frequency ramp-up, reducing CPU-bound frame time spikes.",
     value_type=SettingValueType.INT,
     choices=(),
-    default_value=90,
+    # Windows' own mains default, measured 2026-09-11: 60. The shipped 90 was the
+    # battery value, so reset slowed the mains rail down.
+    default_value=60,
     recommended_value=15,
     requires_reboot=False,
     evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning",
     ],
-    current_impact="90%: CPU waits until nearly fully loaded before scaling up frequency",
+    current_impact="Raised: CPU waits until it is nearly fully loaded before clocking up",
     recommended_impact="15%: CPU scales up quickly → fewer frame time spikes",
     scope=SettingScope.RECOMMENDED,
     category_order=7,
@@ -329,20 +374,44 @@ POWER_CPU_DECREASE_THRESHOLD = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Frequency Scale-Down Threshold",
     short_name="Slow-down trigger point",
-    description="CPU utilization % below which frequency decreases. Higher values keep "
-    "the CPU at speed longer, reducing frequency yo-yo during gaming.",
+    # The direction here was shipped backwards. Microsoft's own tuning document,
+    # already this setting's source, says verbatim: "Processor Performance
+    # Decrease Threshold - large values quicken the power response to idle
+    # periods". The threshold is the utilization *below which* the clock drops,
+    # so a large value fires on almost any lull and a small one holds the clock
+    # up through it. The shipped copy read "Higher values keep the CPU at speed
+    # longer", and the recommendation (8, against this machine's stock of 20) was
+    # argued from that inversion: it does not reduce oscillation, it keeps clocks
+    # raised through idle periods, which is the `Minimum processor state = 100`
+    # shape consequence 4 names as harmful — heat banked all session for frames
+    # nobody is drawing. Holding the clock through a *short* lull is already
+    # `cpu_decrease_time = 3`, which costs no idle heat because it is a count of
+    # intervals rather than a floor.
+    #
+    # So the tweak leaves and a guard takes its place (consequence 2 and 6):
+    # `recommended_value` is Windows' own value, derived per machine by
+    # `adopt_windows_defaults`, and applying it undoes a guide, another tool or
+    # an earlier fpstune release that lowered it.
+    description="CPU utilization below which Windows drops the clock. Higher values notice an "
+    "idle period sooner, so the machine stops banking heat the moment the work stops.",
     value_type=SettingValueType.INT,
     choices=(),
-    default_value=5,
-    recommended_value=8,
+    default_value=20,
+    recommended_value=20,
     requires_reboot=False,
     evidence_level="proven",
-    current_impact="5%: CPU scales down quickly when utilization drops below 5%",
-    recommended_impact="8%: CPU stays at speed a bit longer → reduces frequency oscillation",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning",
+    ],
+    current_impact="Lowered: Clocks are held through idle periods, banking heat for no frames",
+    recommended_impact="Windows' own value: Clocks fall as the work stops, keeping headroom",
     scope=SettingScope.RECOMMENDED,
     category_order=8,
-    effect="Slightly raises CPU scale-down threshold to reduce frequency oscillation",
-    impact_scores={"fps_cpu_bound": "+0-1%", "latency_ms": -0.1},
+    effect="Restores Windows' own scale-down threshold so idle time costs no heat",
+    # A guard, so 0.0 rather than an invented saving: on a machine nothing
+    # lowered, applying it changes nothing. What it is worth is a function of how
+    # wrong the machine was.
+    impact_scores={"power_watts": 0.0, "stability": "high"},
     min_value=0,
     max_value=100,
     detect_type=DetectType.POWERCFG,
@@ -428,23 +497,29 @@ POWER_CPU_MIN_PARKING = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Core Parking (Min Unparked Cores)",
     short_name="Cores kept awake",
-    description="Minimum percentage of CPU cores that stay active. Setting to 100% disables "
-    "core parking, eliminating wake latency when parked cores are needed.",
+    description="Minimum share of CPU cores that stay unparked. This is Windows' own mains "
+    "value here; fpstune puts it back when another optimizer lowers it.",
     value_type=SettingValueType.INT,
     choices=(),
-    default_value=0,
+    # Windows' own mains default, measured 2026-09-11: 100. The shipped 0 made
+    # reset park cores harder than Windows ever would.
+    default_value=100,
     recommended_value=100,
     requires_reboot=False,
     evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning",
     ],
-    current_impact="0%: Windows may park most CPU cores → 1-5ms wake latency per frame",
-    recommended_impact="100%: All cores always active → no parking wake latency",
+    current_impact="Lowered: Cores may park, so a frame that needs one waits for it to wake",
+    recommended_impact="Windows' own value: Every core stays available, with no wake to pay for",
     scope=SettingScope.ESSENTIAL,
     category_order=6,
-    effect="Disables CPU core parking by keeping 100% of cores unparked",
-    impact_scores={"fps_cpu_bound": "+0-1%", "latency_ms": -0.5, "stability": "marginal"},
+    effect="Restores Windows' own minimum of unparked cores",
+    # A guard now that the default is read from the machine: Windows already
+    # ships this value on mains here, so on a machine nothing lowered, applying
+    # it changes nothing. What it is worth is whatever the other tool took away,
+    # which is not ours to state (C11).
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     min_value=0,
     max_value=100,
     detect_type=DetectType.POWERCFG,
@@ -468,14 +543,17 @@ POWER_CPU_EPP = SettingExecutor(
     "nothing.",
     value_type=SettingValueType.INT,
     choices=(),
-    default_value=50,
+    # Windows' own mains default, measured 2026-09-11: 33. The shipped 50 was the
+    # figure Microsoft's tuning document quotes for Windows *Server* — a default
+    # read out of a document rather than off the device, which is the C1 defect.
+    default_value=33,
     recommended_value=25,
     requires_reboot=False,
     evidence_level="proven",
     sources=[
         "https://www.phoronix.com/review/intel-meteorlake-epp/",
     ],
-    current_impact="50: Balanced between performance and efficiency",
+    current_impact="Higher values: CPU leans toward saving power, costing response per frame",
     recommended_impact="25: Performance-biased → faster frequency ramp, better frame pacing",
     scope=SettingScope.RECOMMENDED,
     category_order=11,
@@ -503,11 +581,13 @@ POWER_DISK_TIMEOUT = SettingExecutor(
     "spin-down, eliminating the re-spin delay when accessing files during gaming.",
     value_type=SettingValueType.INT,
     choices=(),
-    default_value=600,
+    # Windows' own mains default, measured 2026-09-11: 1200. The shipped 600 was
+    # the battery value.
+    default_value=1200,
     recommended_value=0,
     requires_reboot=False,
     evidence_level="proven",
-    current_impact="600s: HDD spins down after 10 minutes of idle → stutter on first access",
+    current_impact="Any timeout: HDD spins down when idle → stutter on the first access",
     recommended_impact="0 (never): Disk stays ready → no spin-up stutter during gaming",
     # What this avoids is a spin-up stall on a mechanical disk, measured in seconds
     # and only on an HDD — not a millisecond input-latency saving. The -12.0 was the
@@ -534,20 +614,26 @@ POWER_THERMAL_COOLING = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="Thermal Cooling Mode",
     short_name="Fan-first or slow-down-first cooling",
-    description="Controls whether the system uses the fan (active) or throttles the CPU (passive) "
-    "first when temperatures rise. Active cooling prevents thermal throttling.",
+    description="Whether the system speeds the fan (active) or slows the CPU (passive) first as "
+    "temperature rises. Active is Windows' own mains value; fpstune puts it back.",
     value_type=SettingValueType.CHOICE,
     choices=("passive", "active"),
-    default_value="passive",
+    # Windows' own mains default, measured 2026-09-11: Active. The shipped
+    # "passive" was the battery value, so reset moved the mains rail to the
+    # throttle-first policy this setting exists to avoid.
+    default_value="active",
     recommended_value="active",
     requires_reboot=False,
     evidence_level="proven",
-    current_impact="Passive: CPU throttles first before fan increases → performance loss under load",
-    recommended_impact="Active: Fan increases first → CPU maintains full clock speed",
+    current_impact="Passive: The CPU is slowed before the fan answers, so clocks drop under load",
+    recommended_impact="Windows' own value: The fan answers first and clocks are not cut to cool",
     scope=SettingScope.RECOMMENDED,
     category_order=13,
-    effect="Enables active thermal cooling so the fan runs first, preventing CPU throttle",
-    impact_scores={"fps_cpu_bound": "+0-15%", "stability": "high"},
+    effect="Restores Windows' own fan-first cooling policy",
+    # A guard: Windows ships Active on mains here, so on a stock machine this
+    # changes nothing. When it does fire, what it gives back is whatever clock
+    # the passive policy was taking away — a figure only that machine has.
+    impact_scores={"fps_cpu_bound": 0.0, "stability": "high"},
     detect_type=DetectType.POWERCFG,
     detect_command="",
     detect_args={"subgroup": THERMAL_SUBGROUP, "setting": THERMAL_SETTING},
@@ -1100,3 +1186,64 @@ POWER_SETTINGS: list[SettingExecutor] = [
     # Advisory
     RYZEN_BALANCED_PLAN,
 ]
+
+
+# ===========================================================================
+# What "Windows stock" is, decided by Windows rather than by this file
+# ===========================================================================
+# Every `default_value` above is a fallback. The real one is published beside
+# the setting in Windows' own catalogue, per machine, by the processor driver:
+#
+#     ...\PowerSettings\<subgroup>\<setting>\DefaultPowerSchemeValues\<Balanced>
+#
+# and `reset` is contracted to write exactly that (C6). Eight settings shipped a
+# constant that was not it — three of them Windows' *battery* value written onto
+# mains, one of them (`cpu_epp = 50`) a figure quoted from Microsoft's Windows
+# Server tuning document instead of read off the device. The constants are
+# corrected, so the fallback is right on a machine that publishes nothing; the
+# derivation is what makes it right on a machine nobody has seen.
+#
+# An index outside the setting's own `value_map` is refused rather than adopted:
+# a default the UI cannot show as one of its `choices` is the C6 breach this pass
+# exists to close, not a new stock value.
+
+# A setting whose recommendation *is* "whatever Windows ships here" — a drift
+# guard in consequence-2 shape — has to follow the derived default too, or it
+# stops being a guard the moment a machine publishes something else. Only ids
+# listed here move; every other recommendation is fpstune's own argument and is
+# never rewritten by a registry read.
+_TRACKS_WINDOWS_DEFAULT: frozenset[str] = frozenset({"power:cpu_decrease_threshold"})
+
+
+def adopt_windows_defaults(
+    settings: list[SettingExecutor],
+    reader: Callable[[str, str], int | None] = windows_default_index,
+) -> None:
+    """Replace each powercfg setting's `default_value` with this machine's own.
+
+    Mutates in place, because the registry, the API and the CLI all hold these
+    same objects — a copy would leave three answers to "what is stock here".
+    Called once at import, which is the registry's build time.
+    """
+    for setting in settings:
+        if setting.detect_type is not DetectType.POWERCFG:
+            continue
+        subgroup = setting.detect_args.get("subgroup", "")
+        guid = setting.detect_args.get("setting", "")
+        if not subgroup or not guid:
+            continue
+
+        raw = reader(subgroup, guid)
+        if raw is None:
+            continue
+
+        derived = map_raw_to_display(setting.value_map, raw)
+        if setting.choices and derived not in setting.choices:
+            continue
+
+        setting.default_value = derived
+        if setting.id in _TRACKS_WINDOWS_DEFAULT:
+            setting.recommended_value = derived
+
+
+adopt_windows_defaults(POWER_SETTINGS)

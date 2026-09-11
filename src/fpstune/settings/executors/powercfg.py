@@ -11,9 +11,10 @@ import re
 import subprocess
 import sys
 import threading
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
-from fpstune.settings.applicability import values_equal
+from fpstune.settings.applicability import NOT_SUPPORTED, values_equal
+from fpstune.settings.base import Reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 
 if TYPE_CHECKING:
@@ -54,6 +55,86 @@ _POWER_SCHEMES_KEY = "SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSche
 # where the same plan reads "Dengeli".
 _MUI_INDIRECT_PREFIX = "@"
 
+# Windows' own catalogue of power settings, one key per setting, and beside each
+# one the value Windows ships for every scheme:
+#     ...\Power\PowerSettings\<subgroup>\<setting>
+#         \DefaultPowerSchemeValues\<scheme>\{AC,DC}SettingIndex
+# The Balanced entry is what `reset` is contracted to write (C6: "the curated
+# stock value (Windows stock)"), and it is populated per machine by the processor
+# driver — on the measured host `cpu_epp` reads 33 where the shipped constant said
+# 50, which was the Windows *Server* figure quoted in Microsoft's tuning document.
+# A default taken from a document rather than from the device is the same defect
+# class as a hardcoded buffer size.
+_POWER_CATALOGUE_KEY = "SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings"
+BALANCED_SCHEME = "381b4222-f694-41f0-9685-ff5bb260df2e"
+
+
+def windows_default_index(
+    subgroup: str, setting: str, rail: Literal["AC", "DC"] = "AC"
+) -> int | None:
+    """Windows' own Balanced index for one power setting on one rail, or None.
+
+    Mains (``AC``) is the value the product tunes and the one `reset` writes.
+    Battery (``DC``) is the value fpstune writes *instead of* the tweak: the
+    owner's decision of 2026-09-11 is calm on battery, so the rail nobody is
+    gaming on keeps whatever Windows shipped for it.
+
+    None means "this machine publishes no default for that setting" — a GUID it
+    does not carry, or a catalogue that cannot be read — and every caller keeps
+    what it has rather than inventing a value.
+    """
+    if sys.platform != "win32":
+        return None
+    import winreg
+
+    path = (
+        f"{_POWER_CATALOGUE_KEY}\\{subgroup}\\{setting}"
+        f"\\DefaultPowerSchemeValues\\{BALANCED_SCHEME}"
+    )
+    try:
+        with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as key:
+            raw, _ = winreg.QueryValueEx(key, f"{rail}SettingIndex")
+    except OSError:
+        return None
+    return raw if isinstance(raw, int) else None
+
+
+# === When the processor, not Windows, picks the frequency =====================
+#
+# Microsoft's processor power management tuning document — the source the seven
+# settings below already cite — says of Broadwell-and-later Intel parts under
+# Windows' default configuration: "most of the processor power management
+# decisions are made in the processor instead of OS level ... The legacy PPM
+# parameters used by OS have minimal impact on the actual frequency decisions,
+# except telling the processor if it should favor power or performance, or
+# capping the minimal and maximum frequencies", and "OS is no longer required to
+# monitor activity and select frequency at regular intervals".
+#
+# Its own tuning list splits on exactly that line: "For HWP enabled system" names
+# Energy performance preference alone, while the increase/decrease threshold,
+# time and policy parameters are listed "For Non-HWP system". The time-check
+# interval is the period of that same monitoring loop, so it goes with them.
+#
+# Whether the loop runs on this machine is one read (PERFAUTONOMOUS), so per C10
+# the honest answer is "not applicable here" rather than a control that does
+# nothing while claiming fps and latency. EPP, minimum and maximum processor
+# state keep acting and are deliberately absent from this set; so is core
+# parking, which is a scheduling decision rather than a frequency one.
+_PROCESSOR_SUBGROUP = "54533251-82be-4824-96c1-47b60b740d00"
+_PERF_AUTONOMOUS_SETTING = "8baa4a8a-14c6-4451-8e8b-14bdbd197537"
+
+_AUTONOMOUS_BYPASSED_SETTINGS: frozenset[str] = frozenset(
+    {
+        "06cadf0e-64ed-448a-8927-ce7bf90eb35d",  # performance increase threshold
+        "12a0ab44-fe28-4fa9-b3bd-4b64f44960a6",  # performance decrease threshold
+        "465e1f50-b610-473a-ab58-00d1077dc418",  # performance increase policy
+        "40fbefc7-2e9d-4d25-a185-0cfd8574bac6",  # performance decrease policy
+        "4d2b0152-7d5c-498b-88e2-34345392a2c5",  # performance time check interval
+        "984cf492-3bed-4488-a8f9-4286c97bf5aa",  # performance increase time
+        "d8edeb9b-95cf-4f95-a73c-b061973693c8",  # performance decrease time
+    }
+)
+
 
 class PowerCfgExecutor(BaseExecutor):
     """Execute powercfg commands for power settings.
@@ -69,6 +150,12 @@ class PowerCfgExecutor(BaseExecutor):
     """
 
     _active_scheme: str | None = None
+    # Tri-state, because "could not tell" and "not autonomous" must not collapse:
+    # `_autonomous_mode` is the answer, `_autonomous_read` says whether one was
+    # obtained. Without the second flag a machine that cannot answer would pay a
+    # ~370 ms subprocess for every setting in every scan.
+    _autonomous_mode: bool | None = None
+    _autonomous_read: bool = False
     _lock: threading.Lock = threading.Lock()
 
     def detect(self, setting: SettingExecutor) -> tuple[Any | None, str | None]:
@@ -85,6 +172,13 @@ class PowerCfgExecutor(BaseExecutor):
 
         if not subgroup or not setting_guid:
             return None, "Missing 'subgroup' or 'setting' in detect_args"
+
+        # A frequency-selection parameter the silicon is bypassing is not a
+        # setting this machine has — see _AUTONOMOUS_BYPASSED_SETTINGS. An
+        # unreadable answer (None) leaves it visible: hiding seven tweaks
+        # because a subprocess failed is the worse error.
+        if setting_guid in _AUTONOMOUS_BYPASSED_SETTINGS and self._autonomous_mode_enabled():
+            return NOT_SUPPORTED, None
 
         # The registry holds the same AC index powercfg /query prints, and reading
         # it costs microseconds against ~370 ms for the subprocess. Verified on
@@ -119,6 +213,19 @@ class PowerCfgExecutor(BaseExecutor):
         is a tweak that quietly stops applying — see the note on _target_schemes.
         The active plan is written first, so if a later plan fails the machine the
         user is actually on is already correct.
+
+        Two rails, two answers (owner's decision, 2026-09-11 — calm on battery).
+        Mains gets the value asked for. Battery gets Windows' own default for
+        this machine, whatever was asked: a laptop on battery is the clearest
+        case of "performance is not wanted right now", and the tweaks that bite
+        there — every thread unparked, fans active, the radio awake — spend heat
+        and runtime for frames nobody asked for. That also makes every apply a
+        consequence-6 guard on the rail it does not tune, which is what puts back
+        the machines already carrying fpstune's old both-rails write.
+
+        A battery default that cannot be read leaves the battery rail alone. The
+        alternative is writing a remembered constant onto a rail we did not
+        measure, which is the defect this pass just removed from `default_value`.
         """
         schemes = self._target_schemes()
         if not schemes:
@@ -142,11 +249,25 @@ class PowerCfgExecutor(BaseExecutor):
         if not subgroup or not setting_guid:
             return False, "Missing 'subgroup' or 'setting' in apply_args"
 
-        # Apply to both AC (plugged in) and DC (battery), on every plan.
+        # One read for the whole apply: the battery default cannot differ between
+        # plans, because it is a property of the setting rather than of a plan.
+        battery_index = windows_default_index(subgroup, setting_guid, "DC")
+        writes: list[tuple[str, int]] = [("/setacvalueindex", raw_index)]
+        if battery_index is None:
+            from fpstune.utils.debug import debug_log
+
+            debug_log(
+                "powercfg",
+                f"{setting.id}: no Balanced DC default published for "
+                f"{subgroup}\\{setting_guid}; battery rail left untouched",
+            )
+        else:
+            writes.append(("/setdcvalueindex", battery_index))
+
         failures: list[str] = []
         for scheme in schemes:
-            for flag in ("/setacvalueindex", "/setdcvalueindex"):
-                cmd = f"{flag} {scheme} {subgroup} {setting_guid} {raw_index}"
+            for flag, index in writes:
+                cmd = f"{flag} {scheme} {subgroup} {setting_guid} {index}"
                 success, output = self._run(cmd)
                 if not success:
                     failures.append(f"{scheme} {flag}: {output.strip()}")
@@ -162,6 +283,37 @@ class PowerCfgExecutor(BaseExecutor):
         if failures:
             return True, f"applied, but {len(failures)} write(s) failed: {'; '.join(failures)}"
         return True, None
+
+    def _autonomous_mode_enabled(self) -> bool | None:
+        """Whether the processor is choosing its own frequencies on this machine.
+
+        Asked of powercfg rather than of the plan's registry key, because the
+        question is the *effective* value. Measured 2026-09-11: the active plan
+        holds no override for PERFAUTONOMOUS and the Balanced catalogue default
+        is 0, yet ``powercfg /qh`` reports 0x00000001 — the platform answers over
+        both. A registry-only read would have said "Windows is in control" on a
+        machine where it is not.
+
+        None means the question could not be answered; the caller treats that as
+        "leave the setting visible". Cached for the process because it cannot
+        change while a scan runs, and a scan asks it once per affected setting.
+        """
+        with PowerCfgExecutor._lock:
+            if PowerCfgExecutor._autonomous_read:
+                return PowerCfgExecutor._autonomous_mode
+
+        # Outside the lock: `_run` spawns a subprocess, and the same lock guards
+        # `_get_active_scheme`, which would then be blocked behind it.
+        success, output = self._run(
+            f"/qh SCHEME_CURRENT {_PROCESSOR_SUBGROUP} {_PERF_AUTONOMOUS_SETTING}"
+        )
+        raw = self._parse_query_output(output) if success else None
+        answer = None if raw is None else raw == 1
+
+        with PowerCfgExecutor._lock:
+            PowerCfgExecutor._autonomous_mode = answer
+            PowerCfgExecutor._autonomous_read = True
+        return answer
 
     def _active_scheme_from_registry(self) -> str | None:
         """Read the active scheme GUID from the registry.
@@ -240,17 +392,32 @@ class PowerCfgExecutor(BaseExecutor):
             return True
         return str(name).startswith(_MUI_INDIRECT_PREFIX)
 
-    def _scheme_index(self, scheme: str, subgroup: str, setting: str) -> int | None:
-        """One plan's AC index for one setting, or None when it holds no override."""
+    def _scheme_index(
+        self, scheme: str, subgroup: str, setting: str
+    ) -> tuple[int | None, int | None]:
+        """One plan's (mains, battery) indices, each None when it holds no override.
+
+        Both rails in one key open, because an observation narrower than the
+        action is how a write goes unnoticed: fpstune writes DC as well as AC, so
+        reading only AC left a drifted battery rail invisible to detect and to
+        verify alike.
+        """
         import winreg
 
         path = f"{_POWER_SCHEMES_KEY}\\{scheme}\\{subgroup}\\{setting}"
+        indices: list[int | None] = []
         try:
             with winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE, path) as key:
-                raw, _ = winreg.QueryValueEx(key, "ACSettingIndex")
+                for rail in ("AC", "DC"):
+                    try:
+                        raw, _ = winreg.QueryValueEx(key, f"{rail}SettingIndex")
+                    except OSError:
+                        indices.append(None)
+                        continue
+                    indices.append(raw if isinstance(raw, int) else None)
         except OSError:
-            return None
-        return raw if isinstance(raw, int) else None
+            return None, None
+        return indices[0], indices[1]
 
     def _detect_via_registry_key(self, setting: SettingExecutor) -> Any | None:
         """Read one power setting across every plan fpstune writes.
@@ -275,13 +442,32 @@ class PowerCfgExecutor(BaseExecutor):
         if not schemes:
             return None
 
+        # The battery rail is not tuned, so it is not compared against the
+        # recommendation — it is compared against Windows' own value for it. A
+        # plan holding no DC override already inherits that value, so only an
+        # override can drift.
+        windows_battery = windows_default_index(subgroup, setting_guid, "DC")
+
         readings: list[Any] = []
+        battery_drift: dict[str, Any] | None = None
         for scheme in schemes:
-            raw = self._scheme_index(scheme, subgroup, setting_guid)
-            if raw is None:
+            mains, battery = self._scheme_index(scheme, subgroup, setting_guid)
+            if mains is None:
                 readings.append(setting.default_value)
             else:
-                readings.append(map_raw_to_display(setting.value_map, raw))
+                readings.append(map_raw_to_display(setting.value_map, mains))
+
+            if (
+                battery_drift is None
+                and battery is not None
+                and windows_battery is not None
+                and battery != windows_battery
+            ):
+                battery_drift = {
+                    "kind": "power_dc_rail",
+                    "dc_value": map_raw_to_display(setting.value_map, battery),
+                    "windows_dc_default": map_raw_to_display(setting.value_map, windows_battery),
+                }
 
         # `values_equal`, not `==`: these readings do not all come from the same
         # place. A plan holding an override yields whatever `value_map`
@@ -290,6 +476,11 @@ class PowerCfgExecutor(BaseExecutor):
         # for a setting whose map is empty. Compared with `==` that reads as
         # "the plans disagree", and the UI would report a machine as half-tuned
         # when every plan already holds the same value.
+        return self._with_battery_note(self._agreed_value(setting, readings), battery_drift)
+
+    @staticmethod
+    def _agreed_value(setting: SettingExecutor, readings: list[Any]) -> Any:
+        """The one mains value the plans agree on, or the plan that is behind."""
         if all(values_equal(r, readings[0]) for r in readings):
             return readings[0]
 
@@ -301,6 +492,19 @@ class PowerCfgExecutor(BaseExecutor):
             if not values_equal(reading, setting.recommended_value):
                 return reading
         return readings[0]
+
+    @staticmethod
+    def _with_battery_note(value: Any, battery_drift: dict[str, Any] | None) -> Any:
+        """The reading, carrying what the battery rail holds when it is not stock.
+
+        The value itself stays the mains reading — that is the value the product
+        tunes, talks about and verifies. The battery rail travels in ``finding``,
+        the channel an advisory already uses for the numbers behind its word, so
+        a rail nobody tunes is still a rail somebody can see.
+        """
+        if battery_drift is None:
+            return value
+        return Reading(value, battery_drift)
 
     def _get_active_scheme(self) -> str | None:
         """Get the currently active power scheme GUID."""
@@ -390,7 +594,13 @@ class PowerCfgExecutor(BaseExecutor):
         HKLM\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\
         <scheme_guid>\\<subgroup_guid>\\<setting_guid>
 
-        Values are stored as ACSettingIndex and DCSettingIndex (REG_DWORD).
+        Values are stored as ACSettingIndex and DCSettingIndex (REG_DWORD), and
+        both are read here: fpstune writes both rails, so a fallback that saw
+        only one would be the narrower-observation defect all over again. The
+        mains index is the value; the battery index travels in the ``Reading``
+        when it is not what Windows ships, exactly as on the fast path. A plan
+        with no battery override prints ``NONE``, which is inheritance rather
+        than drift.
         """
         if sys.platform != "win32":
             return None, "Not available on this platform"
@@ -403,9 +613,10 @@ class PowerCfgExecutor(BaseExecutor):
         ps_script = f"""
 $path = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\{scheme}\\{subgroup}\\{setting}'
 if (Test-Path -LiteralPath $path) {{
-    $val = Get-ItemProperty -LiteralPath $path -Name 'ACSettingIndex' -ErrorAction SilentlyContinue
-    if ($val) {{
-        Write-Output $val.ACSettingIndex
+    $val = Get-ItemProperty -LiteralPath $path -ErrorAction SilentlyContinue
+    if ($val -and $null -ne $val.ACSettingIndex) {{
+        $dc = if ($null -ne $val.DCSettingIndex) {{ $val.DCSettingIndex }} else {{ 'NONE' }}
+        Write-Output ('{{0}} {{1}}' -f $val.ACSettingIndex, $dc)
     }} else {{
         Write-Output 'NOTFOUND'
     }}
@@ -442,14 +653,18 @@ if (Test-Path -LiteralPath $path) {{
                 )
                 return "not_available", None
             if output:
+                fields = output.split()
                 try:
-                    raw_value = int(output)
-                    display_value = map_raw_to_display(value_map, raw_value)
-                    return display_value, None
+                    raw_value = int(fields[0])
                 except ValueError as e:
                     from fpstune.utils.debug import debug_log
 
                     debug_log("powercfg", f"Failed to parse power setting value '{output}': {e}")
+                else:
+                    display_value = map_raw_to_display(value_map, raw_value)
+                    return self._battery_note_from_fallback(
+                        display_value, fields, subgroup, setting, value_map
+                    ), None
         except Exception as e:
             from fpstune.utils.debug import debug_log
 
@@ -458,6 +673,34 @@ if (Test-Path -LiteralPath $path) {{
         # Reached only on a real failure: an exception, an unparseable value, or
         # no output at all. A missing subgroup returns above and never lands here.
         return None, "Could not detect power setting"
+
+    def _battery_note_from_fallback(
+        self,
+        value: Any,
+        fields: list[str],
+        subgroup: str,
+        setting: str,
+        value_map: dict[Any, Any],
+    ) -> Any:
+        """Same battery note as the fast path, from the PowerShell fallback's line."""
+        if len(fields) < 2 or fields[1] == "NONE":
+            return value
+        try:
+            battery = int(fields[1])
+        except ValueError:
+            return value
+
+        windows_battery = windows_default_index(subgroup, setting, "DC")
+        if windows_battery is None or battery == windows_battery:
+            return value
+        return Reading(
+            value,
+            {
+                "kind": "power_dc_rail",
+                "dc_value": map_raw_to_display(value_map, battery),
+                "windows_dc_default": map_raw_to_display(value_map, windows_battery),
+            },
+        )
 
     def get_available_values(self, subgroup: str, setting_guid: str) -> list[int]:
         """Get available values for a power setting.
@@ -505,6 +748,8 @@ if (Test-Path -LiteralPath $path) {{
 
     @classmethod
     def invalidate_cache(cls) -> None:
-        """Invalidate cached active scheme."""
+        """Invalidate the cached active scheme and autonomous-mode reading."""
         with cls._lock:
             cls._active_scheme = None
+            cls._autonomous_mode = None
+            cls._autonomous_read = False

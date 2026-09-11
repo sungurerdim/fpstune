@@ -2322,19 +2322,22 @@ MW3_CLOUD_SAVEGAME = _make_mw3_cst_setting(
     setting_id="game_config:mw3:cloud_savegame",
     display_name="MW3 Cloud Config Savegame",
     short_name="MW3 Cloud Config Savegame",
-    description="Syncs the config files to the Activision cloud on launch. When on, the cloud copy is "
-    "downloaded at startup and overwrites local changes, so tuned settings revert after every "
-    "restart.",
+    description="Syncs the config files to the Activision cloud on launch. When on, the tuned config "
+    "follows the account to every machine it signs in on instead of living on one disk.",
     cst_key="ConfigCloudSavegameEnabled:0.0",
     choices=("false", "true"),
     default_value="true",
-    recommended_value="false",
-    current_impact="true: Cloud settings overwrite local config on every game launch → optimised values reset",
-    recommended_impact="false: Local config is authoritative — settings applied by this tool persist across restarts",
-    effect="Disables cloud config savegame sync so local settings are not overwritten on launch",
-    # Stops the cloud copy overwriting local tweaks. That is a config-integrity
-    # benefit with no latency component at all — the -12.0 was the sweep's clipping
-    # cap, and the frontend adds latency_ms into the total shown on Home.
+    recommended_value="true",
+    current_impact="false: Config stays on this machine only → tuned settings are lost on a reinstall or another PC",
+    recommended_impact="true: Tuned config is kept in the cloud and applied wherever the account plays",
+    effect="Keeps the tuned config in the cloud so it follows the account to every machine",
+    # Decided 2026-09-10: the cloud copy is where the tuned config is *kept*, not a
+    # threat to it. Guides turn this off so a stale cloud copy cannot overwrite local
+    # edits; the ordering fpstune enforces makes that moot — a write lands only while
+    # the game is closed, and the next launch uploads that copy. Recommended equals
+    # the stock value, so this row is a drift guard (consequence 2) for machines a
+    # guide or an earlier fpstune release switched off. Config integrity, not
+    # latency: the metric is a placeholder the frontend never adds up (C11).
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=62,
     evidence_level="proven",
@@ -2345,16 +2348,16 @@ MW3_CLOUD_STORAGE = _make_mw3_cst_setting(
     setting_id="game_config:mw3:cloud_storage",
     display_name="MW3 Cloud Config Storage",
     short_name="MW3 Cloud Config Storage",
-    description="Uploads and downloads config data to Activision cloud storage. "
-    "Disabling prevents the game from pulling cloud-stored settings that overwrite local optimisations.",
+    description="Uploads and downloads config data to Activision cloud storage. On, the tuned config "
+    "is stored with the account and lands on every machine that signs in.",
     cst_key="ConfigCloudStorageEnabled:1.0",
     choices=("false", "true"),
     default_value="true",
-    recommended_value="false",
-    current_impact="true: Config uploaded/downloaded from cloud → remote copy can overwrite local tweaks",
-    recommended_impact="false: Cloud storage inactive — local config file is the single source of truth",
-    effect="Disables cloud storage for config so remote values cannot overwrite local settings",
-    # Same as the savegame sibling: config integrity, not latency.
+    recommended_value="true",
+    current_impact="false: Cloud storage off → the tuned config exists on this disk alone",
+    recommended_impact="true: Tuned config stored in the cloud and applied on every machine the account uses",
+    effect="Stores the tuned config in the cloud so every machine gets it",
+    # Same decision as the savegame sibling (2026-09-10): a drift guard at the stock value.
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=63,
     evidence_level="proven",

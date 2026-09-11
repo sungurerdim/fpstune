@@ -1415,12 +1415,12 @@ export const settingsTr: Record<
   "game_config:mw3:cloud_savegame": {
     name: "MW3 bulut yapılandırma kaydı",
     description:
-      "Oyun açılışında oyuncu yapılandırma dosyalarını Activision bulutuyla eşitler. Açıkken oyun buluttaki ayarları indirip yerel değişiklikleri ezer — iyileştirilmiş ayarlar kaybolur.",
+      "Oyun açılışında yapılandırma dosyalarını Activision bulutuyla eşitler. Açıkken iyileştirilmiş yapılandırma tek bir diske bağlı kalmaz, hesabın girdiği her makineye gelir.",
   },
   "game_config:mw3:cloud_storage": {
     name: "MW3 bulut yapılandırma deposu",
     description:
-      "Yapılandırma verisini Activision bulut deposuna yükler ve oradan indirir. Kapatmak, buluttaki kopyanın yerel iyileştirmeleri ezmesini önler.",
+      "Yapılandırma verisini Activision bulut deposuna yükler ve oradan indirir. Açıkken iyileştirilmiş yapılandırma hesapla birlikte saklanır ve giriş yapılan her makineye iner.",
   },
   "game_cleanup:mw3:shader_cache_cleanup": {
     name: "MW3 shader önbelleği",
@@ -1485,7 +1485,7 @@ export const settingsTr: Record<
   "game_config:mw4:cloud_storage": {
     name: "MW4 bulut yapılandırma deposu",
     description:
-      "Yerel yapılandırmayı Activision'ın bulut kopyasıyla eşitler. Açıkken başka makineden veya önceki oturumdan yazılmış bulut kopyası buradaki ayarları habersizce ezebilir.",
+      "Yerel yapılandırmayı Activision'ın bulut kopyasıyla eşitler. Açıkken iyileştirilmiş yapılandırma hesapla birlikte saklanır ve hesabın girdiği her makinede uygulanır.",
   },
   "game_config:mw4:hw_change_detection": {
     name: "MW4 donanım değişikliği algısı",

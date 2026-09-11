@@ -384,16 +384,19 @@ MW4_CLOUD_STORAGE = _make_mw4_setting(
     setting_id="game_config:mw4:cloud_storage",
     display_name="MW4 Cloud Config Storage",
     short_name="MW4 Cloud Config Storage",
-    description="Syncs the local config with Activision's cloud copy. While it is on, a cloud "
-    "copy written from another machine or an earlier session can overwrite the settings applied "
-    "here without warning.",
+    description="Syncs the local config with Activision's cloud copy. On, the tuned config is stored "
+    "with the account and applied on every machine it signs in on.",
     key="ConfigCloudStorageEnabled@0",
     choices=("false", "true"),
     default_value="true",
-    recommended_value="false",
-    current_impact="true: A remote copy can overwrite local settings on launch",
-    recommended_impact="false: The local file is the single source of truth",
-    effect="Stops cloud sync from overwriting local settings",
+    recommended_value="true",
+    current_impact="false: The tuned config lives on this disk alone and is lost with it",
+    recommended_impact="true: Tuned config kept in the cloud and applied wherever the account plays",
+    effect="Stores the tuned config in the cloud so every machine gets it",
+    # Decided 2026-09-10, with the MW3 siblings: the cloud is where the tuned
+    # config is kept. fpstune writes only while the game is closed and the next
+    # launch uploads that copy, so the "stale cloud copy overwrites local edits"
+    # case the guides guard against does not arise. Stock value → drift guard.
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=2,
     scope=SettingScope.RECOMMENDED,

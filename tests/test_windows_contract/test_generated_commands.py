@@ -46,6 +46,7 @@ from typing import Any
 import pytest
 
 from fpstune.settings.base import DetectType, SettingExecutor
+from fpstune.settings.executors.powershell import _add_cleanup_paths
 from fpstune.settings.executors.powershell_actions import ACTION_COMMANDS
 from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils.powershell import substitute_placeholders
@@ -286,6 +287,11 @@ def _collect_commands() -> list[dict[str, str]]:
             )
         if setting.apply_type == DetectType.POWERSHELL and setting.apply_command.strip():
             args = {**setting.apply_args, "value": _apply_sample(setting)}
+            # A cleanup delete is handed its path list by the executor rather
+            # than carrying one in `apply_args`; rendering without it would leave
+            # `%paths%` unfilled here and nowhere else, which is a defect in the
+            # collector rather than in the definition.
+            _add_cleanup_paths(setting, args)
             collected.append(
                 {
                     "id": setting.id,

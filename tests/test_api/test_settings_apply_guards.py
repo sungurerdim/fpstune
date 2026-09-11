@@ -124,7 +124,7 @@ class TestBulkApplySharesSingleApplyValidation:
 
         with (
             _route_mocks(setting),
-            patch("fpstune.api.routes.settings.CommandExecutor.apply") as apply_cmd,
+            patch("fpstune.api.routes.settings_apply.CommandExecutor.apply") as apply_cmd,
         ):
             result = client.post(
                 "/api/settings/bulk/apply",
@@ -145,7 +145,7 @@ class TestBulkApplySharesSingleApplyValidation:
         with (
             _route_mocks(setting),
             patch(
-                "fpstune.api.routes.settings.CommandExecutor.apply", return_value=(True, None)
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ) as apply_cmd,
             patch(
                 "fpstune.api.routes.settings._finalize_apply_response",
@@ -171,7 +171,7 @@ class TestFreeStringValidation:
         with (
             _route_mocks(setting),
             patch(
-                "fpstune.api.routes.settings.CommandExecutor.apply", return_value=(True, None)
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ) as apply_cmd,
             patch(
                 "fpstune.api.routes.settings._finalize_apply_response",
@@ -232,7 +232,7 @@ class TestFreeStringValidation:
 
         with (
             _route_mocks(setting),
-            patch("fpstune.api.routes.settings.CommandExecutor.apply") as apply_cmd,
+            patch("fpstune.api.routes.settings_apply.CommandExecutor.apply") as apply_cmd,
         ):
             result = client.post(
                 "/api/settings/bulk/apply",

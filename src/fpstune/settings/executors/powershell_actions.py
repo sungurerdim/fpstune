@@ -7,6 +7,15 @@ script that uses %placeholder% substitution at execution time.
 
 from __future__ import annotations
 
+import re
+from collections.abc import Mapping
+from typing import Any
+
+from fpstune.settings.cleanup_targets import PATH_SEPARATOR
+
+#: The separator escaped for PowerShell's `-split`, which takes a regex.
+_PATH_SPLIT = re.escape(PATH_SEPARATOR)
+
 # Read and write a config file without changing its byte-level shape.
 #
 # `[System.IO.File]::WriteAllText($p, $t, [System.Text.Encoding]::UTF8)` writes a
@@ -124,101 +133,6 @@ _DOCKER_RECLAIM_TEMPLATE = r"""
 """
 
 
-def _cod_install_lookup(flavor: str) -> str:
-    """PowerShell that leaves ``$install`` at the folder holding ``flavor``.
-
-    Call of Duty titles keep their caches beside the game data rather than in a
-    user directory, and the install path is the user's own — a library on any
-    drive, under any name (C9). Battle.net's ``product.db`` is the machine's own
-    record of where it put them, so the path is read out of it rather than
-    guessed.
-
-    The build folder is globbed rather than named. MW3 ships under ``_retail_``
-    and the MW4 beta under ``_beta_``; a literal ``_retail_`` is a constant that
-    goes stale the moment a title is in beta — measured here, where MW4's 2.3 GB
-    of cache sat in a folder the MW3 lookup could not see. What is stable is the
-    flavor directory (`cod23`, `cod26`) inside it.
-
-    Args:
-        flavor: The engine flavor directory, e.g. ``cod23`` or ``cod26``.
-
-    Returns:
-        A PowerShell fragment. ``$install`` is ``$null`` when nothing matched.
-    """
-    return rf"""
-        $install = $null
-        $agentDb = 'C:\ProgramData\Battle.net\Agent\product.db'
-        if ([System.IO.File]::Exists($agentDb)) {{
-            try {{
-                $bytes = [IO.File]::ReadAllBytes($agentDb)
-                $enc   = [System.Text.Encoding]::GetEncoding(1252)
-                $text  = $enc.GetString($bytes)
-                foreach ($m in [regex]::Matches($text, '[A-Za-z]:[/\\][A-Za-z0-9 ()_\\/-]{{5,150}}')) {{
-                    $ip = ($m.Value.TrimEnd() -replace '/', '\')
-                    if (-not [System.IO.Directory]::Exists($ip)) {{ continue }}
-                    foreach ($build in [System.IO.Directory]::EnumerateDirectories($ip, '_*_')) {{
-                        if ([System.IO.Directory]::Exists((Join-Path $build '{flavor}'))) {{
-                            $install = $build
-                            break
-                        }}
-                    }}
-                    if ($null -ne $install) {{ break }}
-                }}
-            }} catch {{}}
-        }}
-    """
-
-
-#: The caches a Call of Duty install rebuilds on its next launch. `shadercache`
-#: is under the flavor directory; the other two sit beside it.
-_COD_CACHE_SUBDIRS = ("{flavor}\\shadercache", "telescopeCache", "xpak_cache")
-
-
-def _cod_cache_cleanup(flavor: str, label: str) -> str:
-    """The apply half: delete this title's rebuildable caches, report the bytes."""
-    subs = ", ".join(f"'{sub.format(flavor=flavor)}'" for sub in _COD_CACHE_SUBDIRS)
-    return (
-        _cod_install_lookup(flavor)
-        + rf"""
-        if ($null -eq $install) {{
-            Write-Output "FPSTUNE_WARN: {label} install dir not found — shader cache skipped"
-            exit 0
-        }}
-        $freed = [long]0
-        foreach ($sub in @({subs})) {{
-            $p = Join-Path $install $sub
-            if ([System.IO.Directory]::Exists($p)) {{
-                foreach ($f in [System.IO.Directory]::EnumerateFiles($p, '*', [System.IO.SearchOption]::AllDirectories)) {{
-                    try {{ $freed += [System.IO.FileInfo]::new($f).Length }} catch {{}}
-                }}
-                Remove-Item -Recurse -Force $p -ErrorAction SilentlyContinue
-            }}
-        }}
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """
-    )
-
-
-def _cod_cache_size(flavor: str, label: str) -> str:
-    """The detect half: how much those caches currently hold."""
-    subs = ",\n                        ".join(
-        f"(Join-Path $install '{sub.format(flavor=flavor)}')" for sub in _COD_CACHE_SUBDIRS
-    )
-    return (
-        _cod_install_lookup(flavor)
-        + rf"""
-                if ($null -ne $install) {{
-                    Emit-DirCleanup @(
-                        {subs}
-                    )
-                }} else {{
-                    Write-Output "FPSTUNE_WARN: {label} install dir not found via Battle.net product.db"
-                    Write-Output "ready|not_installed"
-                }}
-    """
-    )
-
-
 # DISM answers in the system language, and the old parser looked for the English
 # words 'Reclaimable|Reduction|Cleanup' on a line that also carried a size — a
 # line AnalyzeComponentStore never prints, in any language — so the estimate was
@@ -252,35 +166,7 @@ _DISM_RECLAIMABLE_FUNCTION = r"""
 """
 
 _CLEANUP_STATUS = (
-    r"""        function Get-DirSizeBytes([string]$dirPath) {
-            $size = [long]0
-            if (-not [System.IO.Directory]::Exists($dirPath)) { return $size }
-            try {
-                $di = [System.IO.DirectoryInfo]::new($dirPath)
-                foreach ($fi in $di.EnumerateFiles('*', [System.IO.SearchOption]::AllDirectories)) {
-                    $size += $fi.Length
-                }
-            } catch {
-                # Inaccessible subtree aborted enumeration mid-walk — keep the partial sum.
-            }
-            $size
-        }
-        function Get-MultiDirSizeBytes([string[]]$paths) {
-            $total = [long]0
-            foreach ($p in $paths) { $total += Get-DirSizeBytes $p }
-            $total
-        }
-        # Emit a cleanup size from a candidate path list. If NONE of the paths exist,
-        # the target software/feature is not installed → emit "ready|not_installed" so
-        # the setting becomes not-applicable (hidden + excluded from all totals).
-        function Emit-DirCleanup([string[]]$paths) {
-            $existing = @($paths | Where-Object { $_ -and [System.IO.Directory]::Exists($_) })
-            if ($existing.Count -eq 0) { Write-Output 'ready|not_installed'; return }
-            $bytes = [long]0
-            foreach ($p in $existing) { $bytes += Get-DirSizeBytes $p }
-            Write-Output "ready|$([math]::Round($bytes/1MB, 0)) MB"
-        }
-        # Per-type reclaimable bytes from 'docker system df' as a hashtable
+    r"""        # Per-type reclaimable bytes from 'docker system df' as a hashtable
         # (Images/Containers/Build Cache/Local Volumes). Starts Docker Desktop if the
         # engine is down. Returns $null when docker is unavailable.
         function Get-DockerReclaimBytes() {
@@ -321,11 +207,15 @@ _CLEANUP_STATUS = (
         }
 """
     + _DISM_RECLAIMABLE_FUNCTION
-    + r"""        # The dispatch is a function so that the ~15 KB of helpers above can be
-        # parsed once and then asked about every cleanup type in the same
-        # session. Measured on the dev machine: a cold scan spawned 26
-        # PowerShell processes here, one per cleanup setting, each re-parsing
-        # this whole script to answer one question. See prefetch_cleanup_sizes.
+    + r"""        # What is left here is what no directory walk can answer: a component
+        # store only DISM accounts for, a docker daemon's own bookkeeping, the
+        # VSS shadow storage allocation, and the event log service's record
+        # counts. Every cleanup whose target is a folder is measured in-process
+        # by `settings/cleanup_targets.py` instead - from the same path list its
+        # delete command is handed, and without a process start per scan.
+        #
+        # The dispatch is still a function so the helpers above are parsed once
+        # and then asked about each remaining type in the same session.
         function Get-CleanupStatus([string]$type) {
         switch ($type) {
             'dism' {
@@ -336,142 +226,32 @@ _CLEANUP_STATUS = (
                     Write-Output 'ready|unavailable'
                 }
             }
-            'temp' {
-                $mb = [math]::Round((Get-MultiDirSizeBytes @($env:TEMP, "$env:LOCALAPPDATA\Temp", "$env:windir\Temp"))/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'nvidia_shader' {
-                $cachePaths = [System.Collections.Generic.List[string]]::new()
-                foreach ($sub in @('DXCache','GLCache')) {
-                    $p = "$env:LOCALAPPDATA\NVIDIA\$sub"
-                    if (Test-Path $p) { $cachePaths.Add($p) }
-                }
-                $npdBase = "$env:USERPROFILE\AppData\LocalLow\NVIDIA\PerDriverVersion"
-                if (Test-Path $npdBase) {
-                    foreach ($sub in @('DXCache','GLCache')) {
-                        $p = Join-Path $npdBase $sub
-                        if (Test-Path $p) { $cachePaths.Add($p) }
-                    }
-                    foreach ($verDir in Get-ChildItem $npdBase -Directory -EA SilentlyContinue) {
-                        foreach ($sub in @('DXCache','GLCache')) {
-                            $p = Join-Path $verDir.FullName $sub
-                            if (Test-Path $p) { $cachePaths.Add($p) }
-                        }
-                    }
-                }
-                Emit-DirCleanup $cachePaths
-            }
-            'amd_shader' {
-                $cachePaths = [System.Collections.Generic.List[string]]::new()
-                $amdBase = "$env:LOCALAPPDATA\AMD"
-                if (Test-Path $amdBase) {
-                    foreach ($sub in @('DxCache','VkCache','GLCache','DXCache')) {
-                        $p = Join-Path $amdBase $sub
-                        if (Test-Path $p) { $cachePaths.Add($p) }
-                    }
-                    foreach ($dir in Get-ChildItem $amdBase -Directory -EA SilentlyContinue) {
-                        foreach ($sub in @('DxCache','VkCache','GLCache','DXCache')) {
-                            $p = Join-Path $dir.FullName $sub
-                            if (Test-Path $p) { $cachePaths.Add($p) }
-                        }
-                    }
-                }
-                Emit-DirCleanup $cachePaths
-            }
-            'intel_shader' {
-                $cachePaths = [System.Collections.Generic.List[string]]::new()
-                $intelBase = "$env:LOCALAPPDATA\Intel"
-                if (Test-Path $intelBase) {
-                    $p = Join-Path $intelBase 'ShaderCache'
-                    if (Test-Path $p) { $cachePaths.Add($p) }
-                    foreach ($dir in Get-ChildItem $intelBase -Directory -EA SilentlyContinue) {
-                        $p = Join-Path $dir.FullName 'ShaderCache'
-                        if (Test-Path $p) { $cachePaths.Add($p) }
-                    }
-                }
-                Emit-DirCleanup $cachePaths
-            }
-            'directx_shader' { Emit-DirCleanup @("$env:LOCALAPPDATA\D3DSCache") }
-            'battlenet_cache' { Emit-DirCleanup @("$env:ProgramData\Blizzard Entertainment\Battle.net\Cache") }
             'event_logs' {
-                $mb = [math]::Round((Get-DirSizeBytes "$env:windir\System32\winevt\Logs")/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'wer' {
-                $mb = [math]::Round((Get-MultiDirSizeBytes @("$env:ALLUSERSPROFILE\Microsoft\Windows\WER\ReportArchive","$env:ALLUSERSPROFILE\Microsoft\Windows\WER\ReportQueue","$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportArchive","$env:LOCALAPPDATA\Microsoft\Windows\WER\ReportQueue"))/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'defender' {
-                $mb = [math]::Round((Get-MultiDirSizeBytes @("$env:ALLUSERSPROFILE\Microsoft\Windows Defender\Scans\History\Service","$env:ALLUSERSPROFILE\Microsoft\Windows Defender\Scans\History\Store","$env:ALLUSERSPROFILE\Microsoft\Windows Defender\Scans\MetaStore","$env:ALLUSERSPROFILE\Microsoft\Windows Defender\Scans\ScanResults"))/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'prefetch' {
-                $mb = [math]::Round((Get-DirSizeBytes "$env:windir\Prefetch")/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'browser' {
-                $total = Get-MultiDirSizeBytes @("$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Cache\Cache_Data","$env:LOCALAPPDATA\Microsoft\Edge\User Data\Default\Code Cache","$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Cache\Cache_Data","$env:LOCALAPPDATA\Google\Chrome\User Data\Default\Code Cache","$env:LOCALAPPDATA\BraveSoftware\Brave-Browser\User Data\Default\Cache\Cache_Data")
-                $ffBase = "$env:APPDATA\Mozilla\Firefox\Profiles"
-                if ([System.IO.Directory]::Exists($ffBase)) {
-                    foreach ($prof in [System.IO.Directory]::GetDirectories($ffBase)) {
-                        $total += Get-MultiDirSizeBytes @("$prof\cache2","$prof\startupCache","$prof\OfflineCache")
-                    }
+                # Only the logs `ClearLog` will actually clear, which is the ones
+                # holding records. Measured here on 2026-09-10: the whole folder
+                # was 449 files and 67.3 MB, of which 41 logs holding 35.5 MB had
+                # any record in them at all - so sizing the folder promised
+                # roughly twice what clearing it can return. A cleared log keeps
+                # a small allocation (4 KB was the smallest on disk), which this
+                # does not subtract; that is under half a percent of the figure,
+                # and it leaves the estimate conservative rather than optimistic.
+                #
+                # The same criterion is read again afterwards, so a log the
+                # service refused to clear stays in the set and the freed figure
+                # reports only what actually went.
+                $bytes = [long]0
+                foreach ($log in Get-WinEvent -ListLog * -ErrorAction SilentlyContinue) {
+                    if (-not $log.RecordCount -or $log.RecordCount -le 0) { continue }
+                    $file = $log.LogFilePath
+                    if (-not $file) { continue }
+                    $file = [Environment]::ExpandEnvironmentVariables($file)
+                    try { $bytes += [System.IO.FileInfo]::new($file).Length } catch {}
                 }
-                Write-Output "ready|$([math]::Round($total/1MB, 0)) MB"
-            }
-            'windows_update_cache' {
-                $mb = [math]::Round((Get-DirSizeBytes "$env:windir\SoftwareDistribution\Download")/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'delivery_optimization' {
-                $mb = [math]::Round((Get-DirSizeBytes "$env:windir\ServiceProfiles\NetworkService\AppData\Local\Microsoft\Windows\DeliveryOptimization\Cache")/1MB, 0)
-                Write-Output "ready|$mb MB"
-            }
-            'thumbnail_cache' {
-                $total = [long]0
-                $explorerDir = "$env:LOCALAPPDATA\Microsoft\Windows\Explorer"
-                if ([System.IO.Directory]::Exists($explorerDir)) {
-                    foreach ($f in [System.IO.Directory]::GetFiles($explorerDir, "thumbcache_*.db")) {
-                        try { $total += [System.IO.FileInfo]::new($f).Length } catch {}
-                    }
-                    $icdb = "$explorerDir\IconCache.db"
-                    if ([System.IO.File]::Exists($icdb)) { try { $total += [System.IO.FileInfo]::new($icdb).Length } catch {} }
-                }
-                Write-Output "ready|$([math]::Round($total/1MB, 0)) MB"
-            }
-            'memory_dumps' {
-                $total = Get-MultiDirSizeBytes @("$env:windir\Minidump","$env:windir\LiveKernelReports","$env:LOCALAPPDATA\CrashDumps")
-                $mdmp = "$env:windir\MEMORY.DMP"
-                if ([System.IO.File]::Exists($mdmp)) { try { $total += [System.IO.FileInfo]::new($mdmp).Length } catch {} }
-                Write-Output "ready|$([math]::Round($total/1MB, 0)) MB"
-            }
-            'discord_cache' { Emit-DirCleanup @("$env:APPDATA\discord\Cache\Cache_Data","$env:APPDATA\discord\Code Cache","$env:APPDATA\discord\GPUCache") }
-            'epic_cache' { Emit-DirCleanup @("$env:LOCALAPPDATA\EpicGamesLauncher\Saved\webcache","$env:LOCALAPPDATA\EpicGamesLauncher\Saved\webcache_4147","$env:LOCALAPPDATA\EpicGamesLauncher\Saved\Logs") }
-            'steam_webcache' { Emit-DirCleanup @("$env:LOCALAPPDATA\Steam\htmlcache\Cache\Cache_Data","$env:LOCALAPPDATA\Steam\htmlcache\Code Cache") }
-            'pip_cache' { Emit-DirCleanup @("$env:LOCALAPPDATA\pip\Cache") }
-            'npm_cache' { Emit-DirCleanup @("$env:APPDATA\npm-cache") }
-            'yarn_cache' { Emit-DirCleanup @("$env:LOCALAPPDATA\Yarn\Cache") }
-            'pnpm_cache' { Emit-DirCleanup @("$env:LOCALAPPDATA\pnpm\store") }
-            'nuget_cache' { Emit-DirCleanup @("$env:USERPROFILE\.nuget\packages") }
-            'maven_cache' { Emit-DirCleanup @("$env:USERPROFILE\.m2\repository") }
-            'gradle_cache' { Emit-DirCleanup @("$env:USERPROFILE\.gradle\caches") }
-            'cargo_cache' { Emit-DirCleanup @("$env:USERPROFILE\.cargo\registry\cache","$env:USERPROFILE\.cargo\registry\src") }
-            'mw3_shader' {
-__MW3_SHADER_SIZE__
-            }
-            'mw4_shader' {
-__MW4_SHADER_SIZE__
-            }
-            'mw3_crash' {
-                $p = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Call of Duty MWIII\crashes'
-                Emit-DirCleanup @($p)
-            }
-            'cod_crash_reports' {
-                Emit-DirCleanup @((Join-Path $env:LOCALAPPDATA 'Activision\Call of Duty\crash_reports'))
+                Write-Output "ready|$([math]::Round($bytes/1MB, 0)) MB"
             }
             'docker_prune' {
                 # `docker system prune -f` reclaims build cache + stopped containers +
-                # dangling images only — NOT unused tagged images (needs -a) or volumes.
+                # dangling images only - NOT unused tagged images (needs -a) or volumes.
                 # df's "Images Reclaimable" lumps in unused-tagged images, so the full
                 # total overcounts ~2x (e.g. 19 GB shown vs ~8 GB actually freed).
                 # Build Cache + Containers tracks the real -f freed space closely.
@@ -494,26 +274,6 @@ __MW4_SHADER_SIZE__
                     foreach ($k in $h.Keys) { if ($k -ne 'Local Volumes') { $b += $h[$k] } }
                     Write-Output "ready|$([math]::Round($b/1MB, 0)) MB"
                 } catch { Write-Output "ready|unavailable" }
-            }
-            'wsl_compact' {
-                $totalBytes = [double]0
-                $foundVhd = $false
-                $lxss = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Lxss'
-                if (Test-Path $lxss) {
-                    foreach ($key in Get-ChildItem $lxss -EA SilentlyContinue) {
-                        $bp = (Get-ItemProperty $key.PSPath -Name BasePath -EA SilentlyContinue).BasePath
-                        if ($bp) {
-                            $bp = $bp -replace '^\\\\\?\\',''
-                            foreach ($vhd in Get-ChildItem -Path $bp -Filter *.vhdx -EA SilentlyContinue) {
-                                $totalBytes += $vhd.Length
-                                $foundVhd = $true
-                            }
-                        }
-                    }
-                }
-                # No WSL2 virtual disk → WSL not in use → not applicable (hidden).
-                if (-not $foundVhd) { Write-Output "ready|not_installed" }
-                else { Write-Output "ready|$([math]::Round($totalBytes/1MB, 0)) MB" }
             }
             'shadow_copy' {
                 try {
@@ -556,10 +316,252 @@ __MW4_SHADER_SIZE__
         }
         }
         Get-CleanupStatus '%type%'
-""".replace("__MW3_SHADER_SIZE__", _cod_cache_size("cod23", "MW3")).replace(
-        "__MW4_SHADER_SIZE__", _cod_cache_size("cod26", "MW4")
-    )
+"""
 )
+
+
+# Every SSD volume this machine can retrim, as (drive letter, volume path) pairs
+# in $ssdVolumes. Shared by the reading and the action on purpose: if the two
+# disagreed about which volumes count, a retrim would leave behind a volume the
+# reading still calls overdue, and the row would never go green.
+#
+# The three properties compared here come back as their storage-MOF ValueMap
+# names rather than as MUI text - the same enumeration printed `SSD`, `NVMe` and
+# `Fixed` verbatim on a Turkish Windows on 2026-09-10 - so this is the C4
+# carve-out, not localized-text parsing. `SpindleSpeed` is the second opinion for
+# a disk that reports `Unspecified`: Windows documents 0 as solid state.
+# `DriveType -ne 'Fixed'` drops an external enclosure, which Optimize Drives does
+# not list either.
+_SSD_VOLUMES = r"""
+    $sep = [char]0x5C
+    $solidDisks = @()
+    foreach ($pd in Get-PhysicalDisk) {
+        $solid = ($pd.MediaType -eq 'SSD') -or
+                 (($pd.MediaType -eq 'Unspecified') -and ($pd.SpindleSpeed -eq 0))
+        if (-not $solid) { continue }
+        foreach ($disk in ($pd | Get-Disk)) { $solidDisks += $disk.Number }
+    }
+    $ssdVolumes = @()
+    foreach ($part in Get-Partition) {
+        if (-not $part.DriveLetter) { continue }
+        if ($solidDisks -notcontains $part.DiskNumber) { continue }
+        $vol = Get-Volume -DriveLetter $part.DriveLetter
+        if (-not $vol) { continue }
+        if ($vol.DriveType -ne 'Fixed') { continue }
+        $volPath = $vol.Path
+        if (-not $volPath) { $volPath = $vol.UniqueId }
+        $ssdVolumes += ,@($part.DriveLetter, $volPath)
+    }
+"""
+
+# When Windows last ran Optimize Drives on each SSD volume, and whether that is
+# long enough ago to say the schedule has stopped running.
+#
+# The record is `LastRunTime` under
+# HKLM\SOFTWARE\Microsoft\Dfrg\Statistics\Volume{<guid>}: a 16-byte REG_BINARY
+# SYSTEMTIME in local time - wYear, wMonth, wDayOfWeek, wDay, wHour, wMinute,
+# wSecond, wMilliseconds, each a little-endian word. The subkey name is the
+# volume GUID `Get-Volume` reports as its own `Path`, which is why nothing here
+# has to name a drive.
+#
+# Three readings taken on this machine on 2026-09-10 decided that source over the
+# event log:
+#   1. `ScheduledDefrag`'s task history said 7.09.2026 01:52:24 and the system
+#      volume's `LastRunTime` decoded to 2026-09-07 01:52:24 - the same second,
+#      so the key is what the scheduled optimization writes.
+#   2. The Application log held one record in total and zero Defrag events, so
+#      `Get-WinEvent -Id 258` would have answered "never" on a machine that had
+#      been retrimmed three days earlier. An event log rolls; this key does not.
+#   3. A retrim then moved the key to 2026-09-10 23:00:55 and left
+#      `LastRunClustersTrimmed` at 7409270 - so it tracks a retrim, not only a
+#      full defragmentation, which keeps its own `LastRunFullDefragTime`.
+#
+# The threshold is 14 days because Windows' own optimization schedule is weekly:
+# one missed week is a machine that was switched off, two is a schedule that is
+# not running. It is deliberately not the point at which an SSD suffers - TRIM
+# arrears cost sustained write speed gradually - but the point at which the
+# arrears mean something is broken.
+#
+# Which volume the number describes is the one nearest the threshold from its own
+# side: `ok` reports the oldest retrim (the volume closest to going overdue) and
+# `overdue` reports the newest overdue one (the volume that crossed most
+# recently). Both answer "how close to the line is this machine", and neither can
+# overstate the case. A volume with no record at all outranks every age, because
+# "never" is not a large number of days.
+_SSD_TRIM_STATUS = (
+    r"""
+    $ErrorActionPreference = 'SilentlyContinue'
+    $thresholdDays = 14
+    $statsRoot = 'HKLM:\SOFTWARE\Microsoft\Dfrg\Statistics'
+"""
+    + _SSD_VOLUMES
+    + r"""
+    if ((@(Get-PhysicalDisk)).Count -eq 0) {
+        Write-Output 'FPSTUNE_WARN: Get-PhysicalDisk listed no disk; the storage service could not answer'
+    }
+    $now = Get-Date
+    $noRecord = $false
+    $ages = @()
+    foreach ($entry in $ssdVolumes) {
+        $leaf = ''
+        if ($entry[1]) { $leaf = $entry[1].TrimEnd($sep).Split($sep)[-1] }
+        $stamp = $null
+        if ($leaf.StartsWith('Volume{')) {
+            $stat = (Get-ItemProperty (Join-Path $statsRoot $leaf)).LastRunTime
+            if ($stat -and $stat.Length -ge 16) {
+                $year   = $stat[0]  + $stat[1]  * 256
+                $month  = $stat[2]  + $stat[3]  * 256
+                $day    = $stat[6]  + $stat[7]  * 256
+                $hour   = $stat[8]  + $stat[9]  * 256
+                $minute = $stat[10] + $stat[11] * 256
+                $second = $stat[12] + $stat[13] * 256
+                # An all-zero structure is the shape of "this volume has never
+                # been optimized", and an impossible date is a corrupt one; both
+                # leave $stamp null, which is the same answer.
+                if ($year -gt 1900) {
+                    $stamp = Get-Date -Year $year -Month $month -Day $day -Hour $hour -Minute $minute -Second $second
+                }
+            }
+        }
+        if ($null -eq $stamp) { $noRecord = $true; continue }
+        $age = [int][Math]::Floor(($now - $stamp).TotalDays)
+        # A clock moved backwards would otherwise report a negative age, which
+        # reads as a retrim in the future rather than as a recent one.
+        if ($age -lt 0) { $age = 0 }
+        $ages += $age
+    }
+    if ($ssdVolumes.Count -eq 0) {
+        Write-Output 'not_available'
+    } elseif ($noRecord) {
+        Write-Output 'overdue|never'
+    } else {
+        $late = @($ages | Where-Object { $_ -ge $thresholdDays })
+        if ($late.Count -gt 0) {
+            Write-Output ('overdue|{0} days' -f ($late | Measure-Object -Minimum).Minimum)
+        } else {
+            Write-Output ('ok|{0} days' -f ($ages | Measure-Object -Maximum).Maximum)
+        }
+    }
+"""
+)
+
+# One retrim per SSD volume, which is one concept rather than one per drive: the
+# user asks for "tell the SSDs what is free again", and a machine whose games
+# live on a second volume gains nothing from doing only the system one.
+#
+# `-Verbose` is redirected onto stdout (`4>&1`) because that stream is where
+# `Optimize-Volume` reports its progress, and the streamed apply shows the user
+# what is happening during a run measured at 8.4 s and 5.3 s for the two volumes
+# of a 1 TB NVMe disk on 2026-09-10. The exit code, not the text, decides the
+# verdict: a volume that throws is named in English and collected, and a failure
+# anywhere exits non-zero, so a partial run is reported failed rather than done.
+_SSD_RETRIM = (
+    r"""
+    $ErrorActionPreference = 'SilentlyContinue'
+"""
+    + _SSD_VOLUMES
+    + r"""
+    if ($ssdVolumes.Count -eq 0) {
+        Write-Output 'No SSD volume with a drive letter on this machine'
+        exit 1
+    }
+    $failed = @()
+    foreach ($entry in $ssdVolumes) {
+        $letter = $entry[0]
+        Write-Output ('Retrimming volume {0}:' -f $letter)
+        try {
+            Optimize-Volume -DriveLetter $letter -ReTrim -Verbose -ErrorAction Stop 4>&1 |
+                ForEach-Object { Write-Output ('  {0}' -f $_) }
+            Write-Output ('Volume {0}: retrim complete' -f $letter)
+        } catch {
+            $failed += $letter
+            Write-Output ('Volume {0}: retrim failed - {1}' -f $letter, $_.Exception.Message)
+        }
+    }
+    if ($failed.Count -gt 0) {
+        Write-Output ('Retrim failed on volume(s): ' + ($failed -join ', '))
+        exit 1
+    }
+    Write-Output 'ok'
+"""
+)
+
+# One delete for every cleanup whose target is a path, and it is handed the path
+# list rather than rebuilding it.
+#
+# The list comes from `settings/cleanup_targets.py`, which is also what sizes the
+# target immediately before and immediately after this runs. That is the point:
+# the sizer and the deleter cannot disagree about which folders a cleanup covers,
+# because there is one list and both are given it. Every defect in the audit's
+# mismatch table was a second copy of a path list drifting from the first - a
+# folder counted twice and deleted once, a cache deleted and never counted, a
+# subdirectory counted and never deleted.
+#
+# What is gone from here is as important as what arrived. Each of these scripts
+# used to walk its own tree with `Get-ChildItem -Recurse | Measure-Object` before
+# and sometimes after the delete, to print a `Cleaned N MB` line that nothing
+# parses - measured the slowest of the five sizing methods tried, 5.5 to 9 times
+# the cost of the walk it was imitating, and paid twice by three of them.
+_PATH_CLEANUP = r"""
+    $ErrorActionPreference = 'SilentlyContinue'
+    # A separator no Windows path may contain, so the whole list stays one
+    # placeholder and the substitution layer escapes it as the single literal it
+    # lands in. `cleanup_targets.delete_arguments` refuses a path holding one.
+    $paths = @('%paths%' -split '__SPLIT__') | Where-Object { $_ }
+    $mode = '%mode%'
+    $globs = @('%globs%' -split '__SPLIT__') | Where-Object { $_ }
+__PROLOGUE__
+    foreach ($path in $paths) {
+        if (-not (Test-Path -LiteralPath $path)) { continue }
+        if ($mode -eq 'directory') {
+            # The folder itself goes: the caller's target says so, and its
+            # `installed` marker is what keeps the row from reading as
+            # uninstalled afterwards.
+            Remove-Item -LiteralPath $path -Recurse -Force -ErrorAction SilentlyContinue
+        } elseif ($mode -eq 'top_files') {
+            # Files directly inside it and nothing else - no -Recurse, so a
+            # subdirectory is neither counted nor removed.
+            $items = if ($globs.Count -gt 0) {
+                @($globs | ForEach-Object {
+                    Get-ChildItem -LiteralPath $path -Filter $_ -File -Force -ErrorAction SilentlyContinue
+                })
+            } else {
+                @(Get-ChildItem -LiteralPath $path -File -Force -ErrorAction SilentlyContinue)
+            }
+            $items | Remove-Item -Force -ErrorAction SilentlyContinue
+        } else {
+            # One enumeration of the top level and one -Recurse per entry, never
+            # one Remove-Item per file: Temp held 12719 files under 438 entries
+            # when that difference timed a cleanup out.
+            Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
+                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
+        }
+    }
+__EPILOGUE__
+    Write-Output "Cleanup ran over $($paths.Count) path(s)"
+"""
+
+
+def _path_cleanup(prologue: str = "", epilogue: str = "") -> str:
+    """The shared delete, optionally bracketed by a service stop and start.
+
+    Two cleanups have to stop the service that holds their folder open before it
+    can be emptied - Windows Update and Delivery Optimization - and both must
+    start it again whatever happened in between.
+    """
+    return (
+        _PATH_CLEANUP.replace("__SPLIT__", _PATH_SPLIT)
+        .replace("__PROLOGUE__", prologue)
+        .replace("__EPILOGUE__", epilogue)
+    )
+
+
+def _service_cleanup(service: str) -> str:
+    """The shared delete with `service` stopped around it."""
+    return _path_cleanup(
+        prologue=f"    Stop-Service -Name {service} -Force -ErrorAction SilentlyContinue",
+        epilogue=f"    Start-Service -Name {service} -ErrorAction SilentlyContinue",
+    )
 
 
 # Special action commands mapped to actual PowerShell scripts
@@ -614,12 +616,12 @@ ACTION_COMMANDS: dict[str, str] = {
     # machine, 43.0 s before and 34.7 s after, against a run the user timed at
     # about 108 s end to end. Three quarters of it was measuring.
     #
-    # None of that measuring was needed. The row already shows the reclaimable
-    # figure from its own detect, the frontend snapshots it before the run
-    # (useCleanupRunner's pendingFreed), and `_finalize_apply_response` detects
-    # again afterwards — so freed is the difference between two readings the app
-    # takes regardless. Computing it a second time inside the apply bought
-    # nothing and cost more than the cleanup.
+    # The measuring belongs to the app, not to this script. `_apply_and_finalize`
+    # sizes this cleanup's target with the shipped `Get-CleanupStatus` script
+    # immediately before the command and immediately again after it, and reports
+    # the difference as `freed_bytes` — one instrument, one axis, for every
+    # cleanup rather than a bespoke pair of passes inside this one. Computing it
+    # here as well would pay for the same readings twice.
     "dism_cleanup": r"""
         Dism.exe /online /Cleanup-Image /StartComponentCleanup /ResetBase
         if ($LASTEXITCODE -ne 0) {
@@ -640,103 +642,11 @@ ACTION_COMMANDS: dict[str, str] = {
     #    counted them as freed anyway. Sizing before and after makes the number
     #    a measurement (C11). A process writing into Temp between the two passes
     #    can only make the figure conservative, never inflate it.
-    "temp_cleanup": """
-        # The user temp variable and the one under local app data name the
-        # same folder on a stock profile, so without this the walk runs
-        # twice for it. Percent-delimited spellings stay out of this comment:
-        # that is fpstune's own placeholder syntax, and the renderer would
-        # read one here as a placeholder nobody supplies.
-        $paths = @($env:TEMP, "$env:LOCALAPPDATA\\Temp", "$env:windir\\Temp") |
-            Where-Object { $_ } |
-            ForEach-Object { [System.IO.Path]::GetFullPath($_).TrimEnd('\\') } |
-            Select-Object -Unique
-        function Get-SizeBytes([string]$dir) {
-            if (-not (Test-Path -LiteralPath $dir)) { return [int64]0 }
-            return [int64](Get-ChildItem -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue |
-                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-        }
-        $freed = [int64]0
-        foreach ($path in $paths) {
-            if (-not (Test-Path -LiteralPath $path)) { continue }
-            $before = Get-SizeBytes $path
-            Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
-                Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
-            $freed += $before - (Get-SizeBytes $path)
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "nvidia_shader_cleanup": """
-        $cachePaths = [System.Collections.Generic.List[string]]::new()
-        # NVIDIA: LocalAppData root caches
-        foreach ($sub in @('DXCache','GLCache')) {
-            $p = "$env:LOCALAPPDATA\\NVIDIA\\$sub"
-            if (Test-Path $p) { $cachePaths.Add($p) }
-        }
-        # NVIDIA: PerDriverVersion — root + all per-driver-version subdirs
-        $npdBase = "$env:USERPROFILE\\AppData\\LocalLow\\NVIDIA\\PerDriverVersion"
-        if (Test-Path $npdBase) {
-            foreach ($sub in @('DXCache','GLCache')) {
-                $p = Join-Path $npdBase $sub
-                if (Test-Path $p) { $cachePaths.Add($p) }
-            }
-            foreach ($verDir in Get-ChildItem $npdBase -Directory -EA SilentlyContinue) {
-                foreach ($sub in @('DXCache','GLCache')) {
-                    $p = Join-Path $verDir.FullName $sub
-                    if (Test-Path $p) { $cachePaths.Add($p) }
-                }
-            }
-        }
-        foreach ($path in $cachePaths) {
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output 'NVIDIA shader caches cleared'
-    """,
-    "amd_shader_cleanup": """
-        $cachePaths = [System.Collections.Generic.List[string]]::new()
-        # AMD: root caches + one level deep (AMD organises by feature/driver subdirs)
-        $amdBase = "$env:LOCALAPPDATA\\AMD"
-        if (Test-Path $amdBase) {
-            foreach ($sub in @('DxCache','VkCache','GLCache','DXCache')) {
-                $p = Join-Path $amdBase $sub
-                if (Test-Path $p) { $cachePaths.Add($p) }
-            }
-            foreach ($dir in Get-ChildItem $amdBase -Directory -EA SilentlyContinue) {
-                foreach ($sub in @('DxCache','VkCache','GLCache','DXCache')) {
-                    $p = Join-Path $dir.FullName $sub
-                    if (Test-Path $p) { $cachePaths.Add($p) }
-                }
-            }
-        }
-        foreach ($path in $cachePaths) {
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output 'AMD shader caches cleared'
-    """,
-    "intel_shader_cleanup": """
-        $cachePaths = [System.Collections.Generic.List[string]]::new()
-        # Intel: root + one level deep
-        $intelBase = "$env:LOCALAPPDATA\\Intel"
-        if (Test-Path $intelBase) {
-            $p = Join-Path $intelBase 'ShaderCache'
-            if (Test-Path $p) { $cachePaths.Add($p) }
-            foreach ($dir in Get-ChildItem $intelBase -Directory -EA SilentlyContinue) {
-                $p = Join-Path $dir.FullName 'ShaderCache'
-                if (Test-Path $p) { $cachePaths.Add($p) }
-            }
-        }
-        foreach ($path in $cachePaths) {
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output 'Intel shader caches cleared'
-    """,
-    "directx_shader_cleanup": """
-        # Windows D3D shader cache (fixed OS path)
-        $d3ds = "$env:LOCALAPPDATA\\D3DSCache"
-        if (Test-Path $d3ds) {
-            Remove-Item -Path "$d3ds\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output 'DirectX shader cache cleared'
-    """,
+    "temp_cleanup": _path_cleanup(),
+    "nvidia_shader_cleanup": _path_cleanup(),
+    "amd_shader_cleanup": _path_cleanup(),
+    "intel_shader_cleanup": _path_cleanup(),
+    "directx_shader_cleanup": _path_cleanup(),
     # -f only: dangling images, stopped containers, unused networks, build cache.
     # Followed by a vhdx compact so the host actually gets the space back.
     "docker_prune": _DOCKER_RECLAIM_TEMPLATE.replace("__PRUNE_ARGS__", "-f"),
@@ -826,22 +736,7 @@ ACTION_COMMANDS: dict[str, str] = {
         }
         Write-Output "Cleaned $([math]::Round($freedTotal/1MB, 2)) MB"
     """,
-    "battlenet_cache_cleanup": """
-        $bnetPaths = @(
-            "$env:ProgramData\\Blizzard Entertainment\\Battle.net\\Cache",
-            "$env:APPDATA\\Battle.net\\Cache"
-        )
-        $freed = [long]0
-        foreach ($path in $bnetPaths) {
-            if ([System.IO.Directory]::Exists($path)) {
-                foreach ($f in [System.IO.Directory]::EnumerateFiles($path, '*', [System.IO.SearchOption]::AllDirectories)) {
-                    try { $freed += [System.IO.FileInfo]::new($f).Length } catch {}
-                }
-                Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "battlenet_cache_cleanup": _path_cleanup(),
     "event_logs_cleanup": """
         $cleared = 0
         Get-WinEvent -ListLog * -ErrorAction SilentlyContinue | Where-Object { $_.RecordCount -gt 0 } | ForEach-Object {
@@ -852,288 +747,39 @@ ACTION_COMMANDS: dict[str, str] = {
         }
         Write-Output "Cleared $cleared event logs"
     """,
-    "wer_cleanup": """
-        $paths = @(
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows\\WER\\ReportArchive",
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows\\WER\\ReportQueue",
-            "$env:LOCALAPPDATA\\Microsoft\\Windows\\WER\\ReportArchive",
-            "$env:LOCALAPPDATA\\Microsoft\\Windows\\WER\\ReportQueue"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "defender_cache_cleanup": """
-        $paths = @(
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows Defender\\Scans\\History\\Service",
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows Defender\\Scans\\History\\Store",
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows Defender\\Scans\\MetaStore",
-            "$env:ALLUSERSPROFILE\\Microsoft\\Windows Defender\\Scans\\ScanResults"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "wer_cleanup": _path_cleanup(),
+    "defender_cache_cleanup": _path_cleanup(),
     # The report that started all of this: this script called Remove-Item once
     # per file, and on a machine with a few thousand .pf entries it ran past the
     # 30 s apply timeout, so the user saw a timeout rather than a refusal and
     # nothing was cleaned. Same two rules as temp_cleanup above — one piped
     # Remove-Item, and a freed figure measured before against after, since
     # Windows keeps some .pf files open and those survive the delete.
-    "prefetch_cleanup": """
-        $path = "$env:windir\\Prefetch"
-        function Get-SizeBytes([string]$dir) {
-            if (-not (Test-Path -LiteralPath $dir)) { return [int64]0 }
-            return [int64](Get-ChildItem -LiteralPath $dir -Force -ErrorAction SilentlyContinue |
-                Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-        }
-        $freed = [int64]0
-        if (Test-Path -LiteralPath $path) {
-            $before = Get-SizeBytes $path
-            Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
-                Remove-Item -Force -ErrorAction SilentlyContinue
-            $freed = $before - (Get-SizeBytes $path)
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "browser_cache_cleanup": """
-        $paths = @(
-            "$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Cache\\Cache_Data",
-            "$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\Code Cache",
-            "$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\Cache\\Cache_Data",
-            "$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\Code Cache",
-            "$env:LOCALAPPDATA\\BraveSoftware\\Brave-Browser\\User Data\\Default\\Cache\\Cache_Data"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        $ffBase = "$env:APPDATA\\Mozilla\\Firefox\\Profiles"
-        if (Test-Path $ffBase) {
-            Get-ChildItem -Path $ffBase -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-                $profile = $_
-                @("cache2","startupCache","OfflineCache") | ForEach-Object {
-                    $cp = Join-Path $profile.FullName $_
-                    if (Test-Path $cp) {
-                        $size = (Get-ChildItem -Path $cp -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                        $freed += [int64]$size
-                        Remove-Item -Path "$cp\\*" -Recurse -Force -ErrorAction SilentlyContinue
-                    }
-                }
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "windows_update_cache_cleanup": """
-        Stop-Service -Name wuauserv -Force -ErrorAction SilentlyContinue
-        $path = "$env:windir\\SoftwareDistribution\\Download"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Start-Service -Name wuauserv -ErrorAction SilentlyContinue
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "delivery_optimization_cleanup": """
-        Stop-Service -Name dosvc -Force -ErrorAction SilentlyContinue
-        $paths = @(
-            "$env:windir\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Cache",
-            "$env:windir\\ServiceProfiles\\NetworkService\\AppData\\Local\\Microsoft\\Windows\\DeliveryOptimization\\Logs"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Start-Service -Name dosvc -ErrorAction SilentlyContinue
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "prefetch_cleanup": _path_cleanup(),
+    "browser_cache_cleanup": _path_cleanup(),
+    "windows_update_cache_cleanup": _service_cleanup("wuauserv"),
+    "delivery_optimization_cleanup": _service_cleanup("dosvc"),
     # Only the cache databases, never the folder: Explorer keeps its own state
     # here. The measured-freed rule matters most on this one — Explorer usually
     # holds these files open, so the old script reported the full cache size as
     # freed on runs that deleted nothing at all.
-    "thumbnail_cache_cleanup": """
-        $path = "$env:LOCALAPPDATA\\Microsoft\\Windows\\Explorer"
-        # -Filter, not a Where-Object name test: the filesystem provider does the
-        # matching, so this never becomes text matching on output that could be
-        # localized, and the two lists still reach one Remove-Item together.
-        function Get-CacheItems([string]$dir) {
-            if (-not (Test-Path -LiteralPath $dir)) { return @() }
-            return @(Get-ChildItem -LiteralPath $dir -Filter 'thumbcache_*.db' -Force -ErrorAction SilentlyContinue) +
-                @(Get-ChildItem -LiteralPath $dir -Filter 'IconCache.db' -Force -ErrorAction SilentlyContinue)
-        }
-        function Get-CacheBytes([string]$dir) {
-            return [int64](Get-CacheItems $dir | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-        }
-        $freed = [int64]0
-        if (Test-Path -LiteralPath $path) {
-            $before = Get-CacheBytes $path
-            Get-CacheItems $path | Remove-Item -Force -ErrorAction SilentlyContinue
-            $freed = $before - (Get-CacheBytes $path)
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "memory_dumps_cleanup": """
-        $freed = 0
-        foreach ($dir in @("$env:windir\\Minidump", "$env:windir\\LiveKernelReports", "$env:LOCALAPPDATA\\CrashDumps")) {
-            if (Test-Path $dir) {
-                $freed += [int64](Get-ChildItem -Path $dir -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                Remove-Item -Path "$dir\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        if (Test-Path "$env:windir\\MEMORY.DMP") {
-            try { $freed += [int64](Get-Item "$env:windir\\MEMORY.DMP" -Force).Length; Remove-Item "$env:windir\\MEMORY.DMP" -Force -ErrorAction SilentlyContinue } catch { }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "discord_cache_cleanup": """
-        $paths = @(
-            "$env:APPDATA\\discord\\Cache\\Cache_Data",
-            "$env:APPDATA\\discord\\Code Cache",
-            "$env:APPDATA\\discord\\GPUCache"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "epic_cache_cleanup": """
-        $paths = @(
-            "$env:LOCALAPPDATA\\EpicGamesLauncher\\Saved\\webcache",
-            "$env:LOCALAPPDATA\\EpicGamesLauncher\\Saved\\webcache_4147",
-            "$env:LOCALAPPDATA\\EpicGamesLauncher\\Saved\\Logs"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "steam_webcache_cleanup": """
-        $paths = @(
-            "$env:LOCALAPPDATA\\Steam\\htmlcache\\Cache\\Cache_Data",
-            "$env:LOCALAPPDATA\\Steam\\htmlcache\\Code Cache"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "pip_cache_cleanup": """
-        $path = "$env:LOCALAPPDATA\\pip\\Cache"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "npm_cache_cleanup": """
-        $path = "$env:APPDATA\\npm-cache"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "yarn_cache_cleanup": """
-        $path = "$env:LOCALAPPDATA\\Yarn\\Cache"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "pnpm_cache_cleanup": """
-        $path = "$env:LOCALAPPDATA\\pnpm\\store"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "nuget_cache_cleanup": """
-        $path = "$env:USERPROFILE\\.nuget\\packages"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "maven_cache_cleanup": """
-        $path = "$env:USERPROFILE\\.m2\\repository"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "gradle_cache_cleanup": """
-        $path = "$env:USERPROFILE\\.gradle\\caches"
-        $freed = 0
-        if (Test-Path $path) {
-            $freed = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-            Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
-    "cargo_cache_cleanup": """
-        $paths = @(
-            "$env:USERPROFILE\\.cargo\\registry\\cache",
-            "$env:USERPROFILE\\.cargo\\registry\\src"
-        )
-        $freed = 0
-        foreach ($path in $paths) {
-            if (Test-Path $path) {
-                $size = (Get-ChildItem -Path $path -Recurse -Force -ErrorAction SilentlyContinue | Measure-Object -Property Length -Sum -ErrorAction SilentlyContinue).Sum
-                $freed += [int64]$size
-                Remove-Item -Path "$path\\*" -Recurse -Force -ErrorAction SilentlyContinue
-            }
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "thumbnail_cache_cleanup": _path_cleanup(),
+    "memory_dumps_cleanup": _path_cleanup(),
+    "discord_cache_cleanup": _path_cleanup(),
+    "epic_cache_cleanup": _path_cleanup(),
+    "steam_webcache_cleanup": _path_cleanup(),
+    "pip_cache_cleanup": _path_cleanup(),
+    "npm_cache_cleanup": _path_cleanup(),
+    "yarn_cache_cleanup": _path_cleanup(),
+    "pnpm_cache_cleanup": _path_cleanup(),
+    "nuget_cache_cleanup": _path_cleanup(),
+    "maven_cache_cleanup": _path_cleanup(),
+    "gradle_cache_cleanup": _path_cleanup(),
+    "cargo_cache_cleanup": _path_cleanup(),
     # Maintenance actions
     "sfc_scan": "sfc /scannow",
     "dism_health": "Dism.exe /online /Cleanup-Image /RestoreHealth",
+    "ssd_retrim": _SSD_RETRIM,
     # Telemetry scheduled tasks toggle
     "telemetry_tasks_toggle": """
         $tasks = @(
@@ -1504,33 +1150,13 @@ ACTION_COMMANDS: dict[str, str] = {
     # Call of Duty shader/content cache cleanup. Every one of these is rebuilt on
     # the game's next launch, and the install path comes from Battle.net's own
     # record rather than a constant — see `_cod_install_lookup`.
-    "mw3_shader_cache_cleanup": _cod_cache_cleanup("cod23", "MW3"),
-    "mw4_shader_cache_cleanup": _cod_cache_cleanup("cod26", "MW4"),
+    "mw3_shader_cache_cleanup": _path_cleanup(),
+    "mw4_shader_cache_cleanup": _path_cleanup(),
     # Crash reports the Call of Duty launcher writes beside the player config.
     # One directory, shared by every COD title on the machine.
-    "cod_crash_reports_cleanup": r"""
-        $path = Join-Path $env:LOCALAPPDATA 'Activision\Call of Duty\crash_reports'
-        $freed = [long]0
-        if ([System.IO.Directory]::Exists($path)) {
-            foreach ($f in [System.IO.Directory]::EnumerateFiles($path, '*', [System.IO.SearchOption]::AllDirectories)) {
-                try { $freed += [System.IO.FileInfo]::new($f).Length } catch {}
-            }
-            Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "cod_crash_reports_cleanup": _path_cleanup(),
     # MW3 crash dump cleanup
-    "mw3_crash_cleanup": r"""
-        $path = Join-Path ([Environment]::GetFolderPath('MyDocuments')) 'Call of Duty MWIII\crashes'
-        $freed = [long]0
-        if ([System.IO.Directory]::Exists($path)) {
-            foreach ($f in [System.IO.Directory]::EnumerateFiles($path, '*', [System.IO.SearchOption]::AllDirectories)) {
-                try { $freed += [System.IO.FileInfo]::new($f).Length } catch {}
-            }
-            Remove-Item -Recurse -Force $path -ErrorAction SilentlyContinue
-        }
-        Write-Output "Cleaned $([math]::Round($freed/1MB, 2)) MB"
-    """,
+    "mw3_crash_cleanup": _path_cleanup(),
     # MW3 options.4.cod23.cst toggle - modifies graphics/system options file
     # Key format: "KeyName:version.platform" e.g. "WorldStreamingQuality:0.0"
     # If the key is absent (game has never written it), the toggle APPENDS it
@@ -2001,6 +1627,45 @@ _wire_mutex_groups(ACTION_COMMANDS, _MUTEX_GROUPS)
 # stops being constant stops being listed here in the same commit that changes
 # it — a hand-kept list would go on claiming a constant for a script that had
 # started asking the machine something.
-CONSTANT_STATUS_ACTIONS: dict[str, str] = {
-    key: "True" for key, script in ACTION_COMMANDS.items() if script.strip() == "Write-Output $true"
+_CONSTANT_TRUE = "Write-Output $true"
+
+# `maintenance_status` is one detect command over several maintenance actions,
+# and they do not all read the same thing. SFC and the DISM health check describe
+# a repair that is always available, so their reading is a constant; the SSD
+# retrim check has to ask the machine when Windows last optimized each SSD
+# volume. The `type` arg picks the script, the same way it picks the folder for
+# `cleanup_status` — a table rather than a branch inside one PowerShell script,
+# because a branch would make every maintenance reading start a process to reach
+# its own literal.
+MAINTENANCE_STATUS_SCRIPTS: dict[str, str] = {
+    "ssd_trim": _SSD_TRIM_STATUS,
 }
+
+
+def detect_script(cmd_key: str, detect_args: Mapping[str, Any]) -> str | None:
+    """The script this detect command runs for these args, or None if it names none.
+
+    One resolution for both callers: the constant short-circuit below asks the
+    same question the executor asks before spawning PowerShell, so the two cannot
+    come to disagree about what a setting actually runs.
+    """
+    if cmd_key == "maintenance_status":
+        override = MAINTENANCE_STATUS_SCRIPTS.get(str(detect_args.get("type", "")))
+        if override is not None:
+            return override
+    return ACTION_COMMANDS.get(cmd_key)
+
+
+def constant_status_reading(cmd_key: str, detect_args: Mapping[str, Any]) -> str | None:
+    """What this detect prints without being run, or None when it must be run.
+
+    Starting a PowerShell process to learn a literal costs a process and answers
+    nothing: measured, three of the twenty-five a cold scan spawned were exactly
+    this. Derived from the resolved script rather than from a hand-kept list, so
+    a command that stops being constant — one type of `maintenance_status` now
+    does — stops being answered here in the same commit that changes it.
+    """
+    script = detect_script(cmd_key, detect_args)
+    if script is not None and script.strip() == _CONSTANT_TRUE:
+        return "True"
+    return None

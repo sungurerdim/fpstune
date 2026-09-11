@@ -24,6 +24,7 @@ which is how this codebase shipped a dead batch twice.
 from __future__ import annotations
 
 import re
+import threading as _real_threading
 from unittest.mock import patch
 
 import pytest
@@ -93,9 +94,14 @@ class TestTheGeneratedScript:
             assert f"'{cleanup_type}'" in script
 
     def test_the_helpers_appear_once_not_once_per_type(self) -> None:
-        """The whole point: parse the ~15 KB preamble a single time."""
-        script = self._script_for(("temp", "prefetch", "dism"))
-        assert script.count("function Get-DirSizeBytes") == 1
+        """The whole point: parse the preamble a single time.
+
+        The helper named here is the docker one because it is the largest that
+        survived: the folder-walking helpers left with the types they served,
+        which are measured in this process now.
+        """
+        script = self._script_for(("docker_prune", "docker_prune_all", "dism"))
+        assert script.count("function Get-DockerReclaimBytes") == 1
 
     def test_the_single_type_call_is_replaced_not_left_in(self) -> None:
         """Leaving it would run one arbitrary type twice and emit a stray line."""
@@ -251,3 +257,105 @@ class _Inline:
     def start(self) -> None:
         self._target()
         self._finished.append(True)
+
+
+class TestTheScanSplitsBetweenTheTwoInstruments:
+    """Folders are walked here; PowerShell is started only for what needs it.
+
+    Measured on 2026-09-10, same 17 registered types back to back: the one
+    PowerShell session took 13 406-16 991 ms under game load and 3 130 ms idle,
+    the in-process walk 209-525 ms. What is left in PowerShell is what no walk
+    can answer, and one of those — DISM's component store analysis — is genuinely
+    slow (43.0 s before a cleanup, 34.7 s after), which is why the split is worth
+    making rather than just being faster on average.
+    """
+
+    def _cleanups(self):
+        return [
+            s
+            for s in SettingsRegistry(discover_dynamic=False).get_all()
+            if s.detect_command.strip() == "cleanup_status"
+        ]
+
+    def test_only_the_script_only_types_reach_powershell(self) -> None:
+        from fpstune.settings.cleanup_targets import CLEANUP_TARGETS
+        from fpstune.settings.executors import powershell as ps
+
+        asked: list[tuple[str, ...]] = []
+        cache = CleanupSizeCache()
+
+        with (
+            patch("fpstune.settings.cleanup_cache.cleanup_size_cache", cache),
+            patch.object(ps_batch, "_fetch_cleanup_sizes", lambda t: asked.append(t) or {}),
+            patch.object(ps, "threading", _ImmediateThreading()),
+        ):
+            ps.start_cleanup_size_batch(self._cleanups())
+
+        assert len(asked) == 1
+        for cleanup_type in asked[0]:
+            assert cleanup_type not in CLEANUP_TARGETS, cleanup_type
+        # And the ones that did not go there were answered anyway.
+        answered = {k for k, v in cache.all_entries().items() if v["status"] != "calculating"}
+        assert answered, "the walked half settled nothing"
+
+    def test_a_walked_type_never_sits_on_calculating(self) -> None:
+        """A row that spins is a row the user polls; a walk answers in the pass."""
+        from fpstune.settings.executors import powershell as ps
+
+        cache = CleanupSizeCache()
+        cleanups = [
+            s for s in self._cleanups() if s.detect_args.get("type") in ("pip_cache", "npm_cache")
+        ]
+        assert cleanups, "no walked cleanup in the registry to check"
+
+        with (
+            patch("fpstune.settings.cleanup_cache.cleanup_size_cache", cache),
+            patch.object(ps_batch, "_fetch_cleanup_sizes", lambda _t: {}),
+            patch.object(ps, "threading", _ImmediateThreading()),
+        ):
+            ps.start_cleanup_size_batch(cleanups)
+
+        for setting in cleanups:
+            entry = cache.get(setting.id)
+            assert entry is not None, setting.id
+            assert entry["status"] != "calculating", setting.id
+
+
+class _ImmediateThreading:
+    """`threading` with `Thread` run inline, so the batch settles before asserting."""
+
+    @staticmethod
+    def Thread(target, daemon=False, name=""):  # noqa: N802, ARG004
+        class _Inline:
+            @staticmethod
+            def start() -> None:
+                target()
+
+        return _Inline()
+
+    Lock = staticmethod(_real_threading.Lock)
+    BoundedSemaphore = staticmethod(_real_threading.BoundedSemaphore)
+
+
+class TestTheEventLogPromise:
+    """Audit finding 6: the whole log folder was offered as reclaimable.
+
+    Measured on 2026-09-10: 449 `.evtx` files holding 67.3 MB, of which 41 logs
+    and 35.5 MB held any record at all. `ClearLog` empties a log; it deletes no
+    file, so the 31.8 MB in 408 empty logs could never be freed by this command.
+    """
+
+    def test_it_sizes_only_the_logs_clearing_can_empty(self) -> None:
+        script = ACTION_COMMANDS["cleanup_status"]
+        branch = script.split("'event_logs' {", 1)[1].split("'docker_prune'", 1)[0]
+        assert "RecordCount" in branch
+        assert "LogFilePath" in branch
+        # The folder as a whole is what over-promised, and it is gone from here.
+        assert "winevt" not in branch
+
+    def test_the_clear_and_the_size_agree_on_which_logs_count(self) -> None:
+        """Both halves select on the record count, so a log the service refuses
+        to clear stays in the set and the freed figure reports only what went."""
+        size_branch = ACTION_COMMANDS["cleanup_status"].split("'event_logs' {", 1)[1]
+        assert "RecordCount" in size_branch.split("'docker_prune'", 1)[0]
+        assert "RecordCount -gt 0" in ACTION_COMMANDS["event_logs_cleanup"]

@@ -289,8 +289,6 @@ def get_adapter_property(interface_index: Any, keyword: str) -> Any:
     return ADAPTER_PROPERTY_MISSING if value is None else value
 
 
-_CLEANUP_KEY = "cleanup_sizes"
-
 # The tail that turns the shared cleanup script into a single-type query. The
 # batch replaces it with a loop, and derives the preamble by cutting here rather
 # than keeping its own copy — two copies of a 15 KB script would drift, and the
@@ -298,14 +296,28 @@ _CLEANUP_KEY = "cleanup_sizes"
 _CLEANUP_CALL = "Get-CleanupStatus '%type%'"
 
 
+#: What one reading costs, where the default is wrong about it. DISM's
+#: `/AnalyzeComponentStore` is the only one measured in tens of seconds: 43.0 s
+#: elevated before a cleanup and 34.7 s after it, on 2026-09-10, both while the
+#: machine was otherwise busy. Twelve seconds of headroom is not a timeout for
+#: that; it is a guarantee the reading is killed and the row says "unavailable"
+#: for a component store that answered perfectly well, just slowly.
+CLEANUP_TYPE_SECONDS: dict[str, int] = {"dism": 120}
+
+#: Every other cleanup reading left in PowerShell — docker's own accounting, the
+#: shadow storage allocation, the event log record counts — is a query rather
+#: than a walk, and each measured inside two seconds.
+_DEFAULT_TYPE_SECONDS = 12
+
+
 def cleanup_batch_timeout(types: tuple[str, ...]) -> int:
-    """How long the batch may take for `types`. Folder sizing dominates.
+    """How long the batch may take for `types`, derived from what each one costs.
 
     Exposed because the cache entry each claimed setting gets must expire *after*
     the worker that claimed it has given up, and a second copy of this arithmetic
     would be the first thing to drift.
     """
-    return 30 + 12 * len(types)
+    return 30 + sum(CLEANUP_TYPE_SECONDS.get(t, _DEFAULT_TYPE_SECONDS) for t in types)
 
 
 def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
@@ -373,14 +385,6 @@ def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
     if not isinstance(data, dict):
         return {}
     return {str(k): str(v) for k, v in data.items() if isinstance(v, str) and v}
-
-
-def prefetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
-    """Populate the scan cache with every cleanup type's size. Idempotent."""
-    cache = _get_cache()
-    if cache is None:
-        return _fetch_cleanup_sizes(types)
-    return cache_once(cache, _CLEANUP_KEY, lambda: _fetch_cleanup_sizes(types))
 
 
 _DETECTS_KEY = "powershell_detects"

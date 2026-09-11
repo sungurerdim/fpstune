@@ -3112,6 +3112,66 @@ MAINTENANCE_DISM_HEALTH = SettingExecutor(
     apply_timeout=3600,
 )
 
+# The threshold is 14 days, and it is derived from Windows' own schedule rather
+# than from anything about an SSD: the `ScheduledDefrag` task runs weekly, so one
+# missed week is a machine that was switched off for a holiday and two is a
+# schedule that has stopped running. That is what this row detects — not a drive
+# in trouble, but maintenance that is no longer happening. `executors/
+# powershell_actions.py` carries the reading, the registry key it comes from and
+# the three measurements that chose that key over the Defrag event log.
+MAINTENANCE_SSD_RETRIM = SettingExecutor(
+    id="maintenance:ssd_retrim",
+    category=SettingCategory.MAINTENANCE,
+    display_name="SSD TRIM Overdue",
+    short_name="SSD retrim",
+    description="Tells every SSD which blocks are free again, which Windows normally does weekly. "
+    "A drive left without it slows down on writes as its spare blocks fill.",
+    value_type=SettingValueType.STRING,
+    choices=(),
+    default_value=False,
+    recommended_value=False,
+    requires_reboot=False,
+    is_action=True,
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/powershell/module/storage/optimize-volume",
+        "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/defrag",
+    ],
+    current_impact="Overdue: The optimization schedule has not run, so free blocks stay unreported",
+    recommended_impact="Run: Every SSD volume retrimmed → sustained write speed kept at the drive's own level",
+    scope=SettingScope.RECOMMENDED,
+    category_order=26,  # after the two Windows-image repairs
+    effect="Runs Windows' own retrim on every SSD volume",
+    # The same claim `storage:trim_enabled` makes, because it is the same
+    # mechanism: that row keeps TRIM switched on, this one runs the pass that
+    # switch enables. No number, because nothing here has measured one — C11
+    # rule 1 forbids inventing the range that would look better in the tooltip.
+    impact_scores={
+        "storage_performance": "maintained",
+        "ssd_longevity": "high",
+        "stability": "high",
+    },
+    detect_type=DetectType.POWERSHELL,
+    detect_command="maintenance_status",
+    detect_args={"type": "ssd_trim"},
+    # Empty on purpose: the reading is `overdue|<n> days`, `overdue|never`,
+    # `ok|<n> days` or the `not_available` sentinel, and every one of them is
+    # rendered as it stands. A map here would have to enumerate every day count.
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="ssd_retrim",
+    apply_args={},
+    apply_value_map={},
+    duration_estimate="10-60 sec",
+    # Measured 2026-09-10 on a 1 TB NVMe SSD: 8.4 s for the system volume (28.26
+    # GB trimmed) and 5.3 s for the second one. Ten minutes is the headroom for a
+    # SATA SSD, a fuller volume and more of them — a retrim that is still running
+    # when the timeout fires is not stopped by it, only left with nobody reading
+    # it, which is what `maintenance:dism_health` learned at 300 s.
+    apply_timeout=600,
+)
+
+
 # All system settings
 MEMORY_SETTINGS: list[SettingExecutor] = [
     MEMORY_PURGE_STANDBY,
@@ -4103,6 +4163,7 @@ GAME_CLEANUP_SETTINGS: list[SettingExecutor] = [
 MAINTENANCE_SETTINGS: list[SettingExecutor] = [
     MAINTENANCE_SFC,
     MAINTENANCE_DISM_HEALTH,
+    MAINTENANCE_SSD_RETRIM,
 ]
 
 SYSTEM_SETTINGS: list[SettingExecutor] = [

@@ -185,6 +185,25 @@ class BaseExecutor(ABC):
         ...
 
 
+def action_will_not_run(setting: SettingExecutor, value: Any) -> bool:
+    """Whether an apply of `value` would do nothing: an action told False.
+
+    A cleanup, a repair and a purge are actions — their value is not a state to
+    write but permission to run, so a falsy one means "do not run" and the apply
+    returns success without touching the machine. This is exposed rather than
+    left inline because a caller that arranges work *around* an apply must be
+    able to ask the same question: measuring a cleanup's target before and after
+    a command that never runs costs two folder scans and yields a difference of
+    zero, which reads as "this freed nothing" for something that never happened.
+    """
+    if not setting.is_action:
+        return False
+    from fpstune.settings.base import SettingValueType
+
+    coerced = coerce_value_type(value, SettingValueType.BOOL)
+    return coerced is False or coerced is None
+
+
 class CommandExecutor:
     """Unified command execution for all setting types."""
 
@@ -241,7 +260,6 @@ class CommandExecutor:
         does not, rather than making every executor carry a parameter it cannot
         honour.
         """
-        from fpstune.settings.base import SettingValueType
         from fpstune.utils.debug import debug_log
 
         logger.info("[APPLY] %s → %r", tweak_label(setting.id), value)
@@ -251,11 +269,9 @@ class CommandExecutor:
         )
 
         # Skip action execution when value is falsy (treat as "do not run")
-        if setting.is_action:
-            coerced = coerce_value_type(value, SettingValueType.BOOL)
-            if coerced is False or coerced is None:
-                debug_log("executor", f"SKIP ACTION {setting.id}: value={repr(value)}")
-                return True, None
+        if action_will_not_run(setting, value):
+            debug_log("executor", f"SKIP ACTION {setting.id}: value={repr(value)}")
+            return True, None
 
         executor = cls._get_executor(setting.apply_type.value)
         if not executor:

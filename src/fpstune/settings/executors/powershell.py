@@ -10,10 +10,12 @@ from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.base import Reading
+from fpstune.settings.cleanup_measure import store_cleanup_reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 from fpstune.settings.executors.powershell_actions import (
     ACTION_COMMANDS,
-    CONSTANT_STATUS_ACTIONS,
+    constant_status_reading,
+    detect_script,
 )
 from fpstune.settings.executors.ps_batch import get_batched_detect
 from fpstune.utils.powershell import (
@@ -40,43 +42,24 @@ _cleanup_scan_semaphore = threading.BoundedSemaphore(_CLEANUP_SCAN_LIMIT)
 # demonstrably failed: its own PowerShell timeout, plus one full wave of waiting
 # behind the semaphore, plus process-start slack. Handed to `mark_calculating` so
 # an entry cannot outlive the worker that claimed it.
-_CLEANUP_SCAN_TIMEOUT = 90
-_CLEANUP_SCAN_DEADLINE = _CLEANUP_SCAN_TIMEOUT * 2 + 30
+#
+# The timeout is the one `cleanup_batch_timeout` derives for that single type, so
+# the fallback and the batch agree about what a reading costs. They did not: the
+# flat 90 s here would have killed a DISM component store analysis measured at
+# 43.0 s before a cleanup and 34.7 s after it, on a machine where the two run
+# back to back, and reported "unavailable" for a reading that was on its way.
+
+
+def _cleanup_scan_timeout(cleanup_type: str | None) -> tuple[int, int]:
+    """(timeout, cache deadline) for one per-setting cleanup size scan."""
+    from fpstune.settings.executors.ps_batch import cleanup_batch_timeout
+
+    timeout = cleanup_batch_timeout((cleanup_type,) if cleanup_type else ())
+    return timeout, timeout * 2 + 30
+
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
-
-
-def _store_cleanup_reading(setting_id: str, reading: str) -> bool:
-    """Turn one ``ready|<size>`` line into a cache entry. False if unparseable.
-
-    Shared by the per-setting fallback and the batch, so the two cannot disagree
-    about what "unavailable" or "not_installed" means for the same output.
-    """
-    from fpstune.settings.cleanup_cache import cleanup_size_cache
-
-    for line in reversed(reading.splitlines()):
-        s = line.strip()
-        if not s.startswith("ready|"):
-            continue
-        size_part = s[6:].strip()
-        # Service/daemon not running (e.g. Docker engine down): surface as
-        # unavailable so the UI shows that, not "0 MB".
-        if size_part.lower() == "unavailable":
-            cleanup_size_cache.set_unavailable(setting_id)
-            return True
-        # Target software/dirs absent → not applicable (hidden, uncounted).
-        if size_part.lower() == "not_installed":
-            cleanup_size_cache.set_not_installed(setting_id)
-            return True
-        if size_part and "?" not in size_part and "MB" in size_part:
-            try:
-                mb = int(size_part.split()[0])
-                cleanup_size_cache.set_result(setting_id, mb * 1024 * 1024)
-                return True
-            except (ValueError, IndexError):
-                pass
-    return False
 
 
 _cleanup_batch_lock = threading.Lock()
@@ -84,22 +67,29 @@ _cleanup_batch_running = False
 
 
 def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
-    """Size every pending cleanup target in one PowerShell, in the background.
+    """Size every pending cleanup target in the background: one pass, one process.
 
     Each cleanup setting used to get its own daemon thread running the whole
     ~18 KB ``cleanup_status`` script to answer one question. Measured cold on the
     dev machine: 26 PowerShell processes, more than half of everything the scan
     spawned, each re-parsing the same helpers before touching a folder.
 
-    Deliberately still asynchronous, and deliberately not awaited. Folder sizing
-    is genuinely slow — ``dism /AnalyzeComponentStore`` alone runs 30-60 s — so
-    putting it on the scan's critical path would trade 25 processes for a scan
-    nobody waits through. The UI keeps its "calculating" state and fills in.
+    Now the folders are walked in this process, in one thread pool, and PowerShell
+    is started only for the handful of readings no walk can take — the component
+    store, docker's own accounting, the shadow storage allocation, the event log
+    record counts. Measured on the same 17 registered types: 13 406-16 991 ms
+    through PowerShell under game load against 209-525 ms here.
+
+    Deliberately still asynchronous, and deliberately not awaited. What is left in
+    PowerShell is the slow part — ``dism /AnalyzeComponentStore`` alone runs
+    40 s — so putting it on the scan's critical path would trade processes for a
+    scan nobody waits through. The UI keeps its "calculating" state and fills in.
 
     Returns immediately. Settings already in the cache are left alone.
     """
     global _cleanup_batch_running
     from fpstune.settings.cleanup_cache import cleanup_size_cache
+    from fpstune.settings.cleanup_targets import CLEANUP_TARGETS
 
     pending: dict[str, list[str]] = {}
     for setting in settings:
@@ -114,6 +104,9 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
     if not pending:
         return
 
+    walked = tuple(t for t in pending if t in CLEANUP_TARGETS)
+    scripted = tuple(t for t in pending if t not in CLEANUP_TARGETS)
+
     with _cleanup_batch_lock:
         if _cleanup_batch_running:
             return
@@ -122,20 +115,32 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
     # Claim them before the thread starts, so a detect racing this one reads
     # "calculating" and does not start a second computation of the same folder.
     # Each claim expires just after this batch's own timeout, so an id cannot
-    # outlive the run that claimed it however that run ends.
+    # outlive the run that claimed it however that run ends. The deadline is the
+    # PowerShell half's, because that is the half that can take minutes.
     from fpstune.settings.executors.ps_batch import cleanup_batch_timeout
 
-    deadline = cleanup_batch_timeout(tuple(pending)) + 30
+    deadline = cleanup_batch_timeout(scripted) + 30
     for ids in pending.values():
         for setting_id in ids:
             cleanup_size_cache.mark_calculating(setting_id, deadline)
 
     def _run() -> None:
         global _cleanup_batch_running
+        from fpstune.settings.cleanup_measure import as_reading, store_measurement
+        from fpstune.settings.cleanup_targets import size_types
         from fpstune.settings.executors.ps_batch import _fetch_cleanup_sizes
 
+        settled: set[str] = set()
         try:
-            sizes = _fetch_cleanup_sizes(tuple(pending))
+            for cleanup_type, measured in size_types(walked).items():
+                for setting_id in pending[cleanup_type]:
+                    store_measurement(setting_id, as_reading(measured))
+                    settled.add(setting_id)
+        except Exception as exc:  # pragma: no cover - environment dependent
+            _logger.debug("cleanup size walk failed: %s", exc)
+
+        try:
+            sizes = _fetch_cleanup_sizes(scripted) if scripted else {}
         except Exception as exc:  # pragma: no cover - environment dependent
             _logger.debug("cleanup size batch failed: %s", exc)
             sizes = {}
@@ -149,7 +154,9 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
                 # Every id claimed above must end up with an outcome. The claim's
                 # deadline is only the backstop for a worker that dies before
                 # reaching here; one left behind would spin until it expires.
-                if not (reading and _store_cleanup_reading(setting_id, reading)):
+                if setting_id in settled:
+                    continue
+                if not (reading and store_cleanup_reading(setting_id, reading)):
                     cleanup_size_cache.set_unavailable(setting_id)
 
     try:
@@ -199,7 +206,110 @@ _MEDIUM_APPLY = {
 }
 
 
-def _apply_timeout(setting: SettingExecutor, cmd_key: str) -> int:
+def _cleanup_status_reading(setting: SettingExecutor) -> tuple[Any, str | None]:
+    """How much this cleanup has to clean, as the row will show it.
+
+    Served from the background cache when the scan has already filled it. On a
+    miss there are two answers rather than one: a folder target is walked right
+    here, because that costs a directory read and not a process — the row arrives
+    with its size instead of a spinner and a three-second poll — while a reading
+    that needs the component store, a docker daemon or the event log service
+    still starts PowerShell in the background and reports "calculating".
+    """
+    from fpstune.settings.cleanup_cache import cleanup_size_cache
+    from fpstune.settings.cleanup_measure import cleanup_type_of, measure_cleanup_size
+    from fpstune.settings.cleanup_targets import CLEANUP_TARGETS
+
+    entry = cleanup_size_cache.get(setting.id)
+    if entry is not None:
+        if entry["status"] == "calculating":
+            return "ready|calculating", None
+        if entry["status"] == "unavailable":
+            return "ready|unavailable", None
+        if entry["status"] == "not_installed":
+            # Maps to is_applicable=False in the detection engine → hidden.
+            return "not_available", None
+        mb = entry["bytes"] // (1024 * 1024)
+        return f"ready|{mb} MB", None
+
+    cleanup_type = cleanup_type_of(setting)
+    if cleanup_type in CLEANUP_TARGETS:
+        measured = measure_cleanup_size(setting, remember=True)
+        if measured is None:
+            return "ready|unavailable", None
+        if measured.status == "not_installed":
+            return "not_available", None
+        return measured.reading, None
+
+    # Cache miss: start background calculation and return immediately.
+    scan_timeout, scan_deadline = _cleanup_scan_timeout(cleanup_type)
+    cleanup_size_cache.mark_calculating(setting.id, scan_deadline)
+    try:
+        bg_cmd = substitute_placeholders(ACTION_COMMANDS["cleanup_status"], **setting.detect_args)
+    except ValueError as exc:
+        cleanup_size_cache.set_unavailable(setting.id)
+        return None, f"PowerShell command rejected: {exc}"
+    _start_bg_cleanup_detection(setting.id, bg_cmd, scan_timeout)
+    return "ready|calculating", None
+
+
+def _add_cleanup_paths(setting: SettingExecutor, args: dict[str, Any]) -> str | None:
+    """Put this cleanup's own path list into `args`, or say why it could not.
+
+    The list comes from `cleanup_targets`, which is what sized the target
+    immediately before this command runs and will size it again immediately
+    after. A script asking for `%paths%` with nothing to give it would run over
+    the literal placeholder and report success having deleted nothing, so a
+    missing target is a refusal rather than a silent no-op.
+    """
+    from fpstune.settings.cleanup_measure import cleanup_type_of
+    from fpstune.settings.cleanup_targets import (
+        CLEANUP_TARGETS,
+        EXTERNAL,
+        UnsafePath,
+        delete_arguments,
+    )
+
+    cleanup_type = cleanup_type_of(setting)
+    target = CLEANUP_TARGETS.get(cleanup_type or "")
+    if target is None or target.delete_mode == EXTERNAL:
+        return f"cleanup paths unavailable: no path target for {setting.id}"
+    try:
+        args.update(delete_arguments(target))
+    except UnsafePath as exc:
+        return f"cleanup paths rejected: {exc}"
+    return None
+
+
+def _apply_command(
+    setting: SettingExecutor, cmd_key: str, args: dict[str, Any]
+) -> tuple[str | None, str | None]:
+    """The exact command this apply will run, or None and why it was refused.
+
+    Two things can refuse it, and both are rejections rather than failures — the
+    route reports them instead of raising. A value the escaping layer cannot
+    place safely is one; a cleanup whose path list could not be produced is the
+    other, because a delete script running over the literal `%paths%` would
+    report success having removed nothing.
+
+    The path list itself is the one `cleanup_targets` resolved, which is also
+    what sizes the target either side of this command. Every mismatch in the
+    audit was a second path list drifting from the first: a folder counted twice
+    and deleted once, a cache deleted and never counted, a subdirectory counted
+    and never deletable.
+    """
+    template = ACTION_COMMANDS.get(cmd_key, setting.apply_command)
+    if "%paths%" in template:
+        paths_error = _add_cleanup_paths(setting, args)
+        if paths_error is not None:
+            return None, paths_error
+    try:
+        return substitute_placeholders(template, **args), None
+    except ValueError as exc:
+        return None, f"PowerShell command rejected: {exc}"
+
+
+def apply_timeout_seconds(setting: SettingExecutor, cmd_key: str) -> int:
     """How long this apply may take: per-setting override, then the known-slow
     table, then 30 s.
 
@@ -215,7 +325,7 @@ def _apply_timeout(setting: SettingExecutor, cmd_key: str) -> int:
     return 30
 
 
-def _start_bg_cleanup_detection(setting_id: str, cmd: str) -> None:
+def _start_bg_cleanup_detection(setting_id: str, cmd: str, timeout: int) -> None:
     """Run cleanup_status PS in a daemon thread; store result in cleanup_size_cache.
 
     The per-setting fallback, for a cleanup the batch did not cover.
@@ -228,8 +338,8 @@ def _start_bg_cleanup_detection(setting_id: str, cmd: str) -> None:
 
     def _compute_inner() -> None:
         try:
-            ok, out = run_powershell(cmd, timeout=_CLEANUP_SCAN_TIMEOUT)
-            if ok and out and _store_cleanup_reading(setting_id, out):
+            ok, out = run_powershell(cmd, timeout=timeout)
+            if ok and out and store_cleanup_reading(setting_id, out):
                 return
         except Exception:
             pass
@@ -250,13 +360,19 @@ def _start_bg_cleanup_detection(setting_id: str, cmd: str) -> None:
 def _scriptless_reading(setting: SettingExecutor, cmd_key: str) -> Any | None:
     """A detect answer that needs no PowerShell, or None when a script must run.
 
-    Two tables answer here. ``PYTHON_DETECTORS`` holds readings taken in Python
+    Two answers arrive here. ``PYTHON_DETECTORS`` holds readings taken in Python
     through a native API (wlanapi for the Wi-Fi link) — the detect counterpart of
-    ``PYTHON_ACTIONS``. ``CONSTANT_STATUS_ACTIONS`` holds action commands with no
-    state to read: their detect script was the literal ``Write-Output $true``, so
+    ``PYTHON_ACTIONS``. ``constant_status_reading`` holds action commands with no
+    state to read: their detect script is the literal ``Write-Output $true``, so
     running it started a PowerShell process to learn a constant (measured: three of
     the twenty-five a cold scan spawned). Both answers still go through
     ``value_map``, so it is the same value by the same route, without the process.
+
+    The constant is resolved from ``setting.detect_args`` and not from the command
+    name alone, because one command name can cover both kinds: ``maintenance_status``
+    answers a literal for SFC and the DISM health check, and reads the machine for
+    the SSD retrim check. Keying on the name would have answered ``True`` for the
+    reading that has something to say.
     """
     from fpstune.settings.executors.python_actions import PYTHON_DETECTORS
     from fpstune.utils.debug import debug_log
@@ -269,7 +385,7 @@ def _scriptless_reading(setting: SettingExecutor, cmd_key: str) -> Any | None:
             return Reading(map_raw_to_display(setting.value_map, raw.value), raw.finding)
         return map_raw_to_display(setting.value_map, raw)
 
-    constant = CONSTANT_STATUS_ACTIONS.get(cmd_key)
+    constant = constant_status_reading(cmd_key, setting.detect_args)
     if constant is not None:
         debug_log("powershell", f"DETECT CONSTANT {setting.id}: {cmd_key} → {constant!r}")
         return map_raw_to_display(setting.value_map, constant)
@@ -491,39 +607,15 @@ class PowerShellExecutor(BaseExecutor):
         if scriptless is not None:
             return scriptless, None
 
-        # Cleanup status: serve from background cache; kick off PS in a daemon thread on miss.
         if cmd_key == "cleanup_status":
-            from fpstune.settings.cleanup_cache import cleanup_size_cache
-
-            entry = cleanup_size_cache.get(setting.id)
-            if entry is not None:
-                if entry["status"] == "calculating":
-                    return "ready|calculating", None
-                if entry["status"] == "unavailable":
-                    return "ready|unavailable", None
-                if entry["status"] == "not_installed":
-                    # Maps to is_applicable=False in the detection engine → hidden.
-                    return "not_available", None
-                mb = entry["bytes"] // (1024 * 1024)
-                return f"ready|{mb} MB", None
-            # Cache miss: start background calculation and return immediately.
-            cleanup_size_cache.mark_calculating(setting.id, _CLEANUP_SCAN_DEADLINE)
-            try:
-                bg_cmd = substitute_placeholders(ACTION_COMMANDS[cmd_key], **setting.detect_args)
-            except ValueError as exc:
-                cleanup_size_cache.set_unavailable(setting.id)
-                return None, f"PowerShell command rejected: {exc}"
-            _start_bg_cleanup_detection(setting.id, bg_cmd)
-            return "ready|calculating", None
+            return _cleanup_status_reading(setting)
 
         # A value the escaping layer cannot place safely is a refused command,
         # not a failed detector: reported in this executor's own failure shape so
         # the route answers with a rejection rather than a server error.
+        template = detect_script(cmd_key, setting.detect_args) or setting.detect_command
         try:
-            if cmd_key in ACTION_COMMANDS:
-                cmd = substitute_placeholders(ACTION_COMMANDS[cmd_key], **setting.detect_args)
-            else:
-                cmd = substitute_placeholders(setting.detect_command, **setting.detect_args)
+            cmd = substitute_placeholders(template, **setting.detect_args)
         except ValueError as exc:
             return None, f"PowerShell command rejected: {exc}"
 
@@ -692,19 +784,14 @@ class PowerShellExecutor(BaseExecutor):
             ok, message = PYTHON_ACTIONS[cmd_key](args)
             debug_log("powershell", f"APPLY PYTHON {setting.id}: {cmd_key} ok={ok}")
             return ok, message
-        template = ACTION_COMMANDS.get(cmd_key, setting.apply_command)
-        # A value the escaping layer cannot place safely is refused, not written.
-        # Returning the executor's own failure shape keeps that a rejection the
-        # route reports rather than a 500 out of the substitution layer.
-        try:
-            cmd = substitute_placeholders(template, **args)
-        except ValueError as exc:
-            debug_log("powershell", f"APPLY REJECTED {setting.id}: {exc}")
-            return False, f"PowerShell command rejected: {exc}"
+        cmd, rejection = _apply_command(setting, cmd_key, args)
+        if cmd is None:
+            debug_log("powershell", f"APPLY REJECTED {setting.id}: {rejection}")
+            return False, rejection
 
         debug_log("powershell", f"APPLY CMD {setting.id}: {cmd[:300]}...")
 
-        timeout = _apply_timeout(setting, cmd_key)
+        timeout = apply_timeout_seconds(setting, cmd_key)
 
         if on_line is not None:
             # The command about to run, before it runs: this is what the UI shows

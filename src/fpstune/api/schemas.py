@@ -477,6 +477,17 @@ class ApplyResponse(BaseModel):
     #   None  — no check was possible (action, advisory/read-only, or not run)
     verified: bool | None = None
 
+    # What a cleanup actually reclaimed, measured on this machine: the setting's
+    # own reclaimable-size instrument run immediately before the cleanup command
+    # and immediately after it. None on every non-cleanup setting and on any
+    # cleanup whose size could not be read either time — "we could not measure
+    # it" is not the same answer as "it freed nothing", and only a measurement
+    # may put a number in front of the user (C11 rules 2 and 3).
+    freed_bytes: int | None = None
+    # The after reading on its own, so a row can show what is left rather than
+    # only what went.
+    size_after_bytes: int | None = None
+
 
 class BulkApplyRequest(BaseModel):
     """Request to apply multiple settings."""

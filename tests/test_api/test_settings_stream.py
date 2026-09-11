@@ -39,6 +39,8 @@ def _make_apply_response(
     skipped: bool = False,
     error: str | None = None,
     verified: bool | None = True,
+    freed_bytes: int | None = None,
+    size_after_bytes: int | None = None,
 ) -> MagicMock:
     r = MagicMock()
     r.success = success
@@ -49,6 +51,11 @@ def _make_apply_response(
     # The stream now reports the verification outcome computed by
     # _finalize_apply_response instead of re-deriving it locally.
     r.verified = verified
+    # Real values, because the `applied` event carries them into json.dumps: a
+    # MagicMock here takes the whole stream down. None is what every non-cleanup
+    # setting reports.
+    r.freed_bytes = freed_bytes
+    r.size_after_bytes = size_after_bytes
     return r
 
 

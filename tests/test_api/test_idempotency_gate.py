@@ -21,6 +21,7 @@ to a real machine and re-detects.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -66,7 +67,15 @@ class _FakeMachine:
         self.state: dict[str, Any] = {"system:h6_probe": "stock"}
         self.accumulating = accumulating
 
-    def apply(self, setting: SettingExecutor, value: Any) -> tuple[bool, str | None]:
+    def apply(
+        self,
+        setting: SettingExecutor,
+        value: Any,
+        _on_line: Callable[[str, bool], None] | None = None,
+    ) -> tuple[bool, str | None]:
+        # The third parameter is CommandExecutor.apply's own — the live output
+        # channel a streamed run passes. Nothing here streams, but a double that
+        # cannot be called the way the real one is tests a different boundary.
         if self.accumulating:
             # The defect class, exactly: a writer that adds instead of assigns.
             self.state[setting.id] = f"{self.state[setting.id]}+{value}"

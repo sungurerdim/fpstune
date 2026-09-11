@@ -228,16 +228,22 @@ class TestTheMappingIsPublishedRatherThanCopied:
     def test_the_instruments_that_need_arranging_are_not_offered_as_buttons(
         self, client: TestClient
     ) -> None:
-        # presentmon has nothing to read without a game already rendering, and
-        # furmark heats the card on purpose. Both stay listed, with what they
-        # need, so the user is told what to arrange rather than told nothing.
+        # presentmon has nothing to read without a game already rendering, so it
+        # stays listed with what it needs — the user is told what to arrange
+        # rather than told nothing — and is still not a button.
         published = {
             entry["name"]: entry
             for entry in client.get("/api/benchmark/verify/sources").json()["sources"]
         }
-        for name in ("presentmon", "furmark"):
-            assert published[name]["runnable"] is False
-            assert published[name]["requires"]
+        assert published["presentmon"]["runnable"] is False
+        assert published["presentmon"]["requires"]
+        # FurMark is not here at all any more. It heats the card on purpose, so
+        # it answers "how hot, how stable" and never "what does this machine
+        # reach" (C11 rule 6); the thermal claims it used to carry are the
+        # sensor bench's, which measures the same two quantities without a power
+        # virus. A source that verifies nothing has no reason to be published.
+        assert "furmark" not in published
+        assert published["sensors"]["requires"]
         assert published["dpc"]["runnable"] is True
 
 
@@ -251,6 +257,11 @@ class TestOneSample:
         a round is judged in claim metrics (`latency_spike_ms`). Handing the raw
         names to the browser would make the caller guess at the translation,
         which is how a timer's jitter comes to "verify" a network claim.
+
+        The translation is a unit as well as a name. 42.5 microseconds of timer
+        jitter is 0.0425 ms of latency spike; it was published as 42.5 ms for a
+        release, which is a machine that stopped for a twenty-fifth of a second
+        rather than one wobbling by a rounding error.
         """
         from fpstune.api.routes import benchmark as routes
 
@@ -263,7 +274,7 @@ class TestOneSample:
         payload = client.post("/api/benchmark/verify/sample", json={"instrument": "dpc"}).json()
 
         assert payload["instrument"] == "dpc"
-        assert payload["metrics"] == {"latency_spike_ms": 42.5}
+        assert payload["metrics"] == {"latency_spike_ms": 0.0425}
         assert payload["requires"]
 
     def test_a_field_the_instrument_did_not_produce_is_left_out(

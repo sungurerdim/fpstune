@@ -610,7 +610,10 @@ class TestFunctionLengthCeiling:
     # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
     _CEILING = {
         ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
-        ("src/fpstune/settings/executors/powershell.py", "detect"): 184,
+        # 182 -> 160 on 2026-09-11: the cleanup-size branch left for
+        # `_cleanup_status_reading` when a folder target stopped needing a
+        # PowerShell process to answer.
+        ("src/fpstune/settings/executors/powershell.py", "detect"): 160,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/main.py", "create_app"): 197,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
@@ -868,6 +871,10 @@ class TestNoLocalizedTextParsing:
         ),
         ("src/fpstune/api/hardware/network_adapters.py", "'Wi-Fi|Wireless'"): (
             "fallback on the driver's own name where MediaType is absent"
+        ),
+        ("src/fpstune/benchmark/event_scan.py", "$_.ProviderName -match"): (
+            "an event provider's registered id — the name the driver published to ETW, "
+            "not the sentence the event renders into, so no Windows language changes it"
         ),
         ("src/fpstune/api/routes/debug.py", "'*NVIDIA*'"): "a vendor brand name (C5 allows it)",
         ("src/fpstune/api/routes/debug.py", "'Render'"): (

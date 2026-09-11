@@ -115,10 +115,11 @@ def test_the_cleanup_measures_nothing_of_its_own() -> None:
 
     Measured elevated on the reporting machine: 43.0 s for the first and 34.7 s
     for the second, inside a run the user timed at about 108 s. Three quarters
-    of the wait was measuring — and measuring something the app already has,
-    since the row's own detect supplies the before and `_finalize_apply_response`
-    re-detects after. Freed is the difference between two readings that are
-    taken either way.
+    of the wait was measuring — and measuring what the app measures anyway:
+    `_apply_and_finalize` sizes every cleanup's target with the shipped
+    `Get-CleanupStatus` script before the command and again after it, and freed
+    is the difference between those two readings. A bespoke pair of passes in
+    this one script would pay for them twice.
     """
     cleanup = ACTION_COMMANDS["dism_cleanup"]
     assert "AnalyzeComponentStore" not in cleanup

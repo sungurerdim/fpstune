@@ -22,6 +22,7 @@ from fastapi import APIRouter, HTTPException
 
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
+from fpstune.api.routes.settings_apply import apply_and_finalize, bulk_apply_timeout
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -39,7 +40,6 @@ from fpstune.api.schemas import (
 from fpstune.safety import restore
 from fpstune.safety.originals import get_original_values
 from fpstune.settings import (
-    CommandExecutor,
     DetectionEngine,
     SettingsRegistry,
 )
@@ -432,10 +432,18 @@ def _finalize_apply_response(
     cmd_success: bool,
     cmd_error: str | None,
     activity_label: str,
+    *,
+    freed_bytes: int | None = None,
+    size_after_bytes: int | None = None,
 ) -> ApplyResponse:
     """Post-apply: detect new value, verify, log, and return ApplyResponse.
 
     Single source of truth for all apply/reset/optimize paths.
+
+    `freed_bytes` and `size_after_bytes` are what a cleanup's own size
+    instrument read around the command, and they are only ever carried through
+    here — this function runs *after* the command, so it could not take the
+    before reading itself. `settings_apply.apply_and_finalize` measures the pair.
     """
     new_value = None
     success = cmd_success
@@ -443,21 +451,6 @@ def _finalize_apply_response(
     verify_outcome: bool | None = None
 
     if success:
-        # Cleanup settings: invalidate cached size so post-apply detect triggers fresh calculation.
-        if setting.detect_command.strip() == "cleanup_status":
-            from fpstune.settings.cleanup_cache import cleanup_size_cache
-
-            cleanup_size_cache.invalidate(setting.id)
-            # docker_prune and docker_prune_all share the same docker df reclaimable:
-            # running one changes the other's estimate, so invalidate the sibling too
-            # (the frontend re-detects both after a docker run → fresh recompute).
-            _docker_siblings = {
-                "cleanup:docker_prune": "cleanup:docker_prune_all",
-                "cleanup:docker_prune_all": "cleanup:docker_prune",
-            }
-            sibling = _docker_siblings.get(setting.id)
-            if sibling:
-                cleanup_size_cache.invalidate(sibling)
         result = engine.detect_one(setting)
         new_value = result.value
         verified, verify_error, verify_outcome = _verify_setting_applied(
@@ -485,6 +478,8 @@ def _finalize_apply_response(
         new_value=new_value,
         requires_reboot=setting.requires_reboot,
         verified=verify_outcome,
+        freed_bytes=freed_bytes,
+        size_after_bytes=size_after_bytes,
     )
 
 
@@ -555,8 +550,8 @@ def _apply_one(
 
     `on_line` asks for the command's output while it runs, for the callers that
     can show it. Everything else about the run is identical — same applicability
-    check, same validation, same `_finalize_apply_response` afterwards — because
-    a streamed apply that took a different path would be a second apply.
+    check, same validation, same `apply_and_finalize` afterwards — because a
+    streamed apply that took a different path would be a second apply.
     """
     if hardware_context:
         is_applicable, reason = ApplicabilityChecker(hardware_context).is_applicable(setting)
@@ -589,10 +584,7 @@ def _apply_one(
         )
 
     engine = DetectionEngine(hardware_context=hardware_context)
-    success, error = CommandExecutor.apply(setting, value, on_line)
-    return setting.id, _finalize_apply_response(
-        setting, value, engine, success, error, activity_label
-    )
+    return setting.id, apply_and_finalize(setting, value, engine, activity_label, on_line)
 
 
 def _apply_single_setting(
@@ -646,7 +638,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
 
     # Prepare valid settings and check for actions (long-running operations)
     valid_settings: list[tuple[SettingExecutor, Any]] = []
-    has_actions = False
     for setting_id, value in request.settings.items():
         setting = registry.get(setting_id)
         if not setting:
@@ -661,11 +652,10 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
             log_activity(f"Unknown setting: {setting_id}", "error")
         else:
             valid_settings.append((setting, value))
-            if setting.is_action:
-                has_actions = True
 
-    # Use longer timeout for maintenance actions (DISM, SFC, etc.)
-    bulk_timeout = 300 if has_actions else 60
+    # What this particular set can legitimately take, command and the readings
+    # around it — never a flat cap, which was shorter than one DISM cleanup.
+    bulk_timeout = bulk_apply_timeout([setting for setting, _ in valid_settings])
 
     # Create a system restore point before applying tweaks (best-effort)
     if valid_settings and sys.platform == "win32":
@@ -970,8 +960,7 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
     engine = DetectionEngine(hardware_context=hardware_context)
 
     def _apply() -> ApplyResponse:
-        success, error = CommandExecutor.apply(setting, request.value)
-        return _finalize_apply_response(setting, request.value, engine, success, error, "Applied")
+        return apply_and_finalize(setting, request.value, engine, "Applied")
 
     return await asyncio.to_thread(_apply)
 
@@ -1003,10 +992,7 @@ async def reset_setting(setting_id: str) -> ApplyResponse:
     engine = DetectionEngine(hardware_context=hardware_context)
 
     def _reset() -> ApplyResponse:
-        success, error = CommandExecutor.apply(setting, setting.default_value)
-        return _finalize_apply_response(
-            setting, setting.default_value, engine, success, error, "Reset"
-        )
+        return apply_and_finalize(setting, setting.default_value, engine, "Reset")
 
     return await asyncio.to_thread(_reset)
 
@@ -1058,8 +1044,7 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
     engine = DetectionEngine(hardware_context=hardware_context)
 
     def _undo() -> ApplyResponse:
-        success, error = CommandExecutor.apply(setting, original)
-        response = _finalize_apply_response(setting, original, engine, success, error, "Undo")
+        response = apply_and_finalize(setting, original, engine, "Undo")
         # Drop the record only once the machine is actually back, so a failed
         # undo can be retried. Keeping it after a success would pin a value from
         # an arbitrarily old session and stop the next scan recording a fresh one.

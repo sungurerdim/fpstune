@@ -178,6 +178,13 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
                 "success": True,
                 "current_value": response.new_value,
                 "requires_reboot": response.requires_reboot,
+                # What a cleanup reclaimed, measured around its own command by
+                # `_apply_and_finalize`, and null for everything else — including
+                # a cleanup whose size could not be read (C11 rule 3). The
+                # streamed run reports exactly what `POST /apply` returns,
+                # because both come off the same ApplyResponse.
+                "freed_bytes": response.freed_bytes,
+                "size_after_bytes": response.size_after_bytes,
             }
         ),
         _sse(
@@ -240,9 +247,11 @@ async def _stream_nvidia(
 
     # The batch write is one NPI call, but everything after it is per setting and
     # goes through _finalize_apply_response — the single post-apply path. Detect,
-    # verify, log_activity and the cleanup-cache invalidation all live there;
-    # re-implementing them here is how NVIDIA tweaks vanished from the Activity
-    # drawer.
+    # verify and log_activity all live there; re-implementing them here is how
+    # NVIDIA tweaks vanished from the Activity drawer. This is the one path that
+    # does not run a command per setting, so it does not go through
+    # `_apply_and_finalize` — and it does not need to: an NVIDIA profile setting
+    # is never a cleanup, so there is no size to measure around the write.
     engine = DetectionEngine(hardware_context=hardware_context)
     activity_label = "Applied" if action == "apply" else "Reset"
 
@@ -365,6 +374,14 @@ async def _stream_grouped(
     if other_settings:
         async for event in _stream_each(other_settings, action, hardware_context, tally):
             yield event
+
+    if action == "apply" and tally.succeeded:
+        # The one thing the apply path knows about benchmarking: a sentinel the
+        # scheduler finds on its next tick, which is what turns "the machine
+        # changed" into an after-measurement without anyone asking for one.
+        from fpstune.benchmark.ledger import mark_bulk_apply_finished
+
+        mark_bulk_apply_finished()
 
     yield _sse(
         {

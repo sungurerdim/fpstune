@@ -57,7 +57,9 @@ class TestResetCreatesRestorePoint:
                 "fpstune.api.routes.settings._finalize_apply_response",
                 return_value=response_obj,
             ),
-            patch("fpstune.api.routes.settings.CommandExecutor.apply", return_value=(True, None)),
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
+            ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
             patch("fpstune.api.routes.settings._create_restore_point_async") as mock_rp,
         ):

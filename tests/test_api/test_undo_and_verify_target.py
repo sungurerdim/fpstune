@@ -181,8 +181,10 @@ class TestUndoWritesWhatTheMachineHeld:
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
             patch("fpstune.api.routes.settings.get_original_values", return_value=store),
             patch(
-                "fpstune.api.routes.settings.CommandExecutor.apply",
-                side_effect=lambda _s, v: (applied_values.append(v), applied)[1],
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply",
+                # Three parameters because that is what CommandExecutor.apply takes:
+                # the line callback is None on an undo, which has nothing to stream to.
+                side_effect=lambda _s, v, _on_line=None: (applied_values.append(v), applied)[1],
             ),
             patch(
                 "fpstune.api.routes.settings._finalize_apply_response",
@@ -249,7 +251,9 @@ class TestUndoWritesWhatTheMachineHeld:
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
             patch("fpstune.api.routes.settings.get_original_values", return_value=store),
-            patch("fpstune.api.routes.settings.CommandExecutor.apply", return_value=(True, None)),
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
+            ),
             patch(
                 "fpstune.api.routes.settings._finalize_apply_response",
                 return_value=ApplyResponse(

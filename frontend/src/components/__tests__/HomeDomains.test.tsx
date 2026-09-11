@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "../../test/utils";
+import { render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
@@ -22,7 +22,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return {
     ...actual,
-    headroomApi: { list: () => Promise.resolve({ games: [] }) },
+    headroomApi: { list: () => Promise.resolve({ headroom: unmeasuredHeadroom() }) },
   };
 });
 vi.mock("../../hooks/useBulkApply", () => ({

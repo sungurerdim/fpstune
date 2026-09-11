@@ -18,13 +18,13 @@ type BenchTab = "suite" | "verify";
  *   wraps the same instruments, repeats them, and compares through a noise
  *   floor rather than diffing two single readings.
  * - **FPS Capture** was a manual version of a measurement the product already
- *   takes by itself. `headroom_watch` measures a known game once per session
- *   and keeps one current reading; this panel asked the user to type a process
- *   name, name the capture, start it, stop it, and save it into an archive that
- *   nothing else read — and on the machine that reported the problem it held
- *   zero captures. The one thing it could do that headroom cannot is measure a
- *   game fpstune does not know; that is recorded as a gap rather than kept as a
- *   panel.
+ *   takes by itself. The scheduler renders a fixed scene when the machine is
+ *   idle and keeps one current reading; this panel asked the user to type a
+ *   process name, name the capture, start it, stop it, and save it into an
+ *   archive that nothing else read — and on the machine that reported the
+ *   problem it held zero captures. The one thing it could do that headroom
+ *   cannot is measure a real match; that is recorded as a gap rather than kept
+ *   as a panel.
  * - **Stress Test** was FurMark, which answers "how hot, how stable" and never
  *   "what does this machine reach" (C11 rule 6). It stays off the performance
  *   path — but off it entirely rather than beside it, since it had never been

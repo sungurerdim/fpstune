@@ -9,15 +9,13 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
 from fpstune.api.routes.benchmark_ledger import router as ledger_router
-from fpstune.benchmark.headroom_watch import (
-    POLL_INTERVAL_SECONDS,
-    last_results,
-    measure_now,
-)
 from fpstune.benchmark.sources import NO_INSTRUMENT, SOURCES, Source, coverage
 from fpstune.benchmark.verify_round import measure_pair, run_round
-from fpstune.settings.executors.game_processes import GAME_LABELS, game_is_running
-from fpstune.settings.performance_headroom import PerformanceHeadroom
+from fpstune.settings.performance_headroom import (
+    PerformanceHeadroom,
+    measure_now,
+    read_headroom,
+)
 from fpstune.utils.logger import log_activity
 
 router = APIRouter()
@@ -42,16 +40,6 @@ _RUNNABLE: dict[str, str] = {
     "dpc": "timer jitter, measured on the machine as it is",
     "network": "round-trip latency and loss against a known host",
 }
-
-
-class MeasureRequest(BaseModel):
-    """Which game to measure, or none to take whichever one is running.
-
-    Optional because the user pressing "measure again" knows they have a game
-    open and should not have to tell fpstune which one.
-    """
-
-    game: str | None = Field(default=None, max_length=32)
 
 
 class CoverageRequest(BaseModel):
@@ -99,8 +87,8 @@ def _resolve(setting_ids: list[str]) -> list[Any]:
     return resolved
 
 
-def _headroom_payload(game: str, headroom: PerformanceHeadroom, is_running: bool) -> dict[str, Any]:
-    """One game's current reading, shaped for a panel.
+def _headroom_payload(headroom: PerformanceHeadroom) -> dict[str, Any]:
+    """This machine's current reading, shaped for a panel.
 
     ``achievement_percent`` is computed here rather than in the browser so the
     number the UI shows and the number the recommendation engine acts on cannot
@@ -108,9 +96,6 @@ def _headroom_payload(game: str, headroom: PerformanceHeadroom, is_running: bool
     """
     achievement = headroom.achievement
     return {
-        "game": game,
-        "label": GAME_LABELS.get(game, game.upper()),
-        "is_running": is_running,
         "is_measured": headroom.is_measured,
         "measured_fps": headroom.measured_fps,
         "fps_1_percent_low": headroom.fps_1_percent_low,
@@ -118,63 +103,52 @@ def _headroom_payload(game: str, headroom: PerformanceHeadroom, is_running: bool
         "achievement_percent": round(achievement * 100) if achievement is not None else None,
         "tier": headroom.tier,
         "bottleneck": headroom.bottleneck,
-        "cpu_busy_ms": headroom.cpu_busy_ms,
-        "gpu_time_ms": headroom.gpu_time_ms,
-        "input_latency_ms": headroom.input_latency_ms,
         "present_mode": headroom.present_mode,
+        "width": headroom.width,
+        "height": headroom.height,
         "measured_at": headroom.measured_at,
     }
 
 
 @router.get("/headroom")
 async def get_headroom() -> dict[str, Any]:
-    """What each known game last reached on this machine, and what is running now.
+    """What this machine last reached on the fixed scene, against what it can show.
 
     Always answerable, including before anything has ever been measured — an
-    unmeasured game reports itself as unmeasured rather than being left out of
-    the list, because "we have not looked yet" is the answer the user needs in
-    order to press the button.
+    unmeasured machine reports itself as unmeasured rather than as a zero,
+    because "we have not looked yet" is the answer the user needs in order to
+    press the button.
 
-    No history: one current entry per game, overwritten in place.
+    One reading, not one per game: the scene is the same every run, so the
+    number describes the machine. No history either — it is overwritten in place.
     """
-    results = await asyncio.to_thread(last_results)
-    return {
-        "poll_interval_seconds": POLL_INTERVAL_SECONDS,
-        "games": [
-            _headroom_payload(game, headroom, running) for game, headroom, running in results
-        ],
-    }
+    headroom = await asyncio.to_thread(read_headroom)
+    return {"headroom": _headroom_payload(headroom)}
 
 
 @router.post("/headroom/measure")
-async def measure_headroom(request: MeasureRequest) -> dict[str, Any]:
-    """Measure now, on the user's say-so, and return what it found.
+async def measure_headroom() -> dict[str, Any]:
+    """Run the scene now, on the user's say-so, and return what it found.
 
-    Not an error when it cannot: "no game is running" is a true statement about
-    the machine, not a fault, and the response says which of the reasons applied
-    so the panel can tell the user what to do rather than that something broke.
+    Not an error when it cannot: "a game is running" and "the scene is not
+    installed" are true statements about the machine, not faults, and the
+    response says which of the reasons applied so the panel can tell the user
+    what to do rather than that something broke.
     """
-    # Said before the wait, not after it. The capture runs for a minute, and a
-    # minute of silence is what made the suite's runs look hung — the same
-    # report, on a slower path.
+    # Said before the wait, not after it. The scene loads for about fifteen
+    # seconds and then records for thirty, and a minute of silence is what made
+    # the suite's runs look hung — the same report, on a slower path.
     log_activity(
-        f"Measuring the frame rate for {request.game or 'whichever game is running'} "
-        f"— this takes about a minute",
+        "Measuring what this machine reaches on the test scene — this takes about a minute",
         "info",
     )
-    outcome = await asyncio.to_thread(measure_now, request.game)
+    outcome = await asyncio.to_thread(measure_now)
     payload: dict[str, Any] = {
         "measured": outcome.measured,
         "outcome": outcome.outcome,
         "detail": outcome.detail,
-        "game": outcome.game,
-        "headroom": None,
+        "headroom": (_headroom_payload(outcome.headroom) if outcome.headroom is not None else None),
     }
-    if outcome.game is not None and outcome.headroom is not None:
-        # Asked again rather than assumed: a probe that failed because the game
-        # was closed must not have its own reading labelled "running".
-        running = await asyncio.to_thread(game_is_running, outcome.game)
-        payload["headroom"] = _headroom_payload(outcome.game, outcome.headroom, running)
     # Both endings reach the log. A refusal that only reaches the panel leaves
     # the console showing a measurement that started and never said anything.
     log_activity(outcome.detail, "success" if outcome.measured else "warning")

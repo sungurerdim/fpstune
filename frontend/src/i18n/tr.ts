@@ -189,7 +189,8 @@ export const tr: Record<keyof typeof en, string> = {
   "home.statGuards": " · {count} sapma bekçisi nöbette",
   "home.measured": "Ölçüldü",
   "home.noMeasurement":
-    "henüz kare hızı ölçülmedi — bir oyun başlatın ya da Ölçümler'i açın",
+    "henüz kare hızı ölçülmedi — test sahnesini çalıştırmak için Ölçümler'i açın",
+  "home.sceneLabel": "Test sahnesi, bu ekranın çözünürlüğünde",
   "home.ofTarget": "bu ekranın gösterebildiği {target} fps'in %{pct}'i",
   "home.noTarget": "ekran hedefi yok — panel yenileme hızı bilinmiyor",
   "home.claimed": "Henüz uygulanmamış ayarların vaadi",
@@ -340,19 +341,21 @@ export const tr: Record<keyof typeof en, string> = {
   // Headroom panel
   "headroom.title": "Bu makinenin ulaştığı",
   "headroom.subtitle":
-    "Ekranın gösterebildiğine karşı ölçülür. Görüntü kalitesine harcanacak kare olup olmadığına bu karar verir.",
+    "Bu ekranın kendi çözünürlüğünde çizilen sabit bir test sahnesi, ekranın gösterebildiğine karşı ölçülür. Görüntü kalitesine harcanacak kare olup olmadığına bu karar verir.",
   "headroom.measureNow": "Şimdi ölç",
   "headroom.measuring": "Ölçülüyor…",
   "headroom.startFailed": "Ölçüm başlatılamadı.",
   "headroom.readingLast": "Son sonuç okunuyor…",
-  "headroom.needsGame":
-    "Kare hızı ölçmek için ekranda bir şeyin çizilmesi gerekir. Bir oyun başlatın; fpstune ölçümü kendiliğinden alır — ya da oyun açıkken Şimdi ölç'e basın.",
-  "headroom.runningNow": "şu an çalışıyor",
+  "headroom.needsScene":
+    "Henüz bir ölçüm yok. fpstune makine boştayken sabit bir test sahnesi çizer, yani bir oyunun açık olması gerekmez — ya da yaklaşık bir dakika süren Şimdi ölç'e basın.",
+  "headroom.needsDownload":
+    "Test sahnesi Unigine Superposition Basic'tir; tek seferlik 1,3 GB'lık bir indirme. fpstune bunu kendiliğinden başlatmaz.",
   "headroom.onePercentLow": "(%1 düşüklerde {value})",
   "headroom.againstTarget": "bu panelin {target} fps hedefine karşı",
   "headroom.measuredAgo": "Ölçüm: {age}",
+  "headroom.renderedAt": "{width}×{height} ile çizildi, bu ekranın kendi çözünürlüğü",
   "headroom.gaugeLabel":
-    "{game}: ekranın {target} fps hedefine karşı ölçülen kare hızı",
+    "Ekranın {target} fps hedefine karşı ölçülen kare hızı",
   "headroom.tierMet": "Tavanında",
   "headroom.tierMetMeaning":
     "Bu makine ekranın gösterebildiğine ulaşıyor; görüntü kalitesine harcanacak kare fazlası var.",
@@ -367,7 +370,7 @@ export const tr: Record<keyof typeof en, string> = {
     "Ekranın gösterebildiğinin yarısından az. Bilgi olmayan her şey harcanmaya değer; daha keskin bir görüntü zaten masada yok.",
   "headroom.tierUnknown": "Ölçülmedi",
   "headroom.tierUnknownMeaning":
-    "Bu oyun için henüz bir ölçüm yok ve sessizlik kanıt değildir — bu yüzden kare hızına mal olan hiçbir şey önerilmeyecek.",
+    "Bu makinede henüz bir ölçüm yok ve sessizlik kanıt değildir — bu yüzden kare hızına mal olan hiçbir şey önerilmeyecek.",
   "headroom.gpuBound": "GPU'ya bağlı — kareler grafik ayarlarında saklı",
   "headroom.cpuBound": "CPU'ya bağlı — grafik ayarları bunu pek değiştirmez",
   "headroom.bothBound":

@@ -16,10 +16,10 @@ here that adds two areas together, and a test asserts there is not.
 **An area with no pair carries a reason, never a number.** Not zero, not "no
 change" — a sentence saying why it could not be checked, in the same voice
 `sources.py` and `benches.catalogue()` already use. Two of the seven areas say
-that permanently on this build, and they are the honest half of the screen: fps
-and input latency need a game rendering, which is `headroom_watch`'s department,
-and thermal has no instrument on the performance path at all because FurMark is
-a power virus (C11 rule 6).
+that permanently on this build, and they are the honest half of the screen:
+input latency needs a game rendering and a driver that reports the timings, and
+thermal has no instrument on the performance path at all because FurMark is a
+power virus (C11 rule 6).
 
 Its models live here rather than in `api/schemas.py`, following
 `benchmark_suite.py`: these shapes have exactly one caller and putting them in

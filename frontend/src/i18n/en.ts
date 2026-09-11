@@ -201,7 +201,8 @@ export const en = {
   "home.statGuards": " · {count} drift guards standing watch",
   "home.measured": "Measured",
   "home.noMeasurement":
-    "no frame rate measured yet — start a game, or open Benchmarks",
+    "no frame rate measured yet — open Benchmarks to run the test scene",
+  "home.sceneLabel": "Test scene, at this display's resolution",
   "home.ofTarget": "{pct}% of the {target} fps this display can show",
   "home.noTarget": "no display target — panel refresh unknown",
   "home.claimed": "Claimed by settings not yet applied",
@@ -360,19 +361,21 @@ export const en = {
   // Headroom panel
   "headroom.title": "What this machine reaches",
   "headroom.subtitle":
-    "Measured against what the display could show. This is what decides whether there are frames spare to spend on image quality.",
+    "A fixed test scene, rendered at this display's own resolution and measured against what the display could show. This is what decides whether there are frames spare to spend on image quality.",
   "headroom.measureNow": "Measure now",
   "headroom.measuring": "Measuring…",
   "headroom.startFailed": "The measurement could not be started.",
   "headroom.readingLast": "Reading the last result…",
-  "headroom.needsGame":
-    "A frame rate needs something rendering to measure. Start a game and fpstune will take a reading on its own — or press Measure now while it is open.",
-  "headroom.runningNow": "running now",
+  "headroom.needsScene":
+    "Nothing has been measured yet. fpstune renders a fixed test scene when the machine is idle, so no game has to be running — or press Measure now, which takes about a minute.",
+  "headroom.needsDownload":
+    "The test scene is Unigine Superposition Basic, a 1.3 GB one-time download. fpstune never starts it on its own.",
   "headroom.onePercentLow": "({value} at the 1% low)",
   "headroom.againstTarget": "against this panel's {target} fps target",
   "headroom.measuredAgo": "Measured {age}",
+  "headroom.renderedAt": "Rendered at {width}×{height}, this display's own resolution",
   "headroom.gaugeLabel":
-    "{game}: measured frame rate against the display's {target} fps target",
+    "Measured frame rate against the display's {target} fps target",
   "headroom.tierMet": "At its ceiling",
   "headroom.tierMetMeaning":
     "This machine is reaching what the display can show, so there are frames spare to spend on image quality.",
@@ -387,7 +390,7 @@ export const en = {
     "Under half of what the display can show. Everything that is not information is worth spending, and a sharper image is not on offer.",
   "headroom.tierUnknown": "Not measured",
   "headroom.tierUnknownMeaning":
-    "Nothing has been measured for this game yet, and silence is not evidence — so nothing that costs frames will be recommended.",
+    "Nothing has been measured on this machine yet, and silence is not evidence — so nothing that costs frames will be recommended.",
   "headroom.gpuBound": "GPU-bound — graphics settings are where the frames are",
   "headroom.cpuBound": "CPU-bound — graphics settings will not move this much",
   "headroom.bothBound":

@@ -1,4 +1,4 @@
-"""The in-game frame-rate probe, tested against what actually happened.
+"""The frame capture, tested against what actually happened.
 
 Run against a live MW4 on 2026-08-25, at the user's request ("I am opening a
 game, check whether in-game fps detection works"). It did not, and it failed in
@@ -7,7 +7,7 @@ three ways that stacked:
 1. **The flags were PresentMon 1.x.** `--no_top` does not exist in 2.5.1, which
    is the version fpstune downloads. It is not ignored — PresentMon prints
    `error: unrecognized option '--no_top'` and exits without recording anything.
-2. **The capture was killed the moment it started.** `probe_running_game` called
+2. **The capture was killed the moment it started.** The caller called
    `start_capture` (which only spawns the process) and then `stop_capture`
    (which terminates it) with nothing in between. A ten-second probe returned in
    0.6 s.
@@ -19,6 +19,12 @@ three ways that stacked:
 
 The third is the one worth the most: 1 and 2 are bugs, 3 is the product telling
 the user something untrue about their own machine.
+
+The caller that made mistake 2 is gone — the in-game probe was retired on
+2026-09-11 in favour of the fixed scene — so that contract is held here against
+`gpu_scene`, which is now the one thing that drives a capture. The mistake is a
+property of *any* caller of this tool, which is why it is pinned beside the tool
+rather than left to whichever module happens to call it this year.
 """
 
 from __future__ import annotations
@@ -29,11 +35,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from fpstune.benchmark import gpu_scene
+from fpstune.benchmark.gpu_scene import GpuSceneBench
 from fpstune.benchmark.presentmon import PresentMonBenchmark
-from fpstune.settings.performance_headroom import (
-    explain_capture_failure,
-    probe_running_game,
-)
+from fpstune.settings.performance_headroom import explain_capture_failure
 
 ACCESS_DENIED = (
     "error: failed to start trace session: access denied.\n"
@@ -85,21 +90,25 @@ class TestTheCommandLine:
 
 
 class TestTheCaptureIsGivenTimeToRun:
-    def test_the_probe_waits_instead_of_killing_what_it_just_started(self, monkeypatch) -> None:
-        """The 0.6-second ten-second capture, pinned.
+    """The 0.6-second ten-second capture, pinned against today's only caller.
 
-        `wait_for_capture` must be called between starting and stopping, or the
-        recording is terminated before PresentMon has written a row.
-        """
+    `wait_for_capture` has to be called between starting and stopping, or the
+    recording is terminated before PresentMon has written a row. `start_capture`
+    spawns the process and returns; `stop_capture` terminates it. Nothing in
+    either signature says so, which is exactly why this is a test and not a
+    comment.
+    """
+
+    def test_the_scene_waits_instead_of_killing_what_it_just_started(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         order: list[str] = []
+        log = tmp_path / "log.html"
 
         class FakeCapture:
             last_error = ""
 
-            def is_installed(self) -> bool:
-                return True
-
-            def start_capture(self, **_kwargs) -> bool:
+            def start_capture(self, **_kwargs: object) -> bool:
                 order.append("start")
                 return True
 
@@ -111,13 +120,30 @@ class TestTheCaptureIsGivenTimeToRun:
                 order.append("stop")
                 return None
 
-            def analyze_capture(self, _path):  # pragma: no cover - never reached
-                return None
+            def terminate_child(self) -> None:
+                pass
 
-        monkeypatch.setattr(
-            "fpstune.benchmark.presentmon.PresentMonBenchmark", lambda *_a, **_k: FakeCapture()
+        def fake_spawn(_args: list[str], _cwd: Path) -> MagicMock:
+            # The engine announces itself in its own log; the bench polls for
+            # that line and starts recording afterwards.
+            log.write_text(f"<p>{gpu_scene.RUNNING_MARKER}</p>", encoding="utf-8")
+            process = MagicMock()
+            process.poll.return_value = None
+            process.pid = 4242
+            return process
+
+        monkeypatch.setattr(gpu_scene, "_spawn_engine", fake_spawn)
+        monkeypatch.setattr(gpu_scene, "_kill_tree", lambda _pid: None)
+
+        bench = GpuSceneBench(
+            data_dir=tmp_path,
+            seconds_per_sample=10.0,
+            settle_seconds=0.0,
+            poll_seconds=0.0,
+            presentmon=FakeCapture(),  # type: ignore[arg-type]
+            log_path=log,
         )
-        probe_running_game("mw4", 297, duration_seconds=10, now=1000.0)
+        bench._measure(2560, 1440, 1, 0.0)
 
         assert order[0] == "start"
         assert order[1].startswith("wait:"), "the capture was stopped before it could record"
@@ -146,34 +172,10 @@ class TestTheFailureIsDiagnosedFromWhatPresentMonSaid:
         assert explain_capture_failure("") == ""
         assert explain_capture_failure("some unrelated chatter") == ""
 
-    def test_the_probe_passes_the_reason_up(self, monkeypatch) -> None:
-        class RefusingCapture:
-            last_error = ACCESS_DENIED
-
-            def is_installed(self) -> bool:
-                return True
-
-            def start_capture(self, **_kwargs) -> bool:
-                return True
-
-            def wait_for_capture(self, _timeout: float) -> bool:
-                return True
-
-            def stop_capture(self) -> Path | None:
-                return None
-
-            def analyze_capture(self, _path):  # pragma: no cover - never reached
-                return None
-
-        monkeypatch.setattr(
-            "fpstune.benchmark.presentmon.PresentMonBenchmark",
-            lambda *_a, **_k: RefusingCapture(),
-        )
-
-        recorded, reason = probe_running_game("mw4", 297, duration_seconds=1, now=1000.0)
-
-        assert recorded is False
-        assert "administrator" in reason.lower()
+    # That the caller passes this reason up rather than printing its own guess is
+    # pinned where the caller lives:
+    # `test_performance_headroom.py::TestMeasuringOnDemand
+    # ::test_presentmons_own_refusal_is_translated_into_something_fixable`.
 
 
 class TestStderrIsRead:

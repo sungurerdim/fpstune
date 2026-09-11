@@ -51,7 +51,6 @@ def _headroom(tier: str, bottleneck: str = "gpu") -> PerformanceHeadroom:
         TIER_CRITICAL: 0.2,
     }[tier]
     return PerformanceHeadroom(
-        game="mw4",
         measured_fps=300 * ratio,
         target_fps=300,
         bottleneck=bottleneck,
@@ -151,15 +150,11 @@ class TestTheRegistryAppliesIt:
     """The end of the wire: what a user's scope selector actually contains."""
 
     def _registry(self, headroom: PerformanceHeadroom | None) -> SettingsRegistry:
-        unmeasured = PerformanceHeadroom(game="unmeasured")
-
         # `now` is accepted and ignored: the real reader takes it for the
         # staleness rule, and a stub with a narrower signature would pass here
         # and fail the moment the caller starts passing one.
-        def read(game: str, now: float | None = None) -> PerformanceHeadroom:  # noqa: ARG001
-            if headroom is not None and game == headroom.game:
-                return headroom
-            return unmeasured
+        def read(now: float | None = None) -> PerformanceHeadroom:  # noqa: ARG001
+            return headroom if headroom is not None else PerformanceHeadroom()
 
         registry = SettingsRegistry(discover_dynamic=False)
         with patch("fpstune.settings.performance_headroom.read_headroom", side_effect=read):
@@ -211,11 +206,28 @@ class TestTheRegistryAppliesIt:
                 assert after.scope is before.scope
                 assert after.recommended_value == before.recommended_value
 
-    def test_one_game_s_measurement_never_moves_another_s(self) -> None:
-        """Per game, because a machine holding 300 fps here holds 60 there."""
+    def test_one_band_reaches_every_game_that_has_rules(self) -> None:
+        """The band describes the machine, not a title: `gpu_scene` renders the
+        same scene whatever is installed. Before 2026-09-11 the reading came from
+        a capture of one game, so MW3's rules only fired if MW3 itself had been
+        played — a machine at its ceiling got MW4's quality tier and not MW3's."""
         registry = self._registry(_headroom(TIER_MET))
 
         mw3 = registry.get("game_config:mw3:dlss_perf_mode")
-        baseline = SettingsRegistry(discover_dynamic=False).get("game_config:mw3:dlss_perf_mode")
-        assert mw3 is not None and baseline is not None
-        assert mw3.recommended_value == baseline.recommended_value
+        assert mw3 is not None
+        assert mw3.recommended_value == "Maximum Quality"
+
+    def test_a_setting_with_no_rule_is_still_left_alone(self) -> None:
+        """One band, but the rules stay per game: which settings a band may move
+        is a judgement about that title, and a shadow tier is decoration in one
+        game and information in another."""
+        registry = self._registry(_headroom(TIER_MET))
+        baseline = SettingsRegistry(discover_dynamic=False)
+
+        ruled = {rule.setting_id for rules in GAME_RULES.values() for rule in rules}
+        unruled = registry.get("game_config:mw3:shadow_quality")
+        before = baseline.get("game_config:mw3:shadow_quality")
+        assert "game_config:mw3:shadow_quality" not in ruled
+        assert unruled is not None and before is not None
+        assert unruled.recommended_value == before.recommended_value
+        assert unruled.scope is before.scope

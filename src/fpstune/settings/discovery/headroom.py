@@ -23,9 +23,12 @@ def apply_headroom_bands(registry: Registrar, probes: HardwareProbes) -> int:  #
     Until this existed only ``met`` did any work: ``critical``, ``short`` and
     ``near`` were identical to the engine, and the bottleneck reached the
     user's screen and changed nothing. What each band is allowed to do lives
-    in ``headroom_policy`` — this pass is only the application of it, per
-    game, because a machine that holds 300 fps in one title holds 60 in
-    another.
+    in ``headroom_policy`` — this pass is only the application of it.
+
+    One band, read once, applied to every game's rules. The band describes the
+    machine (``gpu_scene`` renders the same scene on every run), while the
+    rules stay per game because a shadow tier is decoration in one title and
+    information in another.
 
     Two different changes, deliberately kept apart:
 
@@ -60,13 +63,13 @@ def apply_headroom_bands(registry: Registrar, probes: HardwareProbes) -> int:  #
         read_headroom,
     )
 
+    headroom = read_headroom()
+    tier = headroom.tier
+    if tier == TIER_UNKNOWN:
+        return 0
+
     moved = 0
     for game in ("mw4", "mw3"):
-        headroom = read_headroom(game)
-        tier = headroom.tier
-        if tier == TIER_UNKNOWN:
-            continue
-
         for rule in rules_for(game):
             setting = registry.get(rule.setting_id)
             if setting is None:
@@ -102,14 +105,14 @@ def apply_headroom_bands(registry: Registrar, probes: HardwareProbes) -> int:  #
             registry.register(setting)
             moved += 1
 
-        if moved:
-            logger.debug(
-                "%s measured %.1f fps against a %s fps target (%s, %s-bound); %d settings moved",
-                game,
-                headroom.measured_fps or 0.0,
-                headroom.target_fps,
-                tier,
-                headroom.bottleneck,
-                moved,
-            )
+    if moved:
+        logger.debug(
+            "this machine measured %.1f fps against a %s fps target (%s, %s-bound); "
+            "%d settings moved",
+            headroom.measured_fps or 0.0,
+            headroom.target_fps,
+            tier,
+            headroom.bottleneck,
+            moved,
+        )
     return moved

@@ -12,28 +12,26 @@ skipif where the platform check cannot be patched cleanly.
 from __future__ import annotations
 
 import sys
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from fpstune.core.power_profile import (
     BALANCED_GUID,
-    DISK_SUBGROUP,
-    DISK_TIMEOUT,
     FPS_BALANCED_DESCRIPTION,
     FPS_BALANCED_NAME,
     HIGH_PERFORMANCE_GUID,
-    OPTIMIZATIONS,
-    PCIE_LINK_STATE,
-    PCIE_SUBGROUP,
     POWER_SAVER_GUID,
-    USB_SELECTIVE_SUSPEND,
-    USB_SUBGROUP,
     PowerPlan,
     PowerProfileManager,
     PowerProfileResult,
     get_power_profile_manager,
 )
+from fpstune.settings.applicability import ApplicabilityChecker, HardwareContext
+from fpstune.settings.base import DetectType
+from fpstune.settings.definitions.power import POWER_SETTINGS
+from fpstune.settings.executors.powercfg import PowerCfgExecutor
 
 # ---------------------------------------------------------------------------
 # Constants and GUIDs
@@ -59,52 +57,6 @@ class TestConstants:
 
     def test_fps_balanced_description_nonempty(self) -> None:
         assert FPS_BALANCED_DESCRIPTION and isinstance(FPS_BALANCED_DESCRIPTION, str)
-
-    def test_usb_subgroup_guid_format(self) -> None:
-        import re
-
-        pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        assert re.match(pattern, USB_SUBGROUP)
-
-    def test_pcie_subgroup_guid_format(self) -> None:
-        import re
-
-        pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        assert re.match(pattern, PCIE_SUBGROUP)
-
-    def test_disk_subgroup_guid_format(self) -> None:
-        import re
-
-        pattern = r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
-        assert re.match(pattern, DISK_SUBGROUP)
-
-    def test_optimizations_list_has_three_entries(self) -> None:
-        assert len(OPTIMIZATIONS) == 3
-
-    def test_optimizations_pcie_entry(self) -> None:
-        subgroup, setting, value, desc = OPTIMIZATIONS[0]
-        assert subgroup == PCIE_SUBGROUP
-        assert setting == PCIE_LINK_STATE
-        assert value == 0
-        assert isinstance(desc, str) and desc
-
-    def test_optimizations_usb_entry(self) -> None:
-        subgroup, setting, value, desc = OPTIMIZATIONS[1]
-        assert subgroup == USB_SUBGROUP
-        assert setting == USB_SELECTIVE_SUSPEND
-        assert value == 0
-        assert isinstance(desc, str) and desc
-
-    def test_optimizations_disk_entry(self) -> None:
-        subgroup, setting, value, desc = OPTIMIZATIONS[2]
-        assert subgroup == DISK_SUBGROUP
-        assert setting == DISK_TIMEOUT
-        assert value == 0
-        assert isinstance(desc, str) and desc
-
-    def test_all_optimization_ac_values_are_zero(self) -> None:
-        for _, _, value, _ in OPTIMIZATIONS:
-            assert value == 0, "All AC optimization values must be 0 (disabled)"
 
 
 # ---------------------------------------------------------------------------
@@ -403,6 +355,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
 
@@ -423,6 +376,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             mgr.create()
 
@@ -431,51 +385,6 @@ class TestCreate:
         rename_cmd = rename_calls[0]
         assert NEW_GUID in rename_cmd
         assert FPS_BALANCED_NAME in rename_cmd
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_create_applies_all_optimizations(self) -> None:
-        mgr = PowerProfileManager()
-        ac_calls: list[list[str]] = []
-
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
-            if "/duplicatescheme" in cmd:
-                return _mock_run(stdout=DUPLICATE_OUTPUT)
-            if "/setacvalueindex" in cmd:
-                ac_calls.append(list(cmd))
-            return _mock_run()
-
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
-        ):
-            result = mgr.create()
-
-        assert result.success is True
-        assert len(ac_calls) == len(OPTIMIZATIONS)
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_create_ac_commands_use_correct_subgroup_and_setting(self) -> None:
-        mgr = PowerProfileManager()
-        ac_calls: list[list[str]] = []
-
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
-            if "/duplicatescheme" in cmd:
-                return _mock_run(stdout=DUPLICATE_OUTPUT)
-            if "/setacvalueindex" in cmd:
-                ac_calls.append(list(cmd))
-            return _mock_run()
-
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
-        ):
-            mgr.create()
-
-        for idx, (subgroup, setting, value, _) in enumerate(OPTIMIZATIONS):
-            cmd = ac_calls[idx]
-            assert subgroup in cmd
-            assert setting in cmd
-            assert str(value) in cmd
 
     @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
     def test_create_returns_failure_when_duplicate_fails(self) -> None:
@@ -511,6 +420,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
 
@@ -529,6 +439,117 @@ class TestCreate:
             result = mgr.create()
         assert result.success is False
         assert "Error" in result.message
+
+
+# ---------------------------------------------------------------------------
+# create — routes through the settings registry (C6: one writer, one AC/DC
+# promise). No second table of values lives in power_profile.py any more; a
+# tweak retired from settings/definitions/power.py disappears from this list
+# for free, and a tweak added there is picked up the same way.
+# ---------------------------------------------------------------------------
+
+
+class TestCreateRoutesThroughTheRegistry:
+    def _expected_writes(self, fixed_dc_index: int) -> tuple[set, set]:
+        """The (subgroup, setting, value) triples the registry itself would apply.
+
+        Derived independently from ``POWER_SETTINGS`` and ``ApplicabilityChecker``
+        — never by calling ``power_profile``'s own helper — so the test proves the
+        two agree rather than assuming it.
+        """
+        checker = ApplicabilityChecker(HardwareContext())
+        expected_ac: set[tuple[str, str, str]] = set()
+        expected_dc: set[tuple[str, str, str]] = set()
+        for setting in POWER_SETTINGS:
+            if setting.detect_type is not DetectType.POWERCFG:
+                continue
+            if not checker.is_applicable(setting)[0]:
+                continue
+            subgroup = setting.apply_args["subgroup"]
+            guid = setting.apply_args["setting"]
+            raw = setting.apply_value_map.get(setting.recommended_value, setting.recommended_value)
+            index = str(int(str(raw).strip()))
+            expected_ac.add((subgroup, guid, index))
+            expected_dc.add((subgroup, guid, str(fixed_dc_index)))
+        return expected_ac, expected_dc
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
+    def test_applies_exactly_the_registrys_recommended_powercfg_values(self) -> None:
+        mgr = PowerProfileManager()
+        fixed_dc_index = 7
+        raw_calls: list[list[str]] = []
+
+        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+            raw_calls.append(list(cmd))
+            if "/duplicatescheme" in cmd:
+                return _mock_run(stdout=DUPLICATE_OUTPUT)
+            return _mock_run()
+
+        with (
+            patch.object(mgr, "find_fps_balanced", return_value=None),
+            patch("subprocess.run", side_effect=run_side_effect),
+            patch.object(PowerCfgExecutor, "_target_schemes", return_value=[NEW_GUID]),
+            patch(
+                "fpstune.settings.executors.powercfg.windows_default_index",
+                return_value=fixed_dc_index,
+            ),
+            patch(
+                "fpstune.core.power_profile.build_hardware_context",
+                return_value=HardwareContext(),
+            ),
+        ):
+            result = mgr.create()
+
+        assert result.success is True
+
+        ac_calls = [c for c in raw_calls if "/setacvalueindex" in c]
+        dc_calls = [c for c in raw_calls if "/setdcvalueindex" in c]
+        actual_ac = {(c[3], c[4], c[5]) for c in ac_calls}
+        actual_dc = {(c[3], c[4], c[5]) for c in dc_calls}
+
+        expected_ac, expected_dc = self._expected_writes(fixed_dc_index)
+        assert actual_ac == expected_ac
+        assert actual_dc == expected_dc
+        # A real setting exists in the registry, so an empty match here would
+        # mean the loop never ran rather than that nothing was applicable.
+        assert expected_ac
+
+    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
+    def test_a_setting_the_hardware_does_not_support_is_never_written(self) -> None:
+        """`is_applicable=False` must be respected exactly as the single-setting
+        apply route respects it — never silently written anyway."""
+        mgr = PowerProfileManager()
+        raw_calls: list[list[str]] = []
+
+        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+            raw_calls.append(list(cmd))
+            if "/duplicatescheme" in cmd:
+                return _mock_run(stdout=DUPLICATE_OUTPUT)
+            return _mock_run()
+
+        # A CPU-vendor gate that no shipped power:* setting currently carries,
+        # applied to every one of them, so the loop must write nothing at all.
+        with (
+            patch.object(mgr, "find_fps_balanced", return_value=None),
+            patch("subprocess.run", side_effect=run_side_effect),
+            patch.object(PowerCfgExecutor, "_target_schemes", return_value=[NEW_GUID]),
+            patch(
+                "fpstune.settings.executors.powercfg.windows_default_index",
+                return_value=None,
+            ),
+            patch(
+                "fpstune.core.power_profile.build_hardware_context",
+                return_value=HardwareContext(),
+            ),
+            patch.object(
+                ApplicabilityChecker, "is_applicable", return_value=(False, "not applicable")
+            ),
+        ):
+            result = mgr.create()
+
+        assert result.success is True
+        assert not [c for c in raw_calls if "/setacvalueindex" in c]
+        assert not [c for c in raw_calls if "/setdcvalueindex" in c]
 
 
 # ---------------------------------------------------------------------------
@@ -766,16 +787,20 @@ class TestStatus:
         fps_plan = PowerPlan(
             guid="deadbeef-dead-beef-dead-beefdeadbeef", name=FPS_BALANCED_NAME, is_active=True
         )
+        fake_settings = [SimpleNamespace(effect="Tweak A"), SimpleNamespace(effect="Tweak B")]
         with (
             patch.object(mgr, "get_active_plan", return_value=fps_plan),
             patch.object(mgr, "find_fps_balanced", return_value=fps_plan.guid),
+            patch(
+                "fpstune.core.power_profile._registry_powercfg_settings",
+                return_value=fake_settings,
+            ),
         ):
             s = mgr.status()
         assert s["active_plan"] == FPS_BALANCED_NAME
         assert s["fps_balanced_active"] is True
         assert s["fps_balanced_exists"] is True
-        assert isinstance(s["optimizations"], list)
-        assert len(s["optimizations"]) == len(OPTIMIZATIONS)
+        assert s["optimizations"] == ["Tweak A", "Tweak B"]
 
     @pytest.mark.skipif(sys.platform != "win32", reason="get_active_plan only on win32")
     def test_status_when_balanced_active(self) -> None:

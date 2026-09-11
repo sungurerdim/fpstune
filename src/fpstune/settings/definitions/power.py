@@ -864,6 +864,42 @@ CPU_LATENCY_HINT_UNPARK_SETTING = "616cdaa5-695e-4545-97ad-97dc2d1bdd88"
 CPU_PARKING_INC_POLICY_SETTING = "c7be0679-2817-4d69-9d02-519a537ed0c6"
 CPU_PARKING_INC_TIME_SETTING = "2ddd5a84-5a71-437e-912a-db0b8c788732"
 
+# Four more processor keys a "gaming optimizer" commonly writes, none of which
+# fpstune watched before this pass. Every FriendlyName/Description string below
+# is quoted verbatim from this machine's own
+# HKLM\SYSTEM\CurrentControlSet\Control\Power\PowerSettings\<SUB_PROCESSOR>\<guid>
+# (read via winreg, 2026-09-11) rather than recalled, and each GUID's presence
+# there was confirmed before it was written here.
+#
+# "Maximum processor frequency" (powrprof.dll,-820): "Specify the approximate
+# maximum frequency of your processor (in MHz)." ValueMin=0, ValueMax=4294967295
+# (DWORD range), ValueUnits "MHz". 0 is the sentinel for "no cap" — the one a
+# cap-happy "gaming optimizer" most directly costs a frame rate by moving.
+CPU_MAX_FREQUENCY_SETTING = "75b0ae3f-bce0-45a7-8c89-c9611c25e100"
+
+# "Processor idle state maximum" (powrprof.dll,-736): "Specify the deepest idle
+# state that should be used." ValueMin=0, ValueMax=20. A low-latency guide
+# commonly pins this to a shallow index to shave C-state wake time; Windows'
+# own mains value on this machine is 0, which is this setting's own "no
+# artificial cap" state — the same sentinel USB/disk timeouts use elsewhere in
+# this file — so idle cores fall as deep as the platform advertises.
+CPU_IDLE_STATE_MAX_SETTING = "9943e905-9a30-4ec1-9b99-44dd3b76f7a2"
+
+# "Allow Throttle States" (powrprof.dll,-381): "Allow processors to use
+# throttle states in addition to performance states." Three named states read
+# off this machine's own enum subkeys 0/1/2: Off, On, Automatic
+# (powrprof.dll,-117/-115/-742). T-states are a thermal escape route below the
+# lowest P-state; "Off" is what a "never throttle" guide asks for, and it is
+# also the one that removes the escape route if the chip ever needs it.
+CPU_THROTTLE_STATES_SETTING = "3b04d4fd-1cc7-4f23-ab1c-d1337819c4bb"
+
+# "Processor duty cycling" (powrprof.dll,-816): "Specify whether the processor
+# may use duty cycling." Two states read off this machine's own enum subkeys
+# 0/1: Disabled, Enabled (powrprof.dll,-730/-732). Duty cycling switches the
+# core fully off on a fixed schedule when P-states and T-states are not enough
+# — a game reads that as a stutter, not a cooldown.
+CPU_DUTY_CYCLING_SETTING = "4e4450b3-6179-4e91-b8f1-5bb9938f81a1"
+
 
 def _cpu_power_setting(
     *,
@@ -1149,6 +1185,105 @@ POWER_CPU_INCREASE_TIME = _cpu_power_setting(
     scope=SettingScope.COMPLETE,
 )
 
+# =============================================================================
+# Four more drift guards: processor keys "gaming optimizers" commonly move,
+# none of which fpstune watched before this pass. Same shape as the block
+# above — recommended_value == default_value == Windows' own mains value here,
+# so applying on a stock machine changes nothing (consequence 2), and the
+# setting exists to put the value back when something else moves it
+# (consequence 6). `impact_scores` therefore carry no magnitude, matching the
+# generic gate in `tests/test_settings/test_power_drift_guards.py`.
+# =============================================================================
+
+# === Maximum Processor Frequency ===
+# The important one of the four: a cap here is a lowered ceiling, and it is
+# exactly what a "reduce heat" guide reaches for. 0 = no cap, Windows' own
+# mains value on this machine.
+POWER_CPU_MAX_FREQUENCY = _cpu_power_setting(
+    setting_id="power:cpu_max_frequency",
+    guid=CPU_MAX_FREQUENCY_SETTING,
+    display_name="Maximum Processor Frequency Cap",
+    short_name="CPU frequency cap",
+    description="The ceiling, in MHz, Windows lets the processor reach. 0 is Windows' own mains "
+    "value, meaning no cap; anything else pins every core below its rated turbo speed, a lowered "
+    "ceiling no game gets back.",
+    default_value=0,
+    recommended_value=0,
+    min_value=0,
+    max_value=4294967295,
+    current_impact="Capped: A frequency limit below the chip's turbo range holds every frame at that ceiling",
+    recommended_impact="0 (Windows' own value): No cap — the full turbo range stays available",
+    effect="Keeps the processor frequency uncapped instead of pinned below its rated speed",
+    impact_scores={"fps_cpu_bound": 0.0, "stability": "high"},
+    category_order=23,
+    scope=SettingScope.RECOMMENDED,
+)
+
+# === Processor Idle State Maximum ===
+POWER_CPU_IDLE_STATE_MAX = _cpu_power_setting(
+    setting_id="power:cpu_idle_state_max",
+    guid=CPU_IDLE_STATE_MAX_SETTING,
+    display_name="Processor Idle State Maximum",
+    short_name="Deepest idle state allowed",
+    description="How deep an idle CPU core may sleep, on the 0-20 scale this platform defines. "
+    "Windows' own value here is 0, no cap; pinning it lower buys smoother C-state wake-ups at the "
+    "cost of heat banked all day.",
+    default_value=0,
+    recommended_value=0,
+    min_value=0,
+    max_value=20,
+    current_impact="Capped: Idle cores are held to a shallow sleep state, banking heat the deepest state would have avoided",
+    recommended_impact="0 (Windows' own value): Idle cores use whatever depth the platform advertises",
+    effect="Removes an artificial cap on idle depth so cores can rest as deep as the platform allows",
+    impact_scores={"power_watts": 0.0, "stability": "high"},
+    category_order=24,
+    scope=SettingScope.RECOMMENDED,
+)
+
+# === Allow Throttle States ===
+POWER_CPU_THROTTLE_STATES = _cpu_power_setting(
+    setting_id="power:cpu_throttle_states",
+    guid=CPU_THROTTLE_STATES_SETTING,
+    display_name="Allow Throttle States",
+    short_name="Throttle-state safety valve",
+    description="Whether Windows may use throttle states alongside performance states to control "
+    "heat. Automatic is Windows' own value; forcing this Off removes a thermal safety valve that "
+    "stays silent until needed.",
+    choices=("off", "on", "automatic"),
+    default_value="automatic",
+    recommended_value="automatic",
+    current_impact="Off: No T-state escape route exists if performance states alone cannot hold the temperature down",
+    recommended_impact="Automatic (Windows' own value): T-states stay available for genuine thermal emergencies and do nothing otherwise",
+    effect="Restores Windows' own throttle-state policy instead of removing a thermal safety valve",
+    value_map={0: "off", 1: "on", 2: "automatic"},
+    apply_value_map={"off": 0, "on": 1, "automatic": 2},
+    impact_scores={"power_watts": 0.0, "stability": "high"},
+    category_order=25,
+    scope=SettingScope.RECOMMENDED,
+)
+
+# === Processor Duty Cycling ===
+POWER_CPU_DUTY_CYCLING = _cpu_power_setting(
+    setting_id="power:cpu_duty_cycling",
+    guid=CPU_DUTY_CYCLING_SETTING,
+    display_name="Processor Duty Cycling",
+    short_name="On/off power cycling",
+    description="Whether Windows may rapidly switch the processor fully on and off to cut heat "
+    "beyond throttle states. Disabled is Windows' own value; enabling it reads to a game as "
+    "stutter, not a cooldown.",
+    choices=("disabled", "enabled"),
+    default_value="disabled",
+    recommended_value="disabled",
+    current_impact="Enabled: The processor is periodically switched off entirely, which a game sees as stutter",
+    recommended_impact="Disabled (Windows' own value): The processor stays fully available, with no on/off cycling",
+    effect="Keeps duty cycling off so the processor never idles mid-frame",
+    value_map={0: "disabled", 1: "enabled"},
+    apply_value_map={"disabled": 0, "enabled": 1},
+    impact_scores={"fps_1_percent_low": 0.0, "stability": "high"},
+    category_order=26,
+    scope=SettingScope.RECOMMENDED,
+)
+
 
 POWER_SETTINGS: list[SettingExecutor] = [
     # CPU core parking and scheduling (highest impact)
@@ -1173,6 +1308,12 @@ POWER_SETTINGS: list[SettingExecutor] = [
     POWER_CPU_LATENCY_HINT_PERF,
     POWER_CPU_PARKING_INC_POLICY,
     POWER_CPU_PARKING_INC_TIME,
+    # Four more drift guards, added once these keys were confirmed to exist on
+    # this machine's own registry — see the block above.
+    POWER_CPU_MAX_FREQUENCY,
+    POWER_CPU_IDLE_STATE_MAX,
+    POWER_CPU_THROTTLE_STATES,
+    POWER_CPU_DUTY_CYCLING,
     # I/O latency settings
     USB_SELECTIVE_SUSPEND,
     PCIE_LINK_STATE,

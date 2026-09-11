@@ -1,7 +1,7 @@
 """What this graphics card reaches, on a scene nobody has to be playing.
 
 Every frame-rate number fpstune could produce until now needed a game already
-running. `presentmon` captures one, `headroom_watch` waits for one, and both are
+running. `presentmon` captures one, and until this bench nothing measured without a game, and both are
 the right shape for the question "how is this machine doing in the game you
 actually play". Neither can answer the other question — *did that change make
 the GPU faster* — because the load was a match, and a match is different every
@@ -55,6 +55,42 @@ the capture is cut into that many consecutive windows, each scored on its own.
 They are genuinely repeated measurements of one fixed load, taken seconds apart,
 which is what a noise floor is made of; what they cannot see is variation
 between two loads of the scene, and that is written here rather than hidden.
+
+**Windows are cut by elapsed time, not by frame count, so window k means the
+same thing on every run** (measured 2026-09-11: a 30 s capture cut into three
+10 s-by-frame-count windows read fps_avg 219 / 197 / 188 with a noise of 31 —
+the windows disagreed because they were three different parts of the
+flythrough, not because the machine did). `_windows` slices on
+`timestamps[0] + k * seconds_per_sample` boundaries, and because every capture
+starts recording exactly `settle_seconds` after the engine's own "Benchmark
+running" line (`_wait_for_scene`, then `time.sleep(self.settle_seconds)`),
+window k of one run and window k of another show the same slice of the scene
+regardless of how fast either machine rendered it. `window_boundaries()`
+reports those slices as seconds after the marker, and `detail["paired"]` is
+always `True` for a bench that finished, so a consumer knows the ordering
+promise below holds. A window whose slice contains fewer than
+`MINIMUM_FRAMES_PER_SAMPLE` frames — a hitch stalled the scene for most of a
+second, the way a real 0.1% low does — is not dropped and not averaged in
+silently either: its index and frame count land in `detail["low_frame_windows"]`,
+so a reader can see which sample in the list is suspect instead of trusting an
+`fps_avg` that a stall produced.
+
+**What a consumer must do to compare window-to-window.** `verify_round.judge`
+and `measure_pair` are the one comparison path in this codebase (C11 rule 2),
+and they do *not* pair by index: `measure_pair` takes `statistics.median()` of
+the whole `before_samples` list against the whole `after_samples` list, so
+calling it once on two three-sample readings compares "the typical window
+before" to "the typical window after", not window 0 to window 0. That is left
+unchanged here — rewriting a shared comparison primitive to serve one bench
+would be exactly the kind of second definition C11 rule 7 warns against. What
+this module guarantees instead is the ordering `measure_pair` would need if a
+caller wants a *per-window* verdict: `BenchReading.samples[k]` is always window
+k, in the order `window_boundaries()` describes it, for every reading this
+bench returns. A caller that wants "did window 2 specifically get faster" has
+to call `verify_round.measure_pair(metric, [before.samples[2]], [after.samples[2]])`
+itself, once per index — passing the full lists answers a different, coarser
+question, and mixing the two is how a paired comparison quietly becomes an
+unpaired one.
 
 **Licence.** Superposition Basic may be installed and executed on an unlimited
 number of computers by private individuals for their own use, and derivative
@@ -279,21 +315,66 @@ def _run_installer(args: list[str]) -> int:
     return completed.returncode
 
 
-def _windows(
-    frametimes: list[float], timestamps: list[float], count: int
-) -> Iterator[tuple[list[float], list[float]]]:
-    """Cut a capture into `count` consecutive windows of equal frame count.
+def window_boundaries(
+    settle_seconds: float, seconds_per_sample: float, count: int
+) -> list[tuple[float, float]]:
+    """Where each sample sits on the scene's own timeline.
 
-    By frames rather than by wall clock, so every window carries the same number
-    of samples: a window cut by time would hold twice as many frames where the
-    scene was fast, and its percentile lows would then be computed over a
-    different population than its neighbour's.
+    Each pair is `(start, stop)` in seconds after the engine's own "Benchmark
+    running" line — not measured from a particular capture, but fixed by the
+    same configuration every capture uses, which is what makes them comparable
+    across runs: a capture always starts recording `settle_seconds` after the
+    marker, so window k always covers the same slice of the flythrough.
     """
-    size = len(frametimes) // count
+    return [
+        (
+            settle_seconds + index * seconds_per_sample,
+            settle_seconds + (index + 1) * seconds_per_sample,
+        )
+        for index in range(count)
+    ]
+
+
+def _windows(
+    frametimes: list[float], timestamps: list[float], seconds_per_sample: float, count: int
+) -> Iterator[tuple[list[float], list[float]]]:
+    """Cut a capture into `count` consecutive windows anchored to elapsed time.
+
+    Window k covers `[k * seconds_per_sample, (k + 1) * seconds_per_sample)`
+    seconds after the capture began (`timestamps[0]`), which is the same slice
+    of the scene on every run because the capture always starts a fixed
+    `settle_seconds` after the "Benchmark running" line — see
+    `window_boundaries`. Cutting by elapsed time rather than by frame count is
+    the point: a window cut by frame count puts a faster run's window k later
+    in the flythrough than a slower run's, so two "window 2"s would be scoring
+    two different pieces of scenery and calling the difference a noise floor.
+
+    Falls back to an equal-frame-count cut when there are no per-frame
+    timestamps to anchor to, or when the capture returned fewer timestamps than
+    frametimes (PresentMon's timestamp column is best-effort) — a same-shaped
+    answer that just is not anchored to the scene's own clock, rather than an
+    index error.
+    """
+    if not timestamps or len(timestamps) != len(frametimes):
+        size = len(frametimes) // count
+        for index in range(count):
+            start = index * size
+            stop = len(frametimes) if index == count - 1 else start + size
+            yield frametimes[start:stop], timestamps[start:stop]
+        return
+
+    origin = timestamps[0]
+    frame_index = 0
     for index in range(count):
-        start = index * size
-        stop = len(frametimes) if index == count - 1 else start + size
-        yield frametimes[start:stop], timestamps[start:stop]
+        if index == count - 1:
+            stop = len(frametimes)
+        else:
+            boundary = origin + (index + 1) * seconds_per_sample
+            stop = frame_index
+            while stop < len(timestamps) and timestamps[stop] < boundary:
+                stop += 1
+        yield frametimes[frame_index:stop], timestamps[frame_index:stop]
+        frame_index = stop
 
 
 def fps_readings(
@@ -301,7 +382,8 @@ def fps_readings(
     frametimes: list[float],
     timestamps: list[float],
     samples: int,
-) -> dict[str, BenchReading]:
+    seconds_per_sample: float,
+) -> tuple[dict[str, BenchReading], list[dict[str, int]]]:
     """One capture, cut into `samples` windows, as the three frame-rate readings.
 
     Scored by `presentmon`'s own `_calculate_stats`, deliberately. "The average
@@ -315,6 +397,12 @@ def fps_readings(
     that name — it knows `fps`, which belongs to a capture of a real game. This
     is a fixed synthetic scene, and letting it answer under the name a game's
     claim is judged by would be two quantities wearing one name.
+
+    Returns the readings alongside every window whose frame count fell below
+    `MINIMUM_FRAMES_PER_SAMPLE` — a hitch that stalled the scene for most of a
+    second, not something to average in as if it were a normal window and not
+    something to silently drop and leave the sample count short. The window's
+    (low) stats stay in the reading; the caller decides what a reader is told.
     """
     if samples < 1:
         raise ValueError("a reading needs at least one window to be measured over")
@@ -322,17 +410,22 @@ def fps_readings(
     averages: list[float] = []
     lows_1: list[float] = []
     lows_01: list[float] = []
-    for window_frametimes, window_timestamps in _windows(frametimes, timestamps, samples):
+    low_frame_windows: list[dict[str, int]] = []
+    windows = _windows(frametimes, timestamps, seconds_per_sample, samples)
+    for index, (window_frametimes, window_timestamps) in enumerate(windows):
+        if len(window_frametimes) < MINIMUM_FRAMES_PER_SAMPLE:
+            low_frame_windows.append({"index": index, "frame_count": len(window_frametimes)})
         stats: FrameTimeStats = presentmon._calculate_stats(window_frametimes, window_timestamps)
         averages.append(stats.fps_avg)
         lows_1.append(stats.fps_1_percent_low)
         lows_01.append(stats.fps_0_1_percent_low)
 
-    return {
+    readings = {
         "fps_avg": BenchReading("fps_avg", averages, "fps", higher_is_better=True),
         "fps_1_percent_low": BenchReading("fps_1_percent_low", lows_1, "fps"),
         "fps_0_1_percent_low": BenchReading("fps_0_1_percent_low", lows_01, "fps"),
     }
+    return readings, low_frame_windows
 
 
 class GpuSceneBench:
@@ -764,11 +857,15 @@ class GpuSceneBench:
                 f"{repeats} comparable windows need at least {needed}"
             )
 
+        readings, low_frame_windows = fps_readings(
+            presentmon, stats.frametimes, stats.timestamps, repeats, self.seconds_per_sample
+        )
+
         return BenchResult(
             bench=self.key,
             label=self.label,
             ran=True,
-            readings=fps_readings(presentmon, stats.frametimes, stats.timestamps, repeats),
+            readings=readings,
             detail={
                 "width": width,
                 "height": height,
@@ -778,6 +875,16 @@ class GpuSceneBench:
                 "capture_seconds": round(self.capture_seconds(repeats), 1),
                 "seconds_per_sample": self.seconds_per_sample,
                 "scene": SCENE,
+                # Anchors, not measurements: every capture starts recording
+                # `settle_seconds` after the marker, so window k always covers
+                # this same slice of the scene regardless of this run's own
+                # frame rate — see `window_boundaries` and the module docstring
+                # for what a caller may and may not do with that.
+                "window_boundaries_s": window_boundaries(
+                    self.settle_seconds, self.seconds_per_sample, repeats
+                ),
+                "paired": True,
+                "low_frame_windows": low_frame_windows,
             },
             duration_seconds=time.perf_counter() - started,
         )

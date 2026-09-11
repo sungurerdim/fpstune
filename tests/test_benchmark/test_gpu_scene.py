@@ -33,10 +33,13 @@ from fpstune.benchmark.gpu_scene import (
     DOWNLOAD_SIZE,
     INSTALLER_BYTES,
     INSTALLER_SHA256,
+    MINIMUM_FRAMES_PER_SAMPLE,
     RUNNING_MARKER,
     GpuSceneBench,
+    _windows,
     fps_readings,
     log_tail,
+    window_boundaries,
 )
 from fpstune.benchmark.presentmon import FrameTimeStats, PresentMonBenchmark
 from fpstune.benchmark.suite import Bench, SpawnsProcess
@@ -79,11 +82,14 @@ def _frametimes(count: int = 600, fast: bool = False) -> list[float]:
 
 
 def _timestamps(frametimes: list[float]) -> list[float]:
+    """Seconds elapsed at the start of each frame, the way PresentMon's own
+    `TimeInSeconds` column reads: frametimes are milliseconds, timestamps are
+    seconds, and the two units are not the same number."""
     elapsed = 0.0
     stamps = []
     for frametime in frametimes:
         stamps.append(elapsed)
-        elapsed += frametime
+        elapsed += frametime / 1000.0
     return stamps
 
 
@@ -491,11 +497,66 @@ class TestTheReadings:
         slow = _frametimes(300)
         fast = _frametimes(300, fast=True)
         harness.presentmon.frametimes = slow + fast
+        # Windows are now cut by elapsed time, not by frame count (see the
+        # module docstring), so the boundary has to land exactly where the
+        # slow half ends for this capture to split the way the test expects.
+        harness.bench.seconds_per_sample = sum(slow) / 1000.0
 
         result = harness.bench.run(2)
 
         first, second = result.readings["fps_avg"].samples
         assert second > first * 1.5
+
+    def test_the_sample_order_matches_the_window_order(self, harness: _Harness) -> None:
+        """The only thing that lets a caller compare window k of one run to
+        window k of another (the module docstring spells out why
+        `verify_round.measure_pair` cannot do that pairing on its own) is that
+        index k in `BenchReading.samples` is reliably window k, in the order
+        the windows were recorded — not sorted, not reversed."""
+        window_seconds = 1.6
+        # Equal-duration segments at three different speeds, so each fills
+        # exactly one window regardless of how many frames it took to do it.
+        slowest = [8.0] * int(window_seconds * 1000 / 8.0)  # 125 fps, 200 frames
+        middle = [4.0] * int(window_seconds * 1000 / 4.0)  # 250 fps, 400 frames
+        fastest = [2.0] * int(window_seconds * 1000 / 2.0)  # 500 fps, 800 frames
+        harness.presentmon.frametimes = slowest + middle + fastest
+        harness.bench.seconds_per_sample = window_seconds
+
+        result = harness.bench.run(3)
+
+        fps_avg = result.readings["fps_avg"].samples
+        assert fps_avg[0] < fps_avg[1] < fps_avg[2]
+
+    def test_a_window_with_too_few_frames_is_reported_but_kept(self, harness: _Harness) -> None:
+        """A hitch that stalls the scene for most of a second produces a window
+        with only a handful of frames — the shape of the 11-frame 0.1% low a
+        real stall left behind. Averaging it in unlabelled would publish the
+        stall as an ordinary reading; dropping it would silently shrink the
+        sample count a caller needs. Neither happens here: the index and frame
+        count land in `detail`, and the reading keeps its place in the list."""
+        fast = [10.0] * 100  # 1.0 s of normal frames
+        stalled = [95.0] * 11  # ~1.045 s crawled through by 11 frames
+        assert MINIMUM_FRAMES_PER_SAMPLE > 11, "the fixture has to be below the floor it tests"
+        harness.presentmon.frametimes = fast + stalled
+        harness.bench.seconds_per_sample = 1.0
+
+        result = harness.bench.run(2)
+
+        assert result.ran is True, result.reason
+        assert result.detail["low_frame_windows"] == [{"index": 1, "frame_count": 11}]
+        assert len(result.readings["fps_avg"].samples) == 2
+
+    def test_the_detail_carries_the_window_anchors(self, harness: _Harness) -> None:
+        """`paired` and the boundaries are what tell a consumer the windows are
+        comparable across runs at all — without them a reader cannot tell this
+        result apart from the old equal-frame-count cut."""
+        result = harness.bench.run(2)
+
+        assert result.detail["paired"] is True
+        assert result.detail["window_boundaries_s"] == window_boundaries(
+            harness.bench.settle_seconds, harness.bench.seconds_per_sample, 2
+        )
+        assert result.detail["low_frame_windows"] == []
 
     def test_the_detail_carries_the_run_a_reader_would_ask_about(self, harness: _Harness) -> None:
         result = harness.bench.run(2)
@@ -534,11 +595,79 @@ class TestTheReadings:
         presentmon = PresentMonBenchmark(data_dir=tmp_path)
         frametimes = _frametimes(400)
 
-        readings = fps_readings(presentmon, frametimes, _timestamps(frametimes), 1)
+        readings, low_frame_windows = fps_readings(
+            presentmon, frametimes, _timestamps(frametimes), 1, 10.0
+        )
         whole = presentmon._calculate_stats(frametimes, _timestamps(frametimes))
 
         assert readings["fps_avg"].samples == [whole.fps_avg]
         assert readings["fps_1_percent_low"].samples == [whole.fps_1_percent_low]
+        assert low_frame_windows == []
+
+
+class TestWindowsAreAnchoredToElapsedTime:
+    """Measured 2026-09-11: one 30 s capture cut into three 10 s-by-frame-count
+    windows read fps_avg 219 / 197 / 188 with a noise of 31, because the three
+    windows were three different pieces of the flythrough. These pin the fix:
+    the cut follows elapsed time, so a stall shrinks a window's frame count
+    instead of shifting where in the scene every later window falls."""
+
+    def test_a_stall_produces_an_uneven_split_not_an_equal_one(self) -> None:
+        """15 frames drawn in the first tenth of a second, then a stall leaves
+        only 3 in the second tenth. An equal-frame-count cut over these 18
+        frames would have put 9 in each window; the elapsed-time cut puts them
+        where they were actually drawn."""
+        frametimes = [5.0] * 18  # content is irrelevant to where the cut falls
+        fast_timestamps = [index * (0.1 / 15) for index in range(15)]
+        stalled_timestamps = [0.15, 0.16, 0.17]
+        timestamps = fast_timestamps + stalled_timestamps
+
+        windows = list(_windows(frametimes, timestamps, seconds_per_sample=0.1, count=2))
+
+        assert [len(frames) for frames, _ in windows] == [15, 3]
+
+    def test_frames_recorded_before_the_first_timestamp_are_not_lost(self) -> None:
+        """The last window takes everything remaining, so a rounding gap at the
+        tail of a capture is not silently dropped."""
+        frametimes = [5.0] * 10
+        timestamps = [index * 0.01 for index in range(10)]  # spans 0.0-0.09 s
+
+        windows = list(_windows(frametimes, timestamps, seconds_per_sample=0.05, count=2))
+
+        total = sum(len(frames) for frames, _ in windows)
+        assert total == len(frametimes)
+
+    def test_falls_back_to_frame_count_when_there_are_no_timestamps(self) -> None:
+        """A capture whose timestamp column PresentMon could not fill is not a
+        capture this can anchor to the scene's clock — an equal split is a
+        same-shaped answer, just not a paired one."""
+        frametimes = [5.0] * 20
+
+        windows = list(_windows(frametimes, [], seconds_per_sample=1.0, count=4))
+
+        assert [len(frames) for frames, _ in windows] == [5, 5, 5, 5]
+
+    def test_falls_back_when_timestamps_are_the_wrong_length(self) -> None:
+        """A partially-filled timestamp column is not trustworthy enough to
+        anchor a boundary to — the same fallback as no timestamps at all."""
+        frametimes = [5.0] * 20
+        timestamps = [index * 0.01 for index in range(10)]  # half as many
+
+        windows = list(_windows(frametimes, timestamps, seconds_per_sample=1.0, count=4))
+
+        assert [len(frames) for frames, _ in windows] == [5, 5, 5, 5]
+
+
+class TestWindowBoundaries:
+    def test_boundaries_are_seconds_after_the_running_marker(self) -> None:
+        assert window_boundaries(3.0, 10.0, 3) == [
+            (3.0, 13.0),
+            (13.0, 23.0),
+            (23.0, 33.0),
+        ]
+
+    def test_a_single_window_spans_settle_to_settle_plus_one_sample(self) -> None:
+        assert window_boundaries(0.0, 10.0, 1) == [(0.0, 10.0)]
 
 
 class TestInstalling:

@@ -1,23 +1,17 @@
-"""What this machine actually achieves in a game, and what that permits.
+"""What this machine actually reaches on a fixed scene, and what that permits.
 
 The product promises "the ceiling that machine and that connection are capable
 of". Raising image quality is only a tweak while the machine is *already* at its
 frame-rate ceiling; below it, the same change lowers the ceiling and becomes the
 thing consequence 3 forbids.
 
-Measured on the machine this was written for: MW4 at 17 ms GPU time and 12.5 ms
-CPU time — 59 fps against a 300 Hz panel. The quality raises that shipped in the
-first pass would have cost roughly half of that, on a system already using a
-fifth of its display. Nothing in the product knew that, because nothing in the
-product was asking.
-
 Two questions, answered separately because they have different consequences.
 
 **How much of the target does this machine reach?** Expressed as bands rather
-than one threshold, since a system at 95% needs a nudge and one at 19% — the
-measured MW4 case — needs everything the config can give and must not be offered
-a sharper image on top. The boundaries are ratios of the machine's own target,
-never frame rates, so they mean the same on a 60 Hz laptop and a 500 Hz desktop.
+than one threshold, since a system at 95% needs a nudge and one at 19% needs
+everything the config can give and must not be offered a sharper image on top.
+The boundaries are ratios of the machine's own target, never frame rates, so
+they mean the same on a 60 Hz laptop and a 500 Hz desktop.
 
 **Which side was the frame waiting on?** GPU, CPU, or both. This does not change
 whether quality is affordable, but it changes which tweak is worth anything: a
@@ -27,18 +21,30 @@ graphics settings alone, and saying otherwise wastes the user's time.
 Unmeasured is treated as "no room". A change that costs frames has to earn its
 recommendation, and silence is not evidence.
 
-Per game, because a machine that holds 300 fps in one title holds 60 in another,
-and a recommendation built from the wrong game's numbers is worse than none.
+**One band for the machine, not one per game** (owner's decision, 2026-09-11).
+The reading used to come from a capture of whatever game happened to be running,
+which made it per-game by construction and made it hostage to the user starting
+a match. Two consequences settled it: a machine with no game open never got a
+band at all, and two captures of two firefights are two different workloads, so
+the same title could report two bands in an hour. `benchmark.gpu_scene` renders
+the same scene, in the same order, at the panel's own resolution, on demand —
+so the number describes the machine rather than the match, and one number is the
+honest amount of information a fixed scene produces. Which *settings* a band may
+move is still per game, and stays in `headroom_policy`.
 """
 
 from __future__ import annotations
 
 import json
+import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fpstune.utils.logger import get_logger
+
+if TYPE_CHECKING:
+    from fpstune.benchmark.suite import BenchResult
 
 logger = get_logger()
 
@@ -47,17 +53,23 @@ logger = get_logger()
 HEADROOM_PATH = Path.home() / ".fpstune" / "headroom.json"
 
 # A measurement older than this is not evidence any more. Drivers change, the
-# game patches, the user re-tunes; a recommendation built on a stale number is
-# the same defect as one built on a guess, only harder to notice.
+# panel is swapped, the user re-tunes; a recommendation built on a stale number
+# is the same defect as one built on a guess, only harder to notice.
 MAX_AGE_SECONDS = 14 * 24 * 60 * 60
+
+# How many windows the on-demand run is cut into. `scheduler.BENCH_REPEATS` and
+# `suite.DEFAULT_REPEATS`, for the same reason: two is the floor at which a noise
+# floor exists at all, three is the floor at which one outlier cannot own the
+# median.
+MEASURE_SAMPLES = 3
 
 
 # How much of the target the machine reaches, and what each band permits.
 #
 # Bands rather than one threshold, because "is there room for quality" and "how
 # hard should this try" are different questions. A machine at 95% of its panel
-# needs a nudge; one at 19% — the measured MW4 case — needs everything the
-# config can give and must not be offered a sharper image on top.
+# needs a nudge; one at 19% needs everything the config can give and must not be
+# offered a sharper image on top.
 #
 # The boundaries are ratios of the machine's own target, never frame rates, so
 # they mean the same thing on a 60 Hz laptop and a 500 Hz desktop. That is the
@@ -81,6 +93,16 @@ MIN_FRAME_CAP = 30
 # How far below the panel a frame cap sits, in Hz.
 VRR_HEADROOM_HZ = 3
 
+# What one measurement attempt ended up doing. Named rather than collapsed into
+# a bool because the reasons are the useful part: "install the scene" and "close
+# the game first" are different instructions to the person who pressed the
+# button (C11 rule 3).
+MEASURED = "measured"
+PANEL_UNKNOWN = "panel_unknown"
+SCENE_UNAVAILABLE = "scene_unavailable"
+MEASURE_FAILED = "measure_failed"
+BUSY = "busy"
+
 
 def frame_cap_for_refresh(max_hz: int) -> int:
     """The frame rate a panel of this refresh should be held at.
@@ -99,9 +121,24 @@ def frame_cap_for_refresh(max_hz: int) -> int:
     return max(max_hz - VRR_HEADROOM_HZ, MIN_FRAME_CAP)
 
 
+def panel_target_fps() -> int | None:
+    """The frame rate this machine's display could actually show.
+
+    ``None`` when the panel will not say. A target guessed at 60 would report a
+    300 Hz machine as having met its ceiling at a fifth of it, and the whole
+    point of the measurement is to stop exactly that mistake.
+    """
+    from fpstune.settings.panel import primary_refresh_hz
+
+    max_hz = primary_refresh_hz()
+    if max_hz is None:
+        return None
+    return frame_cap_for_refresh(max_hz)
+
+
 @dataclass(frozen=True)
 class PerformanceHeadroom:
-    """What a game measured, against what its display could show.
+    """What the scene measured, against what this display could show.
 
     ``target_fps`` comes from the panel, so it is the same number the in-game
     frame cap derives — the point being that the two cannot disagree about what
@@ -112,22 +149,24 @@ class PerformanceHeadroom:
     their target and want different things done about it: one whose GPU is
     saturated has graphics settings to give, while one where both sides are
     saturated does not — and telling that user to lower shadows wastes their
-    time.
+    time. It is ``unknown`` whenever the run did not establish it, which is the
+    honest answer rather than a guess at the likelier side.
     """
 
-    game: str
     measured_fps: float | None = None
     fps_1_percent_low: float | None = None
     target_fps: int | None = None
     measured_at: float | None = None
     bottleneck: str = TIER_UNKNOWN
-    cpu_busy_ms: float | None = None
-    gpu_time_ms: float | None = None
-    input_latency_ms: float | None = None
-    # PresentMon's PresentMode for most frames of the run — the one observable
-    # that proves a borderless game is flipping rather than being composed. A
-    # fact the panel shows verbatim; nothing scores it.
+    # PresentMon's PresentMode for most frames of the run. A fact the panel
+    # shows verbatim; nothing scores it.
     present_mode: str | None = None
+    # The resolution the scene was rendered at, which is the panel's own (C9).
+    # Kept because the band only means anything if the load was the panel's: a
+    # number from a 1080p window compared against a 1440p panel's target would
+    # be a different machine's answer.
+    width: int | None = None
+    height: int | None = None
 
     @property
     def achievement(self) -> float | None:
@@ -141,7 +180,7 @@ class PerformanceHeadroom:
 
     @property
     def tier(self) -> str:
-        """Which band this machine falls in, for this game."""
+        """Which band this machine falls in."""
         ratio = self.achievement
         if ratio is None:
             return TIER_UNKNOWN
@@ -181,7 +220,7 @@ class PerformanceHeadroom:
         return round((1 - self.measured_fps / self.target_fps) * 100)
 
 
-def _load_all() -> dict[str, Any]:
+def _load() -> dict[str, Any]:
     try:
         with open(HEADROOM_PATH, encoding="utf-8") as handle:
             data = json.load(handle)
@@ -193,15 +232,18 @@ def _load_all() -> dict[str, Any]:
         return {}
 
 
-def read_headroom(game: str, now: float | None = None) -> PerformanceHeadroom:
-    """Return what this game last measured, or an unmeasured result.
+def read_headroom(now: float | None = None) -> PerformanceHeadroom:
+    """What this machine last measured, or an unmeasured result.
 
     ``now`` is a parameter rather than a call to the clock so the staleness rule
     can be tested without waiting two weeks.
+
+    A file written by an older build held one entry per game and no top-level
+    ``measured_fps``, so it reads as unmeasured here and is overwritten by the
+    next scene run. That is the conservative direction and needs no migration:
+    the worst it costs is one measurement.
     """
-    entry = _load_all().get(game)
-    if not isinstance(entry, dict):
-        return PerformanceHeadroom(game=game)
+    entry = _load()
 
     measured_at = entry.get("measured_at")
     is_stale = (
@@ -210,53 +252,54 @@ def read_headroom(game: str, now: float | None = None) -> PerformanceHeadroom:
         and now - measured_at > MAX_AGE_SECONDS
     )
     if is_stale:
-        logger.debug("headroom for %s is stale; treating as unmeasured", game)
-        return PerformanceHeadroom(game=game)
+        logger.debug("the headroom reading is stale; treating this machine as unmeasured")
+        return PerformanceHeadroom()
 
     def number(key: str) -> float | None:
         value = entry.get(key)
         return float(value) if isinstance(value, (int, float)) else None
 
-    target = entry.get("target_fps")
+    def whole(key: str) -> int | None:
+        value = entry.get(key)
+        return int(value) if isinstance(value, (int, float)) else None
+
     bottleneck = entry.get("bottleneck")
     return PerformanceHeadroom(
-        game=game,
         measured_fps=number("measured_fps"),
         fps_1_percent_low=number("fps_1_percent_low"),
-        target_fps=int(target) if isinstance(target, (int, float)) else None,
+        target_fps=whole("target_fps"),
         measured_at=measured_at if isinstance(measured_at, (int, float)) else None,
         bottleneck=str(bottleneck) if bottleneck else TIER_UNKNOWN,
-        cpu_busy_ms=number("cpu_busy_ms"),
-        gpu_time_ms=number("gpu_time_ms"),
-        input_latency_ms=number("input_latency_ms"),
         present_mode=str(entry["present_mode"]) if entry.get("present_mode") else None,
+        width=whole("width"),
+        height=whole("height"),
     )
 
 
 def record_headroom(
-    game: str,
     *,
     measured_fps: float,
     target_fps: int,
     fps_1_percent_low: float | None = None,
     measured_at: float,
     bottleneck: str = TIER_UNKNOWN,
-    cpu_busy_ms: float | None = None,
-    gpu_time_ms: float | None = None,
-    input_latency_ms: float | None = None,
     present_mode: str | None = None,
+    width: int | None = None,
+    height: int | None = None,
 ) -> bool:
-    """Store one game's measurement. Returns whether it was written.
+    """Store this machine's measurement. Returns whether it was written.
+
+    The file is replaced rather than merged: there is one current answer and no
+    archive, so anything an older shape left behind goes with the write.
 
     Failures are logged and swallowed: an unwritable state directory must leave
     the product recommending conservatively, not stop it working.
     """
     if measured_fps <= 0 or target_fps <= 0:
-        logger.debug("refusing to record a non-positive measurement for %s", game)
+        logger.debug("refusing to record a non-positive measurement")
         return False
 
-    data = _load_all()
-    data[game] = {
+    data = {
         "measured_fps": round(float(measured_fps), 2),
         "fps_1_percent_low": (
             round(float(fps_1_percent_low), 2) if fps_1_percent_low is not None else None
@@ -264,10 +307,9 @@ def record_headroom(
         "target_fps": int(target_fps),
         "measured_at": measured_at,
         "bottleneck": bottleneck,
-        "cpu_busy_ms": round(float(cpu_busy_ms), 3) if cpu_busy_ms else None,
-        "gpu_time_ms": round(float(gpu_time_ms), 3) if gpu_time_ms else None,
-        "input_latency_ms": round(float(input_latency_ms), 3) if input_latency_ms else None,
         "present_mode": present_mode or None,
+        "width": int(width) if width else None,
+        "height": int(height) if height else None,
     }
 
     try:
@@ -277,23 +319,57 @@ def record_headroom(
             json.dump(data, handle, indent=2)
         temp.replace(HEADROOM_PATH)
     except OSError as exc:
-        logger.debug("could not record headroom for %s: %s", game, exc)
+        logger.debug("could not record the headroom reading: %s", exc)
         return False
 
     logger.debug(
-        "headroom recorded for %s: %.1f fps against a %d fps target",
-        game,
+        "headroom recorded: %.1f fps against a %d fps target",
         measured_fps,
         target_fps,
     )
     return True
 
 
+def record_scene_result(result: BenchResult, *, target_fps: int, measured_at: float) -> bool:
+    """Turn one `gpu_scene` run into this machine's band. Returns whether it wrote.
+
+    The median of the run's own windows, never a single window: `fps_avg` is a
+    list of samples by construction (C11 rule 2) and one of them is a reading
+    nothing could put a noise floor under.
+
+    ``bottleneck`` is read from the result's own detail and is ``unknown`` when
+    the bench did not establish it. PresentMon publishes a GPU/CPU split only
+    for a run it could attribute, and naming a side the scene never measured
+    would move settings on a guess — `headroom_policy` reads this to decide
+    which frame-buying settings are worth promoting.
+    """
+    if not result.ran:
+        return False
+
+    reading = result.readings.get("fps_avg")
+    if reading is None:
+        return False
+
+    low = result.readings.get("fps_1_percent_low")
+    detail = result.detail or {}
+    bottleneck = detail.get("bottleneck")
+    return record_headroom(
+        measured_fps=reading.median,
+        fps_1_percent_low=low.median if low is not None else None,
+        target_fps=target_fps,
+        measured_at=measured_at,
+        bottleneck=str(bottleneck) if bottleneck else TIER_UNKNOWN,
+        present_mode=str(detail["present_mode"]) if detail.get("present_mode") else None,
+        width=detail.get("width") if isinstance(detail.get("width"), int) else None,
+        height=detail.get("height") if isinstance(detail.get("height"), int) else None,
+    )
+
+
 def explain_capture_failure(stderr: str) -> str:
     """Turn PresentMon's own refusal into something a user can act on.
 
     Its two common refusals are both specific and both fixable, and neither has
-    anything to do with what the game was showing:
+    anything to do with what was on the screen:
 
     * ``access denied ... requires administrative privileges`` — PresentMon opens
       an ETW trace session, which an unelevated process cannot do.
@@ -301,10 +377,11 @@ def explain_capture_failure(stderr: str) -> str:
       not have, which is a bug here rather than anything about the machine.
 
     Args:
-        stderr: What PresentMon printed. Empty when it printed nothing.
+        stderr: What PresentMon printed, or the failure text carrying it.
 
     Returns:
-        A sentence for the user, or "" when stderr says nothing recognisable.
+        A sentence for the user, or "" when it says nothing recognisable — in
+        which case the caller's own reason is the better one and is kept.
     """
     lowered = stderr.lower()
     if "access denied" in lowered or "administrative privileges" in lowered:
@@ -321,89 +398,96 @@ def explain_capture_failure(stderr: str) -> str:
     return ""
 
 
-def probe_running_game(
-    game: str,
-    target_fps: int,
-    *,
-    duration_seconds: int = 60,
-    now: float,
-) -> tuple[bool, str]:
-    """Measure a game that is running right now, and record the result.
+@dataclass(frozen=True)
+class MeasurementOutcome:
+    """What one attempt did, and what this machine's current reading is after it.
 
-    Only runs when PresentMon is **already installed**. Downloading 15 MB behind
-    a user who asked for a settings scan is not something to do quietly, and the
-    conservative path costs them nothing but an opt-in they already had.
-
-    Deliberately paired with the running-game check that blocks config writes:
-    while the game is open fpstune cannot write to it anyway, so that window is
-    exactly when there is nothing else to do and everything to measure.
-
-    Returns:
-        ``(recorded, reason)``. The reason is empty on success and on a genuinely
-        empty capture; where PresentMon refused, it is PresentMon's own cause
-        translated. It returns a reason rather than only a bool because the
-        caller's fallback sentence — "it may have been in a menu" — was being
-        printed over an access-denied error, which is a wrong diagnosis rather
-        than a vague one.
+    ``headroom`` is filled in on every outcome, including the failures. A panel
+    that cannot answer "did it measure" must still be able to answer "what does
+    it say", and returning nothing on a failed attempt would blank a result the
+    user could still read a minute ago.
     """
-    from fpstune.settings.executors.game_processes import GAME_PROCESSES
 
-    processes = GAME_PROCESSES.get(game)
-    if not processes:
-        return False, ""
+    outcome: str
+    detail: str
+    headroom: PerformanceHeadroom | None = None
 
-    try:
-        from fpstune.benchmark.presentmon import PresentMonBenchmark
-    except Exception as exc:  # pragma: no cover - import guarded for packaging
-        logger.debug("PresentMon unavailable, skipping headroom probe: %s", exc)
-        return False, ""
+    @property
+    def measured(self) -> bool:
+        return self.outcome == MEASURED
 
-    capture = PresentMonBenchmark()
-    if not capture.is_installed():
-        logger.debug("PresentMon not installed; %s stays unmeasured", game)
-        return False, ""
 
-    # GAME_PROCESSES stores names without the suffix, because that is how the
-    # process snapshot reports them; PresentMon matches on the image name.
-    process_name = f"{processes[0]}.exe"
-    try:
-        if not capture.start_capture(
-            process_name=process_name,
-            output_name=f"headroom_{game}",
-            duration_seconds=duration_seconds,
-        ):
-            return False, ""
-        # Let the timed capture run. `start_capture` only spawns PresentMon, so
-        # calling `stop_capture` straight after it terminates the process before
-        # it has recorded anything — measured against a running game on
-        # 2026-08-25, a ten-second probe returned in 0.6 s with zero frames and
-        # blamed the menu. The margin is for PresentMon's own startup.
-        capture.wait_for_capture(duration_seconds + 10)
-        capture_file = capture.stop_capture()
-        stats = capture.analyze_capture(capture_file) if capture_file else None
-    except Exception as exc:  # pragma: no cover - environment dependent
-        logger.debug("headroom probe for %s failed: %s", game, exc)
-        return False, ""
+def measure_now(
+    *,
+    now: float | None = None,
+    samples: int = MEASURE_SAMPLES,
+    allow_download: bool = False,
+) -> MeasurementOutcome:
+    """Run the scene and record what this machine reached. The UI's button.
 
-    reason = explain_capture_failure(capture.last_error)
+    Every reason it could not run is named rather than collapsed into a single
+    false: the caller is a person deciding what to do next, and "close the game
+    first" and "the scene is not installed" are different instructions.
 
-    if stats is None or stats.fps_avg <= 0:
-        logger.debug(
-            "headroom probe for %s produced no frames%s",
-            game,
-            f": {reason}" if reason else "",
+    ``allow_download`` stays False here. The engine is a 1.3 GB download and
+    that is a decision a user makes once, on its own screen — not something a
+    "measure now" press spends on their behalf.
+    """
+    now = time.time() if now is None else now
+    current = read_headroom(now=now)
+
+    target = panel_target_fps()
+    if target is None:
+        return MeasurementOutcome(
+            outcome=PANEL_UNKNOWN,
+            detail="This display will not report its refresh rate, so there is nothing to "
+            "measure the frame rate against.",
+            headroom=current,
         )
-        return False, reason
 
-    return record_headroom(
-        game,
-        measured_fps=stats.fps_avg,
-        fps_1_percent_low=stats.fps_1_percent_low or None,
-        target_fps=target_fps,
-        measured_at=now,
-        bottleneck=stats.bottleneck,
-        cpu_busy_ms=stats.cpu_busy_ms or None,
-        gpu_time_ms=stats.gpu_time_ms or None,
-        input_latency_ms=stats.input_latency_ms or None,
-        present_mode=stats.present_mode or None,
-    ), reason
+    from fpstune.benchmark.gpu_scene import GpuSceneBench
+    from fpstune.benchmark.operation_lock import operation_lock
+
+    bench = GpuSceneBench(allow_download=allow_download)
+    available, why = bench.is_available()
+    if not available:
+        return MeasurementOutcome(outcome=SCENE_UNAVAILABLE, detail=why, headroom=current)
+
+    # The same mutex an apply, a cleanup and a bench share. The scene renders at
+    # full speed for the best part of a minute; overlapping it with a write to
+    # the machine would measure something halfway between two states.
+    with operation_lock() as taken:
+        if not taken:
+            return MeasurementOutcome(
+                outcome=BUSY,
+                detail="Another fpstune operation is running. The scene would measure a "
+                "machine halfway between two states, so it waits.",
+                headroom=current,
+            )
+        result = bench.run(samples)
+
+    if not result.ran:
+        reason = result.reason or ""
+        return MeasurementOutcome(
+            outcome=MEASURE_FAILED,
+            detail=explain_capture_failure(reason) or reason or "The scene recorded nothing.",
+            headroom=current,
+        )
+
+    if not record_scene_result(result, target_fps=target, measured_at=now):
+        # The scene ran and the number exists; it could not be stored. Reported
+        # as a failure because the recommendation engine reads the file and not
+        # this return, so "measured" would be true on screen and false in effect.
+        return MeasurementOutcome(
+            outcome=MEASURE_FAILED,
+            detail="The scene ran, but its result could not be written to "
+            f"{HEADROOM_PATH.name}, so nothing here has changed.",
+            headroom=current,
+        )
+
+    after = read_headroom(now=now)
+    return MeasurementOutcome(
+        outcome=MEASURED,
+        detail=f"This machine measured against the panel's {target} fps target",
+        headroom=after,
+    )

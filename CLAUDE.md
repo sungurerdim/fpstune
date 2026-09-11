@@ -32,10 +32,11 @@ Tune every point of a Windows 11 machine to the ceiling of *that* hardware and
    exception and must be argued in the setting's own copy, which the player reads.
    Enough visual quality to tell an opponent apart, enough audio to hear where a
    sound came from and what it was — not one tier above.
-   - **Spend only headroom you have measured.** `headroom_watch` measures what each game
-     achieves against what the panel can show. Below target → the minimum tier that
-     still carries the information; at target → the quality-leaning value. A
-     frame-costing recommendation on a machine at 19% of its target is a
+   - **Spend only headroom you have measured.** `gpu_scene` renders a fixed scene at
+     the panel's own resolution and `performance_headroom` turns it into one
+     machine-wide band against what the panel can show. Below target → the minimum
+     tier that still carries the information; at target → the quality-leaning value.
+     A frame-costing recommendation on a machine at 19% of its target is a
      regression, and must never sit in `recommended` scope.
    - **An information channel has its own minimum, and that minimum is the
      answer.** Ask *what is the lowest tier at which this still says what it says*,
@@ -331,7 +332,8 @@ src/fpstune/
             scheduler.py (when to measure: idle, no game, no apply, lock free) ·
             operation_lock.py (the one named mutex an apply, a cleanup and a bench share) ·
             instruments: presentmon · gpu_scene (Superposition Basic driven windowed at the panel's
-            native res, a fixed 30 s slice; downloads on first use, never bundled) · headroom_watch · sensors (GPU and ACPI temperature, and
+            native res, a fixed 30 s slice; downloads on first use, never bundled; its run is
+            also this machine's frame-rate band) · sensors (GPU and ACPI temperature, and
             the thermal claims FurMark used to carry) · cpu_bench · memory · disk_io ·
             network · network_load (both directions; skipped unasked on a metered line) ·
             frame_pacing · timing_bench · dpc · event_scan · storage_health · gpu_memory ·
@@ -377,7 +379,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply, reset and undo; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 419 `SettingExecutor` instances across 15 category files.
+- `settings/definitions/` — 423 `SettingExecutor` instances across 15 category files.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -401,10 +403,15 @@ Module contracts — what the tree does not tell you:
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
   alike; `mobile` is derived from GetSystemPowerStatus, never from a model list.
 - `settings/impact_categories.py` — metric key → kind of gain; thermal ranks with performance.
-- `settings/performance_headroom.py` + `headroom_policy.py` — what a game measured against what
-  the panel can show: band (met/near/short/critical) and which side the frame waited on. `met`
-  raises the value, `short`/`critical` move the scope, the bottleneck picks which settings;
-  `near` and unmeasured change nothing.
+- `settings/performance_headroom.py` + `headroom_policy.py` — what `gpu_scene` measured against
+  what the panel can show: one machine-wide band (met/near/short/critical) and which side the
+  frame waited on. `met` raises the value, `short`/`critical` move the scope, the bottleneck
+  picks which settings; `near` and unmeasured change nothing. The band is the median of the
+  scene run's own windows against `frame_cap_for_refresh(refresh_ceiling_hz)`; `bottleneck` is
+  `unknown` unless the run established a side. One reading, no archive, no per-game key:
+  `~/.fpstune/headroom.json` is a flat object overwritten in place. Which *settings* a band may
+  move stays per game, in `headroom_policy`. `measure_now()` is the on-demand path — it holds
+  the operation lock, never spends the 1.3 GB download, and names every refusal.
 - `settings/cleanup_measure.py` — the one parse of a `ready|<size>` reading, plus the pair taken
   either side of a cleanup command; `freed_bytes` is that difference or nothing (C11 rule 3).
 - `settings/discovery/` — one module per discoverer, each handed the `Registrar` protocol
@@ -415,9 +422,9 @@ Module contracts — what the tree does not tell you:
 - `settings/detection.py` — parallel detection over a ThreadPoolExecutor.
 - `benchmark/verify_round.py` — `judge(claim, measurement)` →
   verified/contradicted/inconclusive/unmeasured.
-- `benchmark/headroom_watch.py` — decides *when* to measure: daemon poll for a running game,
-  once per game session, plus the on-demand UI path. No archive — one entry per game in
-  `~/.fpstune/headroom.json`, overwritten in place.
+- `benchmark/scheduler.py` — decides *when* to measure, and is the only measurement daemon the
+  lifespan starts. `record_headroom_band()` turns its finished `gpu_scene` step into the band,
+  so a machine nobody has played on still has one; no other bench may write a frame rate.
 - `commands/scan.py` — one detection pass shaped by status/gpu; neither prints.
 - `utils/console.py` — the one Rich Console; the logger writes through it.
 - `utils/runtime.py` — frozen-vs-source packaging facts (sys._MEIPASS, bundled frontend).
@@ -482,7 +489,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(15 files, 419 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(7); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(15 files, 423 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(7); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVIDIA Profile Inspector(nv driver profiles); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

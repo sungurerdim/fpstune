@@ -35,7 +35,7 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**419 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**423 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
@@ -44,7 +44,7 @@ this rule raises a setting as readily as it lowers one.
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
 | GPU | 30 | NVIDIA and AMD driver profile optimizations |
 | Network | 28 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
-| Power | 25 | CPU clock behaviour under load and at idle, core parking, USB suspend, disk timeout |
+| Power | 29 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
 | Launchers | 12 | Steam, Battle.net overlay/GPU/shader settings |
 | Core | 6 | Priority separation, system responsiveness, GPU priority |
 | Game | 5 | Game Mode, Game Bar, HAGS |
@@ -360,7 +360,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
                     system*.py, display.py, gpu.py, benchmark*.py, safety.py, debug.py
   settings/         Settings engine
-    definitions/    15 category files producing the 419 settings in 13 categories —
+    definitions/    15 category files producing the 423 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal

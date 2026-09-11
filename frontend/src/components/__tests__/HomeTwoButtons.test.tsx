@@ -10,7 +10,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen } from "../../test/utils";
+import { fireEvent, render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
@@ -54,7 +54,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return {
     ...actual,
     api: { ...actual.api, createRestorePoint: () => restorePoint() },
-    headroomApi: { list: vi.fn().mockResolvedValue({ games: [] }) },
+    headroomApi: { list: vi.fn().mockResolvedValue({ headroom: unmeasuredHeadroom() }) },
   };
 });
 

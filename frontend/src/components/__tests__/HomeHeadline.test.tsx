@@ -17,7 +17,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "../../test/utils";
+import { render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
@@ -114,7 +114,7 @@ function setStore(settings: Setting[]) {
 
 describe("Home headline", () => {
   beforeEach(() => {
-    headroomList.mockResolvedValue({ games: [] });
+    headroomList.mockResolvedValue({ headroom: unmeasuredHeadroom() });
     setStore([]);
   });
 
@@ -151,45 +151,64 @@ describe("Home headline", () => {
   });
 
   it("reads a measurement as a frame rate, not as a ratio of things", async () => {
+    // The live product run of 2026-09-11: fps_avg median 197 on a 297 fps target.
     headroomList.mockResolvedValue({
-      games: [
-        {
-          game: "mw4",
-          label: "Modern Warfare IV",
-          is_measured: true,
-          measured_fps: 57.4,
-          target_fps: 297,
-        },
-      ],
+      headroom: unmeasuredHeadroom({
+        is_measured: true,
+        measured_fps: 197.0,
+        target_fps: 297,
+      }),
     });
     render(<HomeTab />);
 
-    expect(await screen.findByText("57 fps")).toBeInTheDocument();
-    expect(screen.getByText("Modern Warfare IV")).toBeInTheDocument();
+    expect(await screen.findByText("197 fps")).toBeInTheDocument();
     expect(
-      screen.getByText("19% of the 297 fps this display can show"),
+      screen.getByText("66% of the 297 fps this display can show"),
     ).toBeInTheDocument();
     // The old rendering, which read as two counted things.
-    expect(screen.queryByText("57/297")).not.toBeInTheDocument();
+    expect(screen.queryByText("197/297")).not.toBeInTheDocument();
+  });
+
+  it("names the fixed scene as the load, never a game the user has to start", async () => {
+    /* The number describes the machine, so labelling it with a title would
+       claim a measurement of that title nothing here took. */
+    headroomList.mockResolvedValue({
+      headroom: unmeasuredHeadroom({
+        is_measured: true,
+        measured_fps: 197.0,
+        target_fps: 297,
+      }),
+    });
+    render(<HomeTab />);
+
+    expect(
+      await screen.findByText("Test scene, at this display's resolution"),
+    ).toBeInTheDocument();
   });
 
   it("says a panel with no known refresh has no target, rather than inventing one", async () => {
     headroomList.mockResolvedValue({
-      games: [
-        {
-          game: "cs2",
-          label: "Counter-Strike 2",
-          is_measured: true,
-          measured_fps: 240,
-          target_fps: null,
-        },
-      ],
+      headroom: unmeasuredHeadroom({
+        is_measured: true,
+        measured_fps: 240,
+        target_fps: null,
+      }),
     });
     render(<HomeTab />);
 
     expect(await screen.findByText("240 fps")).toBeInTheDocument();
     expect(
       screen.getByText("no display target — panel refresh unknown"),
+    ).toBeInTheDocument();
+  });
+
+  it("points at Benchmarks rather than at starting a game when nothing is measured", async () => {
+    render(<HomeTab />);
+
+    expect(
+      await screen.findByText(
+        "no frame rate measured yet — open Benchmarks to run the test scene",
+      ),
     ).toBeInTheDocument();
   });
 });

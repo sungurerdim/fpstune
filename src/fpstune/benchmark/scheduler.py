@@ -1,19 +1,23 @@
 """When to measure, and — mostly — when to keep out of the way.
 
-`headroom_watch` owns the easy half: a game is running, so capture what it
-reaches. This owns the hard half. The synthetic benches need the machine *not*
-to be doing anything, they change nothing themselves, and there is no user
-watching to confirm the moment was a good one. So every decision here has to be
-defensible on its own, because a measurement taken at the wrong moment is
-indistinguishable from a good one afterwards — and that is exactly the class of
-number C11 exists to refuse.
+The benches here need the machine *not* to be doing anything, they change
+nothing themselves, and there is no user watching to confirm the moment was a
+good one. So every decision here has to be defensible on its own, because a
+measurement taken at the wrong moment is indistinguishable from a good one
+afterwards — and that is exactly the class of number C11 exists to refuse.
 
 **The triggers, all derived, none of them a button.** No baseline on record →
 take one, because every later comparison needs a before and the user should not
 have to know that. A bulk apply just finished → take an "after", signalled by a
 sentinel file the apply path writes so the trigger survives a restart between
-the two. Nothing else. A game running is `headroom_watch`'s business and is
-deliberately not duplicated here.
+the two. Nothing else.
+
+**The frame-rate band comes from here too.** `gpu_scene` is in the plan, so a
+scheduled run already renders the fixed scene at the panel's own resolution;
+`performance_headroom` gets that result and turns it into the machine's band.
+Which is why there is no second daemon waiting for a game to start: the reading
+that decides whether image quality is affordable is produced by the same pass
+that produces the baseline, on a load that is the same every time.
 
 **The guards, and why each one is a refusal rather than a filter.**
 
@@ -44,8 +48,8 @@ and make every guard a decision taken once rather than continuously — the game
 the user launched thirty seconds in would find the bench already committed.
 
 The shape — `_stop` event, `poll_once` split out from the loop, 60-second
-cadence, daemon thread — is `headroom_watch`'s, deliberately, so the two daemons
-the lifespan starts side by side can be started and stopped the same way.
+cadence, daemon thread — keeps every decision above testable without waiting a
+minute for a timer, and keeps starting and stopping the daemon one call each.
 """
 
 from __future__ import annotations
@@ -61,19 +65,18 @@ from dataclasses import dataclass
 
 from fpstune.benchmark import ledger
 from fpstune.benchmark.benches import benches_for, default_keys, tool_executable_names
-from fpstune.benchmark.headroom_watch import running_games
 from fpstune.benchmark.operation_lock import operation_lock
 from fpstune.benchmark.suite import Bench, BenchResult, run_bench_with_deadline
+from fpstune.settings.executors.game_processes import GAME_PROCESSES, game_is_running
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
 
 POLL_INTERVAL_SECONDS = 60.0
-"""`headroom_watch`'s cadence, for the same reason: the checks are cheap, and
-nothing this decides is urgent to the second."""
+"""The checks are cheap, and nothing this decides is urgent to the second."""
 
 FIRST_POLL_DELAY_SECONDS = 90.0
-"""Longer than the headroom watch's 45 s, because this one can start a bench.
+"""Long enough to be out of startup, because this one can start a bench.
 
 Startup is registry warm-up, GPU detection and the first scan. A baseline taken
 into the middle of that would measure fpstune starting up and then stand as this
@@ -116,6 +119,18 @@ class TickOutcome:
     @property
     def measured(self) -> bool:
         return self.outcome == RAN
+
+
+# --- Is anyone playing? ------------------------------------------------------
+
+
+def running_games() -> list[str]:
+    """Which of the known games is rendering right now, in a stable order.
+
+    Sorted rather than dictionary order so the sentence a refusal produces is
+    the same on two machines running the same two games.
+    """
+    return [game for game in sorted(GAME_PROCESSES) if game_is_running(game)]
 
 
 # --- Is anyone using this machine? ------------------------------------------
@@ -294,6 +309,38 @@ def _guard() -> TickOutcome | None:
     return None
 
 
+def record_headroom_band(result: BenchResult) -> bool:
+    """Turn a finished `gpu_scene` run into this machine's band. Returns if it wrote.
+
+    Every scheduled job renders the scene anyway — it is in the default plan, so
+    both the baseline and the "after" produce one. Reading the band off that run
+    is what makes the measurement unattended: nothing has to be played, and the
+    number that decides whether image quality is affordable is produced by the
+    same fixed load on both sides of a comparison.
+
+    Only `gpu_scene`. A band is a frame rate against the panel's own ceiling, and
+    no other bench in the plan measures a frame rate.
+
+    A failure here is logged and swallowed. The ledger already holds the result;
+    an unwritable state directory must leave the product recommending
+    conservatively, not abandon the job halfway through its plan.
+    """
+    if result.bench != "gpu_scene":
+        return False
+
+    try:
+        from fpstune.settings.performance_headroom import panel_target_fps, record_scene_result
+
+        target = panel_target_fps()
+        if target is None:
+            logger.debug("The panel reports no refresh rate, so the scene result has no target")
+            return False
+        return record_scene_result(result, target_fps=target, measured_at=time.time())
+    except Exception as exc:  # noqa: BLE001 - a band nobody could write is not a failed job
+        logger.debug("Could not record the headroom band: %s", exc)
+        return False
+
+
 def _run_step(job: ledger.Job, bench_key: str) -> TickOutcome:
     """Measure one bench and put its result, or its failure, on the record."""
     try:
@@ -317,6 +364,7 @@ def _run_step(job: ledger.Job, bench_key: str) -> TickOutcome:
 
     if result.ran:
         ledger.record_step(job, result)
+        record_headroom_band(result)
         _close_if_done(job)
         return TickOutcome(RAN, f"{bench.label} measured", job.id, bench_key)
 
@@ -366,8 +414,7 @@ def poll_once(now: float | None = None, *, first_tick: bool = False) -> TickOutc
     """One pass: resume, or trigger, or explain why not.
 
     Split out from the loop so every decision above is testable without waiting
-    a minute for a timer — the same split `headroom_watch` makes, for the same
-    reason.
+    a minute for a timer.
     """
     now = time.time() if now is None else now
 

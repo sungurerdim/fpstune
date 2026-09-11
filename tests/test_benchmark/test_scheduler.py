@@ -1,9 +1,8 @@
 """The daemon that decides when to measure, and when to keep out of the way.
 
-`headroom_watch` already answers "measure a game when one is running". This
-answers the harder half: the synthetic benches need the machine *not* to be
-doing anything, they change nothing themselves, and nobody is watching — so
-every decision has to be defensible without a user to confirm it.
+The synthetic benches need the machine *not* to be doing anything, they change
+nothing themselves, and nobody is watching — so every decision has to be
+defensible without a user to confirm it.
 
 The guards are the substance. A synthetic bench that runs during a match steals
 frames from the thing it exists to protect; one that runs during a bulk apply
@@ -12,9 +11,8 @@ that runs while the user is typing measures the typing. Each of those is a
 number that looks exactly like a good one afterwards, which is why they are
 refused at the source rather than filtered later.
 
-`poll_once` is split out from the loop for the same reason it is in
-`headroom_watch`: the decision is worth testing without waiting a minute for a
-timer to come round.
+`poll_once` is split out from the loop so the decision is testable without
+waiting a minute for a timer to come round.
 """
 
 from __future__ import annotations
@@ -443,14 +441,87 @@ class TestTheThread:
 
         assert sched._thread is None
 
-    def test_it_matches_the_headroom_watch_shape(self) -> None:
-        """Two daemons started side by side in one lifespan should be startable
-        and stoppable the same way, or the lifespan grows a special case."""
-        from fpstune.benchmark import headroom_watch
-
+    def test_the_lifespan_can_start_and_stop_it_with_one_call_each(self) -> None:
+        """The shape the lifespan depends on. It is the only background
+        measurement daemon now, and a second entry point here would be a second
+        thing the shutdown path has to remember."""
         for name in ("poll_once", "_stop", "_thread"):
             assert hasattr(sched, name), name
-            assert hasattr(headroom_watch, name), name
+
+
+class TestTheSceneRunBecomesTheMachinesBand:
+    """The frame-rate band is a by-product of a pass that was happening anyway.
+
+    Before this the band came from a capture of a running game, so a machine
+    nobody played on never got one and every quality recommendation stayed shut
+    off. `gpu_scene` is in the default plan, so both the baseline and the
+    "after" already render the fixed scene.
+    """
+
+    def _scene(self, averages: list[float]) -> BenchResult:
+        return BenchResult(
+            bench="gpu_scene",
+            label="GPU scene",
+            ran=True,
+            readings={"fps_avg": BenchReading("fps_avg", averages, "fps", higher_is_better=True)},
+            detail={"width": 2560, "height": 1440},
+        )
+
+    def test_a_finished_scene_run_writes_the_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(
+            "fpstune.settings.performance_headroom.HEADROOM_PATH", tmp_path / "headroom.json"
+        )
+        monkeypatch.setattr("fpstune.settings.performance_headroom.panel_target_fps", lambda: 297)
+
+        assert sched.record_headroom_band(self._scene([219.0, 197.0, 188.0])) is True
+
+        from fpstune.settings.performance_headroom import read_headroom
+
+        assert read_headroom().measured_fps == 197.0
+
+    def test_no_other_bench_may_claim_a_frame_rate(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A band is a frame rate against the panel's ceiling. Letting any
+        finished bench write one would put a latency reading where a frame rate
+        belongs."""
+        monkeypatch.setattr(
+            "fpstune.settings.performance_headroom.HEADROOM_PATH", tmp_path / "headroom.json"
+        )
+        timing = BenchResult(
+            bench="timing",
+            label="timing",
+            ran=True,
+            readings={"latency_ms": BenchReading("latency_ms", [1.0, 1.1], "ms")},
+        )
+
+        assert sched.record_headroom_band(timing) is False
+
+    def test_a_panel_that_reports_no_refresh_writes_no_band(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """There is no target to be a fraction of, and a guessed 60 would report
+        a 300 Hz machine as finished at a fifth of its display."""
+        monkeypatch.setattr(
+            "fpstune.settings.performance_headroom.HEADROOM_PATH", tmp_path / "headroom.json"
+        )
+        monkeypatch.setattr("fpstune.settings.performance_headroom.panel_target_fps", lambda: None)
+
+        assert sched.record_headroom_band(self._scene([197.0])) is False
+
+    def test_an_unwritable_band_never_wedges_the_job(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The ledger already holds the result. A state directory nobody can
+        write must leave the product recommending conservatively, not abandon
+        the plan halfway through."""
+
+        def explode() -> int:
+            raise OSError("the state directory is not writable")
+
+        monkeypatch.setattr("fpstune.settings.performance_headroom.panel_target_fps", explode)
+
+        assert sched.record_headroom_band(self._scene([197.0])) is False
 
 
 def _far_future(step: int = 0) -> float:

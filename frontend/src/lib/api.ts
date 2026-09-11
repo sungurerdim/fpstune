@@ -1053,18 +1053,18 @@ export const verifyApi = {
 };
 
 /**
- * What one game last reached on this machine, against what its panel could show.
+ * What this machine last reached on the test scene, against what its panel shows.
+ *
+ * One reading, not one per game: the scene renders the same frames in the same
+ * order on every run, so the number describes the machine rather than the match.
  *
  * `tier` is the band the ratio falls in, and it is what decides whether raising
  * image quality is a tweak or a way of lowering the ceiling. `null` everywhere
  * means unmeasured, which is a real answer and not an empty state: the product
- * treats silence as "no room", so an unmeasured game is one that will not be
+ * treats silence as "no room", so an unmeasured machine is one that will not be
  * offered a sharper image.
  */
-export interface GameHeadroom {
-  game: string;
-  label: string;
-  is_running: boolean;
+export interface MachineHeadroom {
   is_measured: boolean;
   measured_fps: number | null;
   fps_1_percent_low: number | null;
@@ -1072,48 +1072,41 @@ export interface GameHeadroom {
   achievement_percent: number | null;
   tier: "met" | "near" | "short" | "critical" | "unknown";
   bottleneck: string;
-  cpu_busy_ms: number | null;
-  gpu_time_ms: number | null;
-  input_latency_ms: number | null;
   /** PresentMon's PresentMode for most frames; a fact, shown verbatim. */
   present_mode: string | null;
+  /** The resolution the scene rendered at, which is the panel's own. */
+  width: number | null;
+  height: number | null;
   measured_at: number | null;
 }
 
 /** Why a measurement did not happen. Each one implies a different next step. */
 export type MeasureOutcome =
   | "measured"
-  | "already_fresh"
-  | "no_game_running"
-  | "presentmon_missing"
   | "panel_unknown"
-  | "probe_failed";
+  | "scene_unavailable"
+  | "measure_failed"
+  | "busy";
 
 export interface MeasureResult {
   measured: boolean;
   outcome: MeasureOutcome;
   detail: string;
-  game: string | null;
-  headroom: GameHeadroom | null;
+  headroom: MachineHeadroom | null;
 }
 
 export const headroomApi = {
   /**
-   * Every known game's current reading. Always answerable, including before
-   * anything has been measured — no history is kept, only the last result.
+   * This machine's current reading. Always answerable, including before anything
+   * has been measured — no history is kept, only the last result.
    */
   list: () =>
-    fetchJson<{ poll_interval_seconds: number; games: GameHeadroom[] }>(
-      "/benchmark/headroom",
-    ),
+    fetchJson<{ headroom: MachineHeadroom }>("/benchmark/headroom"),
 
   /**
-   * Measure now. Omitting the game measures whichever one is running, because
-   * the user pressing this knows what they have open.
+   * Run the scene now. Takes no argument: the scene is the load, so there is
+   * nothing for the user to pick.
    */
-  measure: (game?: string) =>
-    fetchJson<MeasureResult>("/benchmark/headroom/measure", {
-      method: "POST",
-      body: JSON.stringify({ game: game ?? null }),
-    }),
+  measure: () =>
+    fetchJson<MeasureResult>("/benchmark/headroom/measure", { method: "POST" }),
 };

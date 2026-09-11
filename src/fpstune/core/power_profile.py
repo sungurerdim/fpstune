@@ -1,17 +1,19 @@
 """Power profile management for FPS Balanced mode.
 
-Creates a custom power profile based on Balanced with gaming optimizations
-applied ONLY when plugged in (AC). Battery (DC) uses Balanced defaults.
+Creates a custom power profile by duplicating Balanced, then writes every
+`power:*` powercfg setting's recommended value from
+`settings/definitions/power.py` through `PowerCfgExecutor.apply()` — the same
+write path a single-setting `POST /settings/{id}/apply` uses. There is exactly
+one table of what "FPS Balanced" tunes (C6, "one writer, one AC/DC promise"):
+the settings registry, not a second list kept here. Mains (AC) gets the
+registry's recommendation; battery (DC) gets Windows' own value for this
+machine, because that is what `PowerCfgExecutor.apply()` itself always writes
+to DC — nothing in this module chooses a battery value.
 
-Safe optimizations applied:
-- PCI Express ASPM = Off (eliminates GPU micro-stutter)
-- USB Selective Suspend = Disabled (no peripheral wake delay)
-- Hard Disk Timeout = 0 (no spin-up delay)
-
-NOT changed (keeps Balanced behavior):
-- CPU Min State = 5% (allows idle power saving)
-- Processor Idle = Enabled (C-states active)
-- Core Parking = Enabled (modern CPUs benefit)
+`PowerCfgExecutor.apply()` targets every power plan the machine actually uses
+(the active plan plus every plan that is not one of Windows' own — see its own
+docstring), so the newly duplicated-and-renamed plan is picked up automatically
+once it exists; no scheme GUID is threaded through as a parameter.
 """
 
 from __future__ import annotations
@@ -21,6 +23,12 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+
+from fpstune.settings.applicability import ApplicabilityChecker
+from fpstune.settings.base import DetectType, SettingExecutor
+from fpstune.settings.definitions.power import POWER_SETTINGS
+from fpstune.settings.executors.powercfg import PowerCfgExecutor
+from fpstune.settings.hardware_context import build_hardware_context
 
 logger = logging.getLogger(__name__)
 
@@ -33,26 +41,24 @@ POWER_SAVER_GUID = "a1841308-3541-4fab-bc81-f71556f20b4a"
 FPS_BALANCED_NAME = "FPS Balanced"
 FPS_BALANCED_DESCRIPTION = "Balanced + gaming optimizations (AC only)"
 
-# Power setting GUIDs for optimizations
-# Subgroup: USB settings
-USB_SUBGROUP = "2a737441-1930-4402-8d77-b2bebba308a3"
-USB_SELECTIVE_SUSPEND = "48e6b7a6-50f5-4782-a5d4-53bb8f07e226"
 
-# Subgroup: PCI Express
-PCIE_SUBGROUP = "501a4d13-42af-4429-9fd1-a8218c268e20"
-PCIE_LINK_STATE = "ee12f906-d277-404b-b6da-e5fa1a576df5"
+def _registry_powercfg_settings() -> list[SettingExecutor]:
+    """The `power:*` settings this plan tunes: powercfg-executed and applicable here.
 
-# Subgroup: Hard Disk
-DISK_SUBGROUP = "0012ee47-9041-4b5d-9b77-535fba8b1442"
-DISK_TIMEOUT = "6738e2c4-e8a5-4a42-b16a-e040e769756e"
-
-# Optimized values (AC only)
-OPTIMIZATIONS = [
-    # (subgroup, setting, ac_value, description)
-    (PCIE_SUBGROUP, PCIE_LINK_STATE, 0, "PCI-E Link State → Off"),
-    (USB_SUBGROUP, USB_SELECTIVE_SUSPEND, 0, "USB Selective Suspend → Disabled"),
-    (DISK_SUBGROUP, DISK_TIMEOUT, 0, "Hard Disk Timeout → Never"),
-]
+    Filtered the same way the single-setting apply route decides applicability
+    (`ApplicabilityChecker` over `applicable_conditions`), so a setting gated to
+    one CPU vendor is skipped here exactly as it would be skipped there. Registry
+    settings that are not `PowerCfgExecutor`-driven (hibernation, power
+    throttling, the Ryzen plan switch) are machine-wide rather than per-scheme
+    and are out of scope for a plan's own values.
+    """
+    context = build_hardware_context()
+    checker = ApplicabilityChecker(context)
+    return [
+        setting
+        for setting in POWER_SETTINGS
+        if setting.detect_type is DetectType.POWERCFG and checker.is_applicable(setting)[0]
+    ]
 
 
 @dataclass
@@ -168,8 +174,11 @@ class PowerProfileManager:
     def create(self) -> PowerProfileResult:
         """Create FPS Balanced power profile.
 
-        Duplicates Balanced profile and applies gaming optimizations
-        to AC (plugged in) settings only. DC (battery) keeps Balanced defaults.
+        Duplicates Balanced, renames it, then writes every applicable
+        `power:*` powercfg setting's recommended value onto it through
+        `PowerCfgExecutor.apply()`. Mains (AC) gets the recommendation; battery
+        (DC) gets Windows' own Balanced value for this machine, which is what
+        the executor always writes to DC regardless of the AC value asked for.
 
         Returns:
             PowerProfileResult with success status.
@@ -234,22 +243,17 @@ class PowerProfileManager:
             )
             details.append(f"Renamed to: {FPS_BALANCED_NAME}")
 
-            # Step 3: Apply optimizations to AC only (DC keeps Balanced defaults)
-            for subgroup, setting, value, description in OPTIMIZATIONS:
-                # Only set AC value - leave DC at Balanced default
-                ac_result = subprocess.run(
-                    ["powercfg", "/setacvalueindex", new_guid, subgroup, setting, str(value)],
-                    capture_output=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                    encoding="utf-8",
-                    errors="replace",
-                )
-
-                if ac_result.returncode == 0:
-                    details.append(f"[AC] {description}")
+            # Step 3: Apply the registry's recommended power:* values through the
+            # same PowerCfgExecutor path every other apply uses (C6). The
+            # executor decides the schemes it writes and the DC value it puts
+            # back; this loop supplies no values of its own.
+            executor = PowerCfgExecutor()
+            for setting in _registry_powercfg_settings():
+                success, error = executor.apply(setting, setting.recommended_value)
+                if success:
+                    details.append(f"[AC] {setting.effect}")
                 else:
-                    details.append(f"[AC] {description} (failed)")
+                    details.append(f"[AC] {setting.effect} (failed: {error})")
 
             self._fps_balanced_guid = new_guid
 
@@ -435,7 +439,7 @@ class PowerProfileManager:
 
         optimizations_applied: list[str] = []
         if fps_balanced_exists and active and active.name == FPS_BALANCED_NAME:
-            optimizations_applied = [desc for _, _, _, desc in OPTIMIZATIONS]
+            optimizations_applied = [s.effect for s in _registry_powercfg_settings()]
 
         return {
             "active_plan": active.name if active else "Unknown",

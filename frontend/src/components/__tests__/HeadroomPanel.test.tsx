@@ -1,17 +1,24 @@
 /**
  * The panel that has to survive not having a measurement.
  *
- * A frame rate cannot be measured with nothing rendering, so the state this
- * component spends most of its life in is "nothing to show yet" — and that is
- * exactly the state a normal empty-state panel gets wrong. The guards here are
- * the three ways it could lie:
+ * Until the fixed scene landed, a frame rate could only be measured while a
+ * game was rendering, so the state this component spent most of its life in was
+ * "nothing to show yet" — and that is exactly the state a normal empty-state
+ * panel gets wrong. The scene makes a first reading reachable from this screen,
+ * but not free: it is a 1.3 GB one-time download, so the empty state still has
+ * to be honest about what pressing the button involves.
  *
- * *Hiding the games it has not measured*, which turns the list into "the games
- * that exist" and leaves the button meaningless.
+ * The guards here are the four ways it could lie:
  *
- * *Blanking a reading because the newest attempt declined.* The game being
- * closed is a reason, not an erasure, and the old number plus the reason is
- * strictly more information than neither.
+ * *Showing nothing at all before the first run*, which leaves the button with
+ * no explanation of what it will do.
+ *
+ * *Hiding the download*, which turns a one-time 1.3 GB decision into a surprise
+ * taken on the user's behalf.
+ *
+ * *Blanking a reading because the newest attempt declined.* A game being open
+ * is a reason, not an erasure, and the old number plus the reason is strictly
+ * more information than neither.
  *
  * *Showing a frame rate without what it permits.* The number decides whether a
  * sharper image is on offer; printed bare, it invites the opposite reading.
@@ -21,7 +28,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor, fireEvent } from "../../test/utils";
 import { HeadroomPanel } from "../HeadroomPanel";
 import { headroomApi } from "../../lib/api";
-import type { GameHeadroom } from "../../lib/api";
+import type { MachineHeadroom } from "../../lib/api";
 
 vi.mock("../../lib/api", () => ({
   headroomApi: {
@@ -32,11 +39,8 @@ vi.mock("../../lib/api", () => ({
 
 const mocked = vi.mocked(headroomApi);
 
-function game(overrides: Partial<GameHeadroom> = {}): GameHeadroom {
+function reading(overrides: Partial<MachineHeadroom> = {}): MachineHeadroom {
   return {
-    game: "mw4",
-    label: "Modern Warfare IV",
-    is_running: false,
     is_measured: false,
     measured_fps: null,
     fps_1_percent_low: null,
@@ -44,44 +48,34 @@ function game(overrides: Partial<GameHeadroom> = {}): GameHeadroom {
     achievement_percent: null,
     tier: "unknown",
     bottleneck: "unknown",
-    cpu_busy_ms: null,
-    gpu_time_ms: null,
-    input_latency_ms: null,
     present_mode: null,
+    width: null,
+    height: null,
     measured_at: null,
     ...overrides,
   };
 }
 
-/** The measured case this feature came from: 57.4 fps on a 300 Hz panel. */
-const MEASURED = game({
+/** The live product run of 2026-09-11: fps_avg median 197 on a 297 fps target. */
+const MEASURED = reading({
   is_measured: true,
-  is_running: true,
-  measured_fps: 57.4,
-  fps_1_percent_low: 36.4,
+  measured_fps: 197.0,
+  fps_1_percent_low: 120.4,
   target_fps: 297,
-  achievement_percent: 19,
-  tier: "critical",
-  bottleneck: "both",
+  achievement_percent: 66,
+  tier: "short",
+  bottleneck: "gpu",
+  width: 2560,
+  height: 1440,
   measured_at: Date.now() / 1000 - 120,
 });
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mocked.list.mockResolvedValue({
-    poll_interval_seconds: 60,
-    games: [game(), game({ game: "mw3", label: "Modern Warfare III" })],
-  });
+  mocked.list.mockResolvedValue({ headroom: reading() });
 });
 
 describe("HeadroomPanel before anything is measured", () => {
-  it("lists the games it has not measured rather than showing an empty panel", async () => {
-    render(<HeadroomPanel />);
-
-    expect(await screen.findByText("Modern Warfare IV")).toBeInTheDocument();
-    expect(screen.getByText("Modern Warfare III")).toBeInTheDocument();
-  });
-
   it("says why nothing that costs frames will be recommended", async () => {
     render(<HeadroomPanel />);
 
@@ -90,47 +84,51 @@ describe("HeadroomPanel before anything is measured", () => {
     ).not.toHaveLength(0);
   });
 
-  it("tells the user what a measurement needs", async () => {
+  it("says the scene takes the measurement, not a game the user has to start", async () => {
     render(<HeadroomPanel />);
 
     expect(
-      await screen.findByText(/needs something rendering to measure/i),
+      await screen.findByText(/renders a fixed test scene when the machine is idle/i),
     ).toBeInTheDocument();
+    expect(screen.queryByText(/start a game/i)).not.toBeInTheDocument();
+  });
+
+  it("says what installing the scene costs before the button is pressed", async () => {
+    render(<HeadroomPanel />);
+
+    expect(await screen.findByText(/1\.3 GB one-time download/i)).toBeInTheDocument();
   });
 });
 
 describe("HeadroomPanel with a measurement", () => {
   beforeEach(() => {
-    mocked.list.mockResolvedValue({
-      poll_interval_seconds: 60,
-      games: [MEASURED],
-    });
+    mocked.list.mockResolvedValue({ headroom: MEASURED });
   });
 
   it("shows the frame rate against what the display could have shown", async () => {
     render(<HeadroomPanel />);
 
-    expect(await screen.findByText("57.4")).toBeInTheDocument();
+    expect(await screen.findByText("197.0")).toBeInTheDocument();
     expect(screen.getByText(/297 fps target/)).toBeInTheDocument();
-    expect(screen.getByText(/19%/)).toBeInTheDocument();
+    expect(screen.getByText(/66%/)).toBeInTheDocument();
   });
 
   it("draws the ratio as a gauge, so 19% and 97% cannot look alike (E5)", async () => {
     render(<HeadroomPanel />);
 
     const gauge = await screen.findByRole("meter", {
-      name: /measured frame rate against the display's 297 fps target/,
+      name: /measured frame rate against the display's 297 fps target/i,
     });
-    expect(gauge).toHaveAttribute("aria-valuenow", "57.4");
+    expect(gauge).toHaveAttribute("aria-valuenow", "197");
     expect(gauge).toHaveAttribute("aria-valuemax", "297");
   });
 
   it("never prints the number without what it permits", async () => {
     render(<HeadroomPanel />);
 
-    expect(await screen.findByText("Far short")).toBeInTheDocument();
+    expect(await screen.findByText("Short")).toBeInTheDocument();
     expect(
-      screen.getByText(/a sharper image is not on offer/i),
+      screen.getByText(/anything the player needs to see is not/i),
     ).toBeInTheDocument();
   });
 
@@ -138,43 +136,68 @@ describe("HeadroomPanel with a measurement", () => {
     render(<HeadroomPanel />);
 
     expect(
-      await screen.findByText(/graphics settings alone will not close the gap/i),
+      await screen.findByText(/graphics settings are where the frames are/i),
     ).toBeInTheDocument();
+  });
+
+  it("says nothing about a side the run never established", async () => {
+    mocked.list.mockResolvedValue({
+      headroom: { ...MEASURED, bottleneck: "unknown" },
+    });
+    render(<HeadroomPanel />);
+
+    await screen.findByText("197.0");
+    expect(screen.queryByText(/-bound/i)).not.toBeInTheDocument();
   });
 
   it("reports the 1% low next to the average rather than instead of it", async () => {
     render(<HeadroomPanel />);
 
-    expect(await screen.findByText(/36.4 at the 1% low/)).toBeInTheDocument();
+    expect(await screen.findByText(/120.4 at the 1% low/)).toBeInTheDocument();
+  });
+
+  it("says the scene rendered at this panel's own resolution", async () => {
+    /* The band compares a frame rate to this display's ceiling, so a reading
+       taken in a smaller window would be a different machine's answer. */
+    render(<HeadroomPanel />);
+
+    expect(
+      await screen.findByText(/2560×1440, this display's own resolution/),
+    ).toBeInTheDocument();
   });
 
   it("shows PresentMon's present mode verbatim, as a fact and not a score", async () => {
     mocked.list.mockResolvedValue({
-      poll_interval_seconds: 60,
-      games: [game({ ...MEASURED, present_mode: "Hardware: Independent Flip" })],
+      headroom: { ...MEASURED, present_mode: "Composed: Copy with GPU GDI" },
     });
     render(<HeadroomPanel />);
 
     expect(
-      await screen.findByText("Present mode: Hardware: Independent Flip"),
+      await screen.findByText("Present mode: Composed: Copy with GPU GDI"),
     ).toBeInTheDocument();
   });
 
   it("says nothing about the present mode when the capture had none", async () => {
     render(<HeadroomPanel />);
 
-    await screen.findByText("57.4");
+    await screen.findByText("197.0");
     expect(screen.queryByText(/Present mode/)).not.toBeInTheDocument();
+  });
+
+  it("drops the download notice once the scene has produced a number", async () => {
+    render(<HeadroomPanel />);
+
+    await screen.findByText("197.0");
+    expect(screen.queryByText(/1\.3 GB/)).not.toBeInTheDocument();
   });
 });
 
 describe("HeadroomPanel measuring on demand", () => {
-  it("asks the backend which game is running rather than making the user say", async () => {
+  it("asks the backend to run the scene, with nothing for the user to pick", async () => {
     mocked.measure.mockResolvedValue({
       measured: true,
       outcome: "measured",
-      detail: "Modern Warfare IV measured against this panel's 297 fps target",
-      game: "mw4",
+      detail: "This machine measured against the panel's 297 fps target",
       headroom: MEASURED,
     });
 
@@ -187,30 +210,25 @@ describe("HeadroomPanel measuring on demand", () => {
   it("shows the reason a measurement declined instead of an error", async () => {
     mocked.measure.mockResolvedValue({
       measured: false,
-      outcome: "no_game_running",
+      outcome: "scene_unavailable",
       detail:
-        "No game fpstune knows is running. Start one and measure again — a frame rate needs something rendering.",
-      game: null,
-      headroom: null,
+        "Modern Warfare IV is running. The scene renders at full speed and would take the card away from the game, so it waits until you are done.",
+      headroom: reading(),
     });
 
     render(<HeadroomPanel />);
     fireEvent.click(await screen.findByRole("button", { name: /measure now/i }));
 
     const status = await screen.findByRole("status");
-    expect(status).toHaveTextContent(/Start one and measure again/);
+    expect(status).toHaveTextContent(/waits until you are done/);
   });
 
   it("keeps the last reading on screen when the newest attempt declines", async () => {
-    mocked.list.mockResolvedValue({
-      poll_interval_seconds: 60,
-      games: [MEASURED],
-    });
+    mocked.list.mockResolvedValue({ headroom: MEASURED });
     mocked.measure.mockResolvedValue({
       measured: false,
-      outcome: "presentmon_missing",
-      detail: "PresentMon is not installed.",
-      game: "mw4",
+      outcome: "measure_failed",
+      detail: "The scene engine would not start.",
       headroom: MEASURED,
     });
 
@@ -218,6 +236,6 @@ describe("HeadroomPanel measuring on demand", () => {
     fireEvent.click(await screen.findByRole("button", { name: /measure now/i }));
 
     await screen.findByRole("status");
-    expect(screen.getByText("57.4")).toBeInTheDocument();
+    expect(screen.getByText("197.0")).toBeInTheDocument();
   });
 });

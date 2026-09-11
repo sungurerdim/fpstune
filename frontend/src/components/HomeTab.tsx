@@ -70,9 +70,10 @@ export function HomeTab() {
   ).length;
   const summary = useImpactSummary();
 
-  // The one number here that is a measurement rather than a claim: what a game
-  // actually reached on this machine, against what the panel can show. If no
-  // game has been measured, this says so instead of substituting an estimate.
+  // The one number here that is a measurement rather than a claim: what this
+  // machine actually reached on the fixed test scene, against what the panel
+  // can show. If nothing has been measured, this says so instead of
+  // substituting an estimate.
   const { data: headroom } = useQuery({
     queryKey: ["headroom"],
     queryFn: headroomApi.list,
@@ -90,8 +91,11 @@ export function HomeTab() {
     queryFn: api.getSystemInfo,
     staleTime: Infinity,
   }).data?.is_admin;
+  // Optional all the way down on purpose: a response is a boundary, and a
+  // missing field here would otherwise take the whole Home tab down rather than
+  // showing "not measured yet", which is the answer anyway.
   const measured = useMemo(
-    () => headroom?.games.filter((game) => game.is_measured) ?? [],
+    () => (headroom?.headroom?.is_measured ? headroom.headroom : null),
     [headroom],
   );
 
@@ -444,36 +448,36 @@ export function HomeTab() {
               }
             />
 
-            {measured.length > 0 ? (
+            {measured ? (
               <Group label={t("home.measured")} tone="success">
-                {measured.map((game) => {
+                {(() => {
                   // The one number on this screen an instrument produced. It is
-                  // written as a sentence rather than a ratio because "57/297"
+                  // written as a sentence rather than a ratio because "197/297"
                   // reads like a count of things, and it is a frame rate against
                   // what this panel can display.
-                  const fps = Math.round(game.measured_fps ?? 0);
-                  const pct = game.target_fps
+                  const fps = Math.round(measured.measured_fps ?? 0);
+                  const pct = measured.target_fps
                     ? Math.round(
-                        ((game.measured_fps ?? 0) / game.target_fps) * 100,
+                        ((measured.measured_fps ?? 0) / measured.target_fps) *
+                          100,
                       )
                     : null;
                   return (
                     <Stat
-                      key={game.game}
                       icon={<Gauge className="w-4 h-4 text-success" />}
                       value={`${fps} fps`}
-                      label={game.label}
+                      label={t("home.sceneLabel")}
                       hint={
                         pct !== null
                           ? t("home.ofTarget", {
                               pct,
-                              target: game.target_fps ?? 0,
+                              target: measured.target_fps ?? 0,
                             })
                           : t("home.noTarget")
                       }
                     />
                   );
-                })}
+                })()}
               </Group>
             ) : (
               /* Not a zero and not an estimate. Nothing has measured a frame

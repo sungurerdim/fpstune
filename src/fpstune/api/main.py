@@ -113,19 +113,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from fpstune.utils.hardware_manager import hardware_manager as _hw_mgr
 
     _hw_mgr.start_hotplug_polling()
-    # Watch for a game to measure. Not a measurement now — a frame rate needs
-    # something rendering, and at startup the game is almost always closed — so
-    # this starts the watch and takes the reading at the only moment it can be
-    # taken. Costs one process snapshot a minute until then.
-    from fpstune.benchmark.headroom_watch import start_headroom_watch
-
-    start_headroom_watch()
-    # And the other half of the same idea. The headroom watch measures a game
-    # when one is running; this one measures the machine itself when nothing
-    # is — a baseline before any tweak lands, and an "after" once a bulk apply
-    # finishes, so a comparison exists without the user having known to take a
-    # "before" first. It refuses to start anything while a game is running, the
-    # machine is in use, or another fpstune operation holds the lock.
+    # Measure the machine itself when nothing else is using it — a baseline
+    # before any tweak lands, and an "after" once a bulk apply finishes, so a
+    # comparison exists without the user having known to take a "before" first.
+    # The fixed GPU scene is part of that plan, so the same pass produces this
+    # machine's frame-rate band; nothing has to be played for one to exist. It
+    # refuses to start anything while a game is running, the machine is in use,
+    # or another fpstune operation holds the lock.
     from fpstune.benchmark.scheduler import start_bench_scheduler
 
     start_bench_scheduler()
@@ -135,10 +129,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Signal background threads to stop
     with contextlib.suppress(Exception):
         _hw_mgr.stop_hotplug_polling()
-    with contextlib.suppress(Exception):
-        from fpstune.benchmark.headroom_watch import stop_headroom_watch
-
-        stop_headroom_watch()
     with contextlib.suppress(Exception):
         from fpstune.benchmark.scheduler import stop_bench_scheduler
 

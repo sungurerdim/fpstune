@@ -128,7 +128,10 @@ def _emitted_keys(source_name: str) -> set[str]:
         # plausibly produced on a fixed scene: about 200 fps with a scatter.
         frametimes = [4.6 + (index % 11) * 0.15 for index in range(600)]
         timestamps = [sum(frametimes[:index]) for index in range(600)]
-        return set(fps_readings(PresentMonBenchmark(), frametimes, timestamps, 2))
+        readings, _low_frame_windows = fps_readings(
+            PresentMonBenchmark(), frametimes, timestamps, 2, 1.5
+        )
+        return set(readings)
     if source_name == "storage_health":
         from unittest.mock import patch
 

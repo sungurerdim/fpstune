@@ -334,15 +334,6 @@ def _session() -> Iterator[_Session]:
             api.destroy_session(handle)
 
 
-def nvapi_available() -> bool:
-    """Whether NVAPI loads on this system. Cheap after the first call."""
-    try:
-        _Nvapi.get()
-    except (NvapiUnavailable, OSError):
-        return False
-    return True
-
-
 def read_driver_settings(setting_ids: list[int]) -> dict[int, int] | None:
     """Effective DWORD values of the given settings on the global profile.
 

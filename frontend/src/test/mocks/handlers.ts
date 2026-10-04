@@ -20,61 +20,6 @@ const sampleSystemInfo = {
   is_admin: true,
 };
 
-const sampleStatus = {
-  modules: [
-    {
-      name: "timer",
-      display_name: "Timer Resolution",
-      description: "System timer optimizations",
-      status: "not_applied",
-      is_available: true,
-      requires_reboot: true,
-      message: "",
-      details: [],
-      settings: [
-        {
-          name: "hpet",
-          display_name: "HPET",
-          description: "High Precision Event Timer",
-          current_value: "enabled",
-          recommended_value: "disabled",
-          default_value: "enabled",
-          value_type: "choice",
-          choices: ["enabled", "disabled"],
-          requires_reboot: true,
-          is_action: false,
-        },
-      ],
-    },
-    {
-      name: "priority",
-      display_name: "CPU/GPU Priority",
-      description: "Process priority settings",
-      status: "applied",
-      is_available: true,
-      requires_reboot: false,
-      message: "",
-      details: [],
-      settings: [
-        {
-          name: "gpu_priority",
-          display_name: "GPU Priority",
-          description: "GPU scheduling priority",
-          current_value: 8,
-          recommended_value: 8,
-          default_value: 8,
-          value_type: "int",
-          requires_reboot: false,
-          is_action: false,
-        },
-      ],
-    },
-  ],
-  applied_count: 1,
-  total_count: 2,
-  loading: false,
-};
-
 // Current SettingExecutor-based API shapes (SettingDefinitionResponse[])
 const sampleSettingsDefinitions = [
   {
@@ -118,11 +63,6 @@ export const handlers = [
     return HttpResponse.json(sampleCategoriesMetadata);
   }),
 
-  // Category list
-  http.get("/api/settings/categories", () => {
-    return HttpResponse.json(["core"]);
-  }),
-
   // Parallel detection (single request, no polling)
   http.post("/api/settings/detect", () => {
     return HttpResponse.json({
@@ -138,24 +78,6 @@ export const handlers = [
     return HttpResponse.json(sampleSystemInfo);
   }),
 
-  // Status
-  http.get("/api/status", () => {
-    return HttpResponse.json(sampleStatus);
-  }),
-
-  // Health check
-  http.get("/api/health", () => {
-    return HttpResponse.json({ status: "healthy" });
-  }),
-
-  // Benchmark status
-  http.get("/api/benchmark/status", () => {
-    return HttpResponse.json({
-      running: false,
-      results: null,
-    });
-  }),
-
   // The measurement ledger: nothing measured yet, which is a real answer and
   // not an empty state. Every surface that mounts the ledger card gets this
   // unless the test overrides it with server.use().
@@ -167,14 +89,6 @@ export const handlers = [
       areas: [],
       bulk_apply_pending: false,
       poll_interval_seconds: 60,
-    });
-  }),
-
-  // Cleanup status
-  http.get("/api/cleanup/status", () => {
-    return HttpResponse.json({
-      temp_files_mb: 1024,
-      browser_cache_mb: 512,
     });
   }),
 ];

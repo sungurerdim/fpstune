@@ -111,17 +111,6 @@ class AdapterRecord:
         still speaks it, and it stays useful as a log line."""
         return f"{self.device_name}|{self.state_flags}|{self.monitor_interface_path}"
 
-    @classmethod
-    def from_record(cls, record: str) -> AdapterRecord | None:
-        parts = record.split("|", 2)
-        if len(parts) < 3:
-            return None
-        try:
-            flags = int(parts[1])
-        except ValueError:
-            return None
-        return cls(parts[0], flags, parts[2])
-
 
 @dataclass(frozen=True)
 class DisplayMode:

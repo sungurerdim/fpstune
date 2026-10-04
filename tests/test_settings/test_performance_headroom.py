@@ -73,7 +73,6 @@ class TestTheQuestionItAnswers:
     def test_at_target_there_is_room_to_spend(self) -> None:
         h = PerformanceHeadroom(measured_fps=297.0, target_fps=297)
         assert h.has_headroom is True
-        assert h.shortfall_percent is None
 
     def test_above_target_there_is_room(self) -> None:
         h = PerformanceHeadroom(measured_fps=320.0, target_fps=297)
@@ -83,7 +82,6 @@ class TestTheQuestionItAnswers:
         """The measured case that started this: 59 fps against a 300 Hz panel."""
         h = PerformanceHeadroom(measured_fps=59.0, target_fps=297)
         assert h.has_headroom is False
-        assert h.shortfall_percent == 80
 
     def test_unmeasured_is_treated_as_no_room(self) -> None:
         """Silence is not evidence. A change that costs frames has to earn its
@@ -559,7 +557,6 @@ class TestTheBands:
         h = PerformanceHeadroom(measured_fps=197.0, target_fps=297)
         assert h.tier == "short"
         assert round(h.achievement * 100) == 66
-        assert h.shortfall_percent == 34
 
 
 class TestTheBottleneckIsCarriedSeparately:

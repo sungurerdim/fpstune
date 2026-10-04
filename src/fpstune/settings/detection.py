@@ -372,22 +372,3 @@ class DetectionEngine:
                 is_optimized=False,
                 is_applicable=True,
             )
-
-    def detect_by_category(
-        self,
-        settings: list[SettingExecutor],
-        category: str,
-        hardware_context: HardwareContext | None = None,
-    ) -> dict[str, DetectionResult]:
-        """Detect settings filtered by category.
-
-        Args:
-            settings: All available settings.
-            category: Category to filter by.
-            hardware_context: Optional hardware context for applicability.
-
-        Returns:
-            Detection results for matching settings.
-        """
-        filtered = [s for s in settings if s.category.value == category]
-        return self.detect_all(filtered, hardware_context=hardware_context)

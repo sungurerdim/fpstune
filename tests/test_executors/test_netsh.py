@@ -226,8 +226,7 @@ class TestNetshDetectApplyPlatform:
 
 class TestNetshApplyValueIsOneToken:
     """`_run` builds argv with `args.split()`, so a value carrying whitespace
-    used to append netsh arguments to an elevated command line — the same defect
-    class the bcdedit token check closes."""
+    used to append netsh arguments to an elevated command line."""
 
     @pytest.fixture
     def executor(self):

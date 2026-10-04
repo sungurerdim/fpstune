@@ -560,16 +560,3 @@ def run_powershell(
     output = error or f"PowerShell exit code: {process.returncode}"
     debug_powershell(command, output, False, component)
     return False, output
-
-
-# Common GUID constants used in Windows registry
-# Pre-escaped for PowerShell usage
-class RegistryGUIDs:
-    """Common Windows registry GUIDs pre-escaped for PowerShell."""
-
-    # Display adapter class GUID
-    DISPLAY_ADAPTER = escape_guid("{4d36e968-e325-11ce-bfc1-08002be10318}")
-
-    # Audio endpoint property GUIDs
-    LOUDNESS_EQ_PROP = escape_guid("{fc52a749-4be9-4510-896e-966ba6525980},3")
-    DEVICE_NAME_PROP = escape_guid("{a45c254e-df1c-4efd-8020-67d146a850e0},2")

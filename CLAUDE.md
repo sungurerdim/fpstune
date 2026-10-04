@@ -315,10 +315,11 @@ hardware-ID changes and kernel drivers are never offered, measured or not.
 
 ```
 src/fpstune/
-  api/      schemas.py (response models) · status_cache.py · hardware/ (network_adapters, storage, audio)
+  api/      schemas.py (response models) · hardware/ (network_adapters, storage, audio)
             routes/  settings.py · settings_apply.py · settings_stream.py · benchmark.py ·
-                     system.py · system_{network,audio,power}.py · system_common.py ·
-                     display.py · debug.py
+                     benchmark_suite.py · benchmark_ledger.py · system.py ·
+                     system_{network,audio,power,storage}.py · system_common.py ·
+                     display.py · safety.py · updates.py · debug.py
   settings/ definitions/ (15 category files) · executors/ · base.py · applicability.py ·
             hardware_context.py · impact_categories.py · groups.py · registry.py ·
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·
@@ -363,9 +364,11 @@ monitor cache invalidation.
 
 Route surface: `settings.py` = CRUD/detect/apply/reset/undo/verify/bulk · `settings_stream.py`
 = `/bulk/stream-{apply,reset}` SSE (own router, `/api/settings` prefix) · `benchmark.py` =
-run/compare + verify/{coverage,sources,sample,round} + headroom{,/measure} · `system.py` =
-system/gpu/status/activity/hardware info, with `system_{network,audio,power}.py` as sub-routers
-on `/api` and `system_common.py` = `_run_powershell_async`. Detail detection lives in
+gpu-scene{,/install} + verify/{coverage,sources,sample,round} + headroom{,/measure} ·
+`benchmark_suite.py` = suite{,/run,/compare} · `benchmark_ledger.py` = ledger{,/runs,/run} ·
+`system.py` = system/hardware/activity/self-check, with `system_{network,audio,power,storage}.py`
+as sub-routers on `/api` and `system_common.py` = `_run_powershell_async` · `updates.py` =
+update/{check,install}. Detail detection lives in
 `api/hardware/`, which returns schema objects and declares no router.
 
 Data flow: UI → api.ts `POST /settings/{id}/apply` → settings route → `executor.apply()` →

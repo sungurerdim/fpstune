@@ -16,7 +16,7 @@ export type OperationStatus =
   | "skipped";
 
 /** The bulk apply/reset in flight, kept here so a tab switch cannot lose it. */
-export interface BulkRun {
+interface BulkRun {
   action: "apply" | "reset";
   cancel: () => void;
 }

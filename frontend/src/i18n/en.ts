@@ -76,7 +76,6 @@ export const en = {
   "update.install": "Update to {latest}",
   "update.installing": "Downloading and verifying…",
   "update.unreachable": "Could not check for updates: {reason}",
-  "update.openReleases": "Open the releases page",
   "header.admin": "Admin",
   "header.notAdmin": "Not Admin",
   "tab.home": "Home",
@@ -111,8 +110,6 @@ export const en = {
   "action.run": "Run",
   "action.runAll": "Run All",
   "action.undo": "Undo",
-  "action.reset": "Reset",
-  "action.verify": "Verify",
   "action.keep": "Keep",
 
   // Row surface
@@ -525,19 +522,11 @@ export const en = {
   "verify.statusUnattributable": "Not attributable",
 
   // Activity log
-  "activity.short": "Activity",
   "activity.title": "Activity Log",
   "activity.open": "Open activity log",
   "activity.close": "Close activity log",
 
   // Software Tweaks tab
-  "settings.searchPlaceholder": "Search settings...",
-  "settings.searchLabel": "Search settings",
-  "settings.filterCategory": "Filter by category",
-  "settings.filterImpact": "Filter by impact",
-  "settings.allCategories": "All categories",
-  "settings.allImpacts": "All impacts",
-  "settings.optimized": "Optimized",
   "settings.noOptimizedYet": "No optimized tweaks yet.",
   "settings.needsOptimization": "Needs optimization",
   "settings.nothingNeeds": "Nothing needs optimization.",
@@ -591,7 +580,6 @@ export const en = {
   "ledger.noise": "noise {noise}{unit}",
   "ledger.noiseUnknown": "noise floor unknown",
   "ledger.samples": "{before} and {after} readings",
-  "ledger.notMeasured": "Not measured",
   "ledger.loading": "Reading what this machine has measured…",
   "ledger.unreachable": "The measurement ledger could not be read.",
   "ledger.noAreas": "No area has been reported yet.",

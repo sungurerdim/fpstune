@@ -45,15 +45,14 @@ def test_removed_timer_setting_is_not_exported(setting_id: str) -> None:
     assert setting_id not in {s.id for s in TIMER_SETTINGS}
 
 
-def test_no_bcdedit_timer_setting_survives(registry: SettingsRegistry) -> None:
-    # Catches a re-add under a different id: the point was to stop writing boot
-    # configuration for timer sources at all, not to blacklist four strings.
-    from fpstune.settings.base import DetectType
-
+def test_no_setting_writes_boot_configuration(registry: SettingsRegistry) -> None:
+    # Catches a re-add under a different id or category: the point was to stop
+    # writing boot configuration at all, not to blacklist four strings. A bad
+    # BCD entry can leave a machine unable to start, so no setting runs bcdedit.
     offenders = [
         s.id
         for s in registry.get_all()
-        if s.id.startswith("timer:") and s.apply_type is DetectType.BCDEDIT
+        if any("bcdedit" in str(command).lower() for command in (s.detect_command, s.apply_command))
     ]
     assert offenders == []
 

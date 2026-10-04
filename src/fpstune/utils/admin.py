@@ -101,20 +101,3 @@ def elevate_if_needed() -> bool:
         return False
     except (OSError, AttributeError):
         return False
-
-
-def get_elevation_error_message() -> str:
-    """Get a user-friendly error message for elevation failure.
-
-    Returns:
-        Error message with instructions.
-    """
-    if sys.platform == "win32":
-        return (
-            "To run fpstune manually as Administrator:\n"
-            "  1. Right-click on Command Prompt or PowerShell\n"
-            "  2. Select 'Run as administrator'\n"
-            "  3. Run: fpstune serve"
-        )
-    else:
-        return "To run fpstune with root privileges:\n  sudo fpstune serve"

@@ -418,10 +418,6 @@ class DiskIoBench:
                 latencies.append((time.perf_counter() - started) * 1000.0)
         return latencies
 
-    def _random_read(self, path: Path) -> list[float]:
-        """One latency in milliseconds per 4K read, at seeded offsets."""
-        return self._random_pass(path, self._offsets(path, self.random_reads), write=False)
-
     def _queued_pass(
         self, path: Path, offsets: list[int], *, write: bool
     ) -> tuple[list[float], float]:

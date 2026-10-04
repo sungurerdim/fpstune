@@ -130,15 +130,6 @@ class TestSettingsRegistryInitialization:
         assert count > 0
         assert count == len(registry.get_all())
 
-    def test_registry_count_by_category(self) -> None:
-        """count_by_category() should return dict of counts."""
-        registry = SettingsRegistry(discover_dynamic=False)
-        counts = registry.count_by_category()
-        assert isinstance(counts, dict)
-        assert "core" in counts or "network" in counts  # Should have at least one category
-        # Sum should equal total count
-        assert sum(counts.values()) == registry.count()
-
     def test_registry_get_categories(self) -> None:
         """get_categories() should return unique category names."""
         registry = SettingsRegistry(discover_dynamic=False)

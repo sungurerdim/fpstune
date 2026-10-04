@@ -21,7 +21,7 @@ import {
 } from "../types/setting";
 
 // Category status for detection tracking
-export type CategoryDetectionStatus = "idle" | "loading" | "done" | "error";
+type CategoryDetectionStatus = "idle" | "loading" | "done" | "error";
 
 // Derive UI status from a detection result's isOptimized flag + raw value.
 // "default" when value is null/unknown (setting at OS default, not yet diverged).

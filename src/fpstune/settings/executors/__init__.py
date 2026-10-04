@@ -300,7 +300,6 @@ class CommandExecutor:
             with cls._executors_lock:
                 if not cls._executors:
                     # Lazy import to avoid circular dependencies
-                    from fpstune.settings.executors.bcdedit import BcdEditExecutor
                     from fpstune.settings.executors.netsh import NetshExecutor
                     from fpstune.settings.executors.nvprofile import NvProfileExecutor
                     from fpstune.settings.executors.powercfg import PowerCfgExecutor
@@ -309,7 +308,6 @@ class CommandExecutor:
 
                     cls._executors = {
                         "powercfg": PowerCfgExecutor(),
-                        "bcdedit": BcdEditExecutor(),
                         "registry": RegistryExecutor(),
                         "powershell": PowerShellExecutor(),
                         "netsh": NetshExecutor(),

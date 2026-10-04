@@ -205,12 +205,6 @@ class TestCommandExecutorGetExecutor:
         executor = CommandExecutor._get_executor("netsh")
         assert isinstance(executor, NetshExecutor)
 
-    def test_returns_bcdedit_executor(self):
-        from fpstune.settings.executors.bcdedit import BcdEditExecutor
-
-        executor = CommandExecutor._get_executor("bcdedit")
-        assert isinstance(executor, BcdEditExecutor)
-
     def test_returns_nvprofile_executor(self):
         from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
@@ -231,14 +225,13 @@ class TestCommandExecutorGetExecutor:
         e2 = CommandExecutor._get_executor("registry")
         assert e1 is e2
 
-    def test_all_six_executor_types_registered(self):
-        # After first call the map must have all 6 types
+    def test_all_five_executor_types_registered(self):
+        # After first call the map must have all 5 types
         CommandExecutor._get_executor("registry")
         assert "powercfg" in CommandExecutor._executors
         assert "registry" in CommandExecutor._executors
         assert "powershell" in CommandExecutor._executors
         assert "netsh" in CommandExecutor._executors
-        assert "bcdedit" in CommandExecutor._executors
         assert "nvprofile" in CommandExecutor._executors
 
 

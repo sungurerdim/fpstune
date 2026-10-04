@@ -213,16 +213,6 @@ class PerformanceHeadroom:
         """
         return self.tier == TIER_MET
 
-    @property
-    def shortfall_percent(self) -> int | None:
-        """How far under target, for the copy. None when there is no shortfall."""
-        if not self.is_measured or self.has_headroom:
-            return None
-        assert self.measured_fps is not None and self.target_fps is not None
-        if self.target_fps <= 0:
-            return None
-        return round((1 - self.measured_fps / self.target_fps) * 100)
-
 
 def _load() -> dict[str, Any]:
     try:

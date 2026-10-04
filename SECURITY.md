@@ -31,8 +31,8 @@ Concretely, fpstune:
 
 - reads and writes registry values under `HKLM` and `HKCU`
 - changes Windows service start types
-- runs `powershell.exe`, `netsh`, `powercfg`, `bcdedit` and `dism` as
-  Administrator
+- runs `powershell.exe`, `netsh`, `powercfg` and `dism` as Administrator
+  (never `bcdedit`: no setting changes boot configuration)
 - changes network adapter advanced properties through the driver
 - edits per-game configuration files in your user profile
 - creates System Restore points before bulk operations

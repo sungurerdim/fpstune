@@ -198,32 +198,27 @@ uv run ruff check src tests
 |----------|--------|-------------|
 | `/api/settings/definitions` | GET | All setting definitions. Includes the per-adapter settings discovered from your hardware, so the registry is built once at startup in the background — the request itself is instant unless it beats that warm-up |
 | `/api/settings/detect` | POST | Parallel detection of all settings (empty body) |
-| `/api/settings/detect/{id}` | GET | Detect a single setting |
 | `/api/settings/{id}/apply` | POST | Apply a value, detect, verify |
 | `/api/settings/{id}/reset` | POST | Write the Windows stock `default_value`, detect, verify |
 | `/api/settings/{id}/undo` | POST | Write what this machine held when fpstune first saw it; 409 if unrecorded |
 | `/api/settings/{id}/verify` | POST | Detect only — `{matches, current_value, expected_value, target}`; `target` picks `recommended` (default), `default`, or `original` |
 | `/api/settings/bulk/apply` | POST | Parallel bulk apply of a `{id: value}` map |
-| `/api/settings/bulk/reset` | POST | Parallel bulk reset to `default_value` |
-| `/api/settings/bulk/optimize` | POST | Parallel bulk apply of `recommended_value` |
 | `/api/settings/bulk/stream-apply` | POST | Sequential SSE bulk apply (per-setting events) |
 | `/api/settings/bulk/stream-reset` | POST | Sequential SSE bulk reset (per-setting events) |
-
-The `/revert` endpoint is deprecated; use `/reset`.
 
 The settings surface is the largest, not the whole API. The other groups, all
 under `/api`, exist so the UI never has to shell out for anything:
 
 | Surface | What it covers |
 |---------|----------------|
-| Display | `/display/monitors`, `/display/refresh`, `/display/{index}/auto`, and `/display/vrr-optimization` (read, apply, reset) |
-| GPU | `/gpu`, `/gpu/detect`, `/gpu/settings`, `/gpu/apply` plus the vendor-specific `/gpu/nvidia/apply` and `/gpu/amd/apply` |
+| Display | `/display/refresh`, `/display/{index}/auto` and `/display/{index}/confirm`, and `/display/vrr-optimization` (read, apply, reset) |
 | Power profile | `/power-profile/status`, `/power-profile/activate`, `/power-profile/revert` |
-| Network | `/network/refresh`, plus per-adapter enable/disable, connection toggle, and `/network/adapter/{name}/status` |
+| Network | `/network/refresh`, plus per-adapter enable/disable and connection toggle |
 | Audio | `/audio/refresh`, per-device enable/disable, and per-device loudness EQ |
-| Hardware and status | `/system`, `/hardware`, `/hardware/context`, `/status`, `/activity` |
-| Safety | `/restore-point` — create and list System Restore points |
-| Elevation | `/elevate` — relaunch the backend with Administrator rights |
+| Storage | `/storage/{drive}/optimize` — trim or defragment one drive |
+| Hardware and status | `/system`, `/hardware`, `/activity`, `/self-check` |
+| Safety | `/restore-point` — create a System Restore point |
+| Updates | `/update/check` and `/update/install` — the published release, checksum-verified before it replaces the exe |
 
 Debug endpoints exist too, but only when the process runs with `FPSTUNE_DEBUG=1`.
 
@@ -276,10 +271,6 @@ sits on its own panel and stays off the performance path.
 | `/api/benchmark/suite` | GET | Which benches exist, which can run here, what each costs, and why the rest cannot |
 | `/api/benchmark/suite/run` | POST | Run them, streaming one event per bench (SSE) |
 | `/api/benchmark/suite/compare` | POST | Judge two runs metric by metric — nothing is stored |
-
-The PresentMon capture flow has its own endpoints as well —
-`/api/benchmark/start`, `/status`, `/baseline`, `/results` and `/compare` —
-which is what the `fpstune fps` commands and the in-game measurement use.
 
 The suite is six instruments, and none of them needs a game running:
 

@@ -364,12 +364,5 @@ class HardwareManager {
 
 export const hardwareManager = HardwareManager.getInstance();
 
-/**
- * React hook for hardware data with automatic updates.
- */
-export function useHardwareManager(): HardwareManager {
-  return hardwareManager;
-}
-
 // Re-export for convenience
 export type { HardwareInfo } from "./api";

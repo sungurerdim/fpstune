@@ -243,7 +243,6 @@ def _write_to_file(component: str, message: str, data: dict[str, Any] | None = N
             "powershell": "powershell.log",
             "registry": "settings.log",
             "nvprofile": "settings.log",
-            "bcdedit": "settings.log",
         }
         log_file = component_map.get(component, "debug.log")
 

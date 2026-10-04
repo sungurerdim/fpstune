@@ -77,4 +77,3 @@ export * from "@testing-library/react";
 // Explicit re-exports for TypeScript
 export { screen, fireEvent, waitFor } from "@testing-library/react";
 export { customRender as render };
-export { createTestQueryClient };

@@ -708,28 +708,6 @@ if (Test-Path -LiteralPath $path) {{
             },
         )
 
-    def get_available_values(self, subgroup: str, setting_guid: str) -> list[int]:
-        """Get available values for a power setting.
-
-        Returns list of possible setting index values (e.g., [0, 1] for on/off).
-        These are extracted from "Possible Setting Index: 000" lines.
-        """
-        cmd = f"/query SCHEME_CURRENT {subgroup} {setting_guid}"
-        success, output = self._run(cmd)
-        if not success:
-            return []
-
-        values: list[int] = []
-        for line in output.splitlines():
-            # Look for numeric index pattern (locale-independent)
-            # "Possible Setting Index: 000" or similar
-            match = re.search(r":\s*(\d{3})\s*$", line.strip())
-            if match:
-                with contextlib.suppress(ValueError):
-                    values.append(int(match.group(1)))
-
-        return sorted(set(values))
-
     def _run(self, args: str) -> tuple[bool, str]:
         """Run powercfg command and return (success, output)."""
         if sys.platform != "win32":

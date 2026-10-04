@@ -20,7 +20,6 @@ SettingExecutor.apply_type dispatches:
     REGISTRY  -> winreg via settings/executors/registry.py
     POWERCFG  -> subprocess powercfg
     NETSH     -> subprocess netsh
-    BCDEDIT   -> subprocess bcdedit
     POWERSHELL-> run_powershell()
     NVPROFILE -> NVAPI driver settings (core/nvapi.py, core/nv_drs.py)
     |
@@ -38,18 +37,21 @@ JSON response -> React Query refetch -> UI refresh
 - `main.py` — FastAPI app factory, lifespan, CORS, static UI mount, /health
 - `routes/settings.py` — list / detect / apply / reset / undo / verify
 - `routes/settings_stream.py` — the SSE bulk apply and bulk reset
+- `routes/settings_apply.py` — no router; the one place a setting's command runs
+  for apply, reset and undo
 - `routes/system.py` plus `system_network.py`, `system_audio.py`,
-  `system_power.py`, `system_common.py` — hardware info, split by subsystem
+  `system_power.py`, `system_storage.py`, `system_common.py` — hardware info,
+  split by subsystem
 - `routes/display.py` — monitor detection + configuration
-- `routes/gpu.py` — GPU profile detection and vendor apply endpoints
 - `routes/safety.py` — restore-point endpoints
-- `routes/benchmark.py`, `routes/benchmark_suite.py` — PresentMon captures, the
-  measurement suite, claim verification and the headroom endpoints. (The FPS
+- `routes/benchmark.py`, `routes/benchmark_suite.py`, `routes/benchmark_ledger.py`
+  — the measurement suite, the resumable ledger, claim verification and the
+  headroom endpoints. (The FPS
   capture and GPU stress *commands* live in the CLI, `commands/benchmark.py` —
   there are no `fps.py` or `gpubench.py` route modules.)
+- `routes/updates.py` — update check, and the checksum-verified self-update
 - `routes/debug.py` — diagnostic endpoints, gated on `FPSTUNE_DEBUG=1`
 - `schemas.py` — Pydantic v2 request/response models
-- `status_cache.py` — module-level cache + background refresh thread
 - `hardware/` — `network_adapters.py`, `storage.py`, `audio.py`: the read-only
   probes behind the hardware panel. They sit under `api/` rather than `utils/`
   because they return `api.schemas` objects, and outside `routes/` because none
@@ -64,9 +66,11 @@ JSON response -> React Query refetch -> UI refresh
   storage, system, timer, visual, game_configs, game_configs_mw4). The
   README states the count and a test holds it to the registry's own.
 - `executors/` — one module per apply mechanism: `registry.py`, `powercfg.py`,
-  `netsh.py`, `bcdedit.py`, `powershell.py`, `powershell_actions.py`,
-  `ps_batch.py`, `nvprofile.py`, `nvidia_app.py`, `mw4_config.py`,
-  `game_config_cache.py`, `game_processes.py`, `config_sweep.py`
+  `netsh.py`, `powershell.py`, `powershell_actions.py`, `python_actions.py`,
+  `ps_batch.py`, `nvprofile.py`, `nvidia_app.py`, `mw3_profile.py`,
+  `mw3_paths.py`, `mw4_config.py`, `game_config_writer.py`, `game_config_cache.py`,
+  `game_processes.py`, `bnet_config.py`, `adapter_restart.py`, `config_sweep.py`.
+  No executor writes boot configuration
 - `detection.py` — `DetectionEngine` runs detection in parallel via
   `ThreadPoolExecutor`; honors per-setting `detect_timeout` overrides.
 - `applicability.py` — `values_equal()`, the `ABSENT_READINGS` sentinel set,
@@ -208,7 +212,7 @@ and `packet_burst.py`. They have their own test directory
 
 - Windows Registry (winreg) — settings r/w
 - PowerShell — apply/detect for non-trivial settings
-- powercfg.exe / netsh.exe / bcdedit.exe — subsystem CLIs
+- powercfg.exe / netsh.exe — subsystem CLIs
 - DISM — cleanup operations
 - nvapi64.dll — NVIDIA driver settings, shipped with every NVIDIA driver
 - WMI / CIM — hardware queries

@@ -204,10 +204,3 @@ class TestDegradation:
 
         monkeypatch.setattr(nvapi._Nvapi, "get", staticmethod(boom))
         assert nvapi.read_driver_settings([0x007BA09E]) is None
-
-    def test_availability_probe_never_raises(self, monkeypatch):
-        def boom():
-            raise OSError("access violation")
-
-        monkeypatch.setattr(nvapi._Nvapi, "get", staticmethod(boom))
-        assert nvapi.nvapi_available() is False

@@ -37,13 +37,6 @@ class TestRecordShape:
         assert record.mirroring is False
         assert AdapterRecord(r"\\.\DISPLAYV1", 9, "").mirroring is True
 
-    def test_the_record_line_round_trips(self) -> None:
-        """The self-check still speaks the name|flags|path line the C# class emitted."""
-        record = AdapterRecord(r"\\.\DISPLAY1", 1, r"\\?\DISPLAY#BBB0002#UID5002#{g}")
-        assert AdapterRecord.from_record(record.as_record()) == record
-        assert AdapterRecord.from_record("garbage") is None
-        assert AdapterRecord.from_record(r"\\.\DISPLAY1|notanumber|x") is None
-
 
 @pytest.mark.skipif(sys.platform != "win32", reason="reads the running desktop")
 class TestTheRealDesktop:

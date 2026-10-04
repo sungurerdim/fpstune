@@ -4,7 +4,7 @@ import { Copy, Check } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { LoadingSpinner } from "../ui/LoadingSpinner";
 
-export function LoadingDot() {
+function LoadingDot() {
   return <LoadingSpinner size="xs" className="inline ml-1" />;
 }
 

@@ -388,7 +388,6 @@ class DetectType(StrEnum):
     """Detection/Apply command types."""
 
     POWERCFG = "powercfg"  # powercfg.exe commands
-    BCDEDIT = "bcdedit"  # bcdedit.exe commands
     REGISTRY = "registry"  # Windows Registry
     POWERSHELL = "powershell"  # PowerShell commands
     NETSH = "netsh"  # netsh.exe commands

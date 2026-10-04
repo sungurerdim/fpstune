@@ -13,7 +13,7 @@ import type { Setting } from "../types/setting";
  * policy, windowed flip model and MPO are the display stack. They belong to the
  * hardware domain and sit at section level rather than under one drive or endpoint.
  */
-export const HARDWARE_MODULES = [
+const HARDWARE_MODULES = [
   "gpu-nvidia",
   "gpu-amd",
   "gpu-hardware",

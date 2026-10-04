@@ -44,8 +44,7 @@ EXTRA_TCP_PROPERTIES = ("EcnCapability", "Timestamps")
 _TCP_CACHE_KEY = "tcp_settings"
 
 # `_run` tokenizes the whole command with `args.split()`, so a value carrying a
-# space would append netsh arguments to an elevated command line — the same
-# defect bcdedit's `_BCD_TOKEN` closes for `/set {current} <name> <value>`.
+# space would append netsh arguments to an elevated command line.
 # Checked here rather than left to the escaping layer: that layer only rejects a
 # wide value when the placeholder sits *outside* quotes, and whether a netsh
 # template happens to quote is not a property netsh's tokenizer cares about.

@@ -8,7 +8,7 @@
 import type { MessageKey } from "../i18n/en";
 
 /** Module prefix for display settings — used to trigger monitor refresh after changes. */
-export const DISPLAY_MODULE_PREFIX = "display:";
+const DISPLAY_MODULE_PREFIX = "display:";
 
 /** Check if a setting ID belongs to the display module. */
 export function isDisplaySetting(settingId: string): boolean {
@@ -112,7 +112,7 @@ export function moduleResponseToMetadata(
 /**
  * Value types for settings
  */
-export type SettingValueType = "bool" | "int" | "float" | "string" | "choice";
+type SettingValueType = "bool" | "int" | "float" | "string" | "choice";
 
 /**
  * Kind of gain a setting delivers. Mirrors CATEGORY_ORDER in
@@ -148,7 +148,7 @@ export const IMPACT_CATEGORY_META: Record<
 /**
  * Setting status based on current vs recommended value
  */
-export type SettingStatus =
+type SettingStatus =
   | "loading"
   | "optimal"
   | "suboptimal"
@@ -158,7 +158,7 @@ export type SettingStatus =
 /**
  * Execution status for apply/revert operations
  */
-export type ExecutionStatus = "idle" | "pending" | "success" | "error";
+type ExecutionStatus = "idle" | "pending" | "success" | "error";
 
 /**
  * Category for grouping settings in UI.
@@ -170,7 +170,7 @@ export type SettingCategory = string;
  * Optimization scope for profile filtering.
  * Settings are categorized by impact level, not risk.
  */
-export type SettingScope = "essential" | "recommended" | "complete";
+type SettingScope = "essential" | "recommended" | "complete";
 
 /**
  * Centralized Setting entity - Single Source of Truth
@@ -346,7 +346,7 @@ export interface SettingDefinition {
 /**
  * Parse setting ID into module and name
  */
-export function parseSettingId(id: SettingId): {
+function parseSettingId(id: SettingId): {
   module: string;
   name: string;
 } {

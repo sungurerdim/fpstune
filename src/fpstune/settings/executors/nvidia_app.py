@@ -110,26 +110,6 @@ def _criteria(data: dict[str, Any]) -> dict[str, Any]:
     return criteria if isinstance(criteria, dict) else data
 
 
-def unmet_criteria() -> list[str]:
-    """The App's own names for the criteria this machine fails.
-
-    Its messages are localised — the file read here was written in Turkish on an
-    English-language product — so the stable half is the name, and that is what
-    is returned. `["bb2"]` on this machine.
-    """
-    data = _snapshot()
-    if data is None:
-        return []
-    states = _criteria(data).get("states")
-    if not isinstance(states, list):
-        return []
-    return [
-        str(entry.get("name"))
-        for entry in states
-        if isinstance(entry, dict) and entry.get("state") is False and entry.get("name")
-    ]
-
-
 def battery_boost_exposure() -> str:
     """Whether this machine can impose NVIDIA's battery frame cap at all.
 

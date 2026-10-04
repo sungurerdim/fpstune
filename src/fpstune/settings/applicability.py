@@ -260,17 +260,6 @@ class ApplicabilityChecker:
 
         return True, ""
 
-    def get_applicable_settings(self, settings: list[SettingExecutor]) -> list[SettingExecutor]:
-        """Filter to only applicable settings.
-
-        Args:
-            settings: List of settings to filter.
-
-        Returns:
-            List of settings that apply to the current hardware.
-        """
-        return [s for s in settings if self.is_applicable(s)[0]]
-
 
 def _coerce_scalar(v: Any) -> Any:
     """Normalize a scalar for comparison.

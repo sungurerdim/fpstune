@@ -176,14 +176,6 @@ class WlanRecord:
     # Whether this adapter lists an SAE auth/cipher pair among what it supports.
     adapter_supports_sae: bool = False
 
-    def as_record_line(self) -> str:
-        """``guid|channel|freqKHz|phy|signal|auth|ssid`` — SSID last because an
-        SSID may itself contain the separator."""
-        return (
-            f"{self.interface_guid}|{self.channel}|{self.center_khz}|{self.phy_type}|"
-            f"{self.signal_percent}|{self.auth_algorithm}|{self.ssid}"
-        )
-
 
 # dot11_phy_type, by the API's own numeric enum; anything else is an empty name.
 PHY_NAMES = {

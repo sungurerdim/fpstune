@@ -147,65 +147,6 @@ class TestParseQueryOutput:
 
 
 # ---------------------------------------------------------------------------
-# get_available_values
-# ---------------------------------------------------------------------------
-
-
-class TestGetAvailableValues:
-    """Tests for PowerCfgExecutor.get_available_values()."""
-
-    QUERY_OUTPUT = (
-        "Power Setting GUID: 48e6b7a6-50f5-4782-a5d4-53bb8f07e226\n"
-        "  Possible Setting Index: 000\n"
-        "  Possible Setting Friendly Name: Disabled\n"
-        "  Possible Setting Index: 001\n"
-        "  Possible Setting Friendly Name: Enabled\n"
-        "  Current AC Power Setting Index: 0x00000001\n"
-    )
-
-    @pytest.fixture
-    def executor(self):
-        PowerCfgExecutor._active_scheme = None
-        return PowerCfgExecutor()
-
-    def test_returns_sorted_list_of_indices(self, executor):
-        with patch.object(executor, "_run", return_value=(True, self.QUERY_OUTPUT)):
-            result = executor.get_available_values(_USB_SUBGROUP, _USB_SETTING)
-        assert result == [0, 1]
-
-    def test_returns_empty_on_failure(self, executor):
-        with patch.object(executor, "_run", return_value=(False, "Error")):
-            result = executor.get_available_values(_USB_SUBGROUP, _USB_SETTING)
-        assert result == []
-
-    def test_returns_empty_on_empty_output(self, executor):
-        with patch.object(executor, "_run", return_value=(True, "")):
-            result = executor.get_available_values(_USB_SUBGROUP, _USB_SETTING)
-        assert result == []
-
-    def test_deduplicates_repeated_indices(self, executor):
-        output = (
-            "  Possible Setting Index: 000\n"
-            "  Possible Setting Index: 000\n"
-            "  Possible Setting Index: 001\n"
-        )
-        with patch.object(executor, "_run", return_value=(True, output)):
-            result = executor.get_available_values(_USB_SUBGROUP, _USB_SETTING)
-        assert result == [0, 1]
-
-    def test_multiple_values(self, executor):
-        output = (
-            "  Possible Setting Index: 000\n"
-            "  Possible Setting Index: 001\n"
-            "  Possible Setting Index: 002\n"
-            "  Possible Setting Index: 003\n"
-        )
-        with patch.object(executor, "_run", return_value=(True, output)):
-            result = executor.get_available_values(_USB_SUBGROUP, _USB_SETTING)
-        assert result == [0, 1, 2, 3]
-
-
-# ---------------------------------------------------------------------------
 # _get_active_scheme
 # ---------------------------------------------------------------------------
 

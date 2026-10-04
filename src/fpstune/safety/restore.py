@@ -6,7 +6,6 @@ import logging
 import subprocess
 import sys
 import threading
-from dataclasses import dataclass
 
 from fpstune.utils.powershell import escape_single_quoted
 from fpstune.utils.system_tools import powershell_exe
@@ -112,16 +111,6 @@ def create_restore_point_async() -> None:
     t.start()
 
 
-@dataclass
-class RestorePointInfo:
-    """System restore point information."""
-
-    sequence_number: int
-    description: str
-    creation_time: str
-    restore_point_type: str
-
-
 class RestorePointManager:
     """Windows System Restore Point management.
 
@@ -176,56 +165,3 @@ class RestorePointManager:
             return result.returncode == 0
         except (subprocess.SubprocessError, OSError):
             return False
-
-    def list_restore_points(self, limit: int = 10) -> list[RestorePointInfo]:
-        """List available system restore points.
-
-        Args:
-            limit: Maximum number of restore points to return.
-
-        Returns:
-            List of RestorePointInfo objects.
-        """
-        if not self._available:
-            return []
-
-        try:
-            ps_script = f"""
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            Get-ComputerRestorePoint | Select-Object -First {limit} | ForEach-Object {{
-                "$($_.SequenceNumber)|$($_.Description)|$($_.CreationTime)|$($_.RestorePointType)"
-            }}
-            """
-
-            result = subprocess.run(
-                [powershell_exe(), "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            if result.returncode != 0:
-                return []
-
-            restore_points = []
-            for line in result.stdout.strip().splitlines():
-                parts = line.split("|")
-                if len(parts) >= 4:
-                    try:
-                        restore_points.append(
-                            RestorePointInfo(
-                                sequence_number=int(parts[0]),
-                                description=parts[1],
-                                creation_time=parts[2],
-                                restore_point_type=parts[3],
-                            )
-                        )
-                    except (ValueError, IndexError):
-                        continue
-
-            return restore_points
-        except (subprocess.SubprocessError, OSError):
-            return []

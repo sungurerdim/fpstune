@@ -9,7 +9,6 @@ import pytest
 
 from fpstune.utils.admin import (
     elevate_if_needed,
-    get_elevation_error_message,
     is_admin,
     require_admin,
 )
@@ -138,19 +137,3 @@ class TestElevateIfNeeded:
         ):
             mock_ctypes.windll.shell32.ShellExecuteW.side_effect = OSError("no shell")
             assert elevate_if_needed() is False
-
-
-class TestElevationErrorMessage:
-    """Platform-specific elevation hint messages."""
-
-    def test_windows_message_mentions_run_as_administrator(self):
-        """Windows error message must reference 'Administrator'."""
-        with patch("sys.platform", "win32"):
-            msg = get_elevation_error_message()
-            assert "Administrator" in msg
-
-    def test_non_windows_message_mentions_sudo(self):
-        """Non-Windows error message must reference 'sudo'."""
-        with patch("sys.platform", "linux"):
-            msg = get_elevation_error_message()
-            assert "sudo" in msg

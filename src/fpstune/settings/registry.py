@@ -150,15 +150,3 @@ class SettingsRegistry:
     def count(self) -> int:
         """Get total number of registered settings."""
         return len(self._settings)
-
-    def count_by_category(self) -> dict[str, int]:
-        """Get count of settings per category.
-
-        Returns:
-            Dict mapping category name to count.
-        """
-        counts: dict[str, int] = {}
-        for setting in self._settings.values():
-            cat = setting.category.value
-            counts[cat] = counts.get(cat, 0) + 1
-        return counts

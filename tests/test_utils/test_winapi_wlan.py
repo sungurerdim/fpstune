@@ -19,7 +19,6 @@ from fpstune.utils.winapi.wlan import (
     WLAN_CONNECTION_ATTRIBUTES,
     WLAN_INTERFACE_INFO,
     WLAN_PROFILE_INFO,
-    WlanRecord,
 )
 
 
@@ -42,24 +41,6 @@ class TestStructLayouts:
 
 
 class TestRecordShape:
-    def test_the_record_line_keeps_the_ssid_last(self) -> None:
-        """An SSID may contain the separator; nothing after it needs splitting."""
-        record = WlanRecord(
-            interface_guid="aaaabbbb-cccc-dddd-eeee-ffff00001111",
-            channel=1,
-            center_khz=5955000,
-            phy_type=10,
-            signal_percent=84,
-            auth_algorithm=9,
-            ssid="cafe|guest",
-            profile_name="cafe",
-            bssid="00:11:22:33:44:55",
-        )
-        assert (
-            record.as_record_line()
-            == "aaaabbbb-cccc-dddd-eeee-ffff00001111|1|5955000|10|84|9|cafe|guest"
-        )
-
     def test_guid_round_trip_is_lowercase_without_braces(self) -> None:
         raw = wlan._guid_bytes("{AAAABBBB-CCCC-DDDD-EEEE-FFFF00001111}")
         assert wlan._guid_str(bytes(raw)) == "aaaabbbb-cccc-dddd-eeee-ffff00001111"

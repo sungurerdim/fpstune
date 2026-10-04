@@ -80,7 +80,7 @@ export interface PowerProfileStatus {
   optimizations: string[];
 }
 
-export interface SelfCheckFinding {
+interface SelfCheckFinding {
   area: string;
   name: string;
   agrees: boolean;
@@ -92,14 +92,14 @@ export interface SelfCheckReport {
   findings: SelfCheckFinding[];
 }
 
-export interface GpuDeviceInfo {
+interface GpuDeviceInfo {
   vendor: string;
   name?: string;
   driver?: string;
   vram_mb?: number;
 }
 
-export interface CpuInfo {
+interface CpuInfo {
   name: string;
   physical_cores: number;
   logical_cores: number;
@@ -182,7 +182,7 @@ export interface ActivityLogEntry {
  * "API error: 400 Bad Request - {json}". `detail` is FastAPI's own field and is
  * the sentence a user should read.
  */
-export class ApiError extends Error {
+class ApiError extends Error {
   constructor(
     readonly status: number,
     readonly detail: string,
@@ -476,7 +476,7 @@ export const api = {
 // backend before it was noticed, and the store was already importing the
 // canonical one.
 
-export interface DetectionResultResponse {
+interface DetectionResultResponse {
   setting_id: string;
   value: unknown | null;
   error: string | null;
@@ -710,7 +710,7 @@ export const settingsApi = {
 // instrument gains a field, and the failure it produces is a verdict comparing
 // two different quantities, which reads exactly like a real one.
 
-export interface VerifySource {
+interface VerifySource {
   name: string;
   requires: string;
   metrics: string[];
@@ -723,7 +723,7 @@ export interface VerifySources {
   no_instrument: Record<string, string>;
 }
 
-export interface MeasurableClaim {
+interface MeasurableClaim {
   setting_id: string;
   metric: string;
   claimed: string;
@@ -773,7 +773,7 @@ export type VerifyStatus =
   | "unmeasured"
   | "not_attributable";
 
-export interface Verdict {
+interface Verdict {
   setting_id: string;
   metric: string;
   claimed: string;
@@ -830,7 +830,7 @@ export interface SuiteCatalogue {
   max_repeats: number;
 }
 
-export interface SuiteReading {
+interface SuiteReading {
   metric: string;
   samples: number[];
   median: number;
@@ -840,7 +840,7 @@ export interface SuiteReading {
   improves_upward: boolean | null;
 }
 
-export interface SuiteResult {
+interface SuiteResult {
   bench: string;
   label: string;
   ran: boolean;
@@ -1120,7 +1120,7 @@ export interface MachineHeadroom {
 }
 
 /** Why a measurement did not happen. Each one implies a different next step. */
-export type MeasureOutcome =
+type MeasureOutcome =
   | "measured"
   | "panel_unknown"
   | "scene_unavailable"

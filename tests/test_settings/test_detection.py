@@ -410,20 +410,3 @@ class TestPrefetchReachesTheScanCache:
 
         assert seen, "the batch never ran — the workers had no scan cache to read"
         assert batched == ["batched"] * 3
-
-
-class TestDetectByCategory:
-    """Tests for detect_by_category filtering."""
-
-    @patch("fpstune.settings.detection.CommandExecutor.detect")
-    def test_filters_by_category(self, mock_detect: MagicMock) -> None:
-        """detect_by_category should only detect settings in the target category."""
-        mock_detect.return_value = ("value", None)
-
-        engine = DetectionEngine(max_workers=2)
-        core_setting = _make_setting(setting_id="core:a", category="core")
-        net_setting = _make_setting(setting_id="network:b", category="network")
-
-        results = engine.detect_by_category([core_setting, net_setting], "core")
-        assert "core:a" in results
-        assert "network:b" not in results

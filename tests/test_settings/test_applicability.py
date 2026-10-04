@@ -352,19 +352,6 @@ class TestApplicabilityChecker:
         assert is_applicable is False
         assert "admin" in reason.lower()
 
-    def test_get_applicable_settings_filters(self, nvidia_intel_context: HardwareContext) -> None:
-        """get_applicable_settings() should return only matching settings."""
-        checker = ApplicabilityChecker(nvidia_intel_context)
-        nvidia_setting = self._make_setting({"gpu_vendor": "nvidia"})
-        amd_setting = self._make_setting({"gpu_vendor": "amd"})
-        universal_setting = self._make_setting({})
-
-        result = checker.get_applicable_settings([nvidia_setting, amd_setting, universal_setting])
-        assert len(result) == 2
-        assert nvidia_setting in result
-        assert universal_setting in result
-        assert amd_setting not in result
-
 
 class TestAnticheatFactReachesTheUser:
     """H8: the one anti-cheat fact rides in the setting's own risk_warning.

@@ -137,7 +137,7 @@ class TestTheAppsCriteriaFileIsReadAsWhatItIs:
         _write(tmp_path, monkeypatch, REAL_SHAPE)
 
         assert "bb2" not in REAL_SHAPE["criteria"]
-        assert nvidia_app.unmet_criteria() == ["bb2"]
+        assert nvidia_app.battery_boost_exposure() == nvidia_app.NO_CAP_POSSIBLE
 
     def test_all_criteria_passing_means_the_cap_is_one_toggle_away(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch
@@ -149,7 +149,6 @@ class TestTheAppsCriteriaFileIsReadAsWhatItIs:
         _write(tmp_path, monkeypatch, supported)
 
         assert nvidia_app.battery_boost_exposure() == nvidia_app.CAP_POSSIBLE
-        assert nvidia_app.unmet_criteria() == []
 
     def test_no_file_is_an_absence_rather_than_an_all_clear(
         self, tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch

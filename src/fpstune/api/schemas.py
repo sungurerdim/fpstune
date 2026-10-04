@@ -186,33 +186,6 @@ class HardwareInfo(BaseModel):
     detecting: bool = False
 
 
-class HardwareContextResponse(BaseModel):
-    """Hardware context for applicability checks.
-
-    This is used by frontend to understand which settings
-    are applicable to the current system.
-    """
-
-    gpu_vendor: str | None = None  # Primary GPU vendor
-    gpu_vendors: list[str] = []  # All detected GPU vendors
-    gpu_name: str | None = None
-    windows_build: int = 0
-    windows_version: str = ""  # e.g., "24H2"
-    is_windows_11: bool = False
-    is_admin: bool = False
-
-
-# System schemas
-class GpuInfoResponse(BaseModel):
-    """GPU information response."""
-
-    vendor: str
-    name: str | None = None
-    driver: str | None = None
-    vram_mb: int | None = None
-    detecting: bool = False
-
-
 class SystemInfo(BaseModel):
     """System information response."""
 
@@ -235,69 +208,9 @@ class SystemInfo(BaseModel):
     gpu_detecting: bool = False
 
 
-class GpuDetectResponse(BaseModel):
-    """GPU detection response."""
-
-    vendor: str
-    name: str | None = None
-    driver_version: str | None = None
-    vram_mb: int | None = None
-
-
-# Every literal below is one of the named setting's own ``choices``, and every
-# default is that setting's ``recommended_value`` — because omitting a field on
-# these endpoints means "apply what fpstune advises", not "apply whatever this
-# model happened to be typed with". Both halves are held by
-# ``tests/test_api/test_gpu_schema_matches_registry.py``, which reads the built
-# registry rather than a second copy of these lists.
-class GpuNvidiaApplyRequest(BaseModel):
-    """NVIDIA GPU apply request."""
-
-    low_latency: Literal["off", "on", "ultra"] = "on"
-    power_mode: Literal["optimal", "adaptive", "maximum"] = "optimal"
-    threaded_opt: Literal["off", "on", "auto"] = "auto"
-    shader_cache: Literal["off", "on"] = "on"
-    # The one field whose recommendation is derived from the panel rather than
-    # declared: with VRR plus a frame cap the setting recommends "on", without
-    # it "off". "off" is the fixed-refresh answer and the safe direction to be
-    # wrong in (tearing, not latency); a caller on a VRR panel should send "on".
-    vsync: Literal["off", "on", "adaptive"] = "off"
-
-
-class GpuAmdApplyRequest(BaseModel):
-    """AMD GPU apply request."""
-
-    anti_lag: Literal["enabled", "disabled"] = "enabled"
-    # No ``gpu-amd:anti_lag_2`` executor is registered (C10 symmetry gap, issue
-    # #34), so this field has no choices to be checked against and the route
-    # forwards it only when the caller sets it explicitly.
-    anti_lag_2: Literal["off", "on", "auto"] = "auto"
-    shader_cache: Literal["enabled", "disabled"] = "enabled"
-    vsync: Literal["off", "on"] = "off"
-
-
 # Safety schemas for the manifest-based backup/revert system were removed along
 # with it; System Restore is the rollback path and its endpoint returns a plain
 # dict.
-
-
-# Benchmark schemas
-class BenchmarkRunResponse(BaseModel):
-    """Benchmark run response."""
-
-    timestamp: str
-    name: str
-    metrics: dict[str, float]
-    system_info: dict[str, str]
-
-
-class BenchmarkCompareResponse(BaseModel):
-    """Benchmark comparison response."""
-
-    before: BenchmarkRunResponse
-    after: BenchmarkRunResponse
-    metrics: list[dict[str, Any]]
-    summary: str
 
 
 # Cleanup schemas
@@ -314,16 +227,6 @@ class ActivityLogResponse(BaseModel):
     """Activity log response."""
 
     entries: list[ActivityLogEntry]
-
-
-# FPS Benchmark schemas (PresentMon-based)
-class FpsImprovements(BaseModel):
-    """FPS improvement metrics."""
-
-    fps_avg_percent: float
-    fps_1_low_percent: float
-    frametime_percent: float
-    stutter_percent: float
 
 
 # GPU Benchmark schemas (FurMark-based)
@@ -505,12 +408,6 @@ class BulkApplyResponse(BaseModel):
     success_count: int
     error_count: int
     requires_reboot: bool
-
-
-class BulkResetRequest(BaseModel):
-    """Request to reset multiple settings to default."""
-
-    setting_ids: list[str] = Field(..., description="Settings to reset to default")
 
 
 class BulkStreamRequest(BaseModel):

@@ -20,11 +20,10 @@ from fastapi.testclient import TestClient
 from fpstune.api.main import create_app
 from fpstune.api.schemas import AudioDeviceInfo
 
-# A realistic MMDevice endpoint GUID, the shape the loudness-eq route validates.
+# A realistic MMDevice endpoint GUID and the endpoint ids detection builds from it.
 DEVICE_GUID = "b7a3f2c1-4d5e-4f60-9a1b-2c3d4e5f6a7b"
-
-# A realistic audio endpoint PnP instance id, the shape the enable route takes.
-PNP_INSTANCE_ID = "SWD\\MMDEVAPI\\{0.0.0.00000000}.{" + DEVICE_GUID + "}"
+OUTPUT_ID = "{0.0.0.00000000}.{" + DEVICE_GUID + "}"
+INPUT_ID = "{0.0.1.00000000}.{" + DEVICE_GUID + "}"
 
 
 @pytest.fixture
@@ -34,7 +33,7 @@ def client() -> TestClient:
     return TestClient(app, raise_server_exceptions=False)
 
 
-def _device(device_id: str = DEVICE_GUID) -> AudioDeviceInfo:
+def _device(device_id: str = OUTPUT_ID) -> AudioDeviceInfo:
     return AudioDeviceInfo(
         id=device_id,
         name="Speakers (Realtek(R) Audio)",
@@ -77,7 +76,7 @@ class TestRefreshAudioDevices:
         data = response.json()
         assert data["success"] is True
         assert len(data["audio_devices"]) == 1
-        assert data["audio_devices"][0]["id"] == DEVICE_GUID
+        assert data["audio_devices"][0]["id"] == OUTPUT_ID
         assert data["audio_devices"][0]["name"] == "Speakers (Realtek(R) Audio)"
         mock_hw.set_audio_devices.assert_called_once_with([device])
 
@@ -123,133 +122,180 @@ def _post_loudness(client: TestClient, device_id: str, *, enabled: bool = True) 
     )
 
 
+_HOSTILE_IDS = [
+    "not-a-guid",
+    DEVICE_GUID,  # a bare GUID is no longer an endpoint id: the flow is missing
+    "{0.0.2.00000000}.{" + DEVICE_GUID + "}",  # no such flow
+    OUTPUT_ID + "\n",  # trailing newline must not slip past an anchored match
+    OUTPUT_ID + "'; Stop-Service -Name Audiosrv; '",  # quote breakout
+    "$(Stop-Service -Name Audiosrv)",  # PowerShell subexpression
+    "PCI\\VEN_10DE&DEV_2484\\4&2A6B4F3&0&0008",  # a GPU, not an audio endpoint
+    "ÿ" + OUTPUT_ID,  # non-ASCII prefix
+]
+
+
 class TestToggleLoudnessEq:
     """Tests for POST /api/audio/device/{device_id}/loudness-eq."""
 
-    def test_enable_writes_the_enable_bytes_for_the_given_device(self, client: TestClient) -> None:
+    def test_enable_writes_the_enable_flag_to_that_output(self, client: TestClient) -> None:
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID, enabled=True)
+            response = _post_loudness(client, OUTPUT_ID, enabled=True)
 
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert data["device_id"] == DEVICE_GUID
-        assert data["enabled"] is True
+        assert data == {
+            "success": True,
+            "device_id": OUTPUT_ID,
+            "enabled": True,
+            "message": "Volume normalization enabled",
+        }
         command = ps.call_args[0][0]
-        assert DEVICE_GUID in command
-        # Bytes 8-9 = ff,ff is what "enabled" means in the FxProperties blob.
-        assert "0xff,0xff" in command
+        assert "\\Render\\{" + DEVICE_GUID + "}" in command
+        # Bytes 8-9 = ff,ff is what "on" means in the VT_BOOL blob.
+        assert "0x00,0x00,0x00,0xff,0xff,0x00,0x00)" in command
+        assert "$enable = $true" in command
 
-    def test_disable_writes_the_disable_bytes(self, client: TestClient) -> None:
+    def test_disable_writes_the_off_flag(self, client: TestClient) -> None:
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID, enabled=False)
+            response = _post_loudness(client, OUTPUT_ID, enabled=False)
 
         assert response.status_code == 200
         assert response.json()["enabled"] is False
         command = ps.call_args[0][0]
         assert "0xff,0xff" not in command
+        assert "$enable = $false" in command
 
-    def test_a_braced_guid_is_accepted(self, client: TestClient) -> None:
-        """Registry tooling hands GUIDs back both bare and braced; refusing one
-        spelling would break half the callers for no safety gain."""
+    def test_the_write_is_the_minimal_rights_open_and_nothing_heavier(
+        self, client: TestClient
+    ) -> None:
+        """The regression this rewrite exists for. The old route took ownership of
+        the key and granted Administrators FullControl (never reverted), imported a
+        .reg file through regedit, and restarted AudioEndpointBuilder — which cut
+        every sound on the machine — on each toggle."""
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, "{" + DEVICE_GUID + "}")
+            _post_loudness(client, OUTPUT_ID)
 
-        assert response.status_code == 200
+        command = ps.call_args[0][0]
+        assert "Set-FpsEndpointValue" in command
+        assert "'SetValue,QueryValues'" in command
+        for forbidden in (
+            "TakeOwnership",
+            "SetAccessControl",
+            "regedit",
+            "Restart-Service",
+            "AudioEndpointBuilder",
+        ):
+            assert forbidden not in command
 
-    @pytest.mark.parametrize(
-        "hostile_id",
-        [
-            "not-a-guid",
-            "",
-            "b7a3f2c1-4d5e-4f60-9a1b",  # truncated GUID
-            "$(Stop-Service -Name Audiosrv)",  # PowerShell subexpression
-            "b7a3f2c1-4d5e-4f60-9a1b-2c3d4e5f6a7b'; regedit /s evil.reg; '",  # quote breakout
-            "ÿb7a3f2c1-4d5e-4f60-9a1b-2c3d4e5f6a7b",  # non-ASCII prefix
-        ],
-    )
-    def test_a_non_guid_device_id_never_reaches_powershell(
+    def test_support_is_microsofts_effects_in_the_chain_not_any_fx_key(
+        self, client: TestClient
+    ) -> None:
+        """An FxProperties key exists on most outputs; Loudness Equalization exists
+        only where Microsoft's pre-mix or post-mix object is loaded."""
+        ps = _ps((True, "OK"))
+        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
+            _post_loudness(client, OUTPUT_ID)
+
+        command = ps.call_args[0][0]
+        assert "Test-FpsMsSysFx $fx" in command
+        assert "62dc1a93-ae24-464c-a43e-452f824c4250" in command
+        assert "637c490d-eee3-4c0a-973f-371958802da2" in command
+
+    def test_turning_it_on_also_clears_disable_sysfx_and_reads_both_back(
+        self, client: TestClient
+    ) -> None:
+        """'On' under a disabled chain is a state Windows shows and never plays —
+        the "it is ticked but nothing happens" report."""
+        ps = _ps((True, "OK"))
+        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
+            _post_loudness(client, OUTPUT_ID)
+
+        command = ps.call_args[0][0]
+        assert "$sysfxKey 0 'DWord'" in command
+        assert "$on = (Test-FpsLeqOn $after) -and ($after.$sysfxKey -ne 1)" in command
+
+    def test_an_input_is_refused_before_powershell(self, client: TestClient) -> None:
+        ps = _ps((True, "OK"))
+        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
+            response = _post_loudness(client, INPUT_ID)
+
+        assert response.status_code == 400
+        ps.assert_not_awaited()
+
+    @pytest.mark.parametrize("hostile_id", _HOSTILE_IDS)
+    def test_anything_but_an_endpoint_id_never_reaches_powershell(
         self, client: TestClient, hostile_id: str
     ) -> None:
-        """The endpoint interpolates the id into a script that takes registry
-        ACL ownership as SYSTEM-adjacent work, so the GUID gate is the whole
-        injection defence and must fire before any shell is built."""
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
             response = _post_loudness(client, hostile_id)
 
-        # An empty path segment cannot match the route (404); everything else
-        # must be rejected by the GUID validation (400).
         assert response.status_code in (400, 404)
         ps.assert_not_awaited()
 
     def test_missing_enabled_flag_is_a_validation_error(self, client: TestClient) -> None:
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = client.post(f"/api/audio/device/{DEVICE_GUID}/loudness-eq")
+            response = client.post(f"/api/audio/device/{quote(OUTPUT_ID, safe='')}/loudness-eq")
 
         assert response.status_code == 422
         ps.assert_not_awaited()
 
-    def test_a_device_the_registry_does_not_hold_is_404(self, client: TestClient) -> None:
-        ps = _ps((True, f"NOT_FOUND:{DEVICE_GUID}"))
-        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+    def test_an_output_the_registry_does_not_hold_is_404(self, client: TestClient) -> None:
+        with patch(
+            "fpstune.api.routes.system_audio._run_powershell_async", new=_ps((True, "NOT_FOUND"))
+        ):
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 404
 
-    def test_a_device_without_enhancement_support_is_400(self, client: TestClient) -> None:
-        ps = _ps((True, "NOT_SUPPORTED"))
-        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+    def test_an_output_without_microsofts_effects_is_400_with_the_reason(
+        self, client: TestClient
+    ) -> None:
+        with patch(
+            "fpstune.api.routes.system_audio._run_powershell_async",
+            new=_ps((True, "NOT_SUPPORTED")),
+        ):
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 400
-        assert "does not support" in response.json()["detail"]
-
-    def test_a_trustedinstaller_key_is_403_with_manual_steps(self, client: TestClient) -> None:
-        """A protected key is not an error to retry — the user is told where in
-        Windows to do it by hand instead."""
-        ps = _ps((True, "TRUSTEDINSTALLER:Manual configuration required for this device"))
-        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
-
-        assert response.status_code == 403
-        assert "Sound settings" in response.json()["detail"]
+        assert "Microsoft's system effects" in response.json()["detail"]
 
     def test_a_powershell_launch_failure_is_500(self, client: TestClient) -> None:
         ps = _ps((False, "The term 'powershell' is not recognized"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 500
 
-    def test_a_write_that_failed_every_method_is_500(self, client: TestClient) -> None:
-        ps = _ps((True, "ERROR: Registry write failed after all methods"))
+    def test_a_write_that_did_not_hold_is_500_with_the_scripts_reason(
+        self, client: TestClient
+    ) -> None:
+        ps = _ps((True, "ERROR: the output did not keep the new state"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 500
+        assert response.json()["detail"] == "the output did not keep the new state"
 
     def test_an_answer_the_route_does_not_know_is_500_not_success(self, client: TestClient) -> None:
         """An unrecognised script answer must never be reported as applied —
         that is a silent false-success on a device mutation."""
         ps = _ps((True, "WARNING: something unexpected"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 500
 
-    def test_debug_lines_before_the_verdict_are_ignored(self, client: TestClient) -> None:
-        """The script's own DEBUG chatter must not shadow the last-line verdict."""
-        ps = _ps((True, "DEBUG: probing Render\nDEBUG: found key\nOK\n"))
+    def test_chatter_before_the_verdict_is_ignored(self, client: TestClient) -> None:
+        ps = _ps((True, "probing Render\nOK\n"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_loudness(client, DEVICE_GUID)
+            response = _post_loudness(client, OUTPUT_ID)
 
         assert response.status_code == 200
-        assert response.json()["success"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -267,74 +313,66 @@ def _post_enabled(client: TestClient, device_id: str, *, enabled: bool) -> Any:
 class TestToggleAudioDevice:
     """Tests for POST /api/audio/device/{device_id}/enabled."""
 
-    def test_disable_runs_the_pnp_disable_for_that_instance(self, client: TestClient) -> None:
+    def test_disable_targets_the_endpoints_own_pnp_instance(self, client: TestClient) -> None:
+        """The id the card holds is the endpoint id; the PnP instance is derived
+        from it. The old card sent a bare GUID, which Get-PnpDevice never found, so
+        every toggle answered 500."""
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, PNP_INSTANCE_ID, enabled=False)
+            response = _post_enabled(client, OUTPUT_ID, enabled=False)
 
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
         assert data["enabled"] is False
-        assert data["device_id"] == PNP_INSTANCE_ID
+        assert data["device_id"] == OUTPUT_ID
         command = ps.call_args[0][0]
-        assert "Disable-PnpDevice" in command
-        assert PNP_INSTANCE_ID in command
+        assert "Disable-PnpDevice -InstanceId 'SWD\\MMDEVAPI\\" + OUTPUT_ID + "'" in command
 
-    def test_enable_runs_the_pnp_enable(self, client: TestClient) -> None:
+    def test_enable_runs_the_pnp_enable_for_an_input_too(self, client: TestClient) -> None:
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, PNP_INSTANCE_ID, enabled=True)
+            response = _post_enabled(client, INPUT_ID, enabled=True)
 
         assert response.status_code == 200
-        assert "Enable-PnpDevice" in ps.call_args[0][0]
+        assert (
+            "Enable-PnpDevice -InstanceId 'SWD\\MMDEVAPI\\" + INPUT_ID + "'" in (ps.call_args[0][0])
+        )
 
-    def test_a_quote_in_the_device_id_cannot_break_out_of_the_string(
-        self, client: TestClient
+    @pytest.mark.parametrize("hostile_id", _HOSTILE_IDS)
+    def test_only_an_audio_endpoint_can_be_switched(
+        self, client: TestClient, hostile_id: str
     ) -> None:
-        """This endpoint takes any PnP instance id, so unlike loudness-eq there
-        is no GUID gate — the single-quote doubling is the entire defence and a
-        bare quote in the built command would hand the id shell control."""
-        hostile = PNP_INSTANCE_ID + "'; Stop-Service -Name Audiosrv; '"
+        """The route used to take any PnP instance id up to 500 characters, so it
+        could disable a GPU or a disk controller. Now it switches audio endpoints
+        and nothing else, refused before a shell is built."""
         ps = _ps((True, "OK"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, hostile, enabled=False)
+            response = _post_enabled(client, hostile_id, enabled=False)
 
-        assert response.status_code == 200
-        command = ps.call_args[0][0]
-        assert hostile not in command, "the raw quote reached PowerShell unescaped"
-        assert hostile.replace("'", "''") in command
-
-    def test_an_oversized_device_id_is_refused_before_powershell(self, client: TestClient) -> None:
-        ps = _ps((True, "OK"))
-        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, "A" * 501, enabled=False)
-
-        assert response.status_code == 400
+        assert response.status_code in (400, 404)
         ps.assert_not_awaited()
-
-    def test_a_maximum_length_device_id_is_still_served(self, client: TestClient) -> None:
-        """The boundary itself: 500 characters is the last legal length, and an
-        off-by-one here would refuse real (long) composite instance ids."""
-        ps = _ps((True, "OK"))
-        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, "A" * 500, enabled=True)
-
-        assert response.status_code == 200
 
     def test_a_device_powershell_cannot_find_is_500_with_the_reason(
         self, client: TestClient
     ) -> None:
         ps = _ps((True, "ERROR: No matching Win32 devices found"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, PNP_INSTANCE_ID, enabled=False)
+            response = _post_enabled(client, OUTPUT_ID, enabled=False)
 
         assert response.status_code == 500
-        assert "No matching Win32 devices" in response.json()["detail"]
+        assert response.json()["detail"] == "No matching Win32 devices found"
 
     def test_a_powershell_launch_failure_is_500(self, client: TestClient) -> None:
         ps = _ps((False, "spawn failed"))
         with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
-            response = _post_enabled(client, PNP_INSTANCE_ID, enabled=True)
+            response = _post_enabled(client, OUTPUT_ID, enabled=True)
+
+        assert response.status_code == 500
+
+    def test_silence_is_not_success(self, client: TestClient) -> None:
+        ps = _ps((True, ""))
+        with patch("fpstune.api.routes.system_audio._run_powershell_async", new=ps):
+            response = _post_enabled(client, OUTPUT_ID, enabled=True)
 
         assert response.status_code == 500

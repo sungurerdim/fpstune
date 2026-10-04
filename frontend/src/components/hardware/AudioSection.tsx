@@ -12,7 +12,7 @@ import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { HardwareSection, NotDetected } from "./shared";
 import { DeviceTweakList } from "./DeviceTweakList";
 import { errorMessage } from "../../lib/api";
-import { notifyError } from "../../lib/notify";
+import { notifyError, notifyInfo } from "../../lib/notify";
 
 const log = createLogger("hardware");
 
@@ -59,9 +59,9 @@ export function AudioSection({
             {outputDevices.map((device, i) => (
               <AudioDeviceCard key={`out-${device.id}-${i}`} device={device} />
             ))}
-            {/* Enhancements, exclusive mode and communications ducking are
-                system-wide audio policy rather than one endpoint's setting, so they
-                belong to the section instead of a device card. */}
+            {/* The audio settings act on every output at once (effects, sample
+                rate, exclusive access) or on Windows as a whole (ducking), so
+                they belong to the section instead of a device card. */}
             <DeviceTweakList match={(setting) => setting.module === "audio"} />
           </div>
         ) : !loading ? (
@@ -124,10 +124,13 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
       return api.setLoudnessEq(device.id, !device.loudness_eq_enabled);
     },
     onSuccess: () => {
-      // Granular refresh: only audio devices (~300ms vs 8s full refresh)
+      // Windows reads the switch when a stream opens, so say when it is heard.
+      notifyInfo(t("hw.loudnessNextStream"));
       hardwareManager.refreshAudioDevices();
     },
     onError: (error: Error) => {
+      // A refused write still re-reads, so the switch shows what the device holds.
+      hardwareManager.refreshAudioDevices();
       log.error(
         `Failed to toggle loudness EQ for "${device.name}":`,
         error.message,
@@ -175,7 +178,7 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
 
         {device.is_default && (
           <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium">
-            Default
+            {t("hw.audioDefault")}
           </span>
         )}
       </div>

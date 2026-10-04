@@ -1,7 +1,10 @@
-"""Audio latency setting definitions.
+"""Audio settings, and the endpoint machinery the hardware panel shares.
 
-Contains settings for reducing audio latency in Windows.
-These settings are safe and reversible.
+Every per-device state here lives on the endpoint itself, under
+``MMDevices\\Audio\\{Render,Capture}\\{guid}``. The global HKCU flags
+``DisableFXEffects`` and ``DisableExclusiveMode`` that earlier releases wrote are
+read by nothing in the Windows audio stack, so they were retired without a guard:
+a value nothing reads has no harmful state to restore.
 """
 
 from __future__ import annotations
@@ -17,8 +20,8 @@ from fpstune.settings.base import (
 # =============================================================================
 # Shared endpoint machinery
 #
-# Two settings walk the MMDevices endpoint list, and both used to carry their own
-# copy of the walk. That asymmetry is its own defect class here (#56): an
+# Three settings and the hardware panel walk the MMDevices endpoint list, and the
+# settings used to carry their own copy of the walk. That asymmetry is its own defect class here (#56): an
 # observation narrower or wider than the action means verification passes over a
 # state that was never reached. One scan, built once, used by both.
 # =============================================================================
@@ -38,6 +41,34 @@ _SYSFX_KEY = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5"
 # device path, so it is identical in every locale — unlike the friendly name, which
 # is translated.
 _DEVICE_PATH_KEY = "{b3f8fa53-0004-438e-9003-51a46e139bfc},2"
+
+# PKEY_AudioEndpoint_Supports_EventDriven_Mode's neighbours on the same GUID: ,3 is
+# "allow applications to take exclusive control of this device" (DWORD, 1 allowed,
+# 0 blocked; absent means allowed, the Windows default).
+_EXCLUSIVE_KEY = "{b3f8fa53-0004-438e-9003-51a46e139bfc},3"
+
+# PKEY_AudioEngine_OEMFormat: the format the driver itself declares as the
+# endpoint's default, in the same PROPVARIANT + WAVEFORMATEX layout as _FORMAT_KEY.
+_OEM_FORMAT_KEY = "{e4870e26-3cc5-4cd2-ba46-ca0a9a70ed04},3"
+
+# The effects-chain slots under FxProperties: ,1 pre-mix and ,2 post-mix CLSIDs
+# (the Vista-era LFX/GFX model), ,3 the property page, ,5-,7 the stream/mode/
+# endpoint effects and ,13-,15 their composite lists. Any of them holding a value
+# means the endpoint has a chain for Disable_SysFx to switch.
+_FX_SLOT_PREFIX = "{d04e05a6-594b-4fb6-a80d-01af5eed7d1d}"
+
+# Microsoft's own system effects — the pre-mix (LFX) and post-mix (GFX) objects
+# that implement Loudness Equalization, Bass Boost and Virtual Surround. Loudness
+# Equalization exists on an endpoint only when one of them sits in its chain; a
+# vendor chain without them has no such effect for a property to switch.
+_MS_SYSFX_CLSIDS = (
+    "{62dc1a93-ae24-464c-a43e-452f824c4250}",
+    "{637c490d-eee3-4c0a-973f-371958802da2}",
+)
+
+# The Loudness Equalization switch: a VT_BOOL PROPVARIANT whose bytes 8-9 are
+# ff,ff when on and 00,00 when off. Absent is off.
+_LEQ_KEY = "{fc52a749-4be9-4510-896e-966ba6525980},3"
 
 # Endpoints whose audio configuration belongs to something other than Windows.
 # Matched against the raw device instance path.
@@ -125,109 +156,77 @@ def _endpoint_scan(flows: tuple[str, ...], property_subkey: str) -> str:
     )
 
 
+# PowerShell predicates over an FxProperties bag, shared by the settings below,
+# the hardware panel's device list and the loudness route, so "this endpoint has
+# an effects chain" and "Loudness Equalization is on" mean one thing everywhere.
+_LEQ_CLSID_PATTERN = "|".join(clsid.strip("{}") for clsid in _MS_SYSFX_CLSIDS)
+FX_HELPERS = (
+    f"$fpsLeqKey = '{_LEQ_KEY}'; "
+    "function Test-FpsFxChain($fx) { "
+    "if (-not $fx) { return $false }; "
+    "foreach ($pp in $fx.PSObject.Properties) { "
+    f"if ($pp.Name -like '{_FX_SLOT_PREFIX},*' -and "
+    "[string]::Join('', @($pp.Value)) -ne '') { return $true } }; "
+    "return $false }; "
+    "function Test-FpsMsSysFx($fx) { "
+    "if (-not $fx) { return $false }; "
+    "foreach ($pp in $fx.PSObject.Properties) { "
+    f"if ($pp.Name -like '{_FX_SLOT_PREFIX},*' -and "
+    f"[string]::Join(' ', @($pp.Value)) -match '{_LEQ_CLSID_PATTERN}') {{ return $true }} }}; "
+    "return $false }; "
+    "function Test-FpsLeqOn($fx) { "
+    "if (-not $fx) { return $false }; "
+    "$v = @($fx.$fpsLeqKey); "
+    "return ($v.Count -ge 10 -and [int]$v[8] -eq 0xff -and [int]$v[9] -eq 0xff) }; "
+)
+
 # Render only, matching the setting's own copy ("every active output"). Capture
-# endpoints carry the flag too, but nothing here has ever observed or written one,
-# and widening the walk without widening the claim is the #56 mistake.
+# effects are noise suppression and echo cancellation — what keeps a player's own
+# voice intelligible to the team — so switching them off is a functional loss, not
+# a latency gain, and this setting does not reach for them.
+#
+# Two endpoint states are skipped on purpose:
+# * Loudness Equalization switched on. That is a per-device choice the user made
+#   in the hardware panel (monitor speakers are the usual reason), and a bulk
+#   "clean" that silently undid it is exactly the "LEQ keeps turning itself off"
+#   report. The device card owns that endpoint's chain.
+# * No Disable_SysFx value and no chain at all: nothing runs, nothing to switch.
+# Absent Disable_SysFx *with* a chain is effects on — the value only exists once
+# something has written it, and the chain runs until then.
 _FX_SCAN = (
-    _endpoint_scan(("Render",), "FxProperties")
+    FX_HELPERS
+    + _endpoint_scan(("Render",), "FxProperties")
     + "$fx = Get-ItemProperty $target -EA SilentlyContinue; "
     "if (-not $fx) { continue }; "
+    "if (Test-FpsLeqOn $fx) { continue }; "
     "$sysfx = $fx.$sysfxKey; "
-    # Absent is not "effects on" — it means the driver publishes no chain to
-    # disable. Both detect and apply skip it, so neither invents a value.
-    "if ($null -eq $sysfx) { continue }; "
+    "if ($null -eq $sysfx -and -not (Test-FpsFxChain $fx)) { continue }; "
+    "$active = ($sysfx -ne 1); "
 )
 
-
-# === Audio Enhancements ===
-# DSP processing (reverb, equalizer, etc.) adds latency
-AUDIO_ENHANCEMENTS = SettingExecutor(
-    id="audio:enhancements",
-    category=SettingCategory.AUDIO,
-    display_name="Audio Enhancements",
-    short_name="Audio enhancements",
-    description="Windows audio DSP effects (equalizer, reverb, loudness equalisation). Processing "
-    "sits between the game and the speakers and smears the positional cues it is meant to sharpen.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: DSP runs on at least one output → added latency and smeared cues",
-    recommended_impact="Disabled: raw output on every active endpoint → lowest latency",
-    scope=SettingScope.COMPLETE,  # Minor improvement
-    category_order=1,
-    perceptible_cost=(
-        "Vendor audio enhancements stop applying — any bass boost, loudness or room correction you relied on goes away."
-    ),  # Primary audio latency setting
-    effect="Disables Windows audio DSP effects on every active output",
-    impact_scores={"latency_ms": -3, "stability": "high"},
-    # Scope note, and it is deliberate. This setting observes and writes exactly
-    # one thing: the global HKCU flag. The per-endpoint effects state is a real
-    # and separate story — measured here, the global flag read 1 ("disabled")
-    # while an active endpoint carried PKEY_AudioEndpoint_Disable_SysFx = 0 —
-    # and fpstune reports that separately (audio:endpoint_enhancements) rather
-    # than pretending this setting covers it.
-    #
-    # An earlier version of this setting did try to cover both, and it was wrong —
-    # but not for the reason recorded at the time. The old note said the endpoint
-    # flag "cannot be written". Corrected by measurement under UAC: it can, through
-    # a minimal-rights open (see _MIN_RIGHTS_WRITER). What was true is that the two
-    # mechanisms tried then both fail —
-    #   * Set-ItemProperty on MMDevices\Audio\Render\*\FxProperties is refused
-    #     because the open asks for KEY_WRITE and the ACL grants SetValue without
-    #     CreateSubKey; the denial was then swallowed by -ErrorAction
-    #     SilentlyContinue while apply returned 'ok'
-    #   * IMMDevice::OpenPropertyStore(STGM_WRITE) succeeds, but the store it
-    #     returns is the endpoint's `Properties`, which does not contain the FX
-    #     keys at all
-    # so apply reported success, wrote nothing, and verification correctly failed.
-    # The split stands on its own merits regardless: this setting owns one global
-    # HKCU flag, `audio:endpoint_enhancements` owns the per-endpoint chain, and
-    # each observes exactly what it writes — which is what C6 and C8 ask for.
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Audio",
-        "name": "DisableFXEffects",
-        "hive": "HKCU",
-    },
-    # 0 or None = enhancements enabled, 1 = disabled
-    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Audio",
-        "name": "DisableFXEffects",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"enabled": 0, "disabled": 1},
-)
 
 # === Per-endpoint audio effects ===
-# The finding this exists for: Windows' global "disable enhancements" flag does
-# not govern an individual output's APO chain, so a machine can read fully
-# optimized while a Loudness EQ is still smearing the footsteps it was turned on
-# to reveal. Measured on the dev machine, with the global flag set to disabled.
+# An output's effects chain is switched by PKEY_AudioEndpoint_Disable_SysFx on that
+# endpoint and nothing else: the global HKCU "DisableFXEffects" flag earlier
+# releases wrote is read by no part of the audio stack, so a machine could read
+# fully optimized while a vendor chain kept smearing the footsteps.
 #
-# This shipped as advisory on the grounds that fpstune could not write it. The
-# symptom was real and the mechanism was wrong: measured under UAC, an ordinary
-# Set-ItemProperty on FxProperties is refused, but a minimal-rights open of the
-# same key accepts the write and reads it back (see _MIN_RIGHTS_WRITER). So the
-# setting applies now. The other half of the old note stands untouched — the store
-# IMMDevice::OpenPropertyStore hands back does not contain the FX keys, which made
-# it the wrong API rather than proof the state is unwritable.
+# The write goes through a minimal-rights open (see _MIN_RIGHTS_WRITER): measured
+# under UAC, Set-ItemProperty on FxProperties is refused, the narrower open is not.
+# IMMDevice::OpenPropertyStore is the wrong API here — the store it returns is the
+# endpoint's Properties, which does not hold the FX keys.
 AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     id="audio:endpoint_enhancements",
     category=SettingCategory.AUDIO,
     display_name="Per-Output Audio Effects",
     short_name="Per-output audio effects",
-    description="Per-device audio effects left switched on for one output. They sit between the game and the "
+    description="Per-device audio effects running on an output. They sit between the game and the "
     "speakers and smear the direction a footstep came from.",
     value_type=SettingValueType.CHOICE,
     choices=("clean", "effects_active"),
-    default_value="clean",
+    # Windows' own state: a driver's effects chain runs until something switches it
+    # off. Reset writes this, so it has to be stock, not the recommendation.
+    default_value="effects_active",
     recommended_value="clean",
     requires_reboot=False,
     evidence_level="proven",
@@ -242,89 +241,119 @@ AUDIO_ENDPOINT_ENHANCEMENTS = SettingExecutor(
     perceptible_cost=("Per-device audio effects stop applying — the device plays the raw stream."),
     effect="Turns off per-device Windows effects on every active output",
     impact_scores={"latency_ms": -3, "stability": "high"},
-    # Windows re-reads the flag when the endpoint is next opened, so a stream that
-    # is already running keeps its old chain until it restarts. Said plainly rather
-    # than left for the user to discover as "it did not work".
+    # Windows reads the flag when a stream opens, so a stream that is already
+    # running keeps its old chain until it restarts. Said plainly rather than left
+    # for the user to discover as "it did not work".
     risk_warning="An app that is already playing keeps the effects it started with until it is "
-    "restarted, because Windows reads this flag when a stream opens. Outputs published by audio "
-    "software such as SteelSeries Sonar, Voicemeeter or Nahimic are deliberately left alone: their "
-    "processing is the product you installed, and that program would put its own setting back.",
+    "restarted, because Windows reads this flag when a stream opens. Outputs where you switched "
+    "Loudness Equalization on in the hardware panel keep their effects, and outputs published by "
+    "audio software such as SteelSeries Sonar, Voicemeeter or Nahimic are left alone: their "
+    "processing is the product you installed.",
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "$result = 'not_available'; " + _FX_SCAN + "if ($result -eq 'not_available') "
         "{ $result = 'clean' }; "
-        "if ($sysfx -eq 0) { $result = 'effects_active' } "
+        "if ($active) { $result = 'effects_active' } "
         "} }; "
         "$result"
     ),
     detect_args={},
     value_map={},
     # Writes exactly the endpoints detect counts — the same scan, so neither can
-    # reach further than the other (#56). An endpoint with no value at all is left
-    # alone by both: absent means the driver publishes no effects chain to disable,
-    # and creating the value there would be acting on something never observed.
+    # reach further than the other (#56). Both directions: "clean" writes 1 where
+    # a chain runs, reset writes Windows' 0 back where fpstune or anything else
+    # switched one off.
     apply_type=DetectType.POWERSHELL,
     apply_command=(
-        _MIN_RIGHTS_WRITER + "$changed = 0; $failed = 0; $rejected = 0; " + _FX_SCAN + "if "
-        "($sysfx -eq 1) { continue }; "
-        "if (-not (Set-FpsEndpointValue \"$sub\\FxProperties\" $sysfxKey 1 'DWord')) "
+        "$want = %value%; "
+        + _MIN_RIGHTS_WRITER
+        + "$changed = 0; $failed = 0; $rejected = 0; "
+        + _FX_SCAN
+        + "if (($want -eq 1) -ne $active) { continue }; "
+        "if (-not (Set-FpsEndpointValue \"$sub\\FxProperties\" $sysfxKey $want 'DWord')) "
         "{ $failed++; continue }; "
         # Read back rather than trust the write, the same discipline the sample-rate
         # setting learned the hard way.
         "$after = (Get-ItemProperty $target -EA SilentlyContinue).$sysfxKey; "
-        "if ($after -eq 1) { $changed++ } else { $rejected++ } "
+        "if ($after -eq $want) { $changed++ } else { $rejected++ } "
         "} }; "
         "if ($failed -gt 0) { 'error: ' + $failed + ' endpoint(s) could not be written' } "
         "elseif ($rejected -gt 0) { 'error: ' + $rejected + ' endpoint(s) did not keep the flag' } "
         "else { 'ok:' + $changed }"
     ),
     apply_args={},
-    apply_value_map={},
+    apply_value_map={"clean": 1, "effects_active": 0},
 )
 
-# === Exclusive Mode ===
-# When enabled, apps can take exclusive control of audio device
-# Can cause other apps to lose audio, but lower latency
-EXCLUSIVE_MODE = SettingExecutor(
-    id="audio:exclusive_mode",
+# === Exclusive mode, per endpoint ===
+# Whether an application may open the device exclusively, bypassing the shared
+# mixer — the lowest-latency path Windows has, used by audio tools and a few games.
+# It is per endpoint ({b3f8fa53-...},3 under Properties); the global HKCU
+# "DisableExclusiveMode" an earlier release wrote is read by nothing.
+#
+# Windows ships it allowed, and allowed costs nothing: shared-mode apps are not
+# slowed by another app's right to go exclusive. So this is a guard (consequence
+# 2): it reports and undoes an output where something blocked the path.
+AUDIO_ENDPOINT_EXCLUSIVE_MODE = SettingExecutor(
+    id="audio:endpoint_exclusive_mode",
     category=SettingCategory.AUDIO,
-    display_name="Exclusive Audio Mode",
-    short_name="Exclusive audio mode",
-    description="Allow apps exclusive audio access. Lower latency but blocks other audio.",
+    display_name="Exclusive Mode Access",
+    short_name="Exclusive mode access",
+    description="Whether apps may take exclusive, mixer-free control of each input and output. "
+    "Blocking it removes the lowest-latency audio path Windows has and gains nothing.",
     value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
+    choices=("allowed", "blocked"),
+    default_value="allowed",
+    recommended_value="allowed",
     requires_reboot=False,
-    current_impact="Enabled: Apps can take exclusive control → lower latency but may block Discord/music",
-    recommended_impact="Disabled: Shared audio → no audio conflicts, slight latency increase",
-    scope=SettingScope.COMPLETE,  # Minor improvement
+    evidence_level="proven",
+    risk_level="safe",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/win32/coreaudio/exclusive-mode-streams",
+    ],
+    current_impact="Blocked: at least one device refuses the exclusive, mixer-free audio path",
+    recommended_impact="Allowed: apps that ask for exclusive low-latency audio can have it",
+    scope=SettingScope.RECOMMENDED,
     category_order=2,
-    perceptible_cost=(
-        "Applications can no longer take exclusive control of the device — bit-perfect playback modes stop working."
-    ),  # Audio access mode
-    effect="Manages audio device exclusivity to prevent audio conflicts",
-    impact_scores={"latency_ms": 0.5, "stability": "high", "ux": "improved compatibility"},
-    # Detection - This is per-device, we'll use a system-wide preference
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Audio",
-        "name": "DisableExclusiveMode",
-        "hive": "HKCU",
-    },
-    # 0 or None = exclusive enabled, 1 = disabled
-    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
-    # Apply
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Audio",
-        "name": "DisableExclusiveMode",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"enabled": 0, "disabled": 1},
+    effect="Restores the exclusive low-latency audio path Windows ships with",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$result = 'not_available'; "
+        + _endpoint_scan(("Render", "Capture"), "Properties")
+        + f"$excl = $p.'{_EXCLUSIVE_KEY}'; "
+        "if ($result -eq 'not_available') { $result = 'allowed' }; "
+        "if ($null -ne $excl -and $excl -isnot [array] -and $excl -eq 0) "
+        "{ $result = 'blocked' } "
+        "} }; "
+        "$result"
+    ),
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command=(
+        "$want = %value%; "
+        + _MIN_RIGHTS_WRITER
+        + "$changed = 0; $failed = 0; $rejected = 0; "
+        + _endpoint_scan(("Render", "Capture"), "Properties")
+        + f"$exclKey = '{_EXCLUSIVE_KEY}'; $excl = $p.$exclKey; "
+        # Only a DWORD this scan can read is ever rewritten: an absent value is
+        # already Windows' "allowed", and a value of another shape is not one this
+        # setting understands.
+        "if ($null -ne $excl -and $excl -is [array]) { continue }; "
+        "$blocked = ($null -ne $excl -and $excl -eq 0); "
+        "if (($want -eq 1) -ne $blocked) { continue }; "
+        "if (-not (Set-FpsEndpointValue \"$sub\\Properties\" $exclKey $want 'DWord')) "
+        "{ $failed++; continue }; "
+        "$after = (Get-ItemProperty $props -EA SilentlyContinue).$exclKey; "
+        "if ($after -eq $want) { $changed++ } else { $rejected++ } "
+        "} }; "
+        "if ($failed -gt 0) { 'error: ' + $failed + ' endpoint(s) could not be written' } "
+        "elseif ($rejected -gt 0) { 'error: ' + $rejected + ' endpoint(s) did not keep the value' } "
+        "else { 'ok:' + $changed }"
+    ),
+    apply_args={},
+    apply_value_map={"allowed": 1, "blocked": 0},
 )
 
 # === Communications Ducking ===
@@ -402,9 +431,10 @@ COMMUNICATIONS_DUCKING = SettingExecutor(
     },
 )
 
-# All audio settings
-# Note: Loudness Equalization (Volume Normalization) is managed per-device
-# in the Hardware panel, not as a global setting here.
+# Loudness Equalization is not a setting: it is a per-device choice made on the
+# device's card in the hardware panel (api/routes/system_audio.py), off by default
+# and never recommended — a compressor flattens the loudness differences that say
+# how far away a sound is.
 # === Shared-mode sample rate, every input and output ===
 # The Windows audio engine mixes at each endpoint's configured rate, so content
 # at a different rate is resampled on every buffer. 48 kHz is the rate to match:
@@ -420,6 +450,13 @@ COMMUNICATIONS_DUCKING = SettingExecutor(
 # little buffering, and no isolated measurement of its latency was found.
 # Deliberately NOT offered: 96/192 kHz. No game content exists at those rates,
 # so they only force everything to be upsampled.
+#
+# Only endpoints whose driver declares 48 kHz as its own default format
+# (PKEY_AudioEngine_OEMFormat) are counted or written. That is the hardware's
+# answer to "does this device run at 48 kHz" (consequence 1), it makes 48 kHz
+# Windows' own stock value for every endpoint in scope — so reset and apply agree
+# and this is a drift guard — and it leaves alone a device whose driver defaults
+# to something else, which a blind 48 kHz write could leave silent.
 # Shared by detect and apply so the two cannot disagree about which endpoints count.
 # That asymmetry is its own defect class in this codebase (#56): an observation
 # narrower or wider than the action means verification passes over a state that was
@@ -433,6 +470,9 @@ _ENDPOINT_SCAN = (
     # could never reach its own target.
     "$blockAlign = [BitConverter]::ToUInt16($b,20); "
     "if ($blockAlign -eq 0) { continue }; "
+    f"$oem = $p.'{_OEM_FORMAT_KEY}'; "
+    "if (-not $oem -or $oem.Length -lt 24 -or [BitConverter]::ToUInt32($oem,12) -ne 48000) "
+    "{ continue }; "
 )
 
 # Blob layout confirmed by decoding real values rather than assumed: 48 bytes,
@@ -446,8 +486,8 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
     category=SettingCategory.AUDIO,
     display_name="Device Sample Rate (48 kHz)",
     short_name="Audio sample rate",
-    description="The rate each input and output runs at. Anything that does not match is "
-    "resampled by the Windows mixer on every buffer, which costs CPU for nothing.",
+    description="The rate each input and output runs at, for devices whose driver defaults to "
+    "48 kHz. Anything else is resampled by the Windows mixer on every buffer, costing CPU.",
     value_type=SettingValueType.CHOICE,
     choices=("optimal", "mismatched"),
     default_value="optimal",
@@ -455,19 +495,17 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
     requires_reboot=False,
     evidence_level="likely",
     risk_level="low",
-    # Two honest caveats rather than one confident claim.
     risk_warning="Counter-Strike 2 is a possible exception: one report has it requesting 44100 Hz "
     "and assuming it got it, producing a delay that grows the longer you play when the device runs "
     "at 48000 or higher. Source 1 was built around 44.1 kHz, so it is plausible, but it is a single "
     "report rather than a measurement — if CS2 audio drifts out of sync for you, set that device "
-    "back to 44100 Hz in Sound Control Panel. Note also that reset returns every device to 48 kHz "
-    "rather than the rate it had before, because fpstune does not record the original.",
+    "back to 44100 Hz in Sound Control Panel.",
     sources=[
         "https://learn.microsoft.com/en-us/windows-hardware/drivers/audio/audio-signal-processing-modes",
         "https://linuxthings.co.uk/blog/cs2-audio-delay",
     ],
     current_impact="Mismatched: at least one device forces the mixer to resample every buffer",
-    recommended_impact="Optimal: every input and output runs at 48 kHz, so nothing is resampled",
+    recommended_impact="Optimal: every 48 kHz-native device runs at 48 kHz, so nothing is resampled",
     scope=SettingScope.COMPLETE,
     category_order=4,
     effect="Matches every input and output to the 48 kHz rate games are authored at",
@@ -518,9 +556,8 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
 )
 
 AUDIO_SETTINGS: list[SettingExecutor] = [
-    AUDIO_ENHANCEMENTS,
     AUDIO_ENDPOINT_ENHANCEMENTS,
     AUDIO_DEVICE_FORMAT,
-    EXCLUSIVE_MODE,
+    AUDIO_ENDPOINT_EXCLUSIVE_MODE,
     COMMUNICATIONS_DUCKING,
 ]

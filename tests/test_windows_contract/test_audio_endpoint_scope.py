@@ -26,11 +26,14 @@ import sys
 import pytest
 from tests.test_windows_contract.conftest import run_shipped_command
 
+from fpstune.settings.base import SettingExecutor
 from fpstune.settings.definitions.audio import (
     _EXCLUDED_PATH_TEST,
     _MIN_RIGHTS_WRITER,
     AUDIO_DEVICE_FORMAT,
+    AUDIO_ENDPOINT_ENHANCEMENTS,
 )
+from fpstune.utils.powershell import substitute_placeholders
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
@@ -58,6 +61,7 @@ $FpsFakeHost = Get-Content $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
 
 $FpsFakeFmtKey = '{f19f064d-082c-4e27-bc73-6882a1bb8e4c},0'
 $FpsFakeDevKey = '{b3f8fa53-0004-438e-9003-51a46e139bfc},2'
+$FpsFakeOemKey = '{e4870e26-3cc5-4cd2-ba46-ca0a9a70ed04},3'
 $FpsFakeBase = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio'
 
 $script:FpsFakeEndpoints = @{}
@@ -86,7 +90,19 @@ foreach ($FpsFakeEp in $FpsFakeHost.endpoints) {
         $FpsFakeObj | Add-Member -NotePropertyName $FpsFakeFmtKey -NotePropertyValue `
             (New-FpsFakeFormatBlob $FpsFakeEp.rate $FpsFakeEp.channels $FpsFakeEp.bits)
     }
+    if ($FpsFakeEp.oem -gt 0) {
+        $FpsFakeObj | Add-Member -NotePropertyName $FpsFakeOemKey -NotePropertyValue `
+            (New-FpsFakeFormatBlob $FpsFakeEp.oem $FpsFakeEp.channels $FpsFakeEp.bits)
+    }
     $script:FpsFakeProps["$FpsFakePath\Properties"] = $FpsFakeObj
+    if ($null -ne $FpsFakeEp.fx) {
+        $FpsFakeFx = New-Object psobject
+        foreach ($FpsFakeFxProp in $FpsFakeEp.fx.PSObject.Properties) {
+            $FpsFakeFx | Add-Member -NotePropertyName $FpsFakeFxProp.Name `
+                -NotePropertyValue $FpsFakeFxProp.Value
+        }
+        $script:FpsFakeProps["$FpsFakePath\FxProperties"] = $FpsFakeFx
+    }
 }
 
 function Get-ChildItem {
@@ -132,6 +148,8 @@ def _endpoint(
     state: int = 1,
     channels: int = 2,
     bits: int = 32,
+    oem: int = 48000,
+    fx: dict | None = None,
 ) -> dict:
     return {
         "id": ident,
@@ -141,6 +159,8 @@ def _endpoint(
         "rate": rate,
         "channels": channels,
         "bits": bits,
+        "oem": oem,
+        "fx": fx,
     }
 
 
@@ -161,11 +181,13 @@ _HANDS_FREE = _endpoint(
 )
 
 
-def _detect(*endpoints: dict, shipped: bool = True) -> str:
-    command = AUDIO_DEVICE_FORMAT.detect_command
+def _detect(
+    *endpoints: dict, shipped: bool = True, setting: SettingExecutor = AUDIO_DEVICE_FORMAT
+) -> str:
+    command = setting.detect_command
     if not shipped:
         command = command.replace(_EXCLUDED_PATH_TEST, _BLUETOOTH_ONLY_TEST)
-        assert command != AUDIO_DEVICE_FORMAT.detect_command, (
+        assert command != setting.detect_command, (
             "the exclusion clause this test substitutes is gone, so the "
             "before/after comparison proves nothing"
         )
@@ -181,13 +203,17 @@ _WRITER_STUB = (
     "function Set-FpsEndpointValue($sub, $name, $value, $kind) { "
     '$target = $script:FpsFakeProps["HKLM:\\$sub"]; '
     "if ($null -eq $target) { return $false }; "
-    "$target.$name = $value; "
+    "$target | Add-Member -NotePropertyName $name -NotePropertyValue $value -Force; "
     "return $true }; "
 )
 
 
-def _apply(*endpoints: dict) -> str:
-    command = AUDIO_DEVICE_FORMAT.apply_command
+def _apply(
+    *endpoints: dict, setting: SettingExecutor = AUDIO_DEVICE_FORMAT, value: str = "optimal"
+) -> str:
+    command = setting.apply_command
+    if "%value%" in command:
+        command = substitute_placeholders(command, value=setting.apply_value_map[value])
     stubbed = command.replace(_MIN_RIGHTS_WRITER, _WRITER_STUB)
     assert stubbed != command, (
         "the shipped writer this harness substitutes is gone, so these tests would "
@@ -265,3 +291,67 @@ class TestEndpointsThatCarryNoAnswer:
         """
         assert _detect(_HANDS_FREE, _SONAR_GAMING, _REALTEK) == "optimal"
         assert _detect(_HANDS_FREE, _SONAR_GAMING) == "not_available"
+
+
+class TestDriverDeclaredRate:
+    """Only a device whose driver defaults to 48 kHz is asked to run at it."""
+
+    def test_a_device_whose_driver_defaults_elsewhere_is_left_alone(self) -> None:
+        legacy = _endpoint("{dac}", r"{1}.USB\VID_0D8C&PID_0014", 44100, oem=44100)
+        assert _detect(_REALTEK, legacy) == "optimal"
+        assert _apply(_REALTEK, legacy) == "ok:0"
+
+    def test_a_48k_native_device_moved_off_rate_is_still_fixed(self) -> None:
+        moved = _endpoint("{hdmi}", r"{1}.HDAUDIO\FUNC_01&VEN_10DE&DEV_009E", 44100)
+        assert _detect(_REALTEK, moved) == "mismatched"
+        assert _apply(_REALTEK, moved) == "ok:1"
+
+    def test_no_declared_format_means_no_claim(self) -> None:
+        undeclared = _endpoint("{x}", r"{1}.HDAUDIO\FUNC_01&VEN_8086", 44100, oem=0)
+        assert _detect(_REALTEK, undeclared) == "optimal"
+        assert _detect(undeclared) == "not_available"
+
+
+_SYSFX = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5"
+_LEQ = "{fc52a749-4be9-4510-896e-966ba6525980},3"
+_PREMIX_SLOT = "{d04e05a6-594b-4fb6-a80d-01af5eed7d1d},1"
+_MS_PREMIX = "{62DC1A93-AE24-464c-A43E-452F824C4250}"
+_VENDOR_SFX = "{9C00EEED-EDCE-4CD8-AE08-CB05E8EF57A0}"
+_LEQ_ON = [11, 0, 0, 0, 1, 0, 0, 0, 255, 255, 0, 0]
+
+
+def _fx_endpoint(ident: str, fx: dict, devpath: str = r"{1}.HDAUDIO\FUNC_01&VEN_10EC") -> dict:
+    return _endpoint(ident, devpath, 48000, fx=fx)
+
+
+class TestEndpointEffects:
+    """`audio:endpoint_enhancements` against the states a real output can be in."""
+
+    def _detect(self, *endpoints: dict) -> str:
+        return _detect(*endpoints, setting=AUDIO_ENDPOINT_ENHANCEMENTS)
+
+    def _apply(self, *endpoints: dict, value: str = "clean") -> str:
+        return _apply(*endpoints, setting=AUDIO_ENDPOINT_ENHANCEMENTS, value=value)
+
+    def test_a_chain_with_no_flag_written_is_effects_on(self) -> None:
+        """The fresh-driver case the old scan skipped as "nothing to disable"."""
+        fresh = _fx_endpoint("{fresh}", {_PREMIX_SLOT: _VENDOR_SFX})
+        assert self._detect(fresh) == "effects_active"
+        assert self._apply(fresh) == "ok:1"
+
+    def test_no_chain_and_no_flag_is_nothing_to_report(self) -> None:
+        bare = _fx_endpoint("{bare}", {"{00000000-0000-0000-0000-000000000000},0": 1})
+        assert self._detect(bare) == "not_available"
+
+    def test_a_disabled_chain_reads_clean_and_reset_puts_windows_back(self) -> None:
+        off = _fx_endpoint("{off}", {_PREMIX_SLOT: _VENDOR_SFX, _SYSFX: 1})
+        assert self._detect(off) == "clean"
+        assert self._apply(off) == "ok:0"
+        assert self._apply(off, value="effects_active") == "ok:1"
+
+    def test_an_output_with_loudness_eq_on_is_not_switched_off(self) -> None:
+        """The monitor-speaker case: the user turned LEQ on from the device card,
+        and a bulk "clean" must not undo it."""
+        monitor = _fx_endpoint("{monitor}", {_PREMIX_SLOT: _MS_PREMIX, _SYSFX: 0, _LEQ: _LEQ_ON})
+        assert self._detect(monitor) == "not_available"
+        assert self._apply(monitor) == "ok:0"

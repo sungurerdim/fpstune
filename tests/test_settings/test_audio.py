@@ -13,25 +13,35 @@ from __future__ import annotations
 from fpstune.settings.base import SettingScope, SettingValueType
 from fpstune.settings.definitions.audio import (
     _ENDPOINT_SCAN,
+    _FX_SCAN,
     AUDIO_DEVICE_FORMAT,
     AUDIO_ENDPOINT_ENHANCEMENTS,
-    AUDIO_ENHANCEMENTS,
+    AUDIO_ENDPOINT_EXCLUSIVE_MODE,
     AUDIO_SETTINGS,
     COMMUNICATIONS_DUCKING,
-    EXCLUSIVE_MODE,
 )
+from fpstune.utils.powershell import substitute_placeholders
 
 
 class TestAudioSettingsList:
     def test_every_audio_setting_is_registered(self) -> None:
         ids = [s.id for s in AUDIO_SETTINGS]
         assert ids == [
-            AUDIO_ENHANCEMENTS.id,
             AUDIO_ENDPOINT_ENHANCEMENTS.id,
             AUDIO_DEVICE_FORMAT.id,
-            EXCLUSIVE_MODE.id,
+            AUDIO_ENDPOINT_EXCLUSIVE_MODE.id,
             COMMUNICATIONS_DUCKING.id,
         ]
+
+    def test_no_setting_writes_the_global_flags_nothing_reads(self) -> None:
+        """HKCU DisableFXEffects and DisableExclusiveMode are read by no part of the
+        Windows audio stack; both shipped as settings that applied, verified, and
+        changed nothing. Retired without a guard — a placebo has no harmful state."""
+        for setting in AUDIO_SETTINGS:
+            text = repr(setting.detect_args) + repr(setting.apply_args)
+            text += setting.detect_command + setting.apply_command
+            assert "DisableFXEffects" not in text
+            assert "DisableExclusiveMode" not in text
 
 
 class TestCommunicationsDucking:
@@ -94,54 +104,45 @@ class TestCommunicationsDucking:
         assert any("stream-attenuation" in s for s in COMMUNICATIONS_DUCKING.sources)
 
 
-class TestEnhancementsScope:
-    """Detect and apply must cover the same ground — no more, no less.
-
-    An earlier version of `audio:enhancements` read the per-endpoint effects
-    state as well as the global flag, and tried to write both. Apply swallowed
-    the failure, returned "ok", and verification failed for the user with
-    expected='disabled' detected='enabled'.
-
-    The reason recorded at the time — "the FxProperties keys reject even an
-    elevated write" — was wrong, and is corrected in
-    `test_windows_contract/test_audio_endpoint_scope.py`: the keys are writable
-    through a minimal-rights open. What holds is the split itself. This setting
-    owns one global HKCU flag; `audio:endpoint_enhancements` owns the per-endpoint
-    chain and now writes it. Each observes exactly what it writes.
-    """
-
-    SYSFX_KEY = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5"
-
-    def test_the_global_setting_observes_exactly_what_it_writes(self) -> None:
-        assert AUDIO_ENHANCEMENTS.detect_args["name"] == "DisableFXEffects"
-        assert AUDIO_ENHANCEMENTS.apply_args["name"] == "DisableFXEffects"
-        assert AUDIO_ENHANCEMENTS.detect_args["hive"] == AUDIO_ENHANCEMENTS.apply_args["hive"]
-        assert AUDIO_ENHANCEMENTS.detect_args["path"] == AUDIO_ENHANCEMENTS.apply_args["path"]
-
-    def test_the_global_setting_does_not_reach_for_the_endpoint_flag(self) -> None:
-        """Claiming it would reinstate an apply that reports success and writes nothing."""
-        assert self.SYSFX_KEY not in AUDIO_ENHANCEMENTS.detect_command
-        assert self.SYSFX_KEY not in AUDIO_ENHANCEMENTS.apply_command
-
-
 class TestEndpointEnhancements:
-    """It reports the finding, and — since the write mechanism was found — fixes it."""
+    """Each output's own effects switch, read and written in both directions."""
 
     SYSFX_KEY = "{1da5d803-d492-4edd-8c23-e0c0ffee7f0e},5"
 
-    def test_it_is_no_longer_advisory(self) -> None:
-        """The old `is_readonly` rested on "cannot be written", which was measured false.
+    def _apply(self, value: str) -> str:
+        raw = AUDIO_ENDPOINT_ENHANCEMENTS.apply_value_map[value]
+        return substitute_placeholders(AUDIO_ENDPOINT_ENHANCEMENTS.apply_command, value=raw)
 
-        Set-ItemProperty is refused on these keys because it opens with KEY_WRITE
-        while the ACL grants SetValue without CreateSubKey. A minimal-rights open
-        writes them, so C1's "report what you cannot change" no longer applies.
-        """
-        assert AUDIO_ENDPOINT_ENHANCEMENTS.is_readonly is False
-        assert AUDIO_ENDPOINT_ENHANCEMENTS.apply_command
+    def test_reset_is_windows_stock_not_the_recommendation(self) -> None:
+        """Reset writes default_value. Windows runs a driver's chain until something
+        switches it off, so stock is effects on — "clean" there made reset a second
+        apply that left the tweak in place."""
+        assert AUDIO_ENDPOINT_ENHANCEMENTS.default_value == "effects_active"
+        assert AUDIO_ENDPOINT_ENHANCEMENTS.recommended_value == "clean"
+
+    def test_each_direction_writes_its_own_flag(self) -> None:
+        assert self._apply("clean").startswith("$want = 1; ")
+        assert self._apply("effects_active").startswith("$want = 0; ")
+
+    def test_an_absent_flag_on_an_output_with_a_chain_is_effects_on(self) -> None:
+        """Disable_SysFx only exists once something has written it. Skipping every
+        output without it hid the common case: a fresh driver, its chain running."""
+        assert "if ($null -eq $sysfx -and -not (Test-FpsFxChain $fx)) { continue }" in _FX_SCAN
+        assert "$active = ($sysfx -ne 1)" in _FX_SCAN
+
+    def test_an_output_with_loudness_eq_on_is_left_to_its_device_card(self) -> None:
+        """Bulk "clean" used to switch off the Loudness Equalization a user had just
+        turned on for their monitor speakers."""
+        assert "if (Test-FpsLeqOn $fx) { continue }" in _FX_SCAN
+
+    def test_inputs_are_not_touched(self) -> None:
+        """Capture effects are noise suppression and echo cancellation — the team
+        hearing you is information, not latency."""
+        assert "foreach ($flow in @('Render'))" in _FX_SCAN
 
     def test_the_write_does_not_go_through_set_itemproperty(self) -> None:
         """The precise regression: Set-ItemProperty here fails with access denied."""
-        command = AUDIO_ENDPOINT_ENHANCEMENTS.apply_command
+        command = self._apply("clean")
         assert "Set-ItemProperty" not in command
         assert "Set-FpsEndpointValue" in command
 
@@ -152,13 +153,13 @@ class TestEndpointEnhancements:
 
     def test_apply_reads_its_own_write_back(self) -> None:
         command = AUDIO_ENDPOINT_ENHANCEMENTS.apply_command
-        assert "$after" in command
-        assert "$rejected" in command
+        assert "if ($after -eq $want) { $changed++ } else { $rejected++ }" in command
 
-    def test_the_warning_states_the_restart_caveat_and_the_exclusion(self) -> None:
-        """Both are things the user would otherwise experience as "it did not work"."""
+    def test_the_warning_states_the_restart_caveat_and_both_exclusions(self) -> None:
+        """All three are things the user would otherwise experience as "it did not work"."""
         warning = AUDIO_ENDPOINT_ENHANCEMENTS.risk_warning or ""
         assert "restarted" in warning
+        assert "Loudness Equalization" in warning
         assert "Sonar" in warning
 
     def test_it_reads_the_key_that_actually_holds_the_state(self) -> None:
@@ -170,33 +171,51 @@ class TestEndpointEnhancements:
         )
         assert "DeviceState" in command, "a disconnected endpoint's state is not evidence"
 
-    def test_one_dirty_endpoint_decides_the_answer(self) -> None:
-        command = AUDIO_ENDPOINT_ENHANCEMENTS.detect_command
-        assert "$sysfx -eq 0" in command
-        assert "$result = 'effects_active'" in command
-
     def test_every_reading_is_a_declared_choice(self) -> None:
-        """Every state the command can report is one the setting declares.
-
-        `not_available` is checked separately below: it is the one reading that
-        must *not* be a choice, because it means there is no endpoint to have a
-        state at all.
-        """
         for token in ("clean", "effects_active"):
             assert token in AUDIO_ENDPOINT_ENHANCEMENTS.choices
             assert f"'{token}'" in AUDIO_ENDPOINT_ENHANCEMENTS.detect_command
+            assert token in AUDIO_ENDPOINT_ENHANCEMENTS.apply_value_map
 
     def test_the_absent_reading_is_emitted_but_never_offered(self) -> None:
-        """A machine with no audio endpoint has no state here, only an absence.
-
-        The command still has to say so — detection turns that into
-        `is_applicable=False` and the setting disappears — but listing it in
-        `choices` would put "not available" in the dropdown as something to pick,
-        and would let the contract test accept a sentinel as a legitimate value.
-        """
         assert "'not_available'" in AUDIO_ENDPOINT_ENHANCEMENTS.detect_command
         assert "not_available" not in AUDIO_ENDPOINT_ENHANCEMENTS.choices
         assert "not_available" not in AUDIO_ENDPOINT_ENHANCEMENTS.apply_value_map
+
+
+class TestEndpointExclusiveMode:
+    """A guard on the per-endpoint switch Windows actually reads."""
+
+    KEY = "{b3f8fa53-0004-438e-9003-51a46e139bfc},3"
+
+    def test_it_is_a_guard_on_windows_stock(self) -> None:
+        assert AUDIO_ENDPOINT_EXCLUSIVE_MODE.default_value == "allowed"
+        assert AUDIO_ENDPOINT_EXCLUSIVE_MODE.recommended_value == "allowed"
+        assert AUDIO_ENDPOINT_EXCLUSIVE_MODE.impact_scores["latency_ms"] == 0.0
+
+    def test_detect_and_apply_read_the_endpoint_value(self) -> None:
+        assert self.KEY in AUDIO_ENDPOINT_EXCLUSIVE_MODE.detect_command
+        assert self.KEY in AUDIO_ENDPOINT_EXCLUSIVE_MODE.apply_command
+        assert "'Render','Capture'" in AUDIO_ENDPOINT_EXCLUSIVE_MODE.detect_command.replace(" ", "")
+
+    def test_both_directions_substitute_cleanly(self) -> None:
+        for value, raw in (("allowed", 1), ("blocked", 0)):
+            command = substitute_placeholders(
+                AUDIO_ENDPOINT_EXCLUSIVE_MODE.apply_command,
+                value=AUDIO_ENDPOINT_EXCLUSIVE_MODE.apply_value_map[value],
+            )
+            assert command.startswith(f"$want = {raw}; ")
+
+    def test_a_value_of_unknown_shape_is_never_rewritten(self) -> None:
+        assert (
+            "if ($null -ne $excl -and $excl -is [array]) { continue }"
+            in AUDIO_ENDPOINT_EXCLUSIVE_MODE.apply_command
+        )
+
+    def test_apply_reads_its_own_write_back(self) -> None:
+        command = AUDIO_ENDPOINT_EXCLUSIVE_MODE.apply_command
+        assert "Set-FpsEndpointValue" in command
+        assert "if ($after -eq $want) { $changed++ } else { $rejected++ }" in command
 
 
 class TestDeviceFormat:
@@ -325,6 +344,16 @@ class TestDeviceFormat:
     def test_it_does_not_offer_rates_no_content_uses(self) -> None:
         for rate in ("96000", "192000", "176400"):
             assert rate not in AUDIO_DEVICE_FORMAT.apply_command
+
+    def test_only_devices_whose_driver_defaults_to_48k_are_in_scope(self) -> None:
+        """Consequence 1: the hardware says what it runs at. A blind 48 kHz write on
+        a device whose driver defaults to something else could leave it silent, and
+        restricting to 48 kHz-native devices also makes 48 kHz Windows' own stock
+        value for everything in scope, so reset and apply agree."""
+        assert "{e4870e26-3cc5-4cd2-ba46-ca0a9a70ed04},3" in _ENDPOINT_SCAN
+        assert "[BitConverter]::ToUInt32($oem,12) -ne 48000" in _ENDPOINT_SCAN
+        assert AUDIO_DEVICE_FORMAT.default_value == AUDIO_DEVICE_FORMAT.recommended_value
+        assert "reset returns every device" not in (AUDIO_DEVICE_FORMAT.risk_warning or "")
 
     def test_the_cs2_counter_evidence_is_stated_not_hidden(self) -> None:
         warning = AUDIO_DEVICE_FORMAT.risk_warning or ""

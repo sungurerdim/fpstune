@@ -1,8 +1,12 @@
-"""Active audio endpoints and whether each supports loudness equalisation.
+"""Every audio endpoint, and whether each supports loudness equalisation.
 
-PnpDevice is the source of truth for what is active; the MMDevices GUID carried
-in the endpoint's own ``InstanceId`` is the key the LEQ toggle API takes, so no
-lookup table between the two is needed or kept.
+The MMDevices registry is the source, not ``Get-PnpDevice -Status OK``: that view
+dropped every disabled endpoint (so a device switched off from the panel could
+never be switched back on), and the old walk de-duplicated by friendly name, so
+two monitors of the same model showed as one card that toggled whichever came
+first. Each endpoint is keyed by its full endpoint id, ``{0.0.0.00000000}.{guid}``
+for an output and ``{0.0.1.00000000}.{guid}`` for an input — the id Windows
+itself uses, and the one the per-device routes take.
 """
 
 from __future__ import annotations
@@ -11,133 +15,116 @@ import json
 import logging
 
 from fpstune.api.schemas import AudioDeviceInfo
+from fpstune.settings.definitions.audio import (
+    _MMDEV_BASE,
+    _SYSFX_KEY,
+    FX_HELPERS,
+)
 from fpstune.utils.debug import debug_log
 from fpstune.utils.powershell import run_powershell
 
 logger = logging.getLogger(__name__)
 
-# Use PnpDevice as source of truth for ACTIVE devices (Status=OK)
-# Then match with MMDevices registry for LEQ detection
-_AUDIO_SCRIPT = """
-    $results = @()
-    $lb = [char]123  # {
-    $rb = [char]125  # }
+# DeviceState: 1 active, 2 disabled, 4 not present, 8 unplugged. Active and
+# disabled are the ones a user can act on; the other two are hardware that is
+# not there.
+#
+# The friendly name is built the way Windows builds it, "<description>
+# (<interface name>)", from PKEY_Device_DeviceDesc and
+# PKEY_DeviceInterface_FriendlyName — both stored on the endpoint, both in the
+# system language, so nothing here parses them.
+#
+# The default device: the audio service stamps "Role:0" (eConsole) on the
+# endpoint it last made the default, as a SYSTEMTIME. The newest stamp among the
+# active endpoints of a flow is that flow's default. An endpoint with no stamp is
+# simply not marked; nothing is guessed.
+_AUDIO_SCRIPT = (
+    FX_HELPERS
+    + f"$base = '{_MMDEV_BASE}'; $sysfxKey = '{_SYSFX_KEY}'; "
+    + r"""
+$results = @()
+foreach ($flow in @('Render', 'Capture')) {
+    $flowIndex = if ($flow -eq 'Render') { '0' } else { '1' }
+    $defaultId = $null; $defaultStamp = ''
+    foreach ($ep in (Get-ChildItem "$base\$flow" -EA SilentlyContinue)) {
+        $key = Get-ItemProperty $ep.PSPath -EA SilentlyContinue
+        $state = $key.DeviceState
+        if ($state -ne 1 -and $state -ne 2) { continue }
+        $p = Get-ItemProperty (Join-Path $ep.PSPath 'Properties') -EA SilentlyContinue
+        $desc = [string]$p.'{a45c254e-df1c-4efd-8020-67d146a850e0},2'
+        $iface = [string]$p.'{b3f8fa53-0004-438e-9003-51a46e139bfc},6'
+        $name = if ($desc -and $iface) { "$desc ($iface)" } elseif ($desc) { $desc } else { $iface }
+        if (-not $name) { continue }
+        $id = "{0.0.$flowIndex.00000000}.$($ep.PSChildName)"
 
-    # LEQ property GUID in FxProperties
-    $leqPropGuid = "${lb}fc52a749-4be9-4510-896e-966ba6525980${rb},3"
-
-    $mmBase = 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\MMDevices\\Audio'
-
-    # Get ONLY active audio endpoints from PnpDevice (Status=OK)
-    $activeEndpoints = Get-PnpDevice -Class AudioEndpoint -Status OK -EA SilentlyContinue
-
-    # PnpDevice InstanceId format: SWD\\MMDEVAPI\\{0.0.0.00000000}.{GUID}
-    # The trailing {GUID} is the exact MMDevices registry key name — no lookup table needed.
-    $seenNames = @{}
-    foreach ($endpoint in $activeEndpoints) {
-        $name = $endpoint.FriendlyName
-        if (-not $name -or $seenNames.ContainsKey($name)) { continue }
-        $seenNames[$name] = $true
-
-        # Extract MMDevices GUID from InstanceId
-        $mmGuid = $null
-        if ($endpoint.InstanceId -match '\\.\\{([^}]+)\\}$') {
-            $mmGuid = "{$($Matches[1])}"
-        }
-
-        # Determine Render vs Capture from InstanceId prefix (0.0.0 = Render, 0.0.1 = Capture)
-        $isRender = $endpoint.InstanceId -match '0\\.0\\.0\\.'
-        $devType = if ($isRender) { 'Playback' } else { 'Recording' }
-
-        $deviceId = $endpoint.InstanceId
-        $leqSupported = $false
-        $leqEnabled = $false
-
-        if ($mmGuid) {
-            $subDir = if ($isRender) { 'Render' } else { 'Capture' }
-            $mmKeyPath = "$mmBase\\$subDir\\$mmGuid"
-            $fxPath = "$mmKeyPath\\FxProperties"
-
-            # MMDevices GUID is the canonical device ID for LEQ toggle API
-            $deviceId = $mmGuid
-
-            # Check LEQ support and state (Playback only)
-            if ($isRender -and (Test-Path $fxPath)) {
-                try {
-                    $leqValue = Get-ItemPropertyValue -Path $fxPath -Name $leqPropGuid -EA Stop
-                    $leqSupported = $true
-                    # Bytes 8-9: 0xff,0xff = enabled; 0x00,0x00 = disabled
-                    if ($leqValue -is [byte[]] -and $leqValue.Length -ge 10) {
-                        $leqEnabled = ($leqValue[8] -eq 0xff -and $leqValue[9] -eq 0xff)
-                    }
-                } catch {
-                    # LEQ property not yet written — device has FxProperties so it supports effects
-                    $leqSupported = (Test-Path $fxPath)
-                }
+        $role = @($key.'Role:0')
+        if ($state -eq 1 -and $role.Count -ge 16) {
+            $stamp = ''
+            foreach ($i in 0, 1, 3, 4, 5, 6, 7) {
+                $stamp += '{0:D5}' -f [BitConverter]::ToUInt16([byte[]]$role, $i * 2)
             }
+            if ($stamp -gt $defaultStamp) { $defaultStamp = $stamp; $defaultId = $id }
         }
 
+        $leqSupported = $false; $leqEnabled = $false; $effectsOff = $false
+        if ($flow -eq 'Render') {
+            $fx = Get-ItemProperty (Join-Path $ep.PSPath 'FxProperties') -EA SilentlyContinue
+            $leqSupported = Test-FpsMsSysFx $fx
+            $effectsOff = ($fx -and $fx.$sysfxKey -eq 1)
+            $leqEnabled = $leqSupported -and (Test-FpsLeqOn $fx) -and -not $effectsOff
+        }
         $results += [PSCustomObject]@{
-            Id = $deviceId
+            Id = $id
             Name = $name
-            DeviceType = $devType
-            IsEnabled = $true
+            DeviceType = if ($flow -eq 'Render') { 'Playback' } else { 'Recording' }
+            IsEnabled = ($state -eq 1)
             IsDefault = $false
-            LeqSupported = $leqSupported
-            LeqEnabled = $leqEnabled
+            LeqSupported = [bool]$leqSupported
+            LeqEnabled = [bool]$leqEnabled
         }
     }
-
-    $results | ConvertTo-Json -Depth 2
-    """
+    if ($defaultId) {
+        foreach ($r in $results) { if ($r.Id -eq $defaultId) { $r.IsDefault = $true } }
+    }
+}
+ConvertTo-Json -InputObject @($results) -Depth 2 -Compress
+"""
+)
 
 
 def get_audio_devices() -> list[AudioDeviceInfo]:
-    """Get audio playback and capture devices with volume normalization support."""
-    devices: list[AudioDeviceInfo] = []
+    """Every active or disabled audio endpoint, with its loudness-EQ state."""
     debug_log("audio", "get_audio_devices() called")
-
     success, output = run_powershell(_AUDIO_SCRIPT, timeout=15, component="audio")
-    debug_log(
-        "audio", f"Audio device PS success={success}, output_len={len(output) if output else 0}"
-    )
-    debug_log("audio", f"Audio device PS output: {output[:1000] if output else '(empty)'}")
-
     if not success:
-        logger.warning(f"Audio device detection failed: {output}")
-        debug_log(
-            "audio", f"PROBLEM: Audio device PS failed: {output[:500] if output else 'no output'}"
-        )
-        return devices
-
+        logger.warning("Audio device detection failed: %s", output)
+        return []
     if not output or output.strip() in ("", "null", "[]"):
-        logger.warning("Audio device detection returned empty output")
-        debug_log("audio", "PROBLEM: Audio device PS returned empty output")
-        return devices
+        logger.info("Audio device detection found no endpoints")
+        return []
 
     try:
         data = json.loads(output)
-        if isinstance(data, dict):
-            data = [data]
-    except json.JSONDecodeError as e:
-        logger.debug(f"Failed to parse audio JSON: {e}")
-        return devices
+    except json.JSONDecodeError as exc:
+        logger.warning("Audio device detection returned unreadable output: %s", exc)
+        return []
+    if isinstance(data, dict):
+        data = [data]
 
-    for dev_data in data:
-        if not dev_data:
+    devices: list[AudioDeviceInfo] = []
+    for entry in data:
+        if not isinstance(entry, dict) or not entry.get("Id"):
             continue
-
         devices.append(
             AudioDeviceInfo(
-                id=str(dev_data.get("Id", "")),
-                name=str(dev_data.get("Name", "Unknown")),
-                device_type=str(dev_data.get("DeviceType", "Playback")),
-                is_enabled=bool(dev_data.get("IsEnabled", True)),
-                is_default=bool(dev_data.get("IsDefault", False)),
-                loudness_eq_supported=bool(dev_data.get("LeqSupported", False)),
-                loudness_eq_enabled=bool(dev_data.get("LeqEnabled", False)),
+                id=str(entry["Id"]),
+                name=str(entry.get("Name") or "Unknown"),
+                device_type=str(entry.get("DeviceType", "Playback")),
+                is_enabled=bool(entry.get("IsEnabled", True)),
+                is_default=bool(entry.get("IsDefault", False)),
+                loudness_eq_supported=bool(entry.get("LeqSupported", False)),
+                loudness_eq_enabled=bool(entry.get("LeqEnabled", False)),
             )
         )
-
-    logger.debug(f"Detected {len(devices)} audio devices")
+    logger.debug("Detected %d audio endpoints", len(devices))
     return devices

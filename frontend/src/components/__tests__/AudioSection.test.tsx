@@ -9,9 +9,11 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "../../test/utils";
+import { fireEvent, render, screen, waitFor } from "../../test/utils";
 import { AudioSection } from "../hardware/AudioSection";
-import type { AudioDeviceInfo } from "../../lib/api";
+import { api, type AudioDeviceInfo } from "../../lib/api";
+import { hardwareManager } from "../../lib/hardware-manager";
+import { useStore } from "../../store";
 
 vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: { refreshAudioDevices: vi.fn().mockResolvedValue([]) },
@@ -94,5 +96,39 @@ describe("the Loudness EQ switch is named by its visible label", () => {
       "aria-checked",
       "true",
     );
+  });
+});
+
+describe("a Loudness EQ change says when it is heard", () => {
+  it("tells the user a playing app hears it after a restart", async () => {
+    // Windows reads the switch when a stream opens. Without this, a toggle that
+    // worked reads as "nothing happened" to someone with music already playing.
+    useStore.setState({ notifications: [] });
+    vi.spyOn(api, "setLoudnessEq").mockResolvedValue({
+      success: true,
+    } as Awaited<ReturnType<typeof api.setLoudnessEq>>);
+    render(<AudioSection devices={[device()]} loading={false} />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Loudness EQ" }));
+
+    await waitFor(() =>
+      expect(
+        useStore
+          .getState()
+          .notifications.some(
+            (n) => n.type === "info" && /when its app restarts/.test(n.message),
+          ),
+      ).toBe(true),
+    );
+  });
+
+  it("re-reads the device after a refused write so the switch shows the truth", async () => {
+    vi.mocked(hardwareManager.refreshAudioDevices).mockClear();
+    vi.spyOn(api, "setLoudnessEq").mockRejectedValue(new Error("refused"));
+    render(<AudioSection devices={[device()]} loading={false} />);
+
+    fireEvent.click(screen.getByRole("switch", { name: "Loudness EQ" }));
+
+    await waitFor(() => expect(hardwareManager.refreshAudioDevices).toHaveBeenCalled());
   });
 });

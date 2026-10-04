@@ -90,7 +90,7 @@ SERVICE_SYSMAIN = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "SysMain"},
+    apply_args={"service": "SysMain", "start_mode": "auto"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -132,7 +132,7 @@ SERVICE_DIAGTRACK = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "DiagTrack"},
+    apply_args={"service": "DiagTrack", "start_mode": "auto"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -169,7 +169,7 @@ SERVICE_WSEARCH = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "WSearch"},
+    apply_args={"service": "WSearch", "start_mode": "delayed-auto"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -217,7 +217,7 @@ SERVICE_NVIDIA_TELEMETRY = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "NvTelemetryContainer"},
+    apply_args={"service": "NvTelemetryContainer", "start_mode": "auto"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -255,7 +255,7 @@ SERVICE_NAHIMIC = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "NahimicService"},
+    apply_args={"service": "NahimicService", "start_mode": "auto"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -293,7 +293,7 @@ SERVICE_FAX = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "Fax"},
+    apply_args={"service": "Fax", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -335,7 +335,7 @@ SERVICE_ERROR_REPORTING = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "WerSvc"},
+    apply_args={"service": "WerSvc", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -348,7 +348,7 @@ SERVICE_RETAIL_DEMO = SettingExecutor(
     "computer and starting it is pure waste.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
-    default_value="disabled",
+    default_value="enabled",  # Windows ships it Manual (trigger-started)
     recommended_value="disabled",
     requires_reboot=False,
     current_impact="Enabled: Retail demo service running → unnecessary background activity",
@@ -374,7 +374,7 @@ SERVICE_RETAIL_DEMO = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "RetailDemo"},
+    apply_args={"service": "RetailDemo", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -418,7 +418,7 @@ SERVICE_WAP_PUSH = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "dmwappushservice"},
+    apply_args={"service": "dmwappushservice", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -460,7 +460,7 @@ SERVICE_XBOX_AUTH = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "XblAuthManager"},
+    apply_args={"service": "XblAuthManager", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -498,7 +498,7 @@ SERVICE_XBOX_GAME_SAVE = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "XblGameSave"},
+    apply_args={"service": "XblGameSave", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -536,7 +536,7 @@ SERVICE_XBOX_NETWORKING = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "XboxNetApiSvc"},
+    apply_args={"service": "XboxNetApiSvc", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -575,7 +575,7 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
     },
     apply_type=DetectType.POWERSHELL,
     apply_command="service_toggle",
-    apply_args={"service": "XboxGipSvc"},
+    apply_args={"service": "XboxGipSvc", "start_mode": "demand"},
     apply_value_map={"enabled": "start", "disabled": "stop"},
 )
 
@@ -797,7 +797,7 @@ PRIVACY_ACTIVITY_HISTORY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 1},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PRIVACY_CONSUMER_FEATURES = SettingExecutor(
@@ -834,7 +834,7 @@ PRIVACY_CONSUMER_FEATURES = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 1, "enabled": 0},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 PRIVACY_EDGE_TELEMETRY = SettingExecutor(
@@ -881,7 +881,7 @@ PRIVACY_EDGE_TELEMETRY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 2},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PRIVACY_CORTANA = SettingExecutor(
@@ -919,7 +919,7 @@ PRIVACY_CORTANA = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 1},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PRIVACY_BING_SEARCH = SettingExecutor(
@@ -1070,7 +1070,7 @@ PRIVACY_TILE_NOTIFICATIONS = SettingExecutor(
         "hive": "HKCU",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 1, "enabled": 0},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 PRIVACY_ALLOW_TELEMETRY = SettingExecutor(
@@ -1117,7 +1117,7 @@ PRIVACY_ALLOW_TELEMETRY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 3},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PRIVACY_COPILOT = SettingExecutor(
@@ -1155,7 +1155,7 @@ PRIVACY_COPILOT = SettingExecutor(
         "hive": "HKCU",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 1, "enabled": 0},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 PRIVACY_WINDOWS_ADS = SettingExecutor(
@@ -1222,7 +1222,7 @@ PRIVACY_WEB_SEARCH_POLICY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 1, "enabled": 0},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 # =============================================================================
@@ -1514,7 +1514,7 @@ SYSTEM_DRIVER_UPDATES_PROTECTION = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"blocked": 1, "allowed": 0},
+    apply_value_map={"blocked": 1, "allowed": None},
 )
 
 SYSTEM_DELIVERY_OPTIMIZATION = SettingExecutor(
@@ -1525,7 +1525,7 @@ SYSTEM_DELIVERY_OPTIMIZATION = SettingExecutor(
     description="Windows Update P2P sharing uploads updates to other PCs over the internet, consuming upload bandwidth during gaming.",
     value_type=SettingValueType.CHOICE,
     choices=("internet", "lan_only", "off"),
-    default_value="internet",
+    default_value="lan_only",
     recommended_value="off",
     requires_reboot=False,
     evidence_level="likely",
@@ -1554,7 +1554,7 @@ SYSTEM_DELIVERY_OPTIMIZATION = SettingExecutor(
         "2": "internet",
         3: "internet",
         "3": "internet",
-        None: "internet",
+        None: "lan_only",
     },
     apply_type=DetectType.REGISTRY,
     apply_command="",
@@ -1564,7 +1564,7 @@ SYSTEM_DELIVERY_OPTIMIZATION = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"off": 0, "lan_only": 1, "internet": 3},
+    apply_value_map={"off": 0, "lan_only": None, "internet": 3},
 )
 
 SYSTEM_DO_BACKGROUND_BANDWIDTH = SettingExecutor(
@@ -1605,7 +1605,7 @@ SYSTEM_DO_BACKGROUND_BANDWIDTH = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"capped": 20, "unlimited": 0},
+    apply_value_map={"capped": 20, "unlimited": None},
 )
 
 SYSTEM_ONEDRIVE_UPLOAD_LIMIT = SettingExecutor(
@@ -1646,7 +1646,7 @@ SYSTEM_ONEDRIVE_UPLOAD_LIMIT = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"capped": 30, "unlimited": 0},
+    apply_value_map={"capped": 30, "unlimited": None},
 )
 
 SYSTEM_WINDOWS_UPDATE_MODE = SettingExecutor(
@@ -1693,7 +1693,7 @@ SYSTEM_WINDOWS_UPDATE_MODE = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"notify_only": 2, "automatic": 4},
+    apply_value_map={"notify_only": 2, "automatic": None},
 )
 
 SYSTEM_COINSTALLERS = SettingExecutor(
@@ -1775,7 +1775,7 @@ SYSTEM_WIDGETS = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"enabled": 1, "disabled": 0},
+    apply_value_map={"enabled": None, "disabled": 0},
 )
 
 SYSTEM_FILE_EXPLORER_LAUNCH = SettingExecutor(
@@ -3192,7 +3192,7 @@ SERVICE_MMCSS = SettingExecutor(
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="enabled",
-    requires_reboot=False,
+    requires_reboot=True,
     evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows/win32/"
@@ -3205,24 +3205,26 @@ SERVICE_MMCSS = SettingExecutor(
     effect="MMCSS elevates game thread priority. Disabling causes "
     "stutter from background process competition",
     impact_scores={"fps_cpu_bound": "+1-3%", "stability": "critical"},
-    detect_type=DetectType.POWERSHELL,
-    detect_command="$s = Get-Service -Name 'MMCSS' -ErrorAction "
-    "SilentlyContinue; "
-    "if ($s) { [int]$s.StartType } else { 'not_found' }",
-    detect_args={"batch_service": "MMCSS"},
-    value_map={
-        2: "enabled",
-        "2": "enabled",
-        4: "disabled",
-        "4": "disabled",
-        3: "enabled",
-        "3": "enabled",
-        "not_found": "not_available",
+    # On Windows 11 MMCSS is a kernel driver (mmcss.sys), not a service:
+    # Get-Service never lists it, so a service query read "not found" on every
+    # machine and this guard never showed. Its Start value is the one switch.
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={
+        "path": r"SYSTEM\CurrentControlSet\Services\MMCSS",
+        "name": "Start",
+        "hive": "HKLM",
     },
-    apply_type=DetectType.POWERSHELL,
-    apply_command="service_toggle",
-    apply_args={"service": "MMCSS"},
-    apply_value_map={"enabled": "start", "disabled": "stop"},
+    value_map={2: "enabled", 3: "enabled", 4: "disabled", None: "not_available"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": r"SYSTEM\CurrentControlSet\Services\MMCSS",
+        "name": "Start",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"enabled": 2, "disabled": 4},
 )
 
 SERVICES_SETTINGS: list[SettingExecutor] = [
@@ -3285,7 +3287,7 @@ PRIVACY_RECALL = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 1},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PRIVACY_CAMERA_INDICATOR = SettingExecutor(
@@ -3676,45 +3678,42 @@ PERF_VBS_CORE_ISOLATION = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="VBS / Core Isolation",
     short_name="Core isolation (VBS)",
-    description="Virtualization-based security (Memory Integrity). Keep it on: disabling gains about 5% fps "
-    "and trips a Windows Security warning.",
+    description="Whether Memory Integrity (hypervisor-enforced code integrity) is running. It is a "
+    "security boundary, so fpstune reports it and never changes it.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="enabled",
-    requires_reboot=True,
+    requires_reboot=False,
     evidence_level="proven",
     sources=[
-        "https://www.windowscentral.com/microsoft/windows-11/my-top-21-ways-to-improve-windows-11-to-increase-gaming-performance-without-hardware-upgrade"
+        "https://learn.microsoft.com/en-us/windows/security/hardware-security/enable-virtualization-based-protection-of-code-integrity",
     ],
-    current_impact="Enabled: Hypervisor-enforced code integrity active (~5% FPS cost, strong security)",
-    recommended_impact="Enabled: Keep enabled → security outweighs ~5% FPS gain for most users",
-    scope=SettingScope.COMPLETE,  # Informational -- user can disable manually if they choose
+    current_impact="Disabled: Kernel code integrity is not enforced by the hypervisor",
+    recommended_impact="Enabled: Kernel code integrity stays enforced; turn it on in Windows Security if it is off",
+    scope=SettingScope.COMPLETE,
     category_order=50,
-    effect="Removes ~5% CPU overhead from virtualization-based security",
-    impact_scores={
-        "fps": "+2-5%",
-        "fps_cpu_bound": "+4-8%",
-        "latency_ms": -0.5,
-        "security": "reduced",
-    },
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-        "name": "Enabled",
-        "hive": "HKLM",
-    },
-    value_map={1: "enabled", 0: "disabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
+    effect="In Windows Security, under Device security > Core isolation, turn Memory integrity on",
+    # A red line in this project: never offered as a tweak, measured or not.
+    impact_scores={"fps": "0%", "security": "kept"},
+    is_readonly=True,
+    # The running state, not the registry switch: the "Enabled" value can be
+    # absent on a machine where HVCI runs, and present on one where the
+    # hypervisor refused to start it. Win32_DeviceGuard lists 2 (HVCI) among
+    # SecurityServicesRunning only when it is actually enforced.
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$g = Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard "
+        "-ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue; "
+        "if (-not $g) { 'not_available' } "
+        "elseif ($g.SecurityServicesRunning -contains 2) { 'enabled' } else { 'disabled' }"
+    ),
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
     apply_command="",
-    apply_args={
-        "path": r"SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity",
-        "name": "Enabled",
-        "hive": "HKLM",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"enabled": 1, "disabled": 0},
+    apply_args={},
+    apply_value_map={},
 )
 
 # =============================================================================

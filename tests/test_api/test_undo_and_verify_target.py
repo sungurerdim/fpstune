@@ -50,6 +50,8 @@ def _fake_setting(setting_id: str = "core:fake"):
     s.apply_type = MagicMock()
     s.apply_type.value = "registry"
     s.apply_args = {}
+    s.is_action = False
+    s.is_readonly = False
     return s
 
 
@@ -224,7 +226,7 @@ class TestUndoWritesWhatTheMachineHeld:
 
         self._undo(client, store)
 
-        assert store.has("core:fake") is False, (
+        assert store.get("core:fake") is None, (
             "keeping it would pin a value from an arbitrarily old session and stop "
             "the next scan recording a fresh one"
         )
@@ -291,12 +293,49 @@ class TestScanRecordsWhatItSaw:
             "c:errored": DetectionResult("c:errored", None, "boom", 1, False, True),
         }
 
+        settings = {sid: _fake_setting(sid) for sid in results}
         with patch("fpstune.api.routes.settings.get_original_values", return_value=store):
-            _record_originals(results)
+            _record_originals(results, settings)
 
         assert store.get("a:read") == "value"
-        assert store.has("b:absent") is False
-        assert store.has("c:errored") is False
+        assert store.get("b:absent") is None
+        assert store.get("c:errored") is None
+
+    def test_actions_and_advisories_are_not_recorded(self, tmp_path) -> None:
+        """A cleanup reads "ready|1200 MB": a status, not a state undo could restore."""
+        from fpstune.api.routes.settings import _record_originals
+
+        store = OriginalValues(path=tmp_path / "originals.json")
+        action, advisory = _fake_setting("cleanup:temp"), _fake_setting("system:xmp")
+        action.is_action = True
+        advisory.is_readonly = True
+        results = {
+            "cleanup:temp": DetectionResult("cleanup:temp", "ready|1200 MB", None, 1, False, True),
+            "system:xmp": DetectionResult("system:xmp", "xmp_active", None, 1, False, True),
+        }
+
+        with patch("fpstune.api.routes.settings.get_original_values", return_value=store):
+            _record_originals(results, {"cleanup:temp": action, "system:xmp": advisory})
+
+        assert store.count() == 0
+
+    def test_a_re_detect_of_named_settings_records_nothing(self, client: TestClient) -> None:
+        """It runs right after an apply; recording there captures fpstune's own write."""
+        registry = MagicMock()
+        registry.get.return_value = _fake_setting()
+        engine = MagicMock()
+        engine.detect_all.return_value = {"core:fake": _detection("tuned")}
+
+        with (
+            patch("fpstune.api.routes.settings._get_registry", return_value=registry),
+            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch("fpstune.api.routes.settings.DetectionEngine", return_value=engine),
+            patch("fpstune.api.routes.settings._record_originals") as record,
+        ):
+            response = client.post("/api/settings/detect", json={"setting_ids": ["core:fake"]})
+
+        assert response.status_code == 200
+        record.assert_not_called()
 
     def test_a_broken_store_does_not_fail_the_scan(self) -> None:
         """The user asked for a scan, not for a convenience store."""
@@ -306,4 +345,81 @@ class TestScanRecordsWhatItSaw:
         exploding.record_first_seen.side_effect = OSError("disk full")
 
         with patch("fpstune.api.routes.settings.get_original_values", return_value=exploding):
-            _record_originals({"a:read": DetectionResult("a:read", "v", None, 1, False, True)})
+            _record_originals(
+                {"a:read": DetectionResult("a:read", "v", None, 1, False, True)},
+                {"a:read": _fake_setting("a:read")},
+            )
+
+
+class TestUndoIsExact:
+    """Undo restores the stored state, refuses what it cannot restore, and says
+    why when the record itself cannot be trusted."""
+
+    def _post_undo(self, client, store, setting, write_calls=None):
+        registry = MagicMock()
+        registry.get.return_value = setting
+        response_obj = ApplyResponse(
+            setting_id=setting.id,
+            success=True,
+            error=None,
+            new_value="what the user had",
+            requires_reboot=False,
+            verified=True,
+        )
+        with (
+            patch("fpstune.api.routes.settings._get_registry", return_value=registry),
+            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch("fpstune.api.routes.settings.get_original_values", return_value=store),
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply",
+                side_effect=AssertionError("the display-value write must not run"),
+            ),
+            patch(
+                "fpstune.api.routes.settings.restore_raw_state",
+                side_effect=lambda _s, raw: (
+                    (write_calls.append(raw), (True, None))[1]
+                    if write_calls is not None
+                    else (True, None)
+                ),
+            ),
+            patch(
+                "fpstune.api.routes.settings._finalize_apply_response",
+                return_value=response_obj,
+            ),
+            patch("fpstune.api.routes.settings.sys.platform", "linux"),
+        ):
+            return client.post(f"/api/settings/{setting.id}/undo")
+
+    def test_a_recorded_raw_state_is_written_back_verbatim(
+        self, client: TestClient, store: OriginalValues
+    ) -> None:
+        """Win32PrioritySeparation 2, 24 and 38 all read "standard"; writing the
+        display value back put 24 (background services) on a stock machine."""
+        raw = {"kind": "registry", "present": True, "value": 2, "type": 4}
+        store.record_first_seen({"core:fake": "standard"}, {"core:fake": raw})
+        written: list = []
+
+        result = self._post_undo(client, store, _fake_setting(), written)
+
+        assert result.status_code == 200
+        assert written == [raw]
+
+    def test_an_action_has_nothing_to_undo(self, client: TestClient, store: OriginalValues) -> None:
+        setting = _fake_setting("cleanup:temp")
+        setting.is_action = True
+        store.record_first_seen({"cleanup:temp": "ready|1200 MB"})
+
+        result = self._post_undo(client, store, setting)
+
+        assert result.status_code == 400
+
+    def test_a_damaged_record_refuses_undo_and_says_why(self, client: TestClient, tmp_path) -> None:
+        path = tmp_path / "originals.json"
+        path.write_text("{not json", encoding="utf-8")
+        damaged = OriginalValues(path=path)
+
+        result = self._post_undo(client, damaged, _fake_setting())
+
+        assert result.status_code == 409
+        assert "could not be read" in result.json()["detail"]
+        assert "Reset" in result.json()["detail"]

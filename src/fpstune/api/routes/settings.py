@@ -39,6 +39,7 @@ from fpstune.api.schemas import (
 )
 from fpstune.safety import restore
 from fpstune.safety.originals import get_original_values
+from fpstune.safety.raw_state import restore as restore_raw_state
 from fpstune.settings import (
     DetectionEngine,
     SettingsRegistry,
@@ -214,19 +215,18 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
         raise HTTPException(status_code=504, detail="Detection timed out after 120 s") from None
 
     total_time_ms = int((time.perf_counter() - start) * 1000)
+    settings_map = {s.id: s for s in settings}
 
     # Remember what the machine held the first time fpstune saw each setting, so
-    # "undo fpstune's change" has something to write. This is the scan that
-    # already ran, so it costs nothing; reading each value again just before its
-    # write would add a subprocess per setting to a path an earlier phase
-    # deliberately removed one from. Only settings that were actually read are
-    # recorded, and only once — see safety/originals.py.
-    _record_originals(results)
+    # "undo fpstune's change" has something to write. Only the full scan records:
+    # a re-detect of named settings runs right after an apply, and recording
+    # there would capture fpstune's own write as the "original" (C6).
+    if not request.setting_ids and not request.category:
+        await asyncio.to_thread(_record_originals, results, settings_map)
 
     # Convert to response
     response_results: dict[str, DetectionResultResponse] = {}
     success_count = error_count = 0
-    settings_map = {s.id: s for s in settings}
 
     originals = get_original_values()
     for setting_id, result in results.items():
@@ -257,21 +257,33 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     )
 
 
-def _record_originals(results: dict[str, Any]) -> None:
+def _record_originals(results: dict[str, Any], settings: dict[str, SettingExecutor]) -> None:
     """Store the first reading of each setting, for "undo fpstune's change".
 
-    A setting that was not applicable or could not be read is skipped: recording
-    None would promise an undo that writes nothing. Failure here is logged and
-    swallowed, because a scan the user asked for must not fail over a
-    convenience store.
+    Skipped: a setting that was not applicable or could not be read (recording
+    None would promise an undo that writes nothing), and actions and advisories,
+    whose reading ("ready|1.2 GB") is a status, not a state an undo could put
+    back. Alongside the display value the stored state itself is captured where
+    it can be (safety/raw_state.py), so undo restores it exactly. Failure here
+    is logged and swallowed: a scan must not fail over the undo record.
     """
+    from fpstune.safety.raw_state import capture
+
     try:
+        store = get_original_values()
         readings = {
             setting_id: result.value
             for setting_id, result in results.items()
-            if result.is_applicable and result.value is not None and result.error is None
+            if result.is_applicable
+            and result.value is not None
+            and result.error is None
+            and (setting := settings.get(setting_id)) is not None
+            and not setting.is_action
+            and not setting.is_readonly
+            and store.get(setting_id) is None
         }
-        added = get_original_values().record_first_seen(readings)
+        raw = {sid: state for sid in readings if (state := capture(settings[sid])) is not None}
+        added = store.record_first_seen(readings, raw)
         if added:
             logger.debug("recorded %d setting(s) as first seen", added)
     except Exception as exc:  # pragma: no cover - a store failure is not a scan failure
@@ -1000,7 +1012,19 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
     if not setting:
         raise HTTPException(404, f"Unknown setting: {setting_id}")
 
+    if setting.is_action or setting.is_readonly:
+        raise HTTPException(
+            400,
+            f"{setting_id} is an action or an advisory; there is no earlier state to put back.",
+        )
+
     originals = get_original_values()
+    damaged = originals.damaged()
+    if damaged:
+        raise HTTPException(
+            409,
+            f"Undo is unavailable because {damaged}. Reset to the Windows default still works.",
+        )
     original = originals.get(setting_id)
     if original is None:
         raise HTTPException(
@@ -1027,8 +1051,13 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
 
     engine = DetectionEngine(hardware_context=hardware_context)
 
+    # The stored state itself where it was captured, so nothing is lost to the
+    # display value's many-to-one mapping (safety/raw_state.py).
+    raw = originals.get_raw(setting_id)
+    write = functools.partial(restore_raw_state, setting, raw) if raw is not None else None
+
     def _undo() -> ApplyResponse:
-        response = apply_and_finalize(setting, original, engine, "Undo")
+        response = apply_and_finalize(setting, original, engine, "Undo", write=write)
         # Drop the record only once the machine is actually back, so a failed
         # undo can be retried. Keeping it after a success would pin a value from
         # an arbitrarily old session and stop the next scan recording a fresh one.

@@ -510,6 +510,9 @@ _PATH_CLEANUP = r"""
     $paths = @('%paths%' -split '__SPLIT__') | Where-Object { $_ }
     $mode = '%mode%'
     $globs = @('%globs%' -split '__SPLIT__') | Where-Object { $_ }
+    $keepNames = @('%keep_names%' -split '__SPLIT__') | Where-Object { $_ }
+    $keepHours = [int]'%keep_recent_hours%'
+    $cutoff = (Get-Date).AddHours(-$keepHours)
 __PROLOGUE__
     foreach ($path in $paths) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
@@ -533,7 +536,14 @@ __PROLOGUE__
             # One enumeration of the top level and one -Recurse per entry, never
             # one Remove-Item per file: Temp held 12719 files under 438 entries
             # when that difference timed a cleanup out.
+            # Entries a running program still owns stay (cleanup_targets.keep_*),
+            # the same filter the size shown beside the row was taken with.
             Get-ChildItem -LiteralPath $path -Force -ErrorAction SilentlyContinue |
+                Where-Object {
+                    $name = $_.Name
+                    -not ($keepNames | Where-Object { $name -like $_ }) -and
+                    ($keepHours -eq 0 -or $_.LastWriteTime -lt $cutoff)
+                } |
                 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
@@ -572,13 +582,17 @@ ACTION_COMMANDS: dict[str, str] = {
     # Add-Type — the pattern Windows Defender flagged as trojan behaviour on
     # 2026-09-02. The script also passed the command value as the buffer pointer,
     # so it never purged anything and always printed success.
-    # Service management - with existence check and graceful handling
-    # Uses Manual StartType when enabling (most services are on-demand)
-    # Verification checks StartType (2=Auto, 3=Manual, 4=Disabled)
-    # Returns "NOT_FOUND" for non-existent services (handled by verification)
-    "service_toggle": """
+    # Service management. "stop" disables and stops; "start" restores the start
+    # type Windows ships for that service (apply_args["start_mode"]: auto,
+    # delayed-auto or demand) — not a blanket Manual, which left SysMain and the
+    # search indexer half-disabled after every reset while verify passed.
+    # sc.exe sets every mode including delayed-auto, which Set-Service on
+    # Windows PowerShell 5.1 cannot; its exit code is checked, never its
+    # (localized) text.
+    "service_toggle": r"""
         $service = '%service%'
         $action = '%value%'
+        $mode = '%start_mode%'
         if ($action -eq 'not_available') {
             Write-Output "SKIPPED:$service not_available"
             exit 0
@@ -588,21 +602,26 @@ ACTION_COMMANDS: dict[str, str] = {
             Write-Output "NOT_FOUND:$service"
             exit 0
         }
+        $sc = Join-Path $env:SystemRoot 'System32\sc.exe'
         try {
             if ($action -eq 'stop') {
-                # Stop and disable
                 if ($svc.Status -eq 'Running') {
                     Stop-Service -Name $service -Force -ErrorAction Stop
                 }
-                Set-Service -Name $service -StartupType Disabled -ErrorAction Stop
+                & $sc config $service start= disabled | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "sc.exe config exited $LASTEXITCODE" }
                 Write-Output "OK:$service disabled"
             } else {
-                # Enable (set to Manual for on-demand services)
-                # Manual (3) allows the service to start when triggered
-                Set-Service -Name $service -StartupType Manual -ErrorAction Stop
-                # Try to start, but don't fail if it can't (dependencies, trigger-start, etc.)
-                Start-Service -Name $service -ErrorAction SilentlyContinue
-                Write-Output "OK:$service enabled"
+                if ($mode -notin @('auto', 'delayed-auto', 'demand')) {
+                    throw "no stock start mode recorded for $service"
+                }
+                & $sc config $service start= $mode | Out-Null
+                if ($LASTEXITCODE -ne 0) { throw "sc.exe config exited $LASTEXITCODE" }
+                if ($mode -ne 'demand') {
+                    # Best effort: dependencies or trigger-start may defer it.
+                    Start-Service -Name $service -ErrorAction SilentlyContinue
+                }
+                Write-Output "OK:$service $mode"
             }
         } catch {
             Write-Output "ERROR:$service $action failed: $($_.Exception.Message)"
@@ -1468,16 +1487,16 @@ ACTION_COMMANDS: dict[str, str] = {
         $siufPath = 'HKCU:\\SOFTWARE\\Microsoft\\Siuf\\Rules'
         $gpPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection'
         $action = '%value%'
-        if (-not (Test-Path $siufPath)) { New-Item -Path $siufPath -Force | Out-Null }
-        if (-not (Test-Path $gpPath)) { New-Item -Path $gpPath -Force | Out-Null }
         if ($action -eq 'disable') {
+            if (-not (Test-Path $siufPath)) { New-Item -Path $siufPath -Force | Out-Null }
+            if (-not (Test-Path $gpPath)) { New-Item -Path $gpPath -Force | Out-Null }
             Set-ItemProperty -Path $siufPath -Name 'NumberOfSIUFInPeriod' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path $gpPath -Name 'DoNotShowFeedbackNotifications' -Value 1 -Type DWord -Force
         } else {
             Remove-ItemProperty -Path $siufPath -Name 'NumberOfSIUFInPeriod' -ErrorAction SilentlyContinue
             Remove-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $gpPath -Name 'DoNotShowFeedbackNotifications' -Value 0 -Type DWord -Force
+            Remove-ItemProperty -Path $gpPath -Name 'DoNotShowFeedbackNotifications' -ErrorAction SilentlyContinue
         }
         Write-Output "Feedback reminders $action completed"
     """,
@@ -1485,15 +1504,17 @@ ACTION_COMMANDS: dict[str, str] = {
     "app_telemetry_toggle": """
         $appCompatPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat'
         $action = '%value%'
-        if (-not (Test-Path $appCompatPath)) { New-Item -Path $appCompatPath -Force | Out-Null }
         if ($action -eq 'disable') {
+            if (-not (Test-Path $appCompatPath)) { New-Item -Path $appCompatPath -Force | Out-Null }
             Set-ItemProperty -Path $appCompatPath -Name 'AITEnable' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path $appCompatPath -Name 'DisableUAR' -Value 1 -Type DWord -Force
             Set-ItemProperty -Path $appCompatPath -Name 'DisableInventory' -Value 1 -Type DWord -Force
         } else {
-            Remove-ItemProperty -Path $appCompatPath -Name 'AITEnable' -ErrorAction SilentlyContinue
-            Set-ItemProperty -Path $appCompatPath -Name 'DisableUAR' -Value 0 -Type DWord -Force
-            Set-ItemProperty -Path $appCompatPath -Name 'DisableInventory' -Value 0 -Type DWord -Force
+            # Stock Windows has no AppCompat policy values; reset removes them
+            # rather than leaving a policy in force.
+            foreach ($n in 'AITEnable', 'DisableUAR', 'DisableInventory') {
+                Remove-ItemProperty -Path $appCompatPath -Name $n -ErrorAction SilentlyContinue
+            }
         }
         Write-Output "App telemetry $action completed"
     """,

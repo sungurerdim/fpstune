@@ -1039,7 +1039,7 @@ function TweakGroup({
           {detecting && (
             <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
           )}
-          <span className="text-xs text-muted-foreground truncate hidden sm:inline">
+          <span className="text-xs text-foreground/80 truncate hidden sm:inline">
             {subtitle}
           </span>
         </div>

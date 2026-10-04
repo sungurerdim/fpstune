@@ -29,6 +29,7 @@ from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.definitions.power import POWER_SETTINGS
 from fpstune.settings.executors.powercfg import PowerCfgExecutor
 from fpstune.settings.hardware_context import build_hardware_context
+from fpstune.utils.system_tools import system_tool
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +100,7 @@ class PowerProfileManager:
 
         try:
             result = subprocess.run(
-                ["powercfg", "/list"],
+                [system_tool("powercfg.exe"), "/list"],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -203,7 +204,7 @@ class PowerProfileManager:
         try:
             # Step 1: Duplicate Balanced profile
             result = subprocess.run(
-                ["powercfg", "/duplicatescheme", BALANCED_GUID],
+                [system_tool("powercfg.exe"), "/duplicatescheme", BALANCED_GUID],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -232,24 +233,45 @@ class PowerProfileManager:
             new_guid = guid_match.group(1).lower()
             details.append(f"Created profile: {new_guid}")
 
-            # Step 2: Rename the profile
-            subprocess.run(
-                ["powercfg", "/changename", new_guid, FPS_BALANCED_NAME, FPS_BALANCED_DESCRIPTION],
+            # Step 2: Rename the profile. A plan left with its MUI name reads as
+            # one of Windows' own and would never be recognised as fpstune's, so a
+            # failed rename removes the plan rather than leaving a stray copy.
+            renamed = subprocess.run(
+                [
+                    system_tool("powercfg.exe"),
+                    "/changename",
+                    new_guid,
+                    FPS_BALANCED_NAME,
+                    FPS_BALANCED_DESCRIPTION,
+                ],
                 capture_output=True,
                 timeout=10,
                 creationflags=subprocess.CREATE_NO_WINDOW,
                 encoding="utf-8",
                 errors="replace",
             )
+            if renamed.returncode != 0:
+                subprocess.run(
+                    [system_tool("powercfg.exe"), "/delete", new_guid],
+                    capture_output=True,
+                    timeout=10,
+                    creationflags=subprocess.CREATE_NO_WINDOW,
+                )
+                return PowerProfileResult(
+                    success=False,
+                    message=f"Could not name the new plan (powercfg exit code {renamed.returncode})",
+                )
             details.append(f"Renamed to: {FPS_BALANCED_NAME}")
 
             # Step 3: Apply the registry's recommended power:* values through the
-            # same PowerCfgExecutor path every other apply uses (C6). The
-            # executor decides the schemes it writes and the DC value it puts
-            # back; this loop supplies no values of its own.
+            # same PowerCfgExecutor path every other apply uses (C6), to the new
+            # plan only: the user's active plan and their other custom plans are
+            # not this action's to change.
             executor = PowerCfgExecutor()
             for setting in _registry_powercfg_settings():
-                success, error = executor.apply(setting, setting.recommended_value)
+                success, error = executor.apply(
+                    setting, setting.recommended_value, schemes=[new_guid]
+                )
                 if success:
                     details.append(f"[AC] {setting.effect}")
                 else:
@@ -303,7 +325,7 @@ class PowerProfileManager:
         # Activate the profile
         try:
             result = subprocess.run(
-                ["powercfg", "/setactive", guid],
+                [system_tool("powercfg.exe"), "/setactive", guid],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -345,7 +367,7 @@ class PowerProfileManager:
 
         try:
             result = subprocess.run(
-                ["powercfg", "/setactive", BALANCED_GUID],
+                [system_tool("powercfg.exe"), "/setactive", BALANCED_GUID],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -400,7 +422,7 @@ class PowerProfileManager:
 
         try:
             result = subprocess.run(
-                ["powercfg", "/delete", guid],
+                [system_tool("powercfg.exe"), "/delete", guid],
                 capture_output=True,
                 text=True,
                 timeout=10,

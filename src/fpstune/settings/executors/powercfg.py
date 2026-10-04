@@ -206,7 +206,9 @@ class PowerCfgExecutor(BaseExecutor):
         display_value = map_raw_to_display(setting.value_map, raw_value)
         return display_value, None
 
-    def apply(self, setting: SettingExecutor, value: Any) -> tuple[bool, str | None]:
+    def apply(
+        self, setting: SettingExecutor, value: Any, *, schemes: list[str] | None = None
+    ) -> tuple[bool, str | None]:
         """Write the setting to every power plan, not just the active one.
 
         A per-plan store plus a tool that switches plans means a single-plan write
@@ -227,7 +229,10 @@ class PowerCfgExecutor(BaseExecutor):
         alternative is writing a remembered constant onto a rail we did not
         measure, which is the defect this pass just removed from `default_value`.
         """
-        schemes = self._target_schemes()
+        # ``schemes`` narrows the write to named plans; creating FPS Balanced
+        # passes its own new GUID so that nothing else the user has is touched.
+        if schemes is None:
+            schemes = self._target_schemes()
         if not schemes:
             return False, "Could not enumerate power schemes"
 

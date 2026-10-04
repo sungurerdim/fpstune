@@ -116,6 +116,7 @@ def apply_and_finalize(
     engine: DetectionEngine,
     activity_label: str,
     on_line: Callable[[str, bool], None] | None = None,
+    write: Callable[[], tuple[bool, str | None]] | None = None,
 ) -> ApplyResponse:
     """Run one setting's command and turn the outcome into the response.
 
@@ -132,6 +133,10 @@ def apply_and_finalize(
     is not going to run — a cleanup reset carries `False`, which is permission
     withheld, and sizing a folder twice around a command that never happened
     would cost two scans to report that nothing was freed.
+
+    ``write`` replaces the setting's own command — undo passes one that puts the
+    recorded stored state back verbatim — and everything around it (the bench
+    lock, detection, verification against ``value``) stays the same.
     """
     global _in_flight
     success: bool
@@ -146,7 +151,9 @@ def apply_and_finalize(
         try:
             will_run = not action_will_not_run(setting, value)
             before = measure_cleanup_size(setting) if will_run else None
-            success, error = CommandExecutor.apply(setting, value, on_line)
+            success, error = (
+                write() if write is not None else CommandExecutor.apply(setting, value, on_line)
+            )
             freed = (
                 freed_after_cleanup(setting, before) if success and will_run else NOTHING_MEASURED
             )

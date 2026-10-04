@@ -1353,7 +1353,16 @@ POWER_SETTINGS: list[SettingExecutor] = [
 # stops being a guard the moment a machine publishes something else. Only ids
 # listed here move; every other recommendation is fpstune's own argument and is
 # never rewritten by a registry read.
-_TRACKS_WINDOWS_DEFAULT: frozenset[str] = frozenset({"power:cpu_decrease_threshold"})
+_TRACKS_WINDOWS_DEFAULT: frozenset[str] = frozenset(
+    {
+        "power:cpu_decrease_threshold",
+        # The copy already says "Windows' own value". A fixed 100 on a machine
+        # whose processor driver ships less is not a guard but a tweak — and on
+        # a dual-CCD X3D part it would undo the parking that keeps a game on the
+        # cache die.
+        "power:cpu_min_parking",
+    }
+)
 
 
 def adopt_windows_defaults(

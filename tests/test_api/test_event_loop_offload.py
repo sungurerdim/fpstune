@@ -278,6 +278,8 @@ class TestSettingHardwareContextOffload:
         record: dict[str, bool] = {}
         originals = MagicMock()
         originals.get.return_value = "enabled"
+        originals.damaged.return_value = None
+        originals.get_raw.return_value = None
         ctx, checker, rp = self._patched(record)
         with (
             ctx,

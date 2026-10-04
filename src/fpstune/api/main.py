@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
+import mimetypes
 import os
 import sys
 import threading
@@ -38,6 +39,21 @@ from fpstune.utils.debug import is_debug_enabled
 from fpstune.utils.detect import start_gpu_detection_async
 from fpstune.utils.logger import get_logger as _get_shared_logger
 from fpstune.utils.runtime import frontend_dist, is_frozen
+
+# Python's mimetypes reads the Windows registry, and on machines where an editor
+# or SDK registered ".js" as text/plain the browser refuses the UI's module
+# script and shows a blank page while the server reports success. The types the
+# bundled UI is served with are fixed here instead of taken from the machine.
+for _type, _ext in (
+    ("text/javascript", ".js"),
+    ("text/javascript", ".mjs"),
+    ("text/css", ".css"),
+    ("text/html", ".html"),
+    ("application/json", ".json"),
+    ("image/svg+xml", ".svg"),
+    ("font/woff2", ".woff2"),
+):
+    mimetypes.add_type(_type, _ext)
 
 
 def _running_under_pytest() -> bool:

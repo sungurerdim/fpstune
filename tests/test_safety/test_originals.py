@@ -45,7 +45,7 @@ class TestRecording:
     def test_an_unread_setting_is_not_recorded(self, store: OriginalValues) -> None:
         """None means "not read", and an undo that writes None writes nothing."""
         assert store.record_first_seen({"perf:numlock_default": None}) == 0
-        assert store.has("perf:numlock_default") is False
+        assert store.get("perf:numlock_default") is None
 
     def test_a_falsy_reading_is_still_a_reading(self, store: OriginalValues) -> None:
         """0 and "" are values; only None is an absence."""
@@ -140,3 +140,47 @@ class TestDamagedStore:
         store = OriginalValues(path=blocked / "originals.json")
         assert store.record_first_seen({"a:b": 1}) == 1  # held in memory
         assert store.get("a:b") == 1
+
+
+class TestADamagedStoreIsNeverOverwritten:
+    """A store that cannot be read must not become an empty one: the next scan
+    would then record post-apply values as every "original"."""
+
+    def test_a_corrupt_file_records_nothing_and_stays_as_it_was(self, tmp_path) -> None:
+        path = tmp_path / "originals.json"
+        path.write_text("{truncated", encoding="utf-8")
+        store = OriginalValues(path=path)
+
+        assert store.record_first_seen({"perf:numlock_default": "on"}) == 0
+        assert path.read_text(encoding="utf-8") == "{truncated"
+        assert store.damaged() is not None
+
+    def test_an_unknown_layout_is_left_untouched(self, tmp_path) -> None:
+        path = tmp_path / "originals.json"
+        path.write_text('{"version": 99, "values": {}}', encoding="utf-8")
+        store = OriginalValues(path=path)
+
+        assert store.record_first_seen({"perf:numlock_default": "on"}) == 0
+        assert '"version": 99' in path.read_text(encoding="utf-8")
+        assert store.damaged() is not None
+
+    def test_a_sound_store_is_not_damaged(self, tmp_path) -> None:
+        assert OriginalValues(path=tmp_path / "originals.json").damaged() is None
+
+
+class TestRawStateTravelsWithTheReading:
+    def test_raw_is_kept_and_returned(self, tmp_path) -> None:
+        store = OriginalValues(path=tmp_path / "originals.json")
+        raw = {"kind": "registry", "present": False}
+
+        store.record_first_seen({"privacy:recall": "enabled"}, {"privacy:recall": raw})
+
+        reloaded = OriginalValues(path=tmp_path / "originals.json")
+        assert reloaded.get_raw("privacy:recall") == raw
+        assert reloaded.get("privacy:recall") == "enabled"
+
+    def test_a_reading_without_raw_has_none(self, tmp_path) -> None:
+        store = OriginalValues(path=tmp_path / "originals.json")
+        store.record_first_seen({"network:tcp_ecn": "enabled"})
+
+        assert store.get_raw("network:tcp_ecn") is None

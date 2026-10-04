@@ -50,6 +50,7 @@ class OriginalValues:
         self._path = path or (get_config_dir() / "originals.json")
         self._lock = threading.Lock()
         self._values: dict[str, dict[str, Any]] | None = None
+        self._damaged: str | None = None
 
     # --- persistence ---------------------------------------------------
 
@@ -60,17 +61,24 @@ class OriginalValues:
         self._values = {}
         try:
             raw = json.loads(self._path.read_text(encoding="utf-8"))
-        except FileNotFoundError:
+        except (FileNotFoundError, NotADirectoryError):
+            # Nothing recorded yet — or no place to keep it, in which case the
+            # store lives in memory for this run (see _persist).
             return self._values
-        except (json.JSONDecodeError, OSError) as exc:
-            # A corrupt store must not take the app down, and must not silently
-            # read as "nothing was ever recorded" either — that would let the
-            # next scan overwrite every original with a post-apply value.
+        except (json.JSONDecodeError, OSError, UnicodeDecodeError) as exc:
+            # A corrupt store must not take the app down, and must not read as
+            # "nothing was ever recorded" either: the next scan would then
+            # record post-apply values over every original. The file is left
+            # exactly as it is and nothing is recorded until it is dealt with.
+            self._damaged = f"the undo record at {self._path} could not be read ({exc})"
             logger.warning("originals store unreadable, undo is unavailable: %s", exc)
             return self._values
 
         if not isinstance(raw, dict) or raw.get("version") != SCHEMA_VERSION:
-            logger.warning("originals store has an unrecognised layout; ignoring it")
+            self._damaged = (
+                f"the undo record at {self._path} has a layout this version does not know"
+            )
+            logger.warning("originals store has an unrecognised layout; leaving it untouched")
             return self._values
 
         entries = raw.get("values")
@@ -94,34 +102,52 @@ class OriginalValues:
 
     # --- api -----------------------------------------------------------
 
-    def record_first_seen(self, readings: dict[str, Any]) -> int:
+    def record_first_seen(
+        self, readings: dict[str, Any], raw: dict[str, dict[str, Any]] | None = None
+    ) -> int:
         """Record any setting not seen before. Returns how many were added.
 
-        Pass ``{setting_id: value}`` for settings that were actually read. A
-        setting whose value is None was not read, and recording None would
-        promise an undo that writes nothing.
+        Pass ``{setting_id: value}`` for settings that were actually read, and
+        optionally ``raw`` — the stored state behind each (safety/raw_state.py),
+        which lets undo restore it exactly. A setting whose value is None was
+        not read, and recording None would promise an undo that writes nothing.
+        Nothing is recorded while the store on disk is damaged.
         """
         added = 0
         with self._lock:
             values = self._load()
+            if self._damaged:
+                return 0
             for setting_id, value in readings.items():
                 if value is None or setting_id in values:
                     continue
-                values[setting_id] = {"value": value, "first_seen": time.time()}
+                entry: dict[str, Any] = {"value": value, "first_seen": time.time()}
+                if raw and raw.get(setting_id) is not None:
+                    entry["raw"] = raw[setting_id]
+                values[setting_id] = entry
                 added += 1
             if added:
                 self._persist()
         return added
+
+    def damaged(self) -> str | None:
+        """Why the store cannot be trusted, or None when it is sound."""
+        with self._lock:
+            self._load()
+            return self._damaged
+
+    def get_raw(self, setting_id: str) -> dict[str, Any] | None:
+        """The stored state recorded with the first reading, if one was."""
+        with self._lock:
+            entry = self._load().get(setting_id)
+        raw = entry.get("raw") if entry else None
+        return raw if isinstance(raw, dict) else None
 
     def get(self, setting_id: str) -> Any | None:
         """The value this setting held when fpstune first saw it, if it did."""
         with self._lock:
             entry = self._load().get(setting_id)
         return entry.get("value") if entry else None
-
-    def has(self, setting_id: str) -> bool:
-        with self._lock:
-            return setting_id in self._load()
 
     def forget(self, setting_id: str) -> bool:
         """Drop one entry. Returns whether there was one.
@@ -132,7 +158,7 @@ class OriginalValues:
         """
         with self._lock:
             values = self._load()
-            if setting_id not in values:
+            if self._damaged or setting_id not in values:
                 return False
             del values[setting_id]
             self._persist()

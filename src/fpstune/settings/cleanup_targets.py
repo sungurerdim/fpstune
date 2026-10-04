@@ -113,6 +113,12 @@ class CleanupTarget:
     #: the locked ones promises bytes no delete can take: Explorer keeps every
     #: thumbnail cache database open, measured 15 of 15 on 2026-09-10.
     skip_locked_files: bool = False
+    #: Top-level entries left alone, by name glob, and entries modified in the
+    #: last ``keep_recent_hours``: in a shared folder like Temp, both mark files
+    #: something running still owns. A one-file app (fpstune.exe included)
+    #: unpacks itself to ``%TEMP%\_MEI*`` and serves from there while it runs.
+    keep_names: tuple[str, ...] = ()
+    keep_recent_hours: int = 0
 
 
 # ---------------------------------------------------------------------------
@@ -349,6 +355,8 @@ _TARGETS: tuple[CleanupTarget, ...] = (
             _env("TEMP"), _under(_env("LOCALAPPDATA"), "Temp"), _under(_env("windir"), "Temp")
         ),
         absent_is_not_installed=False,
+        keep_names=("_MEI*", "fpstune*"),
+        keep_recent_hours=24,
     ),
     CleanupTarget("nvidia_shader", _nvidia_shader_paths),
     CleanupTarget(
@@ -621,6 +629,18 @@ def _file_bytes(path: str, target: CleanupTarget) -> int:
         return 0
 
 
+def _kept_at_top(entry: os.DirEntry[str], target: CleanupTarget, cutoff: float) -> bool:
+    """Whether the delete leaves this top-level entry alone (see ``keep_names``)."""
+    if any(fnmatch.fnmatch(entry.name, glob) for glob in target.keep_names):
+        return True
+    if target.keep_recent_hours:
+        try:
+            return entry.stat(follow_symlinks=False).st_mtime >= cutoff
+        except OSError:
+            return True
+    return False
+
+
 def _dir_bytes(root: str, target: CleanupTarget) -> int | None:
     """Bytes under ``root`` the delete would take, or None if it cannot be read.
 
@@ -633,6 +653,9 @@ def _dir_bytes(root: str, target: CleanupTarget) -> int | None:
     tree the delete does not descend into, and following one both double-counts
     it and, for the compatibility junctions Windows leaves in a profile, loops.
     """
+    import time
+
+    cutoff = time.time() - target.keep_recent_hours * 3600
     total = 0
     stack = [root]
     top_level = True
@@ -645,6 +668,8 @@ def _dir_bytes(root: str, target: CleanupTarget) -> int | None:
             if top_level:
                 return None
             continue
+        if top_level and target.delete_mode == CONTENTS:
+            entries = [e for e in entries if not _kept_at_top(e, target, cutoff)]
         top_level = False
         for entry in entries:
             try:
@@ -762,6 +787,8 @@ def delete_arguments(target: CleanupTarget) -> dict[str, str]:
         "paths": PATH_SEPARATOR.join(paths),
         "mode": target.delete_mode,
         "globs": PATH_SEPARATOR.join(target.name_globs),
+        "keep_names": PATH_SEPARATOR.join(target.keep_names),
+        "keep_recent_hours": str(target.keep_recent_hours),
     }
 
 

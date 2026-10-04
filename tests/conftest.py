@@ -14,6 +14,11 @@ import pytest
 
 # Mock Windows-specific modules when running on non-Windows
 if sys.platform != "win32":
+    # mimetypes binds winreg at import time and walks it on first use; importing
+    # it before the stub keeps it off the registry path it cannot have here.
+    import mimetypes
+
+    mimetypes.init()
     sys.modules["winreg"] = MagicMock()
     # Mock subprocess.CREATE_NO_WINDOW for non-Windows
     if not hasattr(__import__("subprocess"), "CREATE_NO_WINDOW"):

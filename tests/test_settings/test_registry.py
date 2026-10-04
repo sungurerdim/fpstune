@@ -76,9 +76,9 @@ class TestSettingsRegistryInitialization:
         """get() should return a setting by ID."""
         registry = SettingsRegistry(discover_dynamic=False)
         # Try to get a known static setting
-        setting = registry.get("priority:gpu_priority")
-        assert setting is not None, "Should find priority:gpu_priority setting"
-        assert setting.id == "priority:gpu_priority"
+        setting = registry.get("priority:game_priority")
+        assert setting is not None, "Should find priority:game_priority setting"
+        assert setting.id == "priority:game_priority"
 
     def test_registry_get_returns_none_for_unknown(self) -> None:
         """get() should return None for unknown IDs."""

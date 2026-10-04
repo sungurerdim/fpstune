@@ -193,6 +193,9 @@ POWER_HIBERNATION = SettingExecutor(
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
+    # A laptop hibernates at critical battery; without it the machine just
+    # dies, which is an unclean shutdown and a dirty volume. Desktops only.
+    applicable_conditions={"feature_absent": "mobile"},
     requires_reboot=False,
     evidence_level="likely",
     current_impact="Enabled: hiberfil.sys occupies 4-16GB of SSD space constantly",

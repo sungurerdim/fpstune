@@ -141,10 +141,6 @@ export const settingsTr: Record<
     description:
       "Daha ince zamanlayıcı isteyen bir programın bunu yalnızca kendisi için mi yoksa tüm sistem için mi aldığı. Sistem genelinde olması, isteyen oyun olmasa da kare düzenini korur.",
   },
-  "priority:gpu_priority": {
-    name: "Oyuna GPU önceliği",
-    description: "Oyun süreçleri için GPU zamanlama önceliği (0-31).",
-  },
   "priority:game_priority": {
     name: "Oyuna CPU önceliği",
     description: "Oyun görev önceliği (1-6; 6 en yüksek).",
@@ -163,11 +159,6 @@ export const settingsTr: Record<
     name: "Ön plan CPU payı",
     description:
       "Windows başka bir işe geçmeden önce bir iş parçacığının CPU'yu ne kadar tuttuğu. Kısa ve sabit dilimler, oyunun giriş iş parçacığının sırasını daha az beklemesi demektir.",
-  },
-  "priority:sfio_priority": {
-    name: "Oyun depolama önceliği",
-    description:
-      "Oyun süreçleri için zamanlanmış dosya G/Ç önceliği. Yüksek değer, oyun varlıklarının daha hızlı yüklenmesi demektir.",
   },
   "visual:animations": {
     name: "Pencere animasyonları",
@@ -763,17 +754,17 @@ export const settingsTr: Record<
   "perf:shutdown_service_timeout": {
     name: "Kapanışta hizmet bekleme",
     description:
-      "Kapanış sırasında bir hizmetin durması için beklenen azami milisaniye. 5000'den 2000'e indirmek kapanışı 3 saniyeye kadar kısaltır.",
+      "Kapanışta Windows'un her hizmete bitirmesi için tanıdığı süre. Kısaltmak hizmetleri yazma yaparken sonlandırır, birimi kirli bırakıp sonraki açılışta disk denetimine zorlayabilir; bu yüzden Windows'un kendi 5 saniyesi geri getirilir.",
   },
   "perf:shutdown_app_timeout": {
     name: "Kapanışta uygulama bekleme",
     description:
-      "Kapanışta yanıt vermeyen bir uygulamanın kapanması için beklenen azami milisaniye. Hem asılı kalma algısına hem zorla kapatma sayaçlarına uygulanır.",
+      "Windows'un programların kapanmasını ve yanıt vermesini ne kadar beklediği. Daha kısa bekleme, hâlâ kaydeden programları sonlandırır; bu yüzden değerler silinir ve Windows'un kendi süreleri geçerli olur.",
   },
   "perf:shutdown_auto_end_tasks": {
     name: "Kapanışta zorla kapat",
     description:
-      "Kapanış sinyaline yanıt vermeyen görevleri kendiliğinden sonlandırır. Takılan programların kapanışı engellemesini önler.",
+      "Kapanışta kapanmamış programların sorulmadan sonlandırılıp sonlandırılmayacağı. Sonlandırmak kaydedilmemiş işi kaybettirir ve yazmalarını yarıda keser; bu yüzden Windows'un soran kendi davranışı geri getirilir.",
   },
   "perf:gpu_tdr_delay": {
     name: "GPU takılma toleransı",

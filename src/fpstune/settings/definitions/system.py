@@ -630,7 +630,8 @@ SERVICE_UCPD = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    recommended_value="disabled",
+    # A Microsoft protection driver with no performance cost: a guard.
+    recommended_value="enabled",
     requires_reboot=True,  # Kernel driver - change requires reboot to take effect
     current_impact="Enabled: Blocks registry changes to default browser/app settings",
     recommended_impact="Disabled: Full control over default app associations "
@@ -1379,7 +1380,10 @@ PERF_SVCHOST_SPLIT = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("split", "combined"),
     default_value="split",
-    recommended_value="combined",
+    # Microsoft documents service separation as a reliability gain: with
+    # services combined one crash takes many down. A guard; stock is Windows
+    # sizing it to this machine's RAM, restored by deleting the value.
+    recommended_value="split",
     requires_reboot=True,
     current_impact="Split: Services in many svchost.exe processes",
     recommended_impact="Combined: Services merged → ~100-300MB RAM saved, fewer context switches",
@@ -1416,7 +1420,7 @@ PERF_SVCHOST_SPLIT = SettingExecutor(
         "type": "REG_DWORD",
     },
     # 0xFFFFFFFF = max threshold (combine all services)
-    apply_value_map={"combined": 0xFFFFFFFF, "split": 380000},
+    apply_value_map={"combined": 0xFFFFFFFF, "split": None},
 )
 
 # === Network Throttling Index ===
@@ -2280,7 +2284,9 @@ CLEANUP_DISM = SettingExecutor(
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
-    recommended_value=True,
+    # /ResetBase makes installed updates permanent (none can be uninstalled
+    # afterwards): offered, never recommended.
+    recommended_value=False,
     requires_reboot=False,
     is_action=True,
     evidence_level="proven",
@@ -2348,7 +2354,8 @@ CLEANUP_EVENT_LOGS = SettingExecutor(
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
-    recommended_value=True,
+    # Erases the evidence a crash or a failed boot leaves: never recommended.
+    recommended_value=False,
     requires_reboot=False,
     is_action=True,
     evidence_level="proven",
@@ -2632,7 +2639,8 @@ CLEANUP_SHADOW_COPY = SettingExecutor(
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
-    recommended_value=True,
+    # Deletes restore points on data drives: offered, never recommended.
+    recommended_value=False,
     requires_reboot=False,
     is_action=True,
     evidence_level="likely",
@@ -3727,24 +3735,28 @@ SHUTDOWN_SERVICE_TIMEOUT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Service Shutdown Timeout",
     short_name="Shutdown wait for services",
-    description="Maximum milliseconds Windows waits for a service to stop during shutdown. "
-    "Reducing from 5000ms to 2000ms shortens shutdown by up to 3 seconds.",
+    description="How long shutdown lets each service finish. Shorter waits kill services mid-write, which "
+    "can leave a volume dirty and force a disk check at boot.",
     value_type=SettingValueType.CHOICE,
-    choices=("5000ms", "2000ms"),
-    default_value="5000ms",
-    recommended_value="2000ms",
+    choices=("stock", "changed"),
+    default_value="stock",
+    recommended_value="stock",
     requires_reboot=False,
-    evidence_level="likely",
-    current_impact="5000ms: Windows waits up to 5 seconds per service during shutdown",
-    recommended_impact="2000ms: Services killed after 2 seconds → faster shutdown",
-    scope=SettingScope.RECOMMENDED,
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/troubleshoot/windows-server/performance/shutdown-takes-long-time"
+    ],
+    current_impact="Changed: services can be killed before they finish writing at shutdown",
+    recommended_impact="5000 ms (Windows default): every service gets the time Windows gives it",
+    scope=SettingScope.ESSENTIAL,
     category_order=30,
-    effect="Reduces service shutdown timeout from 5s to 2s for faster system shutdown",
-    impact_scores={"latency_ms": 0, "shutdown_speed": "faster"},
+    effect="Restores Windows' own 5-second service shutdown wait",
+    # A guard. Fpstune 0.1.0 recommended 2000 ms here; this puts that back.
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": CONTROL_KEY, "name": "WaitToKillServiceTimeout", "hive": "HKLM"},
-    value_map={"2000": "2000ms", "5000": "5000ms", None: "5000ms"},
+    value_map={"5000": "stock", 5000: "stock", None: "stock", UNMAPPED: "changed"},
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
@@ -3753,7 +3765,7 @@ SHUTDOWN_SERVICE_TIMEOUT = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_SZ",
     },
-    apply_value_map={"2000ms": "2000", "5000ms": "5000"},
+    apply_value_map={"stock": "5000"},
 )
 
 SHUTDOWN_APP_TIMEOUT = SettingExecutor(
@@ -3761,29 +3773,33 @@ SHUTDOWN_APP_TIMEOUT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="App Shutdown Timeout",
     short_name="Shutdown wait for apps",
-    description="Maximum milliseconds Windows waits for a hung application to close during shutdown. "
-    "Applies to both hung-app detection and forced kill timeouts.",
+    description="How long Windows waits for programs to close, and to answer, before ending them. Shorter "
+    "waits end programs that are still saving, so the values are removed and Windows' own apply again.",
     value_type=SettingValueType.CHOICE,
-    choices=("5000ms", "2000ms"),
-    default_value="5000ms",
-    recommended_value="2000ms",
+    choices=("stock", "changed"),
+    default_value="stock",
+    recommended_value="stock",
     requires_reboot=False,
-    evidence_level="likely",
-    current_impact="5000ms: Windows waits up to 5 seconds before killing hung apps on shutdown",
-    recommended_impact="2000ms: Hung apps killed after 2 seconds → faster shutdown",
-    scope=SettingScope.RECOMMENDED,
+    evidence_level="proven",
+    current_impact="Changed: programs can be ended while they are still saving",
+    recommended_impact="Windows default: programs get the time Windows gives them to save and close",
+    scope=SettingScope.ESSENTIAL,
     category_order=31,
-    effect="Reduces application shutdown timeout from 5s to 2s for faster system shutdown",
-    impact_scores={"latency_ms": 0, "shutdown_speed": "faster"},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={"path": DESKTOP_KEY, "name": "WaitToKillAppTimeout", "hive": "HKCU"},
-    value_map={"2000": "2000ms", "5000": "5000ms", None: "5000ms"},
+    effect="Restores Windows' own wait for programs at shutdown",
+    # A guard; 0.1.0 recommended 2000 ms for both values. One concept, two
+    # values Windows reads together (WaitToKillAppTimeout, HungAppTimeout).
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$d = Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -ErrorAction SilentlyContinue; "
+        "if ($null -eq $d.WaitToKillAppTimeout -and $null -eq $d.HungAppTimeout) { 'stock' } else { 'changed' }"
+    ),
+    detect_args={},
+    value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
-        "$v = if ('%value%' -eq '2000ms') { '2000' } else { '5000' }; "
-        "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'WaitToKillAppTimeout' -Value $v -Type String -Force; "
-        "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name 'HungAppTimeout' -Value $v -Type String -Force; "
+        "foreach ($n in 'WaitToKillAppTimeout', 'HungAppTimeout') { "
+        "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name $n -ErrorAction SilentlyContinue }; "
         "'ok'"
     ),
     apply_args={},
@@ -3795,20 +3811,21 @@ SHUTDOWN_AUTO_END_TASKS = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Auto-End Tasks on Shutdown",
     short_name="Force-close on shutdown",
-    description="Automatically terminates tasks that do not respond to the shutdown signal. "
-    "Prevents stuck programs from blocking system shutdown.",
+    description="Whether shutdown ends programs that have not closed without asking. Ending them loses "
+    "unsaved work and interrupts their writes, so Windows' own behaviour, which asks, is restored.",
     value_type=SettingValueType.CHOICE,
     choices=("disabled", "enabled"),
     default_value="disabled",
-    recommended_value="enabled",
+    recommended_value="disabled",
     requires_reboot=False,
-    evidence_level="likely",
-    current_impact="Disabled: Windows shows dialog for hung apps during shutdown → manual intervention needed",
-    recommended_impact="Enabled: Hung apps are terminated automatically → unattended shutdown",
-    scope=SettingScope.RECOMMENDED,
+    evidence_level="proven",
+    current_impact="Enabled: programs are ended at shutdown, unsaved work and all",
+    recommended_impact="Disabled (Windows default): Windows asks before ending a program",
+    scope=SettingScope.ESSENTIAL,
     category_order=32,
-    effect="Enables automatic termination of non-responsive apps during shutdown",
-    impact_scores={"latency_ms": 0, "shutdown_speed": "faster", "stability": "high"},
+    effect="Restores Windows' own prompt before ending programs at shutdown",
+    # A guard; 0.1.0 recommended "enabled".
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": DESKTOP_KEY, "name": "AutoEndTasks", "hive": "HKCU"},
@@ -3816,7 +3833,7 @@ SHUTDOWN_AUTO_END_TASKS = SettingExecutor(
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={"path": DESKTOP_KEY, "name": "AutoEndTasks", "hive": "HKCU", "type": "REG_SZ"},
-    apply_value_map={"enabled": "1", "disabled": "0"},
+    apply_value_map={"enabled": "1", "disabled": None},
 )
 
 GPU_TDR_DELAY = SettingExecutor(
@@ -3829,7 +3846,9 @@ GPU_TDR_DELAY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("default", "extended"),
     default_value="default",
-    recommended_value="extended",
+    # Microsoft: end users should not change TDR keys. A guard: a longer
+    # delay only lengthens a hang, and the stock value is restored by deleting.
+    recommended_value="default",
     requires_reboot=False,
     evidence_level="proven",
     sources=[
@@ -3858,7 +3877,7 @@ GPU_TDR_DELAY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"default": 2, "extended": 10},
+    apply_value_map={"default": None, "extended": 10},
     value_hints={"default": "2s", "extended": "10s"},
 )
 

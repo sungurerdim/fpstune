@@ -67,27 +67,23 @@ DISABLE_8DOT3 = SettingExecutor(
     category=SettingCategory.STORAGE,
     display_name="8.3 Filename Generation",
     short_name="Legacy short filenames",
-    description="Creates legacy 8.3 DOS filenames for every file. Disabling removes unnecessary I/O overhead.",
+    description="Whether NTFS creates short 8.3 names for new files. Windows decides per volume; forcing "
+    "it everywhere saves little and can break old installers.",
     value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
+    choices=("per_volume", "enabled", "disabled"),
+    default_value="per_volume",
+    recommended_value="per_volume",
     requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="Some legacy 16-bit and older 32-bit installers, and a few applications that "
-    "hardcode short paths, resolve files only through their 8.3 names and will fail to launch or "
-    "install without them. The setting affects newly created files only — existing 8.3 names are "
-    "kept — so re-enabling it does not restore names for files created while it was off.",
+    evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/fsutil-8dot3name"
     ],
-    current_impact="Enabled: Creates short names for every file → extra I/O overhead",
-    recommended_impact="Disabled: No short names → reduced disk I/O, faster file operations",
+    current_impact="Changed: short names forced on or off for every volume",
+    recommended_impact="Per volume (Windows default): Windows decides per volume, as it ships",
     scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=2,  # I/O overhead reduction
-    effect="Eliminates legacy DOS-style filename generation overhead",
-    impact_scores={"fps": "0%", "latency_ms": 0, "storage_performance": "+0-1%"},
+    effect="Keeps Windows' own per-volume short-name setting",
+    impact_scores={"fps": "0%", "latency_ms": 0},
     # Detection - NtfsDisable8dot3NameCreation (1 = disabled, 0 = enabled)
     detect_type=DetectType.REGISTRY,
     detect_command="",
@@ -101,11 +97,11 @@ DISABLE_8DOT3 = SettingExecutor(
         "0": "enabled",
         1: "disabled",
         "1": "disabled",
-        2: "disabled",
-        "2": "disabled",
-        3: "enabled",
-        "3": "enabled",
-        None: "enabled",
+        2: "per_volume",
+        "2": "per_volume",
+        3: "disabled",
+        "3": "disabled",
+        None: "per_volume",
     },
     # Apply
     apply_type=DetectType.REGISTRY,
@@ -116,7 +112,7 @@ DISABLE_8DOT3 = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"enabled": 0, "disabled": 1},
+    apply_value_map={"per_volume": 2, "enabled": 0, "disabled": 1},
 )
 
 # === Last Access Time Updates ===
@@ -127,10 +123,11 @@ DISABLE_LAST_ACCESS = SettingExecutor(
     short_name="File access-time logging",
     description="Updates the last-access timestamp on every file read. Disabling reduces unnecessary SSD writes.",
     value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
+    choices=("system_managed", "enabled", "disabled"),
+    # Windows 10 1803+ ships 0x80000002: System Managed.
+    default_value="system_managed",
     recommended_value="disabled",
-    requires_reboot=False,
+    requires_reboot=True,  # fsutil-behavior: "You must restart"
     evidence_level="proven",
     sources=[
         "https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/fsutil-behavior"
@@ -165,16 +162,15 @@ DISABLE_LAST_ACCESS = SettingExecutor(
         1: "disabled",
         0x80000000: "enabled",
         0x80000001: "disabled",
-        0x80000002: "enabled",
-        0x80000003: "disabled",
-        # String versions for values that come as strings
+        0x80000002: "system_managed",
+        0x80000003: "system_managed",
         "0": "enabled",
         "1": "disabled",
-        "2147483648": "enabled",  # 0x80000000
-        "2147483649": "disabled",  # 0x80000001
-        "2147483650": "enabled",  # 0x80000002
-        "2147483651": "disabled",  # 0x80000003
-        None: "enabled",
+        "2147483648": "enabled",
+        "2147483649": "disabled",
+        "2147483650": "system_managed",
+        "2147483651": "system_managed",
+        None: "system_managed",
     },
     # Apply
     apply_type=DetectType.REGISTRY,
@@ -186,7 +182,11 @@ DISABLE_LAST_ACCESS = SettingExecutor(
         "type": "REG_DWORD",
     },
     # Use modern format (0x80000001) for disabled - sets User Managed mode
-    apply_value_map={"enabled": 0x80000000, "disabled": 0x80000001},
+    apply_value_map={
+        "system_managed": 0x80000002,
+        "enabled": 0x80000000,
+        "disabled": 0x80000001,
+    },
 )
 
 # All storage settings

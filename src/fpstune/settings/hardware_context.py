@@ -124,6 +124,7 @@ def build_hardware_context() -> HardwareContext:
     # NVIDIA features exist purely to cap frame rate on one.
     if has_battery():
         features.add("mobile")
+        feature_labels["mobile"] = "hibernation at critical battery"
 
     # None means the panels could not be probed, or none declared either way —
     # unknown, which is a different fact from "no VRR panel": a failed monitor

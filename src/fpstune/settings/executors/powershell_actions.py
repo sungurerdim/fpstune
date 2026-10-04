@@ -808,7 +808,6 @@ ACTION_COMMANDS: dict[str, str] = {
             '\\Microsoft\\Windows\\Application Experience\\ProgramDataUpdater',
             '\\Microsoft\\Windows\\Application Experience\\StartupAppTask',
             '\\Microsoft\\Windows\\Application Experience\\Microsoft Compatibility Appraiser',
-            '\\Microsoft\\Windows\\Autochk\\Proxy',
             '\\Microsoft\\Windows\\DiskDiagnostic\\Microsoft-Windows-DiskDiagnosticDataCollector',
             '\\Microsoft\\Windows\\Device Information\\Device'
         )

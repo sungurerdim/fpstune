@@ -7,7 +7,6 @@ from fpstune.settings.definitions import priority as priority_module
 from fpstune.settings.definitions.priority import (
     GAME_PRIORITY,
     GAMES_KEY,
-    GPU_PRIORITY,
     PRIORITY_CONTROL_KEY,
     PRIORITY_SETTINGS,
     SCHEDULING_CATEGORY,
@@ -43,7 +42,6 @@ class TestPrioritySettings:
     @pytest.mark.parametrize(
         "setting",
         [
-            GPU_PRIORITY,
             GAME_PRIORITY,
             SYSTEM_RESPONSIVENESS,
             SCHEDULING_CATEGORY,
@@ -98,168 +96,53 @@ class TestPrioritySettings:
         assert duplicates == [], f"registered more than once: {duplicates}"
 
     def test_priority_settings_list(self) -> None:
-        """PRIORITY_SETTINGS list should contain all priority settings."""
-        setting_ids = [s.id for s in PRIORITY_SETTINGS]
-        assert "priority:gpu_priority" in setting_ids
-        assert "priority:game_priority" in setting_ids
-        assert "priority:system_responsiveness" in setting_ids
-        assert "priority:scheduling_category" in setting_ids
-        assert "priority:win32_priority_separation" in setting_ids
-        # Named here for the first time: the count assertion this replaced was
-        # the only thing that knew it existed.
-        assert "priority:sfio_priority" in setting_ids
+        setting_ids = {s.id for s in PRIORITY_SETTINGS}
+        assert setting_ids == {
+            "priority:game_priority",
+            "priority:system_responsiveness",
+            "priority:scheduling_category",
+            "priority:win32_priority_separation",
+        }
+
+    def test_values_windows_does_not_read_are_not_offered(self) -> None:
+        """MMCSS: GPU Priority "is not yet used", SFIO Priority "is not used"."""
+        setting_ids = {s.id for s in PRIORITY_SETTINGS}
+        assert "priority:gpu_priority" not in setting_ids
+        assert "priority:sfio_priority" not in setting_ids
 
 
-class TestGPUPriority:
-    """Tests for GPU Priority setting."""
+class TestEveryPrioritySettingGuardsStock:
+    """Each recommendation is Windows' own value (Microsoft's MMCSS page and
+    Windows Internals): the old ones were clamped, cancelled or harmful."""
 
-    def test_value_type(self) -> None:
-        """GPU Priority should be INT type."""
-        assert GPU_PRIORITY.value_type == SettingValueType.INT
+    @pytest.mark.parametrize("setting", PRIORITY_SETTINGS, ids=lambda s: s.id)
+    def test_recommended_is_the_windows_default(self, setting: SettingExecutor) -> None:
+        assert setting.recommended_value == setting.default_value
 
-    def test_bounds(self) -> None:
-        """GPU Priority should have correct min/max bounds."""
-        assert GPU_PRIORITY.min_value == 0
-        assert GPU_PRIORITY.max_value == 31
-
-    def test_default_value(self) -> None:
-        """GPU Priority default should be 8."""
-        assert GPU_PRIORITY.default_value == 8
-
-    def test_recommended_value(self) -> None:
-        """GPU Priority recommended should be 8."""
-        assert GPU_PRIORITY.recommended_value == 8
-
-    def test_default_in_bounds(self) -> None:
-        """Default value should be within bounds."""
-        assert GPU_PRIORITY.min_value <= GPU_PRIORITY.default_value <= GPU_PRIORITY.max_value
-
-    def test_recommended_in_bounds(self) -> None:
-        """Recommended value should be within bounds."""
-        assert GPU_PRIORITY.min_value <= GPU_PRIORITY.recommended_value <= GPU_PRIORITY.max_value
-
-
-class TestGamePriority:
-    """Tests for Game Priority setting."""
-
-    def test_value_type(self) -> None:
-        """Game Priority should be INT type."""
-        assert GAME_PRIORITY.value_type == SettingValueType.INT
-
-    def test_bounds(self) -> None:
-        """Game Priority should have correct min/max bounds."""
-        assert GAME_PRIORITY.min_value == 1
-        assert GAME_PRIORITY.max_value == 6
-
-    def test_default_value(self) -> None:
-        """Game Priority default should be 2."""
-        assert GAME_PRIORITY.default_value == 2
-
-    def test_recommended_value(self) -> None:
-        """Game Priority recommended should be 6."""
-        assert GAME_PRIORITY.recommended_value == 6
-
-    def test_default_in_bounds(self) -> None:
-        """Default value should be within bounds."""
-        assert GAME_PRIORITY.min_value <= GAME_PRIORITY.default_value <= GAME_PRIORITY.max_value
-
-    def test_recommended_in_bounds(self) -> None:
-        """Recommended value should be within bounds."""
-        assert GAME_PRIORITY.min_value <= GAME_PRIORITY.recommended_value <= GAME_PRIORITY.max_value
-
-
-class TestSystemResponsiveness:
-    """Tests for System Responsiveness setting."""
-
-    def test_value_type(self) -> None:
-        """System Responsiveness should be INT type."""
-        assert SYSTEM_RESPONSIVENESS.value_type == SettingValueType.INT
-
-    def test_bounds(self) -> None:
-        """System Responsiveness should have correct min/max bounds."""
-        assert SYSTEM_RESPONSIVENESS.min_value == 0
-        assert SYSTEM_RESPONSIVENESS.max_value == 100
-
-    def test_default_value(self) -> None:
-        """System Responsiveness default should be 20."""
+    def test_responsiveness_stock_is_20(self) -> None:
         assert SYSTEM_RESPONSIVENESS.default_value == 20
 
-    def test_recommended_value(self) -> None:
-        """System Responsiveness recommended should be 0."""
-        assert SYSTEM_RESPONSIVENESS.recommended_value == 0
+    def test_game_priority_stock_is_2(self) -> None:
+        assert GAME_PRIORITY.default_value == 2
+        assert GAME_PRIORITY.value_type == SettingValueType.INT
 
-    def test_default_in_bounds(self) -> None:
-        """Default value should be within bounds."""
-        assert (
-            SYSTEM_RESPONSIVENESS.min_value
-            <= SYSTEM_RESPONSIVENESS.default_value
-            <= SYSTEM_RESPONSIVENESS.max_value
-        )
-
-    def test_recommended_in_bounds(self) -> None:
-        """Recommended value should be within bounds."""
-        assert (
-            SYSTEM_RESPONSIVENESS.min_value
-            <= SYSTEM_RESPONSIVENESS.recommended_value
-            <= SYSTEM_RESPONSIVENESS.max_value
-        )
+    def test_scheduling_category_stock_is_medium(self) -> None:
+        assert SCHEDULING_CATEGORY.default_value == "Medium"
 
 
 class TestWin32PrioritySeparation:
-    """Tests for Win32 Priority Separation setting."""
+    def test_stock_2_is_what_reset_writes(self) -> None:
+        """24 (0x18) is the Server 'Background services' value; it is not stock."""
+        assert WIN32_PRIORITY_SEPARATION.apply_value_map == {"standard": 2}
 
-    def test_value_type(self) -> None:
-        """Win32 Priority Separation should be CHOICE type."""
-        assert WIN32_PRIORITY_SEPARATION.value_type == SettingValueType.CHOICE
+    def test_stock_readings_read_as_standard(self) -> None:
+        from fpstune.settings.executors import map_raw_to_display
 
-    def test_choices(self) -> None:
-        """Win32 Priority Separation should have correct choices."""
-        assert "standard" in WIN32_PRIORITY_SEPARATION.choices
-        assert "gaming" in WIN32_PRIORITY_SEPARATION.choices
-        assert "balanced" in WIN32_PRIORITY_SEPARATION.choices
+        for raw in (2, 38, None):
+            assert map_raw_to_display(WIN32_PRIORITY_SEPARATION.value_map, raw) == "standard"
 
-    def test_value_map_roundtrip(self) -> None:
-        """Value map should correctly map registry values to choices."""
-        # Test gaming value
-        assert WIN32_PRIORITY_SEPARATION.value_map[42] == "gaming"
-        assert WIN32_PRIORITY_SEPARATION.apply_value_map["gaming"] == 42
+    def test_other_tools_values_read_as_changed(self) -> None:
+        from fpstune.settings.executors import map_raw_to_display
 
-        # Test balanced value
-        assert WIN32_PRIORITY_SEPARATION.value_map[41] == "balanced"
-        assert WIN32_PRIORITY_SEPARATION.apply_value_map["balanced"] == 41
-
-        # Test default value
-        assert WIN32_PRIORITY_SEPARATION.value_map[24] == "standard"
-        assert WIN32_PRIORITY_SEPARATION.apply_value_map["standard"] == 24
-
-    def test_legacy_values_map_to_default(self) -> None:
-        """Legacy and non-optimal values should map to 'default'."""
-        # 0x26 (38) = short VARIABLE quanta - common but not optimal
-        assert WIN32_PRIORITY_SEPARATION.value_map[38] == "standard"
-        # 0x02 (2) = legacy Windows default
-        assert WIN32_PRIORITY_SEPARATION.value_map[2] == "standard"
-        # None = key not present
-        assert WIN32_PRIORITY_SEPARATION.value_map[None] == "standard"
-
-
-class TestSchedulingCategory:
-    """Tests for Scheduling Category setting."""
-
-    def test_value_type(self) -> None:
-        """Scheduling Category should be CHOICE type."""
-        assert SCHEDULING_CATEGORY.value_type == SettingValueType.CHOICE
-
-    def test_choices(self) -> None:
-        """Scheduling Category should have correct choices."""
-        assert "Low" in SCHEDULING_CATEGORY.choices
-        assert "Medium" in SCHEDULING_CATEGORY.choices
-        assert "High" in SCHEDULING_CATEGORY.choices
-
-    def test_recommended_value(self) -> None:
-        """Scheduling Category recommended should be High."""
-        assert SCHEDULING_CATEGORY.recommended_value == "High"
-
-    def test_uses_games_key(self) -> None:
-        """Scheduling Category should use GAMES_KEY registry path."""
-        assert SCHEDULING_CATEGORY.detect_args["path"] == GAMES_KEY
-        assert SCHEDULING_CATEGORY.apply_args["path"] == GAMES_KEY
+        for raw in (24, 42, 41, 26):
+            assert map_raw_to_display(WIN32_PRIORITY_SEPARATION.value_map, raw) == "changed"

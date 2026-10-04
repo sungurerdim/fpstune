@@ -125,10 +125,10 @@ function Get-NetAdapter {
     }
 }
 function Get-NetAdapterAdvancedProperty {
-    [CmdletBinding()] param([string]$Name, [string]$RegistryKeyword)
+    [CmdletBinding()] param([string]$Name, [string[]]$RegistryKeyword)
     foreach ($a in $FpsFake.adapters) {
         if ($a.Name -eq $Name) {
-            return [pscustomobject]@{ Name = $Name; RegistryKeyword = $RegistryKeyword; RegistryValue = @($a.moderation) }
+            return [pscustomobject]@{ Name = $Name; RegistryKeyword = $RegistryKeyword[0]; RegistryValue = @($a.moderation) }
         }
     }
     throw "no adapter named '$Name' on this host"

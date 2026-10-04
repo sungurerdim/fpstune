@@ -29,7 +29,7 @@ $ErrorActionPreference = 'Stop'
 $FpsFake = Get-Content $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
 
 function Get-NetAdapterAdvancedProperty {
-    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword, [switch]$AllProperties)
+    [CmdletBinding()] param([int]$InterfaceIndex, [string[]]$RegistryKeyword, [switch]$AllProperties)
     $exposed = [string]$FpsFake.keyword
     if ($AllProperties) {
         return [pscustomobject]@{
@@ -37,14 +37,19 @@ function Get-NetAdapterAdvancedProperty {
             ValidRegistryValues = $FpsFake.valid
         }
     }
-    if ($RegistryKeyword -ne $exposed) {
-        throw 'No matching MSFT_NetAdapterAdvancedPropertySettingData objects found'
+    # Like the real cmdlet: one object per keyword the adapter exposes, and a
+    # non-terminating error (so -ErrorAction decides) for each one it does not.
+    foreach ($k in $RegistryKeyword) {
+        if ($k -eq $exposed) {
+            [pscustomobject]@{ RegistryKeyword = $exposed; ValidRegistryValues = $FpsFake.valid }
+        } else {
+            Write-Error 'No matching MSFT_NetAdapterAdvancedPropertySettingData objects found'
+        }
     }
-    [pscustomobject]@{ RegistryKeyword = $exposed; ValidRegistryValues = $FpsFake.valid }
 }
 
 function Set-NetAdapterAdvancedProperty {
-    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword, $RegistryValue)
+    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword, $RegistryValue, [switch]$NoRestart)
     Write-Output "WROTE=$RegistryKeyword=$RegistryValue"
 }
 """

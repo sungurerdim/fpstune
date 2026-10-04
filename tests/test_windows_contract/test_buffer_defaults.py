@@ -28,7 +28,7 @@ $ErrorActionPreference = 'Stop'
 $FpsFake = Get-Content $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
 
 function Get-NetAdapterAdvancedProperty {
-    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword)
+    [CmdletBinding()] param([int]$InterfaceIndex, [string[]]$RegistryKeyword)
     [pscustomobject]@{
         RegistryValue = @([string]$FpsFake.current)
         NumericParameterMinValue = [int]$FpsFake.min
@@ -38,7 +38,7 @@ function Get-NetAdapterAdvancedProperty {
 }
 
 function Set-NetAdapterAdvancedProperty {
-    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword, $RegistryValue)
+    [CmdletBinding()] param([int]$InterfaceIndex, [string]$RegistryKeyword, $RegistryValue, [switch]$NoRestart)
     Write-Output "WROTE=$RegistryValue"
 }
 """

@@ -141,14 +141,20 @@ def apply_and_finalize(
     global _in_flight
     success: bool
     error: str | None
-    if not _wait_for_bench():
-        success = False
-        error = "A background measurement is using the machine; try again in a moment"
-        freed = NOTHING_MEASURED
-    else:
-        with _in_flight_guard:
-            _in_flight += 1
-        try:
+    # Counted *before* waiting for the lock. Counting after left a window: the
+    # scheduler read zero applies, this side saw the lock free, and then both
+    # went ahead — a bench measuring a machine mid-apply. Counted first, a bench
+    # that takes the lock afterwards sees this apply and stands down
+    # (`scheduler.poll_once`, `benchmark_suite`), and one that took it earlier
+    # is waited out here.
+    with _in_flight_guard:
+        _in_flight += 1
+    try:
+        if not _wait_for_bench():
+            success = False
+            error = "A background measurement is using the machine; try again in a moment"
+            freed = NOTHING_MEASURED
+        else:
             will_run = not action_will_not_run(setting, value)
             before = measure_cleanup_size(setting) if will_run else None
             success, error = (
@@ -157,9 +163,9 @@ def apply_and_finalize(
             freed = (
                 freed_after_cleanup(setting, before) if success and will_run else NOTHING_MEASURED
             )
-        finally:
-            with _in_flight_guard:
-                _in_flight -= 1
+    finally:
+        with _in_flight_guard:
+            _in_flight -= 1
 
     # Looked up now rather than imported above: routes/settings imports this
     # module, so the edge back to it cannot be a module-level one — and a late

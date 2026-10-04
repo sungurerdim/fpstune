@@ -133,6 +133,35 @@ class TestRunning:
         skipped = [event for event in events if event["event"] == "skipped"]
         assert skipped[0]["result"]["reason"] == "start a game first"
 
+    def test_a_bench_never_runs_while_another_operation_holds_the_machine(
+        self, client: TestClient
+    ) -> None:
+        """The suite took no lock, so an apply, a cleanup or the scheduler's own
+        bench could land halfway through it and the result described neither
+        state. Holding the operation lock elsewhere must keep it out."""
+        from fpstune.benchmark.operation_lock import try_acquire
+
+        held = try_acquire()
+        assert held is not None
+        try:
+            events = _events(client, {"benches": ["free"], "repeats": 2})
+        finally:
+            held.release()
+
+        skipped = [event for event in events if event["event"] == "skipped"]
+        assert skipped and "another fpstune operation" in skipped[0]["result"]["reason"]
+
+    def test_a_bench_never_runs_beside_an_apply(
+        self, client: TestClient, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from fpstune.api.routes import benchmark_suite
+
+        monkeypatch.setattr(benchmark_suite, "applies_in_flight", lambda: 1)
+
+        events = _events(client, {"benches": ["free"], "repeats": 2})
+
+        assert [event["event"] for event in events] == ["started", "running", "skipped", "done"]
+
     def test_a_bench_that_raises_does_not_end_the_run(self, client: TestClient) -> None:
         events = _events(client, {"benches": ["free"], "repeats": 2})
         assert events[-1]["event"] == "done"

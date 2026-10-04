@@ -335,23 +335,47 @@ def _atomic_write(path: Path, payload: dict[str, Any]) -> None:
             tmp.unlink(missing_ok=True)
 
 
+def _quarantine(path: Path, why: str) -> None:
+    """Move an unreadable file aside so the next write cannot destroy it.
+
+    Returning None alone made the next job's write replace the file: a damaged
+    baseline vanished and the following run passed for a first run. Renamed
+    instead, it stays on disk for a person to inspect, and out of every glob
+    this module reads (`*.json` no longer matches).
+    """
+    target = path.with_name(f"{path.name}.corrupt-{int(time.time())}")
+    try:
+        os.replace(path, target)
+    except OSError as exc:
+        logger.warning(
+            "Benchmark file %s is unreadable (%s) and could not be set aside: %s", path, why, exc
+        )
+        return
+    logger.warning("Benchmark file %s is unreadable (%s); kept as %s", path, why, target.name)
+
+
 def _read_json(path: Path) -> dict[str, Any] | None:
     """Read one JSON object, or say why it could not be read.
 
     Never silent (C11 rule 3): a ledger that cannot be parsed is a baseline the
     user will never see again, and swallowing that makes the next run look like
-    a first run.
+    a first run. A file that is there but is not JSON is set aside, never left
+    for the next write to overwrite; a file that could not be *opened* (held by
+    an antivirus scan, say) is left exactly where it is.
     """
     try:
         with open(path, encoding="utf-8") as handle:
             data = json.load(handle)
     except FileNotFoundError:
         return None
-    except (OSError, ValueError) as exc:
+    except ValueError as exc:
+        _quarantine(path, str(exc))
+        return None
+    except OSError as exc:
         logger.warning("Benchmark ledger at %s could not be read: %s", path, exc)
         return None
     if not isinstance(data, dict):
-        logger.warning("Benchmark ledger at %s is not a JSON object", path)
+        _quarantine(path, "not a JSON object")
         return None
     return data
 
@@ -377,7 +401,7 @@ def read_job() -> Job | None:
     try:
         return Job.from_dict(payload)
     except (KeyError, TypeError, ValueError) as exc:
-        logger.warning("Benchmark ledger holds no readable job: %s", exc)
+        _quarantine(ledger_path(), f"no readable job: {exc}")
         return None
 
 
@@ -569,7 +593,7 @@ def _load_run(path: Path) -> SuiteRun | None:
     try:
         return SuiteRun.from_dict(payload)
     except (KeyError, TypeError, ValueError) as exc:
-        logger.warning("Benchmark run at %s could not be rebuilt: %s", path, exc)
+        _quarantine(path, f"not a run: {exc}")
         return None
 
 

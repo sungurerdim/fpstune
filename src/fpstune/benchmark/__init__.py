@@ -1,6 +1,5 @@
 """Benchmark tools for fpstune."""
 
-from fpstune.benchmark.compare import BenchmarkComparison
 from fpstune.benchmark.disk_io import DiskIoBench
 from fpstune.benchmark.dpc import (
     DpcBenchmark,
@@ -31,7 +30,6 @@ from fpstune.benchmark.presentmon import (
 from fpstune.benchmark.presentmon import (
     BenchmarkComparison as FpsBenchmarkComparison,
 )
-from fpstune.benchmark.runner import BenchmarkResult, BenchmarkRunner
 from fpstune.benchmark.suite import (
     Bench,
     BenchReading,
@@ -57,9 +55,6 @@ __all__ = [
     "SuiteComparison",
     "run_suite",
     "compare_runs",
-    "BenchmarkRunner",
-    "BenchmarkResult",
-    "BenchmarkComparison",
     "PresentMonBenchmark",
     "FrameTimeStats",
     "BenchmarkCapture",

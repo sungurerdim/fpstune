@@ -342,8 +342,8 @@ class TestAMeteredLineIsNotSpentUnasked:
         assert "cost service is off" in why
 
     def test_a_metered_line_keeps_the_bench_out_of_the_automatic_run(self, monkeypatch) -> None:
-        """The scheduler's plan is `default_keys()`, so this is the whole
-        mechanism by which a daemon nobody asked stops spending an allowance."""
+        """`default_keys()` is what "run everything" means for a person who
+        pressed the button; a metered line keeps it out of that too."""
         from fpstune.benchmark import benches
 
         monkeypatch.setattr(
@@ -375,6 +375,18 @@ class TestAMeteredLineIsNotSpentUnasked:
         )
 
         assert "network_load" in benches.default_keys()
+
+    def test_the_scheduler_never_runs_a_speed_test_unasked(self, monkeypatch) -> None:
+        """F12: on an unrestricted line the scheduler's plan was the default set,
+        so a daemon moved ~33 MB over the user's connection with nobody at the
+        machine — mid-download, mid-call. Unmetered is not consent."""
+        from fpstune.benchmark import scheduler
+
+        monkeypatch.setattr(
+            network_load, "_connection_cost_flags", lambda: (network_load.COST_UNRESTRICTED, "")
+        )
+
+        assert "network_load" not in scheduler.plan_keys()
 
     def test_windows_own_answer_is_read_rather_than_assumed(self) -> None:
         """No stub: the flags come from `INetworkCostManager` on this machine.

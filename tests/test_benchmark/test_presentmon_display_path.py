@@ -58,6 +58,8 @@ def _bench(tmp_path: Path) -> PresentMonBenchmark:
     bench = PresentMonBenchmark(data_dir=tmp_path)
     bench.presentmon_path.parent.mkdir(parents=True, exist_ok=True)
     bench.presentmon_path.write_bytes(b"stub")
+    # The stub is not the pinned binary; the hash gate has its own tests.
+    bench.is_installed = lambda: True  # type: ignore[method-assign]
     return bench
 
 
@@ -140,9 +142,28 @@ class TestOnlyFlagsTheBuildAdmitsTo:
         already running. Use --stop_existing_session ...` — measured 2026-09-11
         on PresentMon 2.5.1, second capture after `stop_capture()` had
         terminated the first. Every capture after the first would fail."""
+        help_text = (
+            _HELP_2_5_1
+            + "  --session_name name           Use the specified session name.\n"
+            + "  --stop_existing_session       Stop the leftover session.\n"
+        )
+
+        cmd = self._capture_command(tmp_path, monkeypatch, help_text)
+        assert "--stop_existing_session" in cmd
+        assert cmd[cmd.index("--session_name") + 1] == "fpstune"
+
+    def test_the_users_own_presentmon_session_is_never_taken_over(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Without a session name of our own, `--stop_existing_session` would
+        stop the default "PresentMon" session — which is the one a user's own
+        PresentMon records under. A build that cannot name the session gets no
+        takeover at all."""
         help_text = _HELP_2_5_1 + "  --stop_existing_session       Stop the leftover session.\n"
 
-        assert "--stop_existing_session" in self._capture_command(tmp_path, monkeypatch, help_text)
+        cmd = self._capture_command(tmp_path, monkeypatch, help_text)
+        assert "--stop_existing_session" not in cmd
+        assert "--session_name" not in cmd
 
     def test_a_build_without_session_takeover_is_not_handed_a_fatal_option(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch

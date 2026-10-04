@@ -254,27 +254,16 @@ class TestTheStutterThreshold:
         assert bench._calculate_stats([10.0] * 99 + [20.0], []).stutter_count == 0
 
 
-class TestTheDownloadIsDiscoveredNotPinned:
-    def test_no_pinned_release_url_survives_in_the_module(self) -> None:
-        """The pinned v2.2.0 zip URL returned 404, so the benchmark could never
-        install its own tool — and nothing reported that. The version and the
-        packaging both moved; asking the API is the only thing that keeps
-        working when they move again.
-        """
+class TestTheDownloadIsPinned:
+    def test_the_release_is_one_named_file_with_its_hash(self) -> None:
+        """ "Whatever GitHub calls latest" is not something to run elevated: the
+        URL names one release and the hash names one file. The API lookup that
+        used to stand here installed a different binary every time the project
+        published one, with nothing checking any of them."""
         from fpstune.benchmark import presentmon
 
-        assert not hasattr(presentmon, "PRESENTMON_RELEASE_URL")
-        assert not hasattr(presentmon, "PRESENTMON_VERSION")
-        assert "releases/latest" in presentmon.PRESENTMON_RELEASE_API
-
-    def test_resolution_failure_is_not_an_exception(self, monkeypatch) -> None:
-        """Offline is a normal state, not a crash. It leaves benchmarks
-        unavailable, which is what the headroom logic already treats as
-        'unmeasured'."""
-        import urllib.request
-
-        def refuse(*_args: object, **_kwargs: object) -> None:
-            raise OSError("no network")
-
-        monkeypatch.setattr(urllib.request, "urlopen", refuse)
-        assert PresentMonBenchmark().resolve_download() is None
+        assert not hasattr(presentmon, "PRESENTMON_RELEASE_API")
+        assert presentmon.PRESENTMON_URL.startswith("https://github.com/GameTechDev/PresentMon/")
+        assert f"v{presentmon.PRESENTMON_VERSION}/" in presentmon.PRESENTMON_URL
+        assert len(presentmon.PRESENTMON_SHA256) == 64
+        int(presentmon.PRESENTMON_SHA256, 16)

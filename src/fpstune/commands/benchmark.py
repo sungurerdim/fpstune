@@ -8,8 +8,12 @@ import click
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from fpstune.benchmark.furmark import FURMARK_DOWNLOAD_SIZE_MB, FurMarkBenchmark
-from fpstune.benchmark.presentmon import PRESENTMON_DOWNLOAD_SIZE_MB, PresentMonBenchmark
+from fpstune.benchmark.furmark import FurMarkBenchmark
+from fpstune.benchmark.presentmon import (
+    PRESENTMON_DOWNLOAD_SIZE_MB,
+    PRESENTMON_VERSION,
+    PresentMonBenchmark,
+)
 from fpstune.commands.utils import (
     console,
     display_dpc_result,
@@ -61,25 +65,9 @@ def benchmark(
 
     fm = FurMarkBenchmark()
 
-    # Auto-install FurMark if needed
     if not compare and not fm.is_installed():
-        console.print(
-            f"[yellow]FurMark 2 not installed. Downloading (~{FURMARK_DOWNLOAD_SIZE_MB} MB)...[/]"
-        )
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-        ) as progress:
-            task = progress.add_task("Downloading FurMark 2...", total=100)
-
-            def update_progress(pct: int) -> None:
-                progress.update(task, completed=pct)
-
-            if not fm.install(progress_callback=update_progress):
-                console.print("[red]\u2717[/] Failed to install FurMark 2")
-                return
-            console.print("[green]\u2713[/] FurMark 2 installed")
+        console.print(f"[yellow]{fm.install_hint()}[/]")
+        return
 
     # Just show comparison?
     if compare:
@@ -98,7 +86,7 @@ def benchmark(
         TextColumn("[progress.description]{task.description}"),
         console=console,
     ) as progress:
-        task = progress.add_task(f"Benchmarking ({settings['duration']}s)...", total=None)
+        progress.add_task(f"Benchmarking ({settings['duration']}s)...", total=None)
         result = fm.run_benchmark(name=name, preset=preset)
 
     if not result:
@@ -131,7 +119,7 @@ def fps() -> None:
 
 @fps.command("install")
 def fps_install() -> None:
-    """Install PresentMon (auto-download from GitHub)."""
+    """Install the pinned PresentMon release (checksum-verified)."""
     pm = PresentMonBenchmark()
 
     if pm.is_installed():
@@ -155,7 +143,7 @@ def fps_install() -> None:
             console.print("[green]\u2713[/] PresentMon installed successfully")
             console.print(f"  Location: {pm.presentmon_path}")
         else:
-            console.print("[red]\u2717[/] Failed to install PresentMon")
+            console.print(f"[red]\u2717[/] Failed to install PresentMon: {pm.install_error}")
 
 
 @fps.command("start")
@@ -169,11 +157,18 @@ def fps_start(game: str | None, duration: int, name: str | None) -> None:
     pm = PresentMonBenchmark()
 
     if not pm.is_installed():
-        console.print(
-            f"[yellow]PresentMon not installed. Installing (~{PRESENTMON_DOWNLOAD_SIZE_MB} MB)...[/]"
-        )
+        # Asked, never assumed: the download is small, but it is a program
+        # fpstune will run as Administrator.
+        if not click.confirm(
+            f"PresentMon {PRESENTMON_VERSION} is not installed. Download it "
+            f"(~{PRESENTMON_DOWNLOAD_SIZE_MB} MB, pinned and checksum-verified, from "
+            "GameTechDev's GitHub release)?",
+            default=False,
+        ):
+            console.print("PresentMon was not installed; no capture started")
+            return
         if not pm.install():
-            console.print("[red]\u2717[/] Failed to install PresentMon")
+            console.print(f"[red]\u2717[/] Failed to install PresentMon: {pm.install_error}")
             return
 
     if pm.is_capturing():
@@ -345,31 +340,15 @@ def gpu_bench() -> None:
 
 @gpu_bench.command("install")
 def gpu_bench_install() -> None:
-    """Install FurMark 2 (auto-download)."""
+    """Show where FurMark 2 goes (fpstune does not download it)."""
     fm = FurMarkBenchmark()
 
     if fm.is_installed():
-        console.print("[green]\u2713[/] FurMark 2 is already installed")
+        console.print("[green]\u2713[/] FurMark 2 is installed")
         console.print(f"  Location: {fm.furmark_cli_path}")
         return
 
-    console.print("Downloading FurMark 2...")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        task = progress.add_task("Downloading...", total=100)
-
-        def update_progress(pct: int) -> None:
-            progress.update(task, completed=pct)
-
-        if fm.install(progress_callback=update_progress):
-            console.print("[green]\u2713[/] FurMark 2 installed successfully")
-            console.print(f"  Location: {fm.furmark_cli_path}")
-        else:
-            console.print("[red]\u2717[/] Failed to install FurMark 2")
+    console.print(fm.install_hint())
 
 
 @gpu_bench.command("run")
@@ -397,10 +376,8 @@ def gpu_bench_run(
     fm = FurMarkBenchmark()
 
     if not fm.is_installed():
-        console.print("[yellow]FurMark 2 not installed. Installing...[/]")
-        if not fm.install():
-            console.print("[red]\u2717[/] Failed to install FurMark 2")
-            return
+        console.print(f"[yellow]{fm.install_hint()}[/]")
+        return
 
     # Show settings
     settings = fm.get_presets()[preset]

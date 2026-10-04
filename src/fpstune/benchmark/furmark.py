@@ -4,7 +4,7 @@ FurMark 2 is a free GPU stress test and benchmark tool.
 https://geeks3d.com/furmark/
 
 This module provides:
-- Automatic FurMark 2 download/installation
+- Running a FurMark 2 the user installed (never downloaded: no published hash)
 - Standardized benchmark runs (consistent settings)
 - Result parsing and analysis
 - Before/after comparison
@@ -14,25 +14,15 @@ from __future__ import annotations
 
 import contextlib
 import re
-import shutil
 import subprocess
-import sys
-import zipfile
-from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.request import urlretrieve
 
 from fpstune.benchmark.result_store import ResultStore
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
-
-# FurMark 2 download URL
-FURMARK_DOWNLOAD_URL = "https://geeks3d.com/dl/get/806"  # FurMark 2 latest
-FURMARK_VERSION = "2.10"
-FURMARK_DOWNLOAD_SIZE_MB = 34  # Approximate ZIP download size
 
 
 @dataclass
@@ -249,60 +239,14 @@ class FurMarkBenchmark:
         """Check if FurMark is installed."""
         return self.furmark_cli_path.exists() or self.furmark_path.exists()
 
-    def install(self, progress_callback: Callable[[int], None] | None = None) -> bool:
-        """Download and install FurMark 2.
-
-        Args:
-            progress_callback: Optional callback for download progress.
-
-        Returns:
-            True if installed successfully.
-        """
-        if sys.platform != "win32":
-            self._logger.warning("FurMark only works on Windows")
-            return False
-
-        try:
-            self._furmark_dir.mkdir(parents=True, exist_ok=True)
-            zip_path = self._furmark_dir / "furmark2.zip"
-
-            # Download
-            self._logger.info("Downloading FurMark 2...")
-
-            def reporthook(count: int, block_size: int, total_size: int) -> None:
-                if progress_callback and total_size > 0:
-                    progress = int(count * block_size * 100 / total_size)
-                    progress_callback(min(progress, 100))
-
-            urlretrieve(FURMARK_DOWNLOAD_URL, zip_path, reporthook)
-
-            # Extract
-            self._logger.info("Extracting FurMark 2...")
-            with zipfile.ZipFile(zip_path, "r") as zf:
-                zf.extractall(self._furmark_dir)
-
-            # Find the exe (might be in a subdirectory)
-            for exe in self._furmark_dir.rglob("furmark.exe"):
-                if exe.parent != self._furmark_dir:
-                    # Move all files from subdirectory
-                    for item in exe.parent.iterdir():
-                        shutil.move(str(item), str(self._furmark_dir / item.name))
-                break
-
-            # Cleanup
-            zip_path.unlink(missing_ok=True)
-
-            # Remove empty subdirectories
-            for subdir in self._furmark_dir.iterdir():
-                if subdir.is_dir() and not list(subdir.iterdir()):
-                    subdir.rmdir()
-
-            self._logger.info("FurMark 2 installed successfully")
-            return self.is_installed()
-
-        except Exception as e:
-            self._logger.error(f"Failed to install FurMark: {e}")
-            return False
+    def install_hint(self) -> str:
+        """What the user has to do, since fpstune does not fetch FurMark itself."""
+        return (
+            "FurMark 2 is not downloaded by fpstune: its publisher posts no checksum, "
+            "so there is nothing to verify a download against before running it as "
+            "Administrator. Install FurMark 2 (x64) from geeks3d.com yourself and copy "
+            f"the folder that holds furmark.exe to {self._furmark_dir}"
+        )
 
     def run_benchmark(
         self,
@@ -324,7 +268,8 @@ class FurMarkBenchmark:
         Returns:
             FurMarkResult or None if benchmark fails.
         """
-        if not self.is_installed() and not self.install():
+        if not self.is_installed():
+            self._logger.error(self.install_hint())
             return None
 
         # Get preset settings

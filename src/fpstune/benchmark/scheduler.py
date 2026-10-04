@@ -56,7 +56,6 @@ from __future__ import annotations
 
 import contextlib
 import ctypes
-import subprocess
 import sys
 import threading
 import time
@@ -64,12 +63,11 @@ from ctypes import wintypes
 from dataclasses import dataclass
 
 from fpstune.benchmark import ledger
-from fpstune.benchmark.benches import benches_for, default_keys, tool_executable_names
+from fpstune.benchmark.benches import benches_for, tool_executable_names, unattended_keys
 from fpstune.benchmark.operation_lock import operation_lock
 from fpstune.benchmark.suite import Bench, BenchResult, run_bench_with_deadline
 from fpstune.settings.executors.game_processes import GAME_PROCESSES, game_is_running
 from fpstune.utils.logger import get_logger
-from fpstune.utils.system_tools import system_tool
 
 logger = get_logger()
 
@@ -184,7 +182,7 @@ def idle_seconds() -> float:
 
 
 def sweep_leftover_tools(names: list[str] | None = None) -> int:
-    """Kill benchmark tools a previous session left running. Returns how many.
+    """Kill benchmark tools a previous fpstune session left running. Returns how many.
 
     PC-Check's `Stop-StressTools` at launch, absorbed. A FurMark left running by
     a crash is a power virus holding the GPU at its thermal limit; a PresentMon
@@ -192,31 +190,27 @@ def sweep_leftover_tools(names: list[str] | None = None) -> int:
     measurement of the new session, and looks like a result rather than a
     mistake.
 
+    Only fpstune's own copies: a process counts when its image is one of the
+    tools' names *and* lives under fpstune's state directory, where every tool
+    fpstune runs is installed. `taskkill /IM` used to end the user's own
+    PresentMon or FurMark too, mid-recording. Then fpstune's own ETW session is
+    stopped, since a killed PresentMon never closes it.
+
     The names come from the tools' own executable paths rather than a list kept
     here — see `benches.tool_executable_names`.
     """
     if sys.platform != "win32":
         return 0
 
+    from fpstune.benchmark.own_processes import kill_own_tools
+    from fpstune.benchmark.presentmon import stop_etw_session
+    from fpstune.utils.config import get_config_dir
+
     targets = tool_executable_names() if names is None else names
-    killed = 0
-    for name in targets:
-        try:
-            completed = subprocess.run(
-                [system_tool("taskkill.exe"), "/F", "/IM", name],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-            )
-        except (OSError, subprocess.SubprocessError) as exc:
-            logger.debug("Could not sweep %s: %s", name, exc)
-            continue
-        # Exit code 128 is "no such process", which is the ordinary case and not
-        # worth a word.
-        if completed.returncode == 0:
-            logger.info("Swept a leftover %s from a previous session", name)
-            killed += 1
+    killed = kill_own_tools(str(get_config_dir()), targets)
+    if killed:
+        logger.info("Swept %d leftover benchmark tool(s) from a previous session", killed)
+    stop_etw_session()
     return killed
 
 
@@ -226,12 +220,12 @@ def sweep_leftover_tools(names: list[str] | None = None) -> int:
 def plan_keys() -> list[str]:
     """The benches a scheduled job runs, in order.
 
-    The default set rather than every bench: `network_load` downloads about
-    25 MB a pass, and a daemon nobody asked doing that on a metered connection
-    is a cost the user never agreed to. `benches.py` already draws that line and
+    Not even the whole default set: `network_load` moves about 33 MB a pass, and
+    a daemon nobody asked doing that is a cost the user never agreed to — on a
+    metered line or not. `benches.py` draws that line (`Entry.unattended`) and
     this defers to it rather than drawing a second one.
     """
-    return default_keys()
+    return unattended_keys()
 
 
 def bench_named(key: str) -> Bench:
@@ -455,6 +449,16 @@ def poll_once(now: float | None = None, *, first_tick: bool = False) -> TickOutc
                 BUSY,
                 "another fpstune operation is running; a bench now would measure "
                 "a machine halfway between two states",
+                job.id,
+                bench_key,
+            )
+        # Asked again under the lock. The guard above ran before it was taken,
+        # and an apply that started in between is counted before it waits for
+        # the lock — so this is the read that closes the gap.
+        if applies_in_flight():
+            return TickOutcome(
+                BUSY,
+                "an apply started while the bench was getting ready; it waits",
                 job.id,
                 bench_key,
             )

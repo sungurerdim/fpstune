@@ -92,12 +92,27 @@ class TestFpsCaptureLifecycle:
         pm = MagicMock()
         pm.is_installed.return_value = False
         pm.install.return_value = False
+        pm.install_error = "the download did not finish: timed out"
 
         with patch.object(bench_cmds, "PresentMonBenchmark", return_value=pm):
-            result = runner.invoke(bench_cmds.fps, ["start"])
+            result = runner.invoke(bench_cmds.fps, ["start"], input="y\n")
 
         assert result.exit_code == 0
         assert "Failed to install" in result.output
+        assert "timed out" in result.output
+        pm.start_capture.assert_not_called()
+
+    def test_declining_the_download_installs_nothing(self, runner) -> None:
+        """A capture used to download PresentMon unasked; the answer is the user's."""
+        pm = MagicMock()
+        pm.is_installed.return_value = False
+
+        with patch.object(bench_cmds, "PresentMonBenchmark", return_value=pm):
+            result = runner.invoke(bench_cmds.fps, ["start"], input="n\n")
+
+        assert result.exit_code == 0
+        pm.install.assert_not_called()
+        pm.start_capture.assert_not_called()
         pm.start_capture.assert_not_called()
 
 
@@ -151,16 +166,20 @@ class TestGpuBench:
         assert "Benchmark failed" in result.output
         fm.save_result.assert_not_called()
 
-    def test_run_stops_when_the_install_fails(self, runner) -> None:
+    def test_run_without_furmark_says_where_it_goes_and_downloads_nothing(self, runner) -> None:
+        """FurMark's publisher posts no checksum, so fpstune never fetches it:
+        the old path downloaded whatever a redirect served (an ARM64 .7z by
+        2026-10) and ran it elevated."""
         fm = _furmark()
         fm.is_installed.return_value = False
-        fm.install.return_value = False
+        fm.install_hint.return_value = "Install FurMark 2 yourself"
 
         with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
             result = runner.invoke(bench_cmds.gpu_bench, ["run"])
 
         assert result.exit_code == 0
-        assert "Failed to install" in result.output
+        assert "Install FurMark 2 yourself" in result.output
+        fm.install.assert_not_called()
         fm.run_benchmark.assert_not_called()
 
     def test_run_passes_the_overrides_through(self, runner) -> None:

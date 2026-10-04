@@ -89,6 +89,31 @@ class TestApplyWaitsForBench:
         assert seen == [1]
         assert settings_apply.applies_in_flight() == 0
 
+    def test_counts_itself_before_it_waits_for_the_lock(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Counted only after the lock looked free, an apply left a window in
+        which the scheduler read zero applies and took the lock: a bench then
+        measured a machine mid-apply. The scheduler must see the apply while it
+        is still waiting."""
+        seen_while_waiting: list[int] = []
+
+        def _is_free() -> bool:
+            seen_while_waiting.append(settings_apply.applies_in_flight())
+            return True
+
+        monkeypatch.setattr(settings_apply, "is_free", _is_free)
+        with (
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply",
+                return_value=(True, None),
+            ),
+            patch("fpstune.api.routes.settings._finalize_apply_response", _finalize_stub),
+        ):
+            settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+        assert seen_while_waiting == [1]
+        assert settings_apply.applies_in_flight() == 0
+
     def test_counter_returns_to_zero_when_the_command_raises(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:

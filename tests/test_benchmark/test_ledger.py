@@ -454,3 +454,29 @@ class TestReadingRunsBack:
 
         with caplog.at_level(logging.WARNING):
             assert led.baseline() is None
+
+
+class TestACorruptLedgerIsKept:
+    """Returning None used to let the next job overwrite the file: a damaged
+    baseline vanished and the next run passed for a first run."""
+
+    def test_unparseable_ledger_is_set_aside_before_a_new_job_writes(self, tmp_path: Path) -> None:
+        led.ledger_path().write_text("{ half a ledger", encoding="utf-8")
+
+        assert led.read_job() is None
+        led.open_job(led.BASELINE, ["timing"])
+
+        kept = list(tmp_path.glob(f"{led.ledger_path().name}.corrupt-*"))
+        assert len(kept) == 1
+        assert kept[0].read_text(encoding="utf-8") == "{ half a ledger"
+
+    def test_a_ledger_holding_no_job_is_set_aside(self, tmp_path: Path) -> None:
+        led.ledger_path().write_text(json.dumps({"unrelated": True}), encoding="utf-8")
+
+        assert led.read_job() is None
+        assert not led.ledger_path().exists()
+        assert list(tmp_path.glob("*.corrupt-*"))
+
+    def test_a_missing_ledger_is_not_corruption(self, tmp_path: Path) -> None:
+        assert led.read_job() is None
+        assert not list(tmp_path.glob("*.corrupt-*"))

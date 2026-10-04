@@ -233,12 +233,3 @@ class TestEveryBenchUsesTheStore:
         assert path.parent == tmp_path.resolve()
         assert "before" in path.name
         assert "Game" in path.name
-
-    def test_runner_squashes_a_traversal_name(self, tmp_path: Path) -> None:
-        from fpstune.benchmark.runner import BenchmarkResult, BenchmarkRunner
-
-        runner = BenchmarkRunner(output_dir=tmp_path)
-        path = runner.save_result(BenchmarkResult(timestamp="2026-08-25T12:00:00", name="../evil"))
-
-        assert path.parent == tmp_path.resolve()
-        assert "evil" in path.name

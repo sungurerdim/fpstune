@@ -4,7 +4,7 @@ PresentMon is Microsoft's open-source tool for capturing frame timing data.
 https://github.com/GameTechDev/PresentMon
 
 This module provides:
-- Automatic PresentMon download/installation
+- A pinned, hash-checked PresentMon install, only ever on the user's say-so
 - Background capture during gameplay
 - Frame time analysis and statistics
 - Before/after comparison with visual charts
@@ -13,32 +13,43 @@ This module provides:
 from __future__ import annotations
 
 import csv
-import json
+import hashlib
 import re
-import shutil
 import statistics
 import subprocess
 import sys
-import zipfile
 from collections import Counter
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from urllib.request import urlretrieve
 
+from fpstune.benchmark.download import DownloadError, fetch_verified
 from fpstune.benchmark.result_store import ResultStore
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
 
-# No pinned release. The URL that used to live here — v2.2.0, as a zip —
-# returned 404: the project moved to v2.5.1 and now publishes a bare .exe rather
-# than an archive, so the version *and* the packaging changed underneath it. A
-# benchmark that cannot install its own tool never ran, and nothing said so.
-# `PresentMonBenchmark.resolve_download()` asks GitHub instead.
-PRESENTMON_RELEASE_API = "https://api.github.com/repos/GameTechDev/PresentMon/releases/latest"
+# Pinned: one release, one file, one hash. The tool runs elevated, so "whatever
+# GitHub calls latest today" is not something to execute. Source, read
+# 2026-10-04 with `gh api repos/GameTechDev/PresentMon/releases`: the v2.5.1
+# asset's own `digest` field, and the same SHA-256 recomputed over the
+# downloaded bytes. 2.5.1 rather than the newer 2.6.0 because every flag and
+# column this module relies on was measured against 2.5.1.
+PRESENTMON_VERSION = "2.5.1"
+PRESENTMON_URL = (
+    "https://github.com/GameTechDev/PresentMon/releases/download/v2.5.1/PresentMon-2.5.1-x64.exe"
+)
+PRESENTMON_SHA256 = "9bec3083069f58f911e6a512f4806db51a27bd096103087bc1d05ef54c80a191"
+PRESENTMON_BYTES = 956_768
 PRESENTMON_DOWNLOAD_SIZE_MB = 1  # The console build is under a megabyte.
+
+#: The ETW session fpstune's captures run under. PresentMon's default is
+#: "PresentMon", which the user's own copy uses too — taking that one over with
+#: `--stop_existing_session` would end somebody else's recording. With a name of
+#: our own, the takeover and the cleanup only ever touch what fpstune started.
+SESSION_NAME = "fpstune"
+SESSION_NAME_FLAG = "--session_name"
 
 
 # PresentMon's own spellings of the swapchain presentation path, across versions.
@@ -72,6 +83,38 @@ OPTIONAL_TRACKING_FLAGS = ("--track_pc_latency", "--track_hw_measurements")
 SESSION_TAKEOVER_FLAG = "--stop_existing_session"
 
 HELP_TIMEOUT_SECONDS = 15
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def stop_etw_session(name: str = SESSION_NAME) -> bool:
+    """Stop the named real-time ETW session, if one is running. Returns if it did.
+
+    A PresentMon that is killed rather than asked to stop leaves its session
+    alive, holding a kernel trace buffer until reboot and refusing the next
+    capture. Only fpstune's own session name is ever passed here.
+    """
+    if sys.platform != "win32":
+        return False
+    from fpstune.utils.system_tools import system_tool
+
+    try:
+        completed = subprocess.run(
+            [system_tool("logman.exe"), "stop", name, "-ets"],
+            capture_output=True,
+            timeout=15,
+            creationflags=subprocess.CREATE_NO_WINDOW,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return False
+    return completed.returncode == 0
+
 
 # The display half of the pipeline, under every spelling PresentMon has used.
 # 1.x named these `MsBetweenDisplayChange`, `MsUntilDisplayed` and
@@ -477,6 +520,11 @@ class PresentMonBenchmark:
         #: "unrecognized option") and a caller reporting an empty capture should
         #: pass that on rather than guess at one.
         self.last_error: str = ""
+        #: Why the last `install()` failed, or "".
+        self.install_error: str = ""
+        #: Whether the running capture was started under `SESSION_NAME`, so a
+        #: kill knows there is a session of ours to clean up.
+        self._own_session = False
 
     @property
     def presentmon_path(self) -> Path:
@@ -496,113 +544,58 @@ class PresentMonBenchmark:
             return
         try:
             process.kill()
-        except OSError as exc:  # pragma: no cover - the process is already gone
+            process.wait(timeout=5)
+        except (OSError, subprocess.TimeoutExpired) as exc:  # pragma: no cover
             self._logger.debug("PresentMon would not be killed: %s", exc)
+        if self._own_session:
+            stop_etw_session()
 
     def is_installed(self) -> bool:
-        """Check if PresentMon is installed."""
-        return self.presentmon_path.exists()
+        """Whether the pinned PresentMon is on disk, byte for byte.
 
-    def resolve_download(self) -> tuple[str, str] | None:
-        """Ask GitHub what the current PresentMon release actually is.
-
-        The pinned URL this used to carry — v2.2.0, as a zip — returns 404. The
-        project is on v2.5.1 and now publishes a bare ``.exe`` rather than an
-        archive, so the version *and* the packaging both moved. A benchmark that
-        cannot install its own tool is a benchmark that never ran, and nothing
-        said so.
-
-        Same rule the rest of the product follows: ask the source rather than
-        hold a constant. Returns ``(version, url)``, or None when the API cannot
-        be reached — offline is not an error worth failing loudly for.
+        Hashed on every ask, not only at download: the file sits in a folder the
+        user's own account can write, and it is about to be started elevated. A
+        megabyte hashes in milliseconds; a swapped executable run as
+        Administrator does not get a second chance. A copy an older fpstune
+        fetched from "latest" fails this too, and is replaced on the next
+        install rather than trusted.
         """
-        import urllib.request
-
-        api = PRESENTMON_RELEASE_API
+        path = self.presentmon_path
         try:
-            request = urllib.request.Request(api, headers={"Accept": "application/vnd.github+json"})
-            with urllib.request.urlopen(request, timeout=15) as response:  # noqa: S310
-                release = json.loads(response.read().decode("utf-8"))
-        except Exception as exc:
-            self._logger.debug(f"Could not reach the PresentMon release API: {exc}")
-            return None
-
-        version = str(release.get("tag_name") or "").lstrip("v")
-        assets = release.get("assets") or []
-
-        # Prefer the console x64 executable. The installer .msi is 150 MB and
-        # would need elevation to unpack; the bare exe is what this needs.
-        for asset in assets:
-            name = str(asset.get("name") or "")
-            if name.lower().endswith(".exe") and "x64" in name.lower():
-                return version, str(asset.get("browser_download_url"))
-
-        for asset in assets:
-            name = str(asset.get("name") or "")
-            if name.lower().endswith(".zip") and "symbol" not in name.lower():
-                return version, str(asset.get("browser_download_url"))
-
-        self._logger.debug("PresentMon release carries no asset this can use")
-        return None
+            return (
+                path.stat().st_size == PRESENTMON_BYTES and file_sha256(path) == PRESENTMON_SHA256
+            )
+        except OSError:
+            return False
 
     def install(self, progress_callback: Callable[[int], None] | None = None) -> bool:
-        """Download and install PresentMon.
+        """Download the pinned PresentMon. Only ever called on the user's say-so.
 
-        Args:
-            progress_callback: Optional callback for download progress.
-
-        Returns:
-            True if installed successfully.
+        Returns True when the verified executable is in place; otherwise
+        `install_error` says why, and nothing unverified is left on disk.
         """
+        self.install_error = ""
         if sys.platform != "win32":
-            self._logger.warning("PresentMon only works on Windows")
+            self.install_error = "PresentMon only works on Windows"
             return False
-
-        resolved = self.resolve_download()
-        if resolved is None:
-            self._logger.error(
-                "Could not determine a PresentMon download; benchmarks stay unavailable"
-            )
-            return False
-        version, url = resolved
-
-        try:
-            self._presentmon_dir.mkdir(parents=True, exist_ok=True)
-            self._logger.info(f"Downloading PresentMon {version}...")
-
-            def reporthook(count: int, block_size: int, total_size: int) -> None:
-                if progress_callback and total_size > 0:
-                    progress = int(count * block_size * 100 / total_size)
-                    progress_callback(progress)
-
-            # The release publishes a bare executable now; older ones shipped a
-            # zip. Both shapes are handled because a machine that installed the
-            # old one should not be stuck with it.
-            if url.lower().endswith(".exe"):
-                urlretrieve(url, self.presentmon_path, reporthook)  # noqa: S310
-            else:
-                archive = self._presentmon_dir / "presentmon.zip"
-                urlretrieve(url, archive, reporthook)  # noqa: S310
-                self._logger.info("Extracting PresentMon...")
-                with zipfile.ZipFile(archive, "r") as zf:
-                    zf.extractall(self._presentmon_dir)
-                for exe in self._presentmon_dir.rglob("PresentMon*.exe"):
-                    if "Console" in exe.name or exe.name == "PresentMon.exe":
-                        if exe.parent != self._presentmon_dir:
-                            shutil.move(str(exe), str(self.presentmon_path))
-                        break
-                archive.unlink(missing_ok=True)
-
-            if not self.is_installed():
-                self._logger.error("PresentMon download finished but no executable is present")
-                return False
-
-            self._logger.info(f"PresentMon {version} installed successfully")
+        if self.is_installed():
             return True
-
-        except Exception as e:
-            self._logger.error(f"Failed to install PresentMon: {e}")
+        self._logger.info(f"Downloading PresentMon {PRESENTMON_VERSION}...")
+        try:
+            fetch_verified(
+                PRESENTMON_URL,
+                self.presentmon_path,
+                sha256=PRESENTMON_SHA256,
+                size=PRESENTMON_BYTES,
+                progress=progress_callback,
+            )
+        except DownloadError as exc:
+            self.install_error = f"PresentMon {PRESENTMON_VERSION} could not be installed: {exc}"
+            self._logger.error(self.install_error)
             return False
+        self._supported_flags = None
+        self._logger.info(f"PresentMon {PRESENTMON_VERSION} installed")
+        return True
 
     def supported_flags(self) -> frozenset[str]:
         """Every option this build of PresentMon accepts, from its own help.
@@ -676,7 +669,13 @@ class PresentMonBenchmark:
         Returns:
             True if capture started successfully.
         """
-        if not self.is_installed() and not self.install():
+        # Never installs. A capture is not consent to a download; the install is
+        # its own step the user asks for (the CLI's prompt, the scene's button).
+        if not self.is_installed():
+            self.last_error = (
+                f"PresentMon {PRESENTMON_VERSION} is not installed; "
+                "install it first (about 1 MB, from GameTechDev's GitHub release)"
+            )
             return False
 
         if self._process is not None:
@@ -713,9 +712,14 @@ class PresentMonBenchmark:
         # session named "PresentMon" is already running. Use
         # --stop_existing_session ...` (measured 2026-09-11, PresentMon 2.5.1,
         # the second capture after `stop_capture()` had terminated the first).
-        # Take the leftover over, on builds that know how.
-        if SESSION_TAKEOVER_FLAG in self.supported_flags():
-            cmd.append(SESSION_TAKEOVER_FLAG)
+        # Take the leftover over, on builds that know how — but only under a
+        # session name of our own, so the takeover can never end a recording the
+        # user started with their own PresentMon.
+        self._own_session = SESSION_NAME_FLAG in self.supported_flags()
+        if self._own_session:
+            cmd.extend([SESSION_NAME_FLAG, SESSION_NAME])
+            if SESSION_TAKEOVER_FLAG in self.supported_flags():
+                cmd.append(SESSION_TAKEOVER_FLAG)
 
         if process_name:
             cmd.extend(["--process_name", process_name])
@@ -764,6 +768,9 @@ class PresentMonBenchmark:
         except subprocess.TimeoutExpired:
             self._process.kill()
             _, stderr = self._process.communicate()
+            # Killed, so it never closed its trace session.
+            if self._own_session:
+                stop_etw_session()
         self.last_error = (stderr or b"").decode("utf-8", errors="replace").strip()
         if self.last_error:
             self._logger.debug("PresentMon said: %s", self.last_error)

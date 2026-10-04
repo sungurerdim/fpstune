@@ -69,6 +69,15 @@ class Entry:
     broad button stays safe to press and the expensive one stays a choice.
     """
 
+    unattended: bool = True
+    """Whether the scheduler may run it with nobody at the machine.
+
+    Stricter than `in_default_run`, which still answers a person who pressed a
+    button. A speed test moves real traffic over somebody's line — a download
+    they may be in the middle of, a call on the same connection — and an
+    unmetered tariff is not consent to that at 3 a.m.
+    """
+
     @property
     def key(self) -> str:
         return self.bench.key
@@ -86,7 +95,7 @@ def _network_load_entry() -> Entry:
     costs = "moves about 33 MB — 25 down, 8 up"
     if not unmetered:
         costs = f"{costs}; not run automatically because {why}"
-    return Entry(NetworkLoadBench(), costs=costs, in_default_run=unmetered)
+    return Entry(NetworkLoadBench(), costs=costs, in_default_run=unmetered, unattended=False)
 
 
 def _gpu_scene_entry() -> Entry:
@@ -166,6 +175,12 @@ def all_entries() -> tuple[Entry, ...]:
 def default_keys() -> list[str]:
     """What "run everything" means, which is not everything."""
     return [entry.key for entry in _entries() if entry.in_default_run]
+
+
+def unattended_keys() -> list[str]:
+    """What the scheduler may run on its own: the default set, minus anything
+    that spends more than the machine's own time unasked."""
+    return [entry.key for entry in _entries() if entry.in_default_run and entry.unattended]
 
 
 def benches_for(keys: list[str] | None) -> list[Bench]:

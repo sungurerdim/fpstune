@@ -468,11 +468,105 @@ class TestPresentMonHelpers:
     def test_is_installed_false_when_no_exe(self, bench):
         assert bench.is_installed() is False
 
-    def test_is_installed_true_when_exe_present(self, bench):
+    def test_an_unpinned_executable_is_not_installed(self, bench):
+        """The file sits where the user's own account can write and is started
+        elevated; a copy that is not the pinned bytes — tampered, truncated, or
+        an older fpstune's "latest" — must not count."""
         exe_path = bench.presentmon_path
         exe_path.parent.mkdir(parents=True, exist_ok=True)
-        exe_path.touch()
+        exe_path.write_bytes(b"x" * 956_768)
+        assert bench.is_installed() is False
+
+    def test_the_pinned_bytes_are_installed(self, bench, monkeypatch):
+        import hashlib
+
+        from fpstune.benchmark import presentmon
+
+        body = b"pinned build"
+        monkeypatch.setattr(presentmon, "PRESENTMON_BYTES", len(body))
+        monkeypatch.setattr(presentmon, "PRESENTMON_SHA256", hashlib.sha256(body).hexdigest())
+        bench.presentmon_path.parent.mkdir(parents=True, exist_ok=True)
+        bench.presentmon_path.write_bytes(body)
         assert bench.is_installed() is True
+
+    def test_a_capture_never_downloads(self, bench, monkeypatch):
+        """Starting a capture is not consent to a download: it used to fetch
+        "latest" from inside `start_capture`, unasked and unhashed."""
+        import urllib.request
+
+        def no_network(*_a, **_k):
+            raise AssertionError("start_capture reached the network")
+
+        monkeypatch.setattr(urllib.request, "urlopen", no_network)
+        monkeypatch.setattr("fpstune.benchmark.presentmon.sys.platform", "win32")
+
+        assert bench.start_capture(output_name="probe") is False
+        assert "not installed" in bench.last_error
+
+    def test_install_fetches_the_pinned_release(self, bench, monkeypatch):
+        from fpstune.benchmark import presentmon
+
+        seen = {}
+
+        def fake_fetch(url, destination, **kwargs):
+            seen.update(url=url, destination=destination, **kwargs)
+
+        monkeypatch.setattr(presentmon, "fetch_verified", fake_fetch)
+        monkeypatch.setattr("fpstune.benchmark.presentmon.sys.platform", "win32")
+
+        assert bench.install() is True
+        assert seen["url"] == presentmon.PRESENTMON_URL
+        assert seen["sha256"] == presentmon.PRESENTMON_SHA256
+        assert seen["size"] == presentmon.PRESENTMON_BYTES
+        assert seen["destination"] == bench.presentmon_path
+
+    def test_a_failed_install_says_why(self, bench, monkeypatch):
+        from fpstune.benchmark import presentmon
+        from fpstune.benchmark.download import DownloadError
+
+        def refuse(*_a, **_k):
+            raise DownloadError("the download did not finish: timed out")
+
+        monkeypatch.setattr(presentmon, "fetch_verified", refuse)
+        monkeypatch.setattr("fpstune.benchmark.presentmon.sys.platform", "win32")
+
+        assert bench.install() is False
+        assert "timed out" in bench.install_error
+
+    def test_a_killed_capture_closes_its_own_etw_session(self, bench, monkeypatch):
+        """A killed PresentMon never closes its trace session; the next capture
+        is refused and the kernel buffer stays allocated until reboot."""
+        from unittest.mock import MagicMock
+
+        from fpstune.benchmark import presentmon
+
+        stopped = []
+        monkeypatch.setattr(presentmon, "stop_etw_session", lambda: stopped.append(True))
+        process = MagicMock()
+        process.poll.return_value = None
+        bench._process = process
+        bench._own_session = True
+
+        bench.terminate_child()
+
+        process.kill.assert_called_once()
+        assert stopped == [True]
+
+    def test_a_session_that_is_not_ours_is_left_alone(self, bench, monkeypatch):
+        from unittest.mock import MagicMock
+
+        from fpstune.benchmark import presentmon
+
+        stopped = []
+        monkeypatch.setattr(presentmon, "stop_etw_session", lambda: stopped.append(True))
+        process = MagicMock()
+        process.poll.return_value = None
+        bench._process = process
+        bench._own_session = False
+
+        bench.terminate_child()
+
+        assert stopped == []
 
     def test_is_capturing_false_initially(self, bench):
         assert bench.is_capturing() is False

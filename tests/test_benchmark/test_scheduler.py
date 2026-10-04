@@ -253,6 +253,19 @@ class TestTheGuards:
         assert "apply" in outcome.detail
         assert sum(bench.calls for bench in benches.values()) == 0
 
+    def test_an_apply_that_starts_while_the_lock_is_taken_wins(
+        self, benches: dict[str, _FakeBench], monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The first read happens before the lock; an apply counted in between
+        must still stop the bench, so the count is read again under the lock."""
+        reads = iter([0, 1])
+        monkeypatch.setattr(sched, "applies_in_flight", lambda: next(reads))
+
+        outcome = sched.poll_once()
+
+        assert outcome.outcome == sched.BUSY
+        assert sum(bench.calls for bench in benches.values()) == 0
+
     def test_the_apply_counter_is_read_from_the_apply_path(self) -> None:
         """Read live rather than mirrored here: a second copy of the count is a
         copy that goes stale exactly when it matters."""

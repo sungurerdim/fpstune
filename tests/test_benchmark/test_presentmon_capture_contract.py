@@ -63,6 +63,7 @@ class TestTheCommandLine:
         bench = PresentMonBenchmark(data_dir=tmp_path)
         bench.presentmon_path.parent.mkdir(parents=True, exist_ok=True)
         bench.presentmon_path.write_bytes(b"stub")
+        monkeypatch.setattr(PresentMonBenchmark, "is_installed", lambda _self: True)
         bench.start_capture(process_name="game.exe", output_name="probe", duration_seconds=10)
         # The capture, not whatever else the module ran the executable for. It
         # also asks `--help` once per session to find out which optional flags
@@ -189,6 +190,7 @@ class TestStderrIsRead:
         bench = PresentMonBenchmark(data_dir=tmp_path)
         bench.presentmon_path.parent.mkdir(parents=True, exist_ok=True)
         bench.presentmon_path.write_bytes(b"stub")
+        monkeypatch.setattr(PresentMonBenchmark, "is_installed", lambda _self: True)
         bench.start_capture(process_name="game.exe", output_name="probe", duration_seconds=1)
         bench.stop_capture()
 

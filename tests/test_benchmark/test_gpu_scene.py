@@ -146,6 +146,16 @@ class _FakePresentMon(PresentMonBenchmark):
         self.capture_started = True
         self.capture_file: Path | None = data_dir / "gpu_scene.csv"
         self.waited_for = 0.0
+        self.installed = True
+        self.install_calls = 0
+
+    def is_installed(self) -> bool:
+        return self.installed
+
+    def install(self, _progress_callback: Any = None) -> bool:
+        self.install_calls += 1
+        self.installed = True
+        return True
 
     def start_capture(
         self,
@@ -750,6 +760,27 @@ class TestInstalling:
         assert "could not be installed" in result.reason
         assert not harness.spawned
 
+    def test_a_scene_without_its_frame_counter_is_not_installed(self, harness: _Harness) -> None:
+        """The capture used to fetch PresentMon from "latest" mid-bench, unasked
+        and unhashed. Now the counter is part of what "installed" means, and the
+        automatic run reports it missing instead of downloading it."""
+        harness.presentmon.installed = False
+
+        available, why = harness.bench.is_available()
+
+        assert available is False
+        assert "PresentMon" in why
+        assert harness.presentmon.install_calls == 0
+
+    def test_the_install_button_also_installs_the_frame_counter(self, harness: _Harness) -> None:
+        """Engine already present: the consented install spends nothing on it
+        again and fetches only the pinned PresentMon."""
+        harness.presentmon.installed = False
+
+        assert harness.bench.install() is True
+        assert harness.downloads == []
+        assert harness.presentmon.install_calls == 1
+
     def test_an_automatic_run_never_starts_the_download(self, harness: _Harness) -> None:
         """1.3 GB is not something a background measurement spends on somebody's
         behalf — `benches.py`'s rule about the default run, over a download."""
@@ -763,6 +794,15 @@ class TestInstalling:
         assert result.ran is False
         assert DOWNLOAD_SIZE in result.reason
         assert harness.downloads == []
+
+
+class TestShutdown:
+    def test_a_finished_run_leaves_nothing_for_shutdown_to_end(self, harness: _Harness) -> None:
+        """The shutdown list holds only scenes still on screen; a finished one
+        left on it would be killed by PID long after that PID was reused."""
+        harness.bench.run(2)
+
+        assert harness.bench not in gpu_scene._running
 
 
 class TestWhenItMustNotRun:

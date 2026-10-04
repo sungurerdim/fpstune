@@ -127,8 +127,9 @@ what a setting claims, and claims never add up to a measurement (gate C11).
 - `verify_round.py` — `judge(claim, measurement)` over a computed noise floor
 - `sources.py` — which claim metrics each instrument can measure, and a named
   reason for every one that nothing can
-- `headroom_watch.py` — decides *when* to measure: once per game session
-- `compare.py`, `runner.py` — before/after deltas and the high-level runner
+- `scheduler.py` — decides *when* to measure: idle, no game, no apply, lock free
+- `ledger.py` — the resumable job and the two persisted runs (`~/.fpstune/bench`)
+- `operation_lock.py` — the one named mutex an apply, a cleanup and a bench share
 
 ### `commands/` — the CLI surface
 

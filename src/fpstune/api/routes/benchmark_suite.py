@@ -32,10 +32,13 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from fpstune.api.routes.settings_apply import applies_in_flight
 from fpstune.benchmark.benches import benches_for, catalogue, default_keys
+from fpstune.benchmark.operation_lock import operation_lock
 from fpstune.benchmark.suite import (
     DEFAULT_REPEATS,
     MINIMUM_REPEATS,
+    Bench,
     BenchResult,
     SuiteRun,
     compare_runs,
@@ -72,6 +75,29 @@ class SuiteCompareRequest(BaseModel):
 
     before: dict[str, Any]
     after: dict[str, Any]
+
+
+BUSY_REASON = (
+    "another fpstune operation (an apply, a cleanup or a scheduled measurement) was "
+    "using the machine, so this bench was not run; a reading taken then would describe "
+    "neither state"
+)
+
+
+def _run_locked(bench: Bench, repeats: int) -> BenchResult:
+    """One bench under the operation lock, in the thread that runs it.
+
+    The suite used to run with no lock at all, so a bulk apply, a cleanup or the
+    scheduler's own bench could land halfway through it. The mutex belongs to
+    the thread that takes it, so it is taken here, inside the worker thread, per
+    bench — never across `await`s on the event loop. The apply count is read
+    under the lock as well: an apply counts itself before it waits, so this is
+    the read that cannot miss one.
+    """
+    with operation_lock() as taken:
+        if not taken or applies_in_flight():
+            return BenchResult(bench=bench.key, label=bench.label, ran=False, reason=BUSY_REASON)
+        return run_bench_with_deadline(bench, repeats)
 
 
 def _sse(event: dict[str, Any]) -> str:
@@ -148,7 +174,7 @@ async def _stream_suite(keys: list[str] | None, label: str, repeats: int) -> Asy
             # The deadline lives inside the worker thread, so the `to_thread`
             # here returns on time even though the abandoned bench thread does
             # not — which is exactly why that one is a daemon.
-            result = await asyncio.to_thread(run_bench_with_deadline, bench, repeats)
+            result = await asyncio.to_thread(_run_locked, bench, repeats)
 
         # A bench that could not run says so at the moment it drops out, not
         # only in the summary at the end (C11 rule 3).

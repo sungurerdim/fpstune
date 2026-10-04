@@ -295,7 +295,8 @@ class TestTheStartupSweep:
         assert PresentMonBenchmark().presentmon_path.name.lower() in names
 
     def test_every_name_is_a_bare_executable_not_a_path(self) -> None:
-        """A sweep matching on a path would miss a tool started from elsewhere."""
+        """Names pre-filter the process list; ownership is then decided by the
+        image path (see `test_own_processes.py`), never by the name alone."""
         for name in bench_registry.tool_executable_names():
             assert "\\" not in name and "/" not in name
             assert name.endswith(".exe")

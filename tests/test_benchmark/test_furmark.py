@@ -388,10 +388,16 @@ class TestFurMarkHelpers:
         presets["custom"] = {"duration": 999}
         assert "custom" not in bench.get_presets()
 
-    def test_install_returns_false_on_non_windows(self, bench):
-        with patch("fpstune.benchmark.furmark.sys.platform", "linux"):
-            result = bench.install()
-        assert result is False
+    def test_nothing_is_downloaded(self, bench):
+        """No published checksum means nothing to verify a download against."""
+        from fpstune.benchmark import furmark
+
+        assert not hasattr(bench, "install")
+        assert not hasattr(furmark, "FURMARK_DOWNLOAD_URL")
+        assert str(bench._furmark_dir) in bench.install_hint()
+
+    def test_a_run_without_furmark_returns_nothing(self, bench):
+        assert bench.run_benchmark() is None
 
 
 # ---------------------------------------------------------------------------

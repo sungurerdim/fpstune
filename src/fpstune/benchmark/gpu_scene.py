@@ -110,11 +110,12 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import TYPE_CHECKING
-from urllib.request import urlretrieve
 
+from fpstune.benchmark.download import fetch_verified
 from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 from fpstune.settings.executors.game_processes import (
     GAME_LABELS,
@@ -124,7 +125,6 @@ from fpstune.settings.executors.game_processes import (
 from fpstune.settings.panel import primary_monitor
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
-from fpstune.utils.system_tools import system_tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -217,8 +217,6 @@ wrong — the scene paused, the wrong process was traced, the window was minimis
 _CAPTURE_GRACE_SECONDS = 10.0
 """How long past its own duration a timed capture may take to exit."""
 
-_KILL_TIMEOUT_SECONDS = 15.0
-
 _TAG = re.compile(r"<[^>]+>")
 """The engine's log is HTML, one `<div>` per line."""
 
@@ -303,19 +301,31 @@ def _kill_tree(pid: int) -> None:
     `/T` because the engine is not always the only process in its own tree, and
     a child left holding the GPU is the leftover the next run would measure.
     """
-    try:
-        subprocess.run(
-            [system_tool("taskkill.exe"), "/PID", str(pid), "/T", "/F"],
-            capture_output=True,
-            timeout=_KILL_TIMEOUT_SECONDS,
-            creationflags=_no_window(),
-        )
-    except (OSError, subprocess.SubprocessError) as exc:
-        logger.debug("The scene engine would not be killed: %s", exc)
+    from fpstune.benchmark.own_processes import kill_pid_tree
+
+    kill_pid_tree(pid)
+
+
+# Benches with a scene on screen right now, so shutdown can end them. Without
+# this, closing fpstune mid-bench left a full-speed 3D scene rendering with
+# nobody to stop it until the next session's sweep.
+_running: set[GpuSceneBench] = set()
+_running_guard = threading.Lock()
+
+
+def terminate_running() -> int:
+    """End every scene (and its capture) this process started. Returns how many."""
+    with _running_guard:
+        benches = list(_running)
+        _running.clear()
+    for bench in benches:
+        bench.terminate_child()
+    return len(benches)
 
 
 def _download(url: str, destination: Path) -> None:
-    urlretrieve(url, destination)  # noqa: S310 - a pinned https URL, hashed after
+    """Bounded, verified, and renamed into place only whole (`download.py`)."""
+    fetch_verified(url, destination, sha256=INSTALLER_SHA256, size=INSTALLER_BYTES)
 
 
 def _run_installer(args: list[str]) -> int:
@@ -528,7 +538,19 @@ class GpuSceneBench:
         return self._presentmon
 
     def is_installed(self) -> bool:
-        return self.engine_path.exists()
+        """The engine and the frame counter both: one without the other measures nothing."""
+        return self.engine_path.exists() and self.presentmon.is_installed()
+
+    def _not_installed_reason(self) -> str:
+        if not self.engine_path.exists():
+            return (
+                f"Unigine Superposition Basic is not installed; installing it is a "
+                f"{DOWNLOAD_SIZE} download, which fpstune never starts on its own."
+            )
+        return (
+            "PresentMon, which counts the scene's frames, is not installed; installing "
+            "the scene installs it too, and fpstune never starts that download on its own."
+        )
 
     @property
     def install_error(self) -> str:
@@ -660,10 +682,7 @@ class GpuSceneBench:
 
         if not self.is_installed():
             if not self.allow_download:
-                return False, (
-                    f"Unigine Superposition Basic is not installed; installing it is a "
-                    f"{DOWNLOAD_SIZE} download, which fpstune never starts on its own."
-                )
+                return False, self._not_installed_reason()
             return True, ""
 
         return True, ""
@@ -699,6 +718,17 @@ class GpuSceneBench:
             self._install_error = "the scene engine is a Windows build"
             return False
 
+        if not self.engine_path.exists() and not self._install_engine():
+            return False
+        # The frame counter rides on the same consent: a scene nobody can count
+        # frames of is not a bench. Pinned and hashed like the engine.
+        presentmon = self.presentmon
+        if not presentmon.is_installed() and not presentmon.install():
+            self._install_error = presentmon.install_error
+            return False
+        return True
+
+    def _install_engine(self) -> bool:
         installer = self.installer_path
         try:
             self.install_dir.mkdir(parents=True, exist_ok=True)
@@ -776,10 +806,7 @@ class GpuSceneBench:
 
         if not self.is_installed():
             if not self.allow_download:
-                return failed(
-                    f"Unigine Superposition Basic is not installed; installing it is a "
-                    f"{DOWNLOAD_SIZE} download, which fpstune never starts on its own."
-                )
+                return failed(self._not_installed_reason())
             if not self.install():
                 return failed(
                     f"Unigine Superposition Basic could not be installed: {self._install_error}"
@@ -822,6 +849,8 @@ class GpuSceneBench:
         except OSError as exc:
             return failed(f"the scene engine would not start: {exc}")
         self._engine = engine
+        with _running_guard:
+            _running.add(self)
 
         try:
             load_seconds = self._wait_for_scene(engine, log)
@@ -858,6 +887,8 @@ class GpuSceneBench:
             # `--terminate_on_proc_exit`, so killing the engine first ends the
             # recording early and the last window is short.
             self._engine = None
+            with _running_guard:
+                _running.discard(self)
             if engine.poll() is None:
                 _kill_tree(engine.pid)
 

@@ -19,6 +19,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from fastapi.telemetry import TelemetryConfig
 
 from fpstune import __version__
 from fpstune.api.routes import (
@@ -208,6 +209,15 @@ def _host_name(host_header: str) -> str:
     return host.partition(":")[0]
 
 
+_NO_TELEMETRY: TelemetryConfig = {
+    "tracing": False,
+    "metrics": False,
+    "logs": False,
+    "operation_spans": False,
+    "auto_configure": False,
+}
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application.
 
@@ -226,6 +236,10 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs" if debug_mode else None,
         redoc_url="/redoc" if debug_mode else None,
+        # FastAPI 0.142+ ships OpenTelemetry that starts exporting by itself
+        # whenever an OTEL_EXPORTER_OTLP_* variable is set on the machine.
+        # fpstune sends nothing anywhere, so every part of it stays off.
+        telemetry=_NO_TELEMETRY,
     )
 
     # Cross-origin access exists for the dev servers only; the shipped exe

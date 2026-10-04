@@ -11,6 +11,7 @@ could notice. What is tested here now is the only name handling discovery runs.
 import pytest
 
 from fpstune.settings.discovery.network import filter_valid_adapters
+from fpstune.settings.discovery.probes import NetworkAdapter
 from fpstune.settings.registry import SettingsRegistry
 
 # A non-ASCII first letter, written as a code point so this file stays ASCII.
@@ -44,20 +45,48 @@ class TestAdapterFiltering:
     )
     def test_named_adapters_survive(self, name: str) -> None:
         """A named adapter is never dropped, whatever characters it carries."""
-        assert filter_valid_adapters([(12, name, "802.3")]) == [(12, name, "802.3")]
+        adapter = NetworkAdapter(
+            12, name, "802.3", "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE"
+        )
+        assert filter_valid_adapters([adapter]) == [adapter]
 
     def test_unnamed_adapter_is_dropped(self) -> None:
         """An empty name is the one rejection: the card would have no label."""
-        assert filter_valid_adapters([(12, "", "802.3")]) == []
+        assert (
+            filter_valid_adapters(
+                [
+                    NetworkAdapter(
+                        12,
+                        "",
+                        "802.3",
+                        "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE",
+                    )
+                ]
+            )
+            == []
+        )
+
+    def test_an_adapter_without_a_device_id_is_dropped(self) -> None:
+        """Its settings would be named by nothing stable (C5)."""
+        assert filter_valid_adapters([NetworkAdapter(12, "Ethernet", "802.3", "")]) == []
 
     def test_drops_only_the_unnamed_one(self) -> None:
         """Filtering is per-adapter; one nameless entry must not take the others."""
-        adapters = [(12, "Ethernet", "802.3"), (0, "", ""), (14, "Wi-Fi", "Native 802.11")]
+        ethernet = NetworkAdapter(
+            12,
+            "Ethernet",
+            "802.3",
+            "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE",
+        )
+        wifi = NetworkAdapter(
+            14,
+            "Wi-Fi",
+            "Native 802.11",
+            "PCI\\VEN_8086&DEV_51F0&SUBSYS_00948086&REV_01\\3&11583659&0&A3",
+        )
+        adapters = [ethernet, NetworkAdapter(0, "", "", ""), wifi]
 
-        assert filter_valid_adapters(adapters) == [
-            (12, "Ethernet", "802.3"),
-            (14, "Wi-Fi", "Native 802.11"),
-        ]
+        assert filter_valid_adapters(adapters) == [ethernet, wifi]
 
     def test_empty_input(self) -> None:
         """No adapters in, no adapters out."""

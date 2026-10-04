@@ -49,14 +49,15 @@ export function isComponentTweak(
 }
 
 /**
- * Per-adapter settings are named `network:<interfaceIndex>:<name>`.
+ * Per-adapter settings are named `network:<adapterKey>:<name>`.
  *
- * The index rather than the adapter name, because names are localised — fpstune
- * stores the index deliberately, and this is what lets a tweak be attributed to one
- * physical adapter. The rest of the `network` module (TCP stack, DNS, QoS) is
+ * The key is derived from the adapter's PnP device id rather than its name, because
+ * names are localised and interface indexes are reassigned — it is what lets a tweak
+ * be attributed to one physical adapter. System-wide network settings have exactly
+ * one colon, so a second one marks a per-adapter setting. The rest of the `network` module (TCP stack, DNS, QoS) is
  * system-wide and therefore software.
  */
-const PER_ADAPTER_ID = /^network:\d+:/;
+const PER_ADAPTER_ID = /^network:[^:]+:/;
 
 /**
  * Settings that live inside a game's own config file rather than in Windows.

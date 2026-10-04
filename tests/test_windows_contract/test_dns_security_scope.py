@@ -60,9 +60,23 @@ function Get-DnsClientServerAddress {
         $AddressFamily,
         [Parameter(ValueFromRemainingArguments = $true)] $Ignored
     )
-    $servers = $fake.dns."$InterfaceIndex"
+    $table = if ($AddressFamily -eq 'IPv6') { $fake.dns6 } else { $fake.dns }
+    $servers = if ($null -eq $table) { $null } else { $table."$InterfaceIndex" }
     if ($null -eq $servers) { $servers = @() }
     [pscustomobject]@{ ServerAddresses = @($servers) }
+}
+
+function Get-NetIPInterface {
+    # An adapter has IPv6 bound when the described host lists IPv6 servers for it.
+    param(
+        $InterfaceIndex,
+        $AddressFamily,
+        [Parameter(ValueFromRemainingArguments = $true)] $Ignored
+    )
+    if ($AddressFamily -eq 'IPv6' -and $null -ne $fake.dns6 -and
+        $null -ne $fake.dns6."$InterfaceIndex") {
+        [pscustomobject]@{ InterfaceIndex = $InterfaceIndex; AddressFamily = 'IPv6' }
+    }
 }
 
 """
@@ -70,10 +84,14 @@ function Get-DnsClientServerAddress {
 _SHIPPED_CATCH = "catch { 'isp' }"
 
 
-def _detect(adapters: list[dict[str, object]], dns: dict[str, list[str]]) -> str:
+def _detect(
+    adapters: list[dict[str, object]],
+    dns: dict[str, list[str]],
+    dns6: dict[str, list[str]] | None = None,
+) -> str:
     """Run the real detect command against a described host and return its answer."""
     command = loud_catch(DNS_SECURITY.detect_command, _SHIPPED_CATCH)
-    payload = {"adapters": fake_adapters(*adapters), "dns": dns}
+    payload = {"adapters": fake_adapters(*adapters), "dns": dns, "dns6": dns6 or {}}
     return run_shipped_command(_HARNESS + command, payload)
 
 
@@ -161,4 +179,19 @@ def test_virtual_adapters_are_excluded_from_the_verdict() -> None:
         [ETHERNET, {"ifIndex": 7, "name": "vEthernet", "description": "Hyper-V Virtual Switch"}],
         {"19": SECURITY_PAIR, "7": [ROUTER]},
     )
+    assert answer == "cloudflare_security"
+
+
+SECURITY_PAIR_V6 = ["2606:4700:4700::1112", "2606:4700:4700::1002"]
+
+
+def test_a_router_ipv6_resolver_is_not_reported_as_applied() -> None:
+    """Dual-stack: IPv4 on the chosen pair, IPv6 still on the router's resolver,
+    which Windows asks first — the filtering only applied to half the lookups."""
+    answer = _detect([ETHERNET], {"19": SECURITY_PAIR}, {"19": ["fe80::1"]})
+    assert answer == "isp"
+
+
+def test_both_families_on_the_chosen_resolver_is_applied() -> None:
+    answer = _detect([ETHERNET], {"19": SECURITY_PAIR}, {"19": SECURITY_PAIR_V6})
     assert answer == "cloudflare_security"

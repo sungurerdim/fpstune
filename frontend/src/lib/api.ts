@@ -24,6 +24,7 @@ export interface NetworkAdapterInfo {
   // System identifiers (for API operations - use these instead of name)
   interface_index?: number | null; // NetAdapter InterfaceIndex (for active adapters)
   instance_id?: string | null; // PnpDevice InstanceId (for all adapters, including disabled)
+  setting_key?: string | null; // id segment of this adapter's settings: network:<setting_key>:<name>
   // WiFi-specific fields
   ssid?: string;
   channel?: number;

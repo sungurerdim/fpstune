@@ -18,9 +18,17 @@ vi.mock("../../lib/hardware-manager", () => ({
 
 // The per-adapter tweak list reads the store; these tests are about the
 // adapter switch, so it stays out of the tree.
-vi.mock("../hardware/DeviceTweakList", () => ({
-  DeviceTweakList: () => null,
+const tweakList = vi.hoisted(() => ({
+  match: undefined as undefined | ((setting: { id: string }) => boolean),
 }));
+vi.mock("../hardware/DeviceTweakList", () => ({
+  DeviceTweakList: ({ match }: { match: (setting: { id: string }) => boolean }) => {
+    tweakList.match = match;
+    return null;
+  },
+}));
+// Read through a call so an assignment in the test does not narrow the type.
+const renderedMatch = () => tweakList.match;
 
 function adapter(
   overrides: Partial<NetworkAdapterInfo> = {},
@@ -197,5 +205,26 @@ describe("the reason travels with the switch, not merely beside it", () => {
     expect(first).toBeTruthy();
     expect(second).toBeTruthy();
     expect(first).not.toBe(second);
+  });
+});
+
+describe("the adapter's own tweaks", () => {
+  it("are matched on the backend's adapter key, not the interface index", () => {
+    // The interface index is reassigned on a driver reinstall or a USB replug,
+    // so a setting named by it could be attributed to another adapter (C5).
+    tweakList.match = undefined;
+    render(<NetworkAdapterCard adapter={adapter({ setting_key: "nic0a1b2c3d4e" })} />);
+
+    expect(renderedMatch()?.({ id: "network:nic0a1b2c3d4e:eee" })).toBe(true);
+    expect(renderedMatch()?.({ id: "network:12:eee" })).toBe(false);
+    expect(renderedMatch()?.({ id: "network:nic99999999ff:eee" })).toBe(false);
+    expect(screen.getByText(/reconnects the adapter once/)).toBeInTheDocument();
+  });
+
+  it("are not listed for an adapter the backend gave no key", () => {
+    tweakList.match = undefined;
+    render(<NetworkAdapterCard adapter={adapter({ setting_key: null })} />);
+
+    expect(tweakList.match).toBeUndefined();
   });
 });

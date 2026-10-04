@@ -424,6 +424,9 @@ def _to_adapter_info(
     # Parse InterfaceIndex (may be null for disabled adapters)
     iface_idx = adapter_data.get("InterfaceIndex")
     interface_index = int(iface_idx) if iface_idx is not None else None
+    instance_id = adapter_data.get("InstanceId")
+
+    from fpstune.settings.definitions.network import adapter_key
 
     return NetworkAdapterInfo(
         name=name,
@@ -439,7 +442,8 @@ def _to_adapter_info(
         gateway=adapter_data.get("Gateway"),
         dns_servers=dns_servers,
         interface_index=interface_index,
-        instance_id=adapter_data.get("InstanceId"),
+        instance_id=instance_id,
+        setting_key=adapter_key(instance_id) if instance_id else None,
         ssid=wifi_ssid,
         channel=wifi_channel,
         frequency_ghz=wifi_freq,

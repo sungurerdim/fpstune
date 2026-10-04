@@ -744,9 +744,11 @@ RYZEN_BALANCED_PLAN = SettingExecutor(
         f"$guid = '{_WINDOWS_BALANCED_SCHEME}' }}; "
         "if (-not $guid) { 'error: could not read the power plan GUID'; return }; "
         "powercfg /setactive $guid 2>&1 | Out-Null; "
-        # Read the active scheme back instead of trusting the exit code, the same
-        # discipline the audio settings had to learn.
-        "$now = ((powercfg /getactivescheme 2>$null) -split ' ')[3]; "
+        # Read the active scheme back instead of trusting the exit code, and take
+        # its GUID by pattern like the detect above: word 3 of the localized line
+        # is a GUID only in languages whose label is three words long.
+        "$now = ([regex]::Match(((powercfg /getactivescheme 2>$null) | Out-String), "
+        "'[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}')).Value; "
         "if ($now -eq $guid) { 'ok' } "
         "else { 'error: plan did not become active (still ' + $now + ')' }"
     ),
@@ -979,8 +981,8 @@ POWER_CPU_MIN_STATE = _cpu_power_setting(
     recommended_value=5,
     min_value=0,
     max_value=100,
-    current_impact="100%: Cores hold maximum clock even at an idle desktop → heat with nothing to show for it",
-    recommended_impact="5%: Idle cores drop to 5% and the thermal budget is still there when the match starts",
+    current_impact="Raised: Cores hold a high clock even at an idle desktop → heat with nothing to show for it",
+    recommended_impact="Windows' own floor: Idle cores clock down and the thermal budget is still there when the match starts",
     effect="Lets idle cores clock down so the thermal budget is intact when a game needs it",
     # A drift guard, so 0.0 rather than an invented saving: on a machine that
     # never had this raised, applying it changes nothing. What it is worth is
@@ -1367,6 +1369,9 @@ _TRACKS_WINDOWS_DEFAULT: frozenset[str] = frozenset(
         "power:cpu_min_parking",
         # Microsoft: PERFBOOSTMODE 4 (Efficient Aggressive) behaves as 2.
         "power:cpu_boost",
+        # A guard against "minimum processor state 100": the right floor is the
+        # one the processor driver publishes, which is not 5 on every machine.
+        "power:cpu_min_state",
     }
 )
 

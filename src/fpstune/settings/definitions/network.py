@@ -9,7 +9,11 @@ human-readable display values. For example, registry DWORD 0xFFFFFFFF maps to "d
 
 from __future__ import annotations
 
+import hashlib
+from dataclasses import replace
+
 from fpstune.settings.base import (
+    UNMAPPED,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -17,12 +21,49 @@ from fpstune.settings.base import (
     SettingValueType,
 )
 
-# Note: escape_single_quoted no longer needed - InterfaceIndex (numeric) is used instead
+
+def adapter_key(instance_id: str) -> str:
+    """The id segment naming one adapter's settings: ``network:<key>:<name>``.
+
+    Derived from the adapter's PnP device id (C5), which survives a reboot, a
+    driver reinstall and a USB replug — the interface index does not, so an
+    index-keyed undo record could be restored onto a different adapter. Hashed
+    because the raw id carries backslashes and ampersands, and the setting id
+    travels in URL paths.
+    """
+    digest = hashlib.sha256(instance_id.strip().upper().encode("utf-8")).hexdigest()
+    return f"nic{digest[:10]}"
+
+
+def keyed_to_adapter(setting: SettingExecutor, interface_index: int, key: str) -> SettingExecutor:
+    """``setting`` with its id moved from the interface index to the adapter key.
+
+    The factories address commands by interface index, which is right for this
+    session; the id is what is stored (undo records, selections), so it must not
+    depend on that index.
+    """
+    prefix = f"network:{interface_index}:"
+    if not setting.id.startswith(prefix):
+        raise ValueError(f"{setting.id} is not a setting of interface {interface_index}")
+    return replace(setting, id=f"network:{key}:{setting.id[len(prefix) :]}")
+
 
 # === DNS IP Address Constants ===
 CLOUDFLARE_SECURITY_IPS = ("1.1.1.2", "1.0.0.2")
 CLOUDFLARE_FAMILY_IPS = ("1.1.1.3", "1.0.0.3")
 CLOUDFLARE_STANDARD_IPS = ("1.1.1.1", "1.0.0.1")
+
+# Each resolver's IPv6 pair, from the operators' own address pages
+# (developers.cloudflare.com/1.1.1.1/ip-addresses, quad9.net service addresses).
+# Setting only the IPv4 pair left the router's IPv6 resolver in place, and
+# Windows queries over IPv6 first on a dual-stack line — so the lookups the
+# setting claimed to filter went to the ISP anyway.
+RESOLVER_IPV6 = {
+    "cloudflare_security": ("2606:4700:4700::1112", "2606:4700:4700::1002"),
+    "cloudflare_family": ("2606:4700:4700::1113", "2606:4700:4700::1003"),
+    "cloudflare": ("2606:4700:4700::1111", "2606:4700:4700::1001"),
+    "quad9": ("2620:fe::fe", "2620:fe::9"),
+}
 
 # === Registry Path Constants ===
 NETWORK_THROTTLING_KEY = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Multimedia\SystemProfile"
@@ -81,101 +122,62 @@ TCP_AUTO_TUNING = SettingExecutor(
     apply_value_map={},
 )
 
-# Scaling Heuristics
-# NOTE: The 'wsh' parameter is LEGACY and has NO EFFECT on Windows 8.1+
-# Heuristics have been disabled by default since Windows 8.1
-# This setting is kept for compatibility but marked as COMPLETE scope (low priority)
-# Reference: https://learn.microsoft.com/en-us/windows-server/networking/technologies/netsh/netsh-interface-tcp
-SCALING_HEURISTICS = SettingExecutor(
-    id="network:scaling_heuristics",
-    category=SettingCategory.NETWORK,
-    display_name="Scaling Heuristics",
-    short_name="Windows override of auto-tuning",
-    description="Windows 8.1 and later ignore this key, so nothing here changes a modern machine. It exists "
-    "to put back what an older guide or optimizer switched on.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="disabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    # Not "experimental": the claim here is that the Windows default is
-    # already correct, which is evidenced by the vendor shipping it and by
-    # the research that rejected changing it. `evidence_level` grades the
-    # benefit, and "leave this alone" is a well-supported benefit.
-    evidence_level="proven",
-    sources=[
-        "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
-    ],
-    current_impact="Legacy: No effect on modern Windows",
-    recommended_impact="Legacy: No effect on modern Windows",
-    scope=SettingScope.COMPLETE,  # Low priority - legacy setting
-    category_order=99,  # Move to bottom since it's legacy
-    effect="Legacy setting with no effect on Windows 8.1+",
-    impact_scores={"latency_ms": 0, "stability": "high"},
-    # Detection - uses separate heuristics command
-    detect_type=DetectType.NETSH,
-    detect_command="interface tcp show heuristics",
-    detect_args={"parse_key": "window scaling heuristics"},
-    value_map={},
-    # Apply - wsh parameter is legacy but still accepted
-    apply_type=DetectType.NETSH,
-    apply_command="interface tcp set heuristics wsh=%value%",
-    apply_args={},
-    apply_value_map={},
-)
-
-# Congestion Provider
-# NOTE: The old "netsh int tcp set global congestionprovider=xxx" is deprecated in Windows 11.
-# The new method uses supplemental templates for Internet/Datacenter profiles.
-# We use PowerShell Set-NetTCPSetting for reliable cross-version support.
+# Congestion Provider — a guard on CUBIC, Windows 11's own default.
+# Set-NetTCPSetting cannot write it on a client: Microsoft documents
+# CongestionProvider as read-only on Windows 10 and later, and its enum has no
+# CUBIC member at all. The supported writer is netsh's supplemental template,
+# whose `internet` template is the one a non-datacenter connection uses.
 CONGESTION_PROVIDER = SettingExecutor(
     id="network:congestion_provider",
     category=SettingCategory.NETWORK,
     display_name="Congestion Provider",
     short_name="Congestion control algorithm",
-    description="How TCP backs off when the line is busy. CUBIC recovers throughput faster than the older "
-    "algorithms on a modern connection, which is a shorter wait on downloads and updates.",
+    description="How TCP backs off when the line is busy. CUBIC, Windows 11's own choice, recovers "
+    "throughput faster than the older algorithms on a modern connection.",
     value_type=SettingValueType.CHOICE,
-    choices=("CUBIC", "NewReno", "CTCP", "DCTCP", "Default"),
+    choices=("CUBIC", "NewReno", "CTCP", "DCTCP", "BBR2"),
     default_value="CUBIC",
     recommended_value="CUBIC",
     requires_reboot=False,
-    # Not "experimental": the claim here is that the Windows default is
-    # already correct, which is evidenced by the vendor shipping it and by
-    # the research that rejected changing it. `evidence_level` grades the
-    # benefit, and "leave this alone" is a well-supported benefit.
     evidence_level="proven",
-    sources=[
-        "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
-    ],
-    current_impact="Default: TCP backs off on congestion with the stock algorithm",
-    recommended_impact="CUBIC: the congestion algorithm tuned for modern high-bandwidth links",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for congestion handling
-    category_order=3,  # Congestion algorithm
-    effect="Optimizes TCP congestion handling for better network performance",
+    sources=["https://learn.microsoft.com/en-us/powershell/module/nettcpip/set-nettcpsetting"],
+    current_impact="Changed: TCP backs off with an algorithm Windows 11 does not ship",
+    recommended_impact="CUBIC: the congestion algorithm Windows 11 ships for modern links",
+    scope=SettingScope.RECOMMENDED,
+    category_order=3,
+    effect="Restores CUBIC congestion control on the Internet TCP template",
     impact_scores={"throughput": "medium", "latency_ms": 0, "stability": "high"},
-    # Detection - PowerShell for reliable cross-version support
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "try { "
         "$setting = Get-NetTCPSetting -SettingName Internet -ErrorAction Stop; "
-        "if ($setting.CongestionProvider) { $setting.CongestionProvider } else { 'CUBIC' } "
+        "[string]$setting.CongestionProvider "
         # No netsh fallback: its labels are localized, and answering CUBIC when the
         # read failed reported a value nothing had read (A11). The sentinel says
         # "could not answer" and the setting is shown as not applicable.
         "} catch { 'not_available' }"
     ),
     detect_args={},
-    value_map={},  # Direct pass-through
-    # Apply - PowerShell Set-NetTCPSetting works on both Windows 10 and 11
-    apply_type=DetectType.POWERSHELL,
-    apply_command=(
-        "Set-NetTCPSetting -SettingName Internet -CongestionProvider %value% -ErrorAction Stop; "
-        "Set-NetTCPSetting -SettingName Datacenter -CongestionProvider %value% -ErrorAction SilentlyContinue; "
-        "'ok'"
-    ),
+    # The CongestionProvider enum's own member names.
+    value_map={
+        "CUBIC": "CUBIC",
+        "NewReno": "NewReno",
+        "CTCP": "CTCP",
+        "DCTCP": "DCTCP",
+        "BBR2": "BBR2",
+        # "the platform default", which on a client is CUBIC.
+        "Default": "CUBIC",
+    },
+    apply_type=DetectType.NETSH,
+    apply_command="interface tcp set supplemental template=internet congestionprovider=%value%",
     apply_args={},
-    apply_value_map={},
+    apply_value_map={
+        "CUBIC": "cubic",
+        "NewReno": "newreno",
+        "CTCP": "ctcp",
+        "DCTCP": "dctcp",
+        "BBR2": "bbr2",
+    },
 )
 
 # Receive Side Scaling
@@ -214,24 +216,27 @@ RECEIVE_SEGMENT_COALESCING = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Receive Segment Coalescing (RSC)",
     short_name="Batch incoming packets",
-    description="Coalesces multiple incoming TCP segments into larger units before delivering them to the host. Disabling prevents the artificial latency this batching introduces.",
+    description="Merges incoming TCP segments of one download into larger units before the CPU sees them. "
+    "Game traffic is UDP and never coalesced, so turning it off only makes downloads cost more CPU.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    recommended_value="disabled",
+    recommended_value="enabled",
     requires_reboot=False,
-    current_impact="Enabled: Packets batched → less CPU but extra latency",
-    recommended_impact="Disabled: Packets processed immediately → lower network latency",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for network latency
-    category_order=5,  # Packet batching latency
-    effect="Disabling prevents packet batching for lower network latency",
-    impact_scores={"latency_ms": -2, "throughput": "medium", "stability": "high"},
-    # Detection - exact key from netsh output (lowercase)
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
+    ],
+    current_impact="Disabled: every TCP segment of a download interrupts the CPU on its own",
+    recommended_impact="Enabled: downloads cost less CPU; game (UDP) traffic is untouched either way",
+    scope=SettingScope.RECOMMENDED,
+    category_order=5,
+    effect="Restores Windows' receive coalescing for TCP downloads",
+    impact_scores={"cpu_usage": -2.0, "latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.NETSH,
     detect_command="interface tcp show global",
     detect_args={"parse_key": "receive segment coalescing state"},
     value_map={},
-    # Apply
     apply_type=DetectType.NETSH,
     apply_command="interface tcp set global rsc=%value%",
     apply_args={},
@@ -287,11 +292,16 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration' -ErrorAction SilentlyContinue; "
+            # The standardised '*' spelling first, then the bare vendor one,
+            # the same order apply picks from.
+            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*InterruptModeration','InterruptModeration' -ErrorAction SilentlyContinue)[0]; "
             "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index, "batch_adapter_keyword": "*InterruptModeration"},
+        detect_args={
+            "ifindex": interface_index,
+            "batch_adapter_keyword": ["*InterruptModeration", "InterruptModeration"],
+        },
         # Map numeric registry values to choice names
         value_map={
             0: "Disabled",
@@ -312,12 +322,12 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
             "$prop = $all | Where-Object { $_.RegistryKeyword -in "
             "@('*InterruptModeration','InterruptModeration') } | Select-Object -First 1; "
             "if (-not $prop) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
@@ -362,11 +372,16 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl' -ErrorAction SilentlyContinue; "
+            # The standardised '*' spelling first, then the bare vendor one,
+            # the same order apply picks from.
+            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*FlowControl','FlowControl' -ErrorAction SilentlyContinue)[0]; "
             "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index, "batch_adapter_keyword": "*FlowControl"},
+        detect_args={
+            "ifindex": interface_index,
+            "batch_adapter_keyword": ["*FlowControl", "FlowControl"],
+        },
         # Map numeric registry values to choice names
         # Per Microsoft docs: 0=Disabled, 1=Tx Enabled, 2=Rx Enabled, 3=Rx & Tx Enabled
         value_map={
@@ -398,12 +413,12 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
             "if ($valid.Count -gt 0 -and -not ($valid -contains ([string][int]%value%))) { "
             "'error: this driver does not accept flow-control value %value%; "
             "its own list is ' + ($valid -join ',') } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' } } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         # Per Microsoft docs: 0=Disabled, 1=Tx Enabled, 2=Rx Enabled, 3=Rx & Tx Enabled
         apply_value_map={
             "Disabled": 0,
@@ -492,16 +507,40 @@ def create_eee_setting(interface_index: int, display_name: str) -> SettingExecut
             "$success = $false; "
             "foreach ($kw in $keywords) { "
             "try { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $kw -RegistryValue $regVal -ErrorAction Stop; "
             "$success = $true; break "
             "} catch { }"
             "}; "
             "if ($success) { 'ok' } else { 'not_supported' }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},  # PowerShell handles conversion
     )
+
+
+# The adapter's driver key, from its PnP device id: Control\Class\{guid}\NNNN.
+_PNP_DRIVER_KEY = (
+    "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
+    "$drv = (Get-PnpDeviceProperty -InstanceId $a.PnPDeviceID "
+    "-KeyName 'DEVPKEY_Device_Driver' -ErrorAction Stop).Data; "
+    "if (-not $drv) { 'not_supported'; return }; "
+    '$k = "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\$drv"; '
+    "$v = [int](Get-ItemProperty -Path $k -Name 'PnPCapabilities' "
+    "-ErrorAction SilentlyContinue).PnPCapabilities; "
+)
+_PNP_POWER_DETECT = (
+    "try { " + _PNP_DRIVER_KEY + "if (($v -band 0x18) -eq 0x18) { 'Disabled' } else { 'Enabled' } "
+    "} catch { 'not_supported' }"
+)
+_PNP_POWER_APPLY = (
+    "try { "
+    + _PNP_DRIVER_KEY
+    + "$new = if ('%value%' -eq 'Disabled') { $v -bor 0x18 } else { $v -band (-bnot 0x18) }; "
+    "Set-ItemProperty -Path $k -Name 'PnPCapabilities' -Value $new -Type DWord "
+    "-Force -ErrorAction Stop; 'ok' "
+    "} catch { 'error:' + $_.Exception.Message }"
+)
 
 
 def create_power_management_setting(interface_index: int, display_name: str) -> SettingExecutor:
@@ -511,6 +550,9 @@ def create_power_management_setting(interface_index: int, display_name: str) -> 
 
     Controls whether Windows can turn off the network adapter to save power.
     For gaming, this should be disabled to maintain constant connectivity.
+    Microsoft documents the switch as PnPCapabilities 24 (0x18) under the
+    adapter's Class key:
+    https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/power-management-on-network-adapter
 
     Args:
         interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
@@ -544,40 +586,21 @@ def create_power_management_setting(interface_index: int, display_name: str) -> 
         category_order=13,  # Per-adapter setting
         effect="Disabling prevents adapter disconnects and resume delays",
         impact_scores={"latency_ms": -150.0, "stability": "high", "power_watts": 0.5},
-        # Detection - Use InterfaceIndex to get adapter, then find PnP device
-        # PnPCapabilities: 0 or absent = Enabled, 24 = Disabled
+        # "Allow the computer to turn off this device" lives in the adapter's
+        # driver key (Control\Class\{4d36e972-...}\NNNN), PnPCapabilities bits
+        # 0x18. The key is found from the adapter's own PnP device id through
+        # DEVPKEY_Device_Driver, never by matching a display name. Other bits in
+        # the same DWORD belong to the driver and are carried through untouched.
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            "try { "
-            "$adapter = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            "$pnpDevice = Get-PnpDevice | Where-Object { $_.FriendlyName -eq $adapter.InterfaceDescription } | Select-Object -First 1; "
-            "if ($pnpDevice) { "
-            '$regPath = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($pnpDevice.InstanceId)\\Device Parameters"; '
-            "$val = (Get-ItemProperty -Path $regPath -Name 'PnPCapabilities' -ErrorAction SilentlyContinue).PnPCapabilities; "
-            "if ($val -eq 24) { 'Disabled' } else { 'Enabled' } "
-            "} else { 'Enabled' } "
-            "} catch { 'Enabled' }"
-        ),
-        # Batched: Get-PnpDevice enumerates every device on the machine, so one
-        # sweep answers every adapter. detect_command stays as the fallback for a
-        # single-setting detect outside a scan.
+        detect_command=_PNP_POWER_DETECT,
+        # Batched: one sweep answers every adapter. detect_command stays as the
+        # fallback for a single-setting detect outside a scan.
         detect_args={"ifindex": interface_index, "batch_pnp_power": True},
-        value_map={},  # Direct pass-through
-        # Apply - Use InterfaceIndex, set PnPCapabilities registry
+        value_map={},
         apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            "try { "
-            "$adapter = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            "$pnpDevice = Get-PnpDevice | Where-Object { $_.FriendlyName -eq $adapter.InterfaceDescription } | Select-Object -First 1; "
-            "if ($pnpDevice) { "
-            '$regPath = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($pnpDevice.InstanceId)\\Device Parameters"; '
-            "$val = if ('%value%' -eq 'Disabled') { 24 } else { 0 }; "
-            "Set-ItemProperty -Path $regPath -Name 'PnPCapabilities' -Value $val -Type DWord -Force -ErrorAction Stop; "
-            "'ok' "
-            "} else { 'not_supported' } "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
-        apply_args={"ifindex": interface_index},
+        apply_command=_PNP_POWER_APPLY,
+        # The driver reads PnPCapabilities when the device starts.
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},  # PowerShell handles conversion
     )
 
@@ -645,6 +668,12 @@ NETWORK_THROTTLING = SettingExecutor(
 # below for why the recommendation moved off them.
 # NOTE: On any non-ISP choice the resolver sees every name this machine looks up.
 # See: https://quad9.net/service/service-addresses-and-features/
+_EXPECTED_IPV6_PS = (
+    "$expected6 = @{ "
+    + "; ".join(f"{name} = '{','.join(sorted(pair))}'" for name, pair in RESOLVER_IPV6.items())
+    + " }; "
+)
+
 DNS_SECURITY = SettingExecutor(
     id="network:dns_security",
     category=SettingCategory.NETWORK,
@@ -731,15 +760,23 @@ DNS_SECURITY = SettingExecutor(
         "cloudflare_family = '1.0.0.3,1.1.1.3'; "
         "cloudflare = '1.0.0.1,1.1.1.1'; "
         "quad9 = '149.112.112.112,9.9.9.9' "
-        "}; "
-        "foreach ($name in $expected.Keys) { "
+        "}; " + _EXPECTED_IPV6_PS + "foreach ($name in $expected.Keys) { "
         "$allMatch = $true; "
         "foreach ($adapter in $adapters) { "
         "$dns = @((Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
         "-AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses); "
         "if ($dns.Count -eq 0 -or ((($dns | Sort-Object) -join ',') -ne $expected[$name])) { "
         "$allMatch = $false; break "
-        "} }; "
+        "}; "
+        # An adapter with IPv6 bound must carry the resolver's IPv6 pair too,
+        # or its lookups bypass the choice over IPv6.
+        "if (Get-NetIPInterface -InterfaceIndex $adapter.ifIndex -AddressFamily IPv6 "
+        "-ErrorAction SilentlyContinue) { "
+        "$dns6 = @((Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
+        "-AddressFamily IPv6 -ErrorAction SilentlyContinue).ServerAddresses); "
+        "if ((($dns6 | Sort-Object) -join ',') -ne $expected6[$name]) { "
+        "$allMatch = $false; break "
+        "} } }; "
         "if ($allMatch) { $result = $name; break } "
         "} }; $result "
         "} catch { 'isp' }"
@@ -761,23 +798,36 @@ DNS_SECURITY = SettingExecutor(
         "}; "
         "$changed = 0; "
         "foreach ($adapter in $adapters) { "
+        "$v6 = @(); "
         "if ('%value%' -eq 'cloudflare_security') { "
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.2','1.0.0.2'); "
+        "$v6 = @('2606:4700:4700::1112','2606:4700:4700::1002'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'cloudflare_family') { "
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.3','1.0.0.3'); "
+        "$v6 = @('2606:4700:4700::1113','2606:4700:4700::1003'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'cloudflare') { "
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.1','1.0.0.1'); "
+        "$v6 = @('2606:4700:4700::1111','2606:4700:4700::1001'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'quad9') { "
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('9.9.9.9','149.112.112.112'); "
+        "$v6 = @('2620:fe::fe','2620:fe::9'); "
         "$changed++ "
         "} else { "
         # Reset to DHCP: clear manual DNS, flush cache, register with DHCP
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses; "
+        "$v6 = @(); "
         "$changed++ "
-        "} }; "
+        "}; "
+        # The IPv6 pair goes on its own call, and only where IPv6 is bound: a
+        # mixed list fails outright on an adapter with IPv6 unbound.
+        "if ($v6.Count -gt 0 -and (Get-NetIPInterface -InterfaceIndex $adapter.ifIndex "
+        "-AddressFamily IPv6 -ErrorAction SilentlyContinue)) { "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $v6 "
+        "-ErrorAction Stop } "
+        "}; "
         # Flush DNS cache and register with DHCP for immediate effect
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
         "Register-DnsClient -ErrorAction SilentlyContinue; "
@@ -826,6 +876,15 @@ _DOH_TEMPLATES = {
     "149.112.112.112": "https://dns.quad9.net/dns-query",
     "8.8.8.8": "https://dns.google/dns-query",
     "8.8.4.4": "https://dns.google/dns-query",
+    # The same resolvers' IPv6 addresses, which dns_security now sets as well.
+    "2606:4700:4700::1111": "https://cloudflare-dns.com/dns-query",
+    "2606:4700:4700::1001": "https://cloudflare-dns.com/dns-query",
+    "2606:4700:4700::1112": "https://security.cloudflare-dns.com/dns-query",
+    "2606:4700:4700::1002": "https://security.cloudflare-dns.com/dns-query",
+    "2606:4700:4700::1113": "https://family.cloudflare-dns.com/dns-query",
+    "2606:4700:4700::1003": "https://family.cloudflare-dns.com/dns-query",
+    "2620:fe::fe": "https://dns.quad9.net/dns-query",
+    "2620:fe::9": "https://dns.quad9.net/dns-query",
 }
 
 # Identical to dns_security's filter. Sharing the text is what stops the two
@@ -846,9 +905,11 @@ _DOH_TEMPLATE_TABLE_PS = "; ".join(
     f"'{address}' = '{template}'" for address, template in _DOH_TEMPLATES.items()
 )
 
+# IPv4 servers live under Doh\<ip>, IPv6 servers under Doh6\<ip>.
 _DOH_INTERFACE_KEY_PS = (
     "'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Dnscache"
-    "\\InterfaceSpecificParameters\\' + $guid + '\\DohInterfaceSettings\\Doh\\' + $server"
+    "\\InterfaceSpecificParameters\\' + $guid + '\\DohInterfaceSettings\\' + "
+    "$(if ($server -like '*:*') { 'Doh6' } else { 'Doh' }) + '\\' + $server"
 )
 
 DNS_OVER_HTTPS = SettingExecutor(
@@ -924,8 +985,9 @@ DNS_OVER_HTTPS = SettingExecutor(
         "$done = 0; $unknown = 0; "
         "foreach ($adapter in $adapters) { "
         "$guid = $adapter.InterfaceGuid; "
-        "$servers = @((Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
-        "-AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses); "
+        # Both families: an IPv6 resolver without its flag is a plaintext path.
+        "$servers = @(Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
+        "-ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses }); "
         "foreach ($server in $servers) { "
         f"$key = {_DOH_INTERFACE_KEY_PS}; "
         "if ('%value%' -eq 'enabled') { "
@@ -1370,93 +1432,47 @@ DNS_NETBT_PRIORITY = SettingExecutor(
     value_hints={"standard": "2001", "optimized": "7"},
 )
 
-# === QoS Bandwidth Reservation (split into 2 single-value tweaks) ===
-
-# Part 1: NonBestEffortLimit — caps the % of bandwidth Windows reserves for QoS.
-# 0 = no reservation (all bandwidth available), default is 10-20% reserved.
+# === QoS Bandwidth Reservation (NonBestEffortLimit) — a guard ===
+# Windows reserves bandwidth only for applications that ask for QoS, and frees it
+# the moment they stop, so the "reclaim 20%" tweak (limit 0) frees nothing on a
+# desktop and takes the reserve away from the voice and video apps that use it.
+# The policy value is absent on a stock machine; the guard deletes it.
 QOS_BANDWIDTH = SettingExecutor(
     id="network:qos_bandwidth",
     category=SettingCategory.NETWORK,
     display_name="QoS Bandwidth Reservation (NonBestEffortLimit)",
     short_name="QoS Bandwidth",
-    description="% of bandwidth Windows reserves for QoS (NonBestEffortLimit). 0 = no reservation.",
+    description="The share of bandwidth Windows may reserve for apps that request QoS, such as voice "
+    "chat. The reserve is used only while such an app asks for it, so a limit of 0 frees nothing.",
     value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
+    choices=("standard", "changed"),
+    default_value="standard",
+    recommended_value="standard",
     requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="The popular claim that Windows permanently reserves 20% of your bandwidth is a "
-    "myth: the reserve is only claimed while an application actively requests QoS, and is "
-    "released otherwise. Setting the limit to 0 therefore recovers little or nothing on a normal "
-    "desktop, while removing the headroom that VoIP and conferencing apps rely on to stay smooth.",
-    current_impact="Enabled: Reserve available to apps that request QoS — unused otherwise",
-    recommended_impact="Disabled (0): No reservation possible → recovers little on a normal desktop",
-    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows-server/networking/technologies/qos/qos-policy-top"
+    ],
+    current_impact="Changed: a policy limit overrides the reserve voice and video apps rely on",
+    recommended_impact="Windows default: the reserve exists only while an app requests it",
+    scope=SettingScope.RECOMMENDED,
     category_order=9,
-    effect="Sets NonBestEffortLimit=0 to remove Windows QoS bandwidth reservation",
-    impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},
+    effect="Removes the NonBestEffortLimit policy so Windows manages the QoS reserve",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": PSCHED_KEY, "name": "NonBestEffortLimit", "hive": "HKLM"},
-    value_map={0: "disabled", "0": "disabled", 10: "enabled", 20: "enabled", None: "enabled"},
-    # Single-setting apply: only NonBestEffortLimit. QoS NLA flag is a separate tweak.
-    apply_type=DetectType.POWERSHELL,
-    apply_command=(
-        "$pschedPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\Psched'; "
-        "if (-not (Test-Path $pschedPath)) { New-Item -Path $pschedPath -Force | Out-Null }; "
-        "if ('%value%' -eq 'disabled') { "
-        "Set-ItemProperty -Path $pschedPath -Name 'NonBestEffortLimit' -Value 0 -Type DWord -Force "
-        "} else { "
-        "Remove-ItemProperty -Path $pschedPath -Name 'NonBestEffortLimit' -ErrorAction SilentlyContinue "
-        "}; 'ok'"
-    ),
-    apply_args={},
-    apply_value_map={},
-)
-
-# Part 2: QoS NLA flag — tells the QoS subsystem to not use Network Location Awareness.
-# This prevents QoS from throttling traffic on "non-home" networks.
-QOS_NLA = SettingExecutor(
-    id="network:qos_nla",
-    category=SettingCategory.NETWORK,
-    display_name="QoS NLA Override (Do not use NLA)",
-    short_name="QoS NLA",
-    description="Prevents QoS from throttling on non-home networks. Sets 'Do not use NLA'=1.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="Bypassing Network Location Awareness makes QoS policies apply on every network "
-    "profile, including public and corporate ones. On a managed network this can conflict with "
-    "policy pushed by the domain, and it removes the profile-based separation that stops home "
-    "rules from following you onto untrusted networks.",
-    current_impact="Enabled: QoS may throttle on non-home network profiles",
-    recommended_impact="Disabled (NLA bypassed): QoS behaves consistently on all networks",
-    scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
-    category_order=9,
-    effect="Sets QoS 'Do not use NLA'=1 to prevent network-profile-based throttling",
-    impact_scores={"throughput": "low", "latency_ms": 0, "stability": "high"},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={"path": QOS_KEY, "name": "Do not use NLA", "hive": "HKLM"},
-    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
-    apply_type=DetectType.POWERSHELL,
-    apply_command=(
-        "$qosPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\QoS'; "
-        "if (-not (Test-Path $qosPath)) { New-Item -Path $qosPath -Force | Out-Null }; "
-        "if ('%value%' -eq 'disabled') { "
-        "Set-ItemProperty -Path $qosPath -Name 'Do not use NLA' -Value 1 -Type DWord -Force "
-        "} else { "
-        "Remove-ItemProperty -Path $qosPath -Name 'Do not use NLA' -ErrorAction SilentlyContinue "
-        "}; 'ok'"
-    ),
-    apply_args={},
-    apply_value_map={},
+    value_map={None: "standard", UNMAPPED: "changed"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": PSCHED_KEY,
+        "name": "NonBestEffortLimit",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"standard": None},
+    value_hints={"standard": "not set"},
 )
 
 # === IPv6 Privacy Extension ===
@@ -1465,30 +1481,24 @@ IPV6_PRIVACY = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="IPv6 Privacy Extension",
     short_name="IPv6 Privacy",
-    description="Creates temporary IPv6 addresses for privacy. Disabling reduces overhead.",
+    description="Gives the machine short-lived IPv6 addresses for outgoing connections so remote servers "
+    "cannot follow it across sessions. Turning it off saves nothing measurable and gives that away.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    recommended_value="disabled",
+    recommended_value="enabled",
     requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="This is a privacy regression, not just a performance setting. RFC 4941 temporary "
-    "addresses exist so remote servers cannot correlate your traffic across sessions; disabling "
-    "them makes your machine present one stable IPv6 address that follows you and is trivially "
-    "loggable. The overhead removed is negligible on any modern system.",
-    current_impact="Enabled: Temporary IPv6 addresses rotate → traffic cannot be correlated",
-    recommended_impact="Disabled: Fixed IPv6 address → less overhead, stable connections",
-    scope=SettingScope.COMPLETE,  # Minor benefit
+    evidence_level="proven",
+    current_impact="Disabled: one stable IPv6 address that every server can log and correlate",
+    recommended_impact="Enabled: rotating temporary addresses, as Windows ships",
+    scope=SettingScope.RECOMMENDED,
     category_order=20,
-    effect="Disabling reduces IPv6 address generation overhead",
-    impact_scores={"latency_ms": 0, "privacy": "reduced"},
-    # Detection
+    effect="Restores Windows' temporary IPv6 addresses",
+    impact_scores={"latency_ms": 0.0, "privacy": "protected", "stability": "high"},
     detect_type=DetectType.NETSH,
     detect_command="interface ipv6 show privacy",
     detect_args={"parse_key": "use temporary addresses"},
     value_map={},
-    # Apply
     apply_type=DetectType.NETSH,
     apply_command="interface ipv6 set privacy state=%value%",
     apply_args={},
@@ -1501,31 +1511,24 @@ IPV6_RANDOM_IDS = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="IPv6 Random Identifiers",
     short_name="IPv6 Random IDs",
-    description="Windows rotates the machine's IPv6 address for privacy, and each rotation drops the "
-    "connections using the old one. Off, a long session stops being interrupted by its own "
-    "address changing.",
+    description="Makes the IPv6 interface identifier random instead of derived from the network card's "
+    "hardware address. Off, the same device fingerprint follows the machine onto every network.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    recommended_value="disabled",
+    recommended_value="enabled",
     requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="Also a privacy regression: with randomisation off, the IPv6 interface identifier "
-    "is derived from your MAC address, so the same device fingerprint travels with you onto every "
-    "network you join. The claimed connection-stability benefit is anecdotal.",
-    current_impact="Enabled: Random interface IDs → device is not identifiable across networks",
-    recommended_impact="Disabled: Consistent IDs → stable, predictable connections",
-    scope=SettingScope.COMPLETE,  # Minor benefit
+    evidence_level="proven",
+    current_impact="Disabled: the IPv6 identifier is built from the hardware address",
+    recommended_impact="Enabled: a random identifier, as Windows ships",
+    scope=SettingScope.RECOMMENDED,
     category_order=21,
-    effect="Disabling provides consistent IPv6 interface identifiers",
-    impact_scores={"latency_ms": 0, "stability": "improved"},
-    # Detection
+    effect="Restores Windows' random IPv6 interface identifiers",
+    impact_scores={"latency_ms": 0.0, "privacy": "protected", "stability": "high"},
     detect_type=DetectType.NETSH,
     detect_command="interface ipv6 show global",
     detect_args={"parse_key": "randomize identifiers"},
     value_map={},
-    # Apply
     apply_type=DetectType.NETSH,
     apply_command="interface ipv6 set global randomizeidentifiers=%value%",
     apply_args={},
@@ -1538,48 +1541,40 @@ TEREDO = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Teredo Tunneling",
     short_name="Teredo",
-    description="IPv6 tunneling over IPv4 NAT. Not needed for gaming, adds latency when active.",
+    description="Carries IPv6 over an IPv4 NAT. Xbox network features and some peer-to-peer games use it "
+    "to reach other players, and it carries no traffic while native IPv6 or plain IPv4 works.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
-    default_value="disabled",  # Windows 11 default is effectively disabled
-    recommended_value="disabled",
+    default_value="enabled",
+    recommended_value="enabled",
     requires_reboot=False,
-    # Not "experimental": the claim here is that the Windows default is
-    # already correct, which is evidenced by the vendor shipping it and by
-    # the research that rejected changing it. `evidence_level` grades the
-    # benefit, and "leave this alone" is a well-supported benefit.
     evidence_level="proven",
-    current_impact="Enabled: IPv6 tunneled over IPv4 → extra latency when active",
-    recommended_impact="Disabled: No tunneling overhead → cleaner network stack",
-    scope=SettingScope.COMPLETE,  # Minor benefit
+    current_impact="Disabled: Xbox network party chat and peer-to-peer matches may fail to connect",
+    recommended_impact="Enabled: Windows' default Teredo client, idle unless a game needs it",
+    scope=SettingScope.RECOMMENDED,
     category_order=22,
-    effect="Disabling removes IPv6-over-IPv4 tunneling overhead",
-    impact_scores={"latency_ms": 0, "stability": "improved"},
-    # Detection
+    effect="Restores Windows' default Teredo state",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.NETSH,
     detect_command="interface teredo show state",
     detect_args={"parse_key": "type"},
-    # netsh returns: default, client, enterpriseclient, relay, server, none, disabled, nondomain
-    # Active types → "enabled", inactive types → "disabled"
+    # netsh reports the configured type: default, client, enterpriseclient,
+    # relay, server, natawareclient, disabled.
     value_map={
         "default": "enabled",
         "client": "enabled",
         "enterpriseclient": "enabled",
+        "natawareclient": "enabled",
         "relay": "enabled",
         "server": "enabled",
         "none": "disabled",
         "disabled": "disabled",
         "nondomain": "disabled",
     },
-    # Apply - Use type= prefix for proper netsh syntax
     apply_type=DetectType.NETSH,
     apply_command="interface teredo set state type=%value%",
     apply_args={},
-    # Map our choices to netsh values
-    apply_value_map={
-        "enabled": "default",  # "default" tells Windows to enable teredo
-        "disabled": "disabled",
-    },
+    apply_value_map={"enabled": "default", "disabled": "disabled"},
 )
 
 
@@ -1631,11 +1626,16 @@ def create_roaming_aggressiveness_setting(
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*RoamAggressiveness' -ErrorAction SilentlyContinue; "
+            # The standardised '*' spelling first, then the bare vendor one,
+            # the same order apply picks from.
+            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*RoamAggressiveness','RoamAggressiveness' -ErrorAction SilentlyContinue)[0]; "
             "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index, "batch_adapter_keyword": "*RoamAggressiveness"},
+        detect_args={
+            "ifindex": interface_index,
+            "batch_adapter_keyword": ["*RoamAggressiveness", "RoamAggressiveness"],
+        },
         # Map numeric registry values (0-4) to choice names
         value_map={
             0: "Lowest",
@@ -1664,12 +1664,12 @@ def create_roaming_aggressiveness_setting(
             "@('*RoamAggressiveness','RoamAggressiveness') } "
             "| Select-Object -First 1).RegistryKeyword; "
             "if (-not $kw) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $kw -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={
             "Lowest": 0,
             "Medium-Low": 1,
@@ -1685,8 +1685,9 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
 
     BEST PRACTICE: Use InterfaceIndex (numeric) for PowerShell commands.
 
-    LSO allows the network adapter to segment large packets, reducing CPU load.
-    However, it can add latency for small, real-time packets used in gaming.
+    A guard (consequence 6). LSO only ever touches large TCP sends; a game's
+    small UDP packets are never segmented by it, so turning it off bought no
+    latency and moved every upload's segmentation onto the CPU.
 
     Args:
         interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
@@ -1700,26 +1701,23 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
         category=SettingCategory.NETWORK,
         display_name=f"Large Send Offload ({display_name})",
         short_name=f"Large-packet offload ({display_name})",
-        description="Network card segments large packets. Disabling reduces latency for small packets.",
+        description="Lets the network card cut large TCP sends into packets instead of the CPU. Game "
+        "packets are small and never pass through it, so turning it off only costs CPU on uploads.",
         value_type=SettingValueType.CHOICE,
         choices=("Enabled", "Disabled"),
         default_value="Enabled",
-        recommended_value="Disabled",
+        recommended_value="Enabled",
         requires_reboot=False,
-        evidence_level="experimental",
-        risk_level="advanced",
-        risk_warning=(
-            "The CPU segments every packet instead of handing a large buffer to the adapter, so CPU use rises on bulk transfers. The claimed latency benefit is a reduction in burstiness and no isolated measurement of it was found — treat it as unproven."
-        ),
+        evidence_level="proven",
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Enabled: Large packets batched → extra delay for small game packets",
-        recommended_impact="Disabled: All packets processed immediately → ideal for real-time gaming",
+        current_impact="Disabled: the CPU segments every large upload itself",
+        recommended_impact="Enabled: the adapter segments uploads; game packets are unaffected",
         scope=SettingScope.RECOMMENDED,
         category_order=15,
-        effect="Disabling prevents large packet batching for real-time gaming",
-        impact_scores={"latency_ms": -2.0, "cpu_usage": 3.0, "stability": "high"},
+        effect="Restores the adapter's large send offload",
+        impact_scores={"cpu_usage": -3.0, "latency_ms": 0.0, "stability": "high"},
         # Detection - Use InterfaceIndex for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
@@ -1733,13 +1731,13 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
         # Apply - Use InterfaceIndex
         apply_type=DetectType.POWERSHELL,
         apply_command=(
-            "if ('%value%' -eq 'Enabled') { "
-            "Enable-NetAdapterLso -InterfaceIndex %ifindex% -ErrorAction SilentlyContinue "
+            "try { if ('%value%' -eq 'Enabled') { "
+            "Enable-NetAdapterLso -InterfaceIndex %ifindex% -NoRestart -ErrorAction Stop "
             "} else { "
-            "Disable-NetAdapterLso -InterfaceIndex %ifindex% -ErrorAction SilentlyContinue "
-            "}; 'ok'"
+            "Disable-NetAdapterLso -InterfaceIndex %ifindex% -NoRestart -ErrorAction Stop "
+            "}; 'ok' } catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
     )
 
@@ -1801,13 +1799,13 @@ def create_checksum_offload_setting(interface_index: int, display_name: str) -> 
         # Apply - Use InterfaceIndex
         apply_type=DetectType.POWERSHELL,
         apply_command=(
-            "if ('%value%' -eq 'Enabled') { "
-            "Enable-NetAdapterChecksumOffload -InterfaceIndex %ifindex% -ErrorAction SilentlyContinue "
+            "try { if ('%value%' -eq 'Enabled') { "
+            "Enable-NetAdapterChecksumOffload -InterfaceIndex %ifindex% -NoRestart -ErrorAction Stop "
             "} else { "
-            "Disable-NetAdapterChecksumOffload -InterfaceIndex %ifindex% -ErrorAction SilentlyContinue "
-            "}; 'ok'"
+            "Disable-NetAdapterChecksumOffload -InterfaceIndex %ifindex% -NoRestart -ErrorAction Stop "
+            "}; 'ok' } catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
     )
 
@@ -2041,47 +2039,6 @@ TCP_NUM_CONNECTIONS = SettingExecutor(
 # === TCP TIME_WAIT Delay ===
 # Reduces the time closed sockets stay in TIME_WAIT state.
 # Default 120s → 30s: freed ports are reusable faster for new connections.
-TCP_TIMED_WAIT_DELAY = SettingExecutor(
-    id="network:tcp_timed_wait_delay",
-    category=SettingCategory.NETWORK,
-    display_name="TCP TIME_WAIT Delay",
-    short_name="TIME_WAIT",
-    description="How long closed sockets wait before port reuse. Lower = faster port recycling.",
-    value_type=SettingValueType.CHOICE,
-    choices=("default", "fast"),
-    default_value="default",
-    recommended_value="fast",
-    requires_reboot=False,
-    evidence_level="likely",
-    sources=[
-        "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/tcpip-and-nbt-configuration-parameters",
-    ],
-    current_impact="Default: 120s TIME_WAIT → ports locked after close, slow recycling",
-    recommended_impact="Fast: 30s TIME_WAIT → ports freed 4x faster, helps rapid server reconnects",
-    scope=SettingScope.RECOMMENDED,
-    category_order=11,
-    effect="Reduces socket TIME_WAIT from 120s to 30s for faster port recycling",
-    impact_scores={"latency_ms": 0, "stability": "improved"},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": TCPIP_PARAMS_KEY,
-        "name": "TcpTimedWaitDelay",
-        "hive": "HKLM",
-    },
-    value_map={30: "fast", "30": "fast", None: "default", 120: "default", "120": "default"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": TCPIP_PARAMS_KEY,
-        "name": "TcpTimedWaitDelay",
-        "hive": "HKLM",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"fast": 30, "default": 120},
-    value_hints={"default": "120s", "fast": "30s"},
-)
-
 # === Default TTL ===
 # Sets the initial Time-To-Live for outbound packets.
 # 64 is optimal for gaming (Linux/macOS default). Windows default is 128.
@@ -2136,7 +2093,7 @@ DEFAULT_TTL = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"optimized": 64, "default": 128},
+    apply_value_map={"optimized": 64, "default": None},  # stock: the value is absent
     value_hints={"default": "128", "optimized": "64"},
 )
 
@@ -2202,14 +2159,14 @@ def create_wake_on_lan_setting(interface_index: int, display_name: str) -> Setti
             "$changed = $false; "
             "foreach ($kw in @('*WakeOnMagicPacket', '*WakeOnPattern')) { "
             "try { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $kw -RegistryValue $regVal -ErrorAction Stop; "
             "$changed = $true "
             "} catch { } "
             "}; "
             "if ($changed) { 'ok' } else { 'not_supported' }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
     )
 
@@ -2310,12 +2267,12 @@ def create_speed_duplex_setting(interface_index: int, display_name: str) -> Sett
         apply_type=DetectType.POWERSHELL,
         apply_command=(
             "try { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword '*SpeedDuplex' -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         # Forced_Other is absent on purpose: it is a reading, not a target. There
         # is no single number it could write, and fpstune has no reason to help a
         # user force a speed — the recommendation is always to negotiate.
@@ -2388,12 +2345,12 @@ def _make_vendor_power_setting(
         apply_type=DetectType.POWERSHELL,
         apply_command=(
             "try { "
-            f"Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            f"Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             f"-RegistryKeyword '{keyword}' -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
@@ -2502,11 +2459,16 @@ def create_advanced_eee_setting(interface_index: int, display_name: str) -> Sett
         # Intel-specific keyword: *AdvancedEEE
         detect_type=DetectType.POWERSHELL,
         detect_command=(
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*AdvancedEEE' -ErrorAction SilentlyContinue; "
+            # The standardised '*' spelling first, then the bare vendor one,
+            # the same order apply picks from.
+            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "-RegistryKeyword '*AdvancedEEE','AdvancedEEE' -ErrorAction SilentlyContinue)[0]; "
             "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index, "batch_adapter_keyword": "*AdvancedEEE"},
+        detect_args={
+            "ifindex": interface_index,
+            "batch_adapter_keyword": ["*AdvancedEEE", "AdvancedEEE"],
+        },
         value_map={
             0: "Disabled",
             "0": "Disabled",
@@ -2531,12 +2493,12 @@ def create_advanced_eee_setting(interface_index: int, display_name: str) -> Sett
             "$kw = ($all | Where-Object { $_.RegistryKeyword -in "
             "@('*AdvancedEEE','AdvancedEEE') } | Select-Object -First 1).RegistryKeyword; "
             "if (-not $kw) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $kw -RegistryValue ([int]%value%) -ErrorAction Stop; "
             "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
@@ -2612,12 +2574,12 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
             "[int]$prop.DefaultRegistryValue }; "
             "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
-            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword '*ReceiveBuffers' -RegistryValue $val -ErrorAction Stop; "
             "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
         value_hints={"default": "Driver default", "maximum": "This adapter's own maximum"},
     )
@@ -2692,12 +2654,12 @@ def create_transmit_buffers_setting(interface_index: int, display_name: str) -> 
             "$val = if ('%value%' -eq 'maximum') { $max } else { "
             "[int]$prop.DefaultRegistryValue }; "
             "if ($val -le 0) { 'error: the driver does not publish a default for this property' } "
-            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "else { Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword '*TransmitBuffers' -RegistryValue $val -ErrorAction Stop; "
             "'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
         value_hints={"default": "driver minimum", "maximum": "adapter maximum"},
     )
@@ -2800,12 +2762,12 @@ def create_rss_queues_setting(
         apply_type=DetectType.POWERSHELL,
         apply_command=(
             "try { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword '*NumRssQueues' -RegistryValue ([int]'%value%') -ErrorAction Stop; "
             "'ok' "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},  # Direct pass-through
     )
 
@@ -2872,11 +2834,11 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
             "} | Select-Object -First 1; "
             "if ($p) { "
             "$val = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $p.RegistryKeyword -RegistryValue $val -ErrorAction Stop; 'ok' "
             "} else { 'not_supported' }"
         ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
     )
 
@@ -2941,82 +2903,11 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
             "} | Select-Object -First 1; "
             "if ($p) { "
             "$val = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
+            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $p.RegistryKeyword -RegistryValue $val -ErrorAction Stop; 'ok' "
             "} else { 'not_supported' }"
         ),
-        apply_args={"ifindex": interface_index},
-        apply_value_map={},
-    )
-
-
-def create_packet_coalescing_setting(interface_index: int, display_name: str) -> SettingExecutor:
-    """Create a D0 Packet Coalescing setting for a specific adapter.
-
-    BEST PRACTICE: Use InterfaceIndex (numeric) for PowerShell commands.
-
-    Packet Coalescing batches incoming packets in the active (D0) power state to reduce
-    CPU notifications, which adds DPC latency spikes (notably on WiFi/ndis.sys). Disabling
-    forces per-packet notification. Adapters without the property report not_supported.
-
-    Args:
-        interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
-        display_name: Human-readable adapter name (for UI display only).
-
-    Returns:
-        SettingExecutor for Packet Coalescing control.
-    """
-    return SettingExecutor(
-        id=f"network:{interface_index}:packet_coalescing",
-        category=SettingCategory.NETWORK,
-        display_name=f"D0 Packet Coalescing ({display_name})",
-        short_name=f"Packet batching while awake ({display_name})",
-        description="Batches incoming packets in the active power state to cut CPU notifications. Disabling forces per-packet processing to remove DPC latency spikes.",
-        value_type=SettingValueType.CHOICE,
-        choices=("Enabled", "Disabled"),
-        default_value="Enabled",
-        recommended_value="Disabled",
-        requires_reboot=False,
-        evidence_level="experimental",
-        risk_level="advanced",
-        risk_warning=(
-            "A vendor feature with no consistent documentation across drivers, so its exact effect differs per adapter. The reasoning — fewer, larger receive batches add delay — is sound, but no measurement was found for it."
-        ),
-        sources=[
-            "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
-        ],
-        current_impact="Enabled: Packets batched in D0 → ndis.sys DPC latency spikes",
-        recommended_impact="Disabled: Per-packet notification → lower DPC latency, less jitter",
-        scope=SettingScope.RECOMMENDED,
-        category_order=25,
-        effect="Disabling D0 packet coalescing removes batching DPC latency",
-        impact_scores={"latency_ms": -1.0, "cpu_usage": 1.0, "stability": "high"},
-        detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'PacketCoalescing|Coalesc' -or "
-            "$_.DisplayName -match 'Packet.?Coalescing' "
-            "} | Select-Object -First 1; "
-            "if ($p) { if ([int](@($p.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' } } "
-            "else { 'not_supported' }"
-        ),
-        detect_args={"ifindex": interface_index},
-        value_map={},
-        apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'PacketCoalescing|Coalesc' -or "
-            "$_.DisplayName -match 'Packet.?Coalescing' "
-            "} | Select-Object -First 1; "
-            "if ($p) { "
-            "$val = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword $p.RegistryKeyword -RegistryValue $val -ErrorAction Stop; 'ok' "
-            "} else { 'not_supported' }"
-        ),
-        apply_args={"ifindex": interface_index},
+        apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={},
     )
 
@@ -3122,13 +3013,19 @@ def create_rss_base_processor_setting(
             "if ($null -ne $maxProc -and $base -gt $maxProc) { "
             "'error: the target core is outside this adapters RSS processor range' "
             "} else { "
-            "Set-NetAdapterRSS -Name $a.Name -BaseProcessorNumber $base -ErrorAction Stop; 'ok' } "
+            "Set-NetAdapterRSS -Name $a.Name -NoRestart -BaseProcessorNumber $base -ErrorAction Stop; 'ok' } "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
-        apply_args={"ifindex": interface_index, "target": target_core},
+        apply_args={"ifindex": interface_index, "target": target_core, "restart_adapter": True},
         apply_value_map={},
         value_hints={"default": "Driver default", "optimized": f"Core {target_core}"},
     )
+
+
+_MSI_KEY = (
+    '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($a.PnPDeviceID)\\Device Parameters'
+    '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
+)
 
 
 def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingExecutor:
@@ -3176,36 +3073,43 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
         effect="Enables MSI/MSI-X interrupt delivery for the network adapter",
         impact_scores={"latency_ms": -1.0, "stability": "high"},
         detect_type=DetectType.POWERSHELL,
+        # The device is the adapter's own PnP device id, never a display-name
+        # match (two identical NICs share a FriendlyName).
         detect_command=(
-            "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction SilentlyContinue; "
-            "if ($a) { "
-            "$pnp = Get-PnpDevice | Where-Object { $_.FriendlyName -eq $a.InterfaceDescription } "
-            "| Select-Object -First 1; "
-            "if ($pnp) { "
-            '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($pnp.InstanceId)\\Device Parameters'
-            '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
-            "$v = (Get-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction SilentlyContinue).MSISupported; "
+            "try { "
+            "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
+            + _MSI_KEY
+            + "$v = (Get-ItemProperty -Path $rp -Name 'MSISupported' "
+            "-ErrorAction SilentlyContinue).MSISupported; "
             "if ($v -eq 1) { 'enabled' } else { 'default' } "
-            "} else { 'not_supported' } "
-            "} else { 'not_supported' }"
+            "} catch { 'not_supported' }"
         ),
         detect_args={"ifindex": interface_index},
         value_map={},
         apply_type=DetectType.POWERSHELL,
+        # Many drivers' INF files set MSISupported themselves, so "default" is
+        # not "no value": deleting it switched MSI off on hardware that shipped
+        # with it on. The first enabling write records what was there; default
+        # puts exactly that back, and does nothing on a device fpstune never wrote.
         apply_command=(
             "try { "
             "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            "$pnp = Get-PnpDevice | Where-Object { $_.FriendlyName -eq $a.InterfaceDescription } "
-            "| Select-Object -First 1; "
-            "if (-not $pnp) { return 'not_supported' }; "
-            '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($pnp.InstanceId)\\Device Parameters'
-            '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
+            + _MSI_KEY
+            + "$cur = (Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue); "
             "if ('%value%' -eq 'enabled') { "
             "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force | Out-Null }; "
+            "if ($null -eq $cur.fpstuneOriginalMSISupported) { "
+            "$was = if ($null -eq $cur.MSISupported) { -1 } else { [int]$cur.MSISupported }; "
+            "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' -Value $was "
+            "-Type DWord -Force }; "
             "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force "
-            "} else { "
-            "Remove-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction SilentlyContinue "
-            "}; 'ok' "
+            "} elseif ($null -ne $cur.fpstuneOriginalMSISupported) { "
+            "$was = [int]$cur.fpstuneOriginalMSISupported; "
+            "if ($was -eq -1) { Remove-ItemProperty -Path $rp -Name 'MSISupported' "
+            "-ErrorAction SilentlyContinue } "
+            "else { Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was -Type DWord -Force }; "
+            "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' "
+            "-ErrorAction SilentlyContinue }; 'ok' "
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index},
@@ -3219,7 +3123,6 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
 #       DNS_QUERY_PRIORITY, DNS_NETBT_PRIORITY (each manages 1 registry value)
 # NOTE: NAGLE_ALGORITHM split: TCP_ACK_FREQUENCY and TCP_DEL_ACK_TICKS are separate
 # NOTE: MAX_USER_PORT split: TCP_NUM_CONNECTIONS is a separate tweak
-# NOTE: QOS_BANDWIDTH split: QOS_NLA is a separate tweak
 # === Idle Wi-Fi radio while a wired link is up ===
 # A Wi-Fi adapter that is enabled but not connected still scans for networks on
 # a timer, and each scan is kernel-mode work on the same cores the game uses.
@@ -3608,7 +3511,6 @@ NETWORK_SETTINGS: list[SettingExecutor] = [
     NAGLE_ALGORITHM,
     TCP_ACK_FREQUENCY,
     TCP_DEL_ACK_TICKS,
-    SCALING_HEURISTICS,
     CONGESTION_PROVIDER,
     RECEIVE_SIDE_SCALING,
     RECEIVE_SEGMENT_COALESCING,
@@ -3620,11 +3522,9 @@ NETWORK_SETTINGS: list[SettingExecutor] = [
     DNS_QUERY_PRIORITY,
     DNS_NETBT_PRIORITY,
     QOS_BANDWIDTH,
-    QOS_NLA,
     TCP_FAST_OPEN,
     MAX_USER_PORT,
     TCP_NUM_CONNECTIONS,
-    TCP_TIMED_WAIT_DELAY,
     IPV6_PRIVACY,
     IPV6_RANDOM_IDS,
     TEREDO,

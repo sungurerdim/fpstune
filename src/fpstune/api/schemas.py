@@ -123,6 +123,9 @@ class NetworkAdapterInfo(BaseModel):
     # System identifiers (for API operations - use these instead of name)
     interface_index: int | None = None  # NetAdapter InterfaceIndex (for active adapters)
     instance_id: str | None = None  # PnpDevice InstanceId (for all adapters, including disabled)
+    # The id segment of this adapter's settings (`network:<setting_key>:<name>`),
+    # derived from instance_id so the UI never re-derives it.
+    setting_key: str | None = None
     # WiFi-specific fields
     ssid: str | None = None
     channel: int | None = None
@@ -149,7 +152,7 @@ class StorageDriveInfo(BaseModel):
 class AudioDeviceInfo(BaseModel):
     """Audio device information."""
 
-    id: str  # Device GUID from registry
+    id: str  # Endpoint id: {0.0.0.00000000}.{guid} (output), {0.0.1...} (input)
     name: str  # Friendly name: "Speakers (Realtek)", "SteelSeries Engine"
     device_type: str  # Playback, Recording
     is_default: bool = False

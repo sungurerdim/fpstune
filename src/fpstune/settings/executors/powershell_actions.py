@@ -12,9 +12,11 @@ from collections.abc import Mapping
 from typing import Any
 
 from fpstune.settings.cleanup_targets import PATH_SEPARATOR
+from fpstune.settings.executors.mw3_paths import MW3_PLAYERS_PS
 
 #: The separator escaped for PowerShell's `-split`, which takes a regex.
 _PATH_SPLIT = re.escape(PATH_SEPARATOR)
+
 
 # Read and write a config file without changing its byte-level shape.
 #
@@ -871,37 +873,6 @@ ACTION_COMMANDS: dict[str, str] = {
         Write-Output "Windows ads $action completed"
     """,
     # Accessibility popups disable (Sticky/Filter/Toggle Keys)
-    "accessibility_popups_toggle": """
-        $stickyPath = 'HKCU:\\Control Panel\\Accessibility\\StickyKeys'
-        $filterPath = 'HKCU:\\Control Panel\\Accessibility\\Keyboard Response'
-        $togglePath = 'HKCU:\\Control Panel\\Accessibility\\ToggleKeys'
-        $action = '%value%'
-        if ($action -eq 'disable') {
-            Set-ItemProperty -Path $stickyPath -Name 'Flags' -Value '506' -Type String -Force
-            Set-ItemProperty -Path $filterPath -Name 'Flags' -Value '122' -Type String -Force
-            Set-ItemProperty -Path $togglePath -Name 'Flags' -Value '58' -Type String -Force
-        } else {
-            Set-ItemProperty -Path $stickyPath -Name 'Flags' -Value '510' -Type String -Force
-            Set-ItemProperty -Path $filterPath -Name 'Flags' -Value '126' -Type String -Force
-            Set-ItemProperty -Path $togglePath -Name 'Flags' -Value '62' -Type String -Force
-        }
-        Write-Output "Accessibility popups $action completed"
-    """,
-    # Mouse acceleration toggle
-    "mouse_acceleration_toggle": """
-        $mousePath = 'HKCU:\\Control Panel\\Mouse'
-        $action = '%value%'
-        if ($action -eq 'disable') {
-            Set-ItemProperty -Path $mousePath -Name 'MouseSpeed' -Value '0' -Type String -Force
-            Set-ItemProperty -Path $mousePath -Name 'MouseThreshold1' -Value '0' -Type String -Force
-            Set-ItemProperty -Path $mousePath -Name 'MouseThreshold2' -Value '0' -Type String -Force
-        } else {
-            Set-ItemProperty -Path $mousePath -Name 'MouseSpeed' -Value '1' -Type String -Force
-            Set-ItemProperty -Path $mousePath -Name 'MouseThreshold1' -Value '6' -Type String -Force
-            Set-ItemProperty -Path $mousePath -Name 'MouseThreshold2' -Value '10' -Type String -Force
-        }
-        Write-Output "Mouse acceleration $action completed"
-    """,
     # Fast Startup toggle
     "fast_startup_toggle": """
         $powerPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power'
@@ -935,7 +906,8 @@ ACTION_COMMANDS: dict[str, str] = {
         $games = @('cs2.exe', 'ModernWarfare3.exe', 'cod.exe', 'Warzone.exe')
         if ($action -eq 'enabled') {
             if (-not (Test-Path $qosPath)) { New-Item -Path $qosPath -Force | Out-Null }
-            Set-ItemProperty -Path $qosPath -Name 'Do not use NLA' -Value 1 -Type DWord -Force
+            # REG_SZ "1", as Microsoft documents it; a DWORD is not honoured.
+            Set-ItemProperty -Path $qosPath -Name 'Do not use NLA' -Value '1' -Type String -Force
             foreach ($exe in $games) {
                 $name = "fpstune-$exe"
                 Remove-NetQosPolicy -Name $name -Confirm:$false -ErrorAction SilentlyContinue
@@ -1093,10 +1065,11 @@ ACTION_COMMANDS: dict[str, str] = {
     # MW3 texture streaming config - sets HTTPStreamLimitMBytes to 0 in gamerprofile
     "mw3_texture_toggle": _CONFIG_IO_HELPERS
     + r"""
-        $docPath = [System.Environment]::GetFolderPath('MyDocuments')
+"""
+    + MW3_PLAYERS_PS
+    + r"""
         $action = '%value%'
         if ($action -eq 'not_installed') { Write-Output 'not_installed'; exit 0 }
-        $codPath = Join-Path $docPath 'Call of Duty MWIII\players'
         if (-not (Test-Path $codPath)) { Write-Output 'not_installed'; exit 0 }
         # Match both legacy 'gamerprofile.0.BASE.cst' and current 'gamerprofile.pc.0.BASE.cst'.
         # Pick the most recently modified gamerprofile to handle multi-account installs,
@@ -1181,8 +1154,10 @@ ACTION_COMMANDS: dict[str, str] = {
     # so the next launch picks up the recommended value instead of failing.
     "mw3_options_toggle": _CONFIG_IO_HELPERS
     + r"""
-        $docPath = [System.Environment]::GetFolderPath('MyDocuments')
-        $optPath = Join-Path $docPath 'Call of Duty MWIII\players\options.4.cod23.cst'
+"""
+    + MW3_PLAYERS_PS
+    + r"""
+        $optPath = Join-Path $codPath 'options.4.cod23.cst'
         if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; exit 0 }
         $key = '%key%'; $newVal = '%value%'
         if ($newVal -eq 'not_installed') { Write-Output 'not_installed'; exit 0 }
@@ -1269,8 +1244,10 @@ ACTION_COMMANDS: dict[str, str] = {
     # only one leaves the behaviour switched on by the other.
     "mw3_pause_rendering_toggle": _CONFIG_IO_HELPERS
     + r"""
-        $docPath = [System.Environment]::GetFolderPath('MyDocuments')
-        $optPath = Join-Path $docPath 'Call of Duty MWIII\players\options.4.cod23.cst'
+"""
+    + MW3_PLAYERS_PS
+    + r"""
+        $optPath = Join-Path $codPath 'options.4.cod23.cst'
         if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; exit 0 }
         $newVal = '%value%'
         if ($newVal -eq 'not_installed') { Write-Output 'not_installed'; exit 0 }
@@ -1390,21 +1367,6 @@ ACTION_COMMANDS: dict[str, str] = {
         }
         Write-ConfigText $lcfg.FullName $c
         Write-Output 'ok'
-    """,
-    # Battle.net JSON config toggle - modifies Battle.net.config JSON
-    "bnet_json_toggle": r"""
-        $bnetCfg = Join-Path $env:APPDATA 'Battle.net\Battle.net.config'
-        if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; exit 0 }
-        try {
-            $json = Get-Content $bnetCfg -Raw | ConvertFrom-Json
-            $section = '%section%'; $key = '%key%'; $val = '%value%'
-            if ($null -eq $json.$section) {
-                $json | Add-Member -NotePropertyName $section -NotePropertyValue ([PSCustomObject]@{}) -Force
-            }
-            $json.$section | Add-Member -NotePropertyName $key -NotePropertyValue $val -Force
-            $json | ConvertTo-Json -Depth 10 | Set-Content $bnetCfg -Encoding UTF8
-            Write-Output 'ok'
-        } catch { Write-Output "error:$($_.Exception.Message)" }
     """,
     # Steam CEF (browser) GPU compositing toggle - disables GPU in Steam UI for lower overhead
     "steam_cef_toggle": r"""
@@ -1580,10 +1542,6 @@ _MUTEX_GROUPS: dict[str, list[str]] = {
     # Steam localconfig.vdf (per-app launch options).
     "Global\\fpstune-steam-localconfig-vdf": [
         "steam_localconfig_vdf_toggle",
-    ],
-    # Battle.net Battle.net.config (single JSON file, multiple settings target it).
-    "Global\\fpstune-bnet-json": [
-        "bnet_json_toggle",
     ],
 }
 

@@ -595,21 +595,21 @@ class TestFunctionLengthCeiling:
     """H3's KISS gate: the twelve functions over 140 lines are the ceiling.
 
     Length is a proxy, and an honest one here: every function on this list
-    interleaves at least two jobs (toggle_loudness_eq mixes device lookup,
-    registry writes and service restarts). The frozen set may only shrink —
+    interleaves at least two jobs. The frozen set may only shrink —
     get_monitors left it on 2026-09-02 when the P/Invoke half moved to
-    winapi.display and the join to monitor_topology (355 -> 78 lines) —
+    winapi.display and the join to monitor_topology (355 -> 78 lines), and
+    toggle_loudness_eq on 2026-10-04 when its ACL takeover, .reg fallback and
+    audio-service restart were replaced by one minimal-rights write (253 -> 74) —
     a NEW function over the floor fails immediately, and splitting one of
     these must remove its entry in the same change, so every simplification
-    is on the record. The tested ones (toggle_loudness_eq,
-    toggle_network_adapter) are the safe ones to split first.
+    is on the record. The tested one (toggle_network_adapter) is the safe one
+    to split first.
     """
 
     _FLOOR = 140
 
     # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
     _CEILING = {
-        ("src/fpstune/api/routes/system_audio.py", "toggle_loudness_eq"): 253,
         # 182 -> 160 on 2026-09-11: the cleanup-size branch left for
         # `_cleanup_status_reading` when a folder target stopped needing a
         # PowerShell process to answer.
@@ -830,12 +830,7 @@ class TestNoLocalizedTextParsing:
     """
 
     _FORBIDDEN = ("Select-String", "findstr", "wmic", "Get-Counter")
-    _FORBIDDEN_ALLOWED = {
-        (
-            "src/fpstune/api/routes/system_audio.py",
-            "d04e05a6",
-        ): "matches a property GUID, not a word",
-    }
+    _FORBIDDEN_ALLOWED: dict[tuple[str, str], str] = {}
     _OPERATOR = re.compile(
         r"(?<![\w-])-[ci]?(?:not)?(?:match|like)\b"  # the operator; not "mid-match" in prose
         r"|\.To(?:Lower|Upper)\(\)"
@@ -878,18 +873,18 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/api/routes/debug.py", "'Render'"): (
             "a registry key name under MMDevices\\Audio, not text"
         ),
-        ("src/fpstune/api/routes/system_audio.py", "'*TrustedInstaller*'"): (
-            "the service SID's account name; the localized authority prefix is not compared"
-        ),
         ("src/fpstune/api/routes/system_network.py", "'*802.11*'"): _ENUM_802,
         ("src/fpstune/settings/definitions/audio.py", "-like '*{fragment}*'"): (
             "device-path fragments fpstune lists itself"
         ),
-        ("src/fpstune/settings/definitions/display.py", "SwapEffectUpgradeEnable="): (
-            "the registry value's own token format"
+        ("src/fpstune/settings/definitions/audio.py", "-like '{_FX_SLOT_PREFIX},*'"): (
+            "a registry value name: a property-key GUID, not text"
         ),
-        ("src/fpstune/settings/definitions/game.py", "VRROptimizeEnable="): (
-            "the registry value's own token format"
+        ("src/fpstune/settings/definitions/audio.py", "-match '{_LEQ_CLSID_PATTERN}'"): (
+            "COM class ids read from the registry, not text"
+        ),
+        ("src/fpstune/settings/definitions/display.py", "{token}"): (
+            "a DirectXUserGlobalSettings entry name, the registry value's own token format"
         ),
         ("src/fpstune/settings/definitions/gpu.py", "GpuPreference="): (
             "the registry value's own token format"

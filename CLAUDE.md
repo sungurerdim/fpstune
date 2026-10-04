@@ -379,7 +379,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply, reset and undo; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 419 `SettingExecutor` instances across 15 category files.
+- `settings/definitions/` — 404 `SettingExecutor` instances across 15 category files.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -396,8 +396,15 @@ Module contracts — what the tree does not tell you:
 - `executors/mw3_profile.py` — MW3 gamerprofile target; the scope digit is *optional*, because
   that file ships in two live schemas: `Name@0 = v // range`, and the older `Name@ v // range`
   with a BOM, one per account dir.
-- `executors/game_processes.py` — refuses a config write while that game is running; games
-  flush settings from memory on exit, undoing a write that apply AND verify both passed.
+- `executors/game_processes.py` — refuses a config write while that game (or, for a
+  `launcher:` row, Steam / Battle.net) is running; both flush settings from memory on exit,
+  undoing a write that apply AND verify both passed. Launchers sit in their own table:
+  `GAME_PROCESSES` also tells the bench scheduler a game is being played.
+- `executors/mw3_paths.py` — MW3's players folder is one of two (standalone `Call of Duty
+  MWIII\players`, HQ `Call of Duty\players`); the one whose options file was written last wins,
+  in Python and PowerShell alike.
+- `executors/bnet_config.py` — Battle.net.config read/write in Python: one value changed, no
+  BOM, atomic replace; only keys the client is on record reading.
 - `settings/base.py` — `SettingExecutor` dataclass: risk_level, risk_warning, evidence_level,
   impact_scores. `module` is the first segment of the id.
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
@@ -489,7 +496,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(15 files, 419 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(15 files, 404 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

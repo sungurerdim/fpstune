@@ -21,7 +21,6 @@ from fpstune.settings.definitions.network import (
     QOS_BANDWIDTH,
     RECEIVE_SEGMENT_COALESCING,
     RECEIVE_SIDE_SCALING,
-    SCALING_HEURISTICS,
     TCP_AUTO_TUNING,
     TEREDO,
     create_checksum_offload_setting,
@@ -30,7 +29,6 @@ from fpstune.settings.definitions.network import (
     create_interrupt_moderation_setting,
     create_lso_setting,
     create_msi_mode_setting,
-    create_packet_coalescing_setting,
     create_power_management_setting,
     create_roaming_aggressiveness_setting,
     create_rss_base_processor_setting,
@@ -69,7 +67,6 @@ class TestStaticNetworkSettings:
         [
             TCP_AUTO_TUNING,
             NAGLE_ALGORITHM,
-            SCALING_HEURISTICS,
             CONGESTION_PROVIDER,
             RECEIVE_SIDE_SCALING,
             RECEIVE_SEGMENT_COALESCING,
@@ -182,6 +179,70 @@ class TestStaticNetworkSettings:
             )
 
 
+class TestRetiredAndGuarded:
+    """What a retired tweak leaves behind (consequence 6).
+
+    Each of these once recommended a state that bought nothing a player can
+    measure and cost something real: privacy, Xbox network connectivity, CPU on
+    downloads, the QoS reserve voice chat uses. The guard recommends the
+    harmless state so a machine already carrying the tweak is put back.
+    """
+
+    @pytest.mark.parametrize(
+        ("setting", "harmless"),
+        [
+            (RECEIVE_SEGMENT_COALESCING, "enabled"),
+            (IPV6_PRIVACY, "enabled"),
+            (IPV6_RANDOM_IDS, "enabled"),
+            (TEREDO, "enabled"),
+            (QOS_BANDWIDTH, "standard"),
+            (CONGESTION_PROVIDER, "CUBIC"),
+        ],
+    )
+    def test_the_guard_recommends_the_windows_default(
+        self, setting: SettingExecutor, harmless: str
+    ) -> None:
+        assert setting.default_value == harmless, setting.id
+        assert setting.recommended_value == harmless, setting.id
+        assert setting.risk_level != "advanced", setting.id
+
+    def test_teredo_stock_is_the_default_client(self) -> None:
+        """Windows ships Teredo as type=default; the old row called that 'disabled'."""
+        assert TEREDO.value_map["default"] == "enabled"
+        assert TEREDO.apply_value_map["enabled"] == "default"
+
+    def test_qos_policy_guard_deletes_the_value(self) -> None:
+        """Stock has no NonBestEffortLimit policy at all; any value is a change."""
+        assert QOS_BANDWIDTH.apply_value_map["standard"] is None
+        assert QOS_BANDWIDTH.value_map[None] == "standard"
+
+    def test_default_ttl_reset_deletes_the_value(self) -> None:
+        """Writing 128 left a value Windows never had; stock is the value's absence."""
+        assert network_module.DEFAULT_TTL.apply_value_map["default"] is None
+
+    def test_congestion_provider_is_written_through_the_supplemental_template(self) -> None:
+        """Set-NetTCPSetting cannot write CongestionProvider on a client, and has no CUBIC."""
+        assert "Set-NetTCPSetting" not in CONGESTION_PROVIDER.apply_command
+        assert CONGESTION_PROVIDER.apply_command == (
+            "interface tcp set supplemental template=internet congestionprovider=%value%"
+        )
+        assert CONGESTION_PROVIDER.apply_value_map["CUBIC"] == "cubic"
+        for raw in ("CUBIC", "Default"):
+            assert CONGESTION_PROVIDER.value_map[raw] == "CUBIC"
+
+    @pytest.mark.parametrize(
+        "retired",
+        [
+            "network:scaling_heuristics",
+            "network:qos_nla",
+            "network:tcp_timed_wait_delay",
+        ],
+    )
+    def test_placebos_are_gone(self, retired: str) -> None:
+        assert retired not in {s.id for s in NETWORK_SETTINGS}
+        assert not hasattr(network_module, "create_packet_coalescing_setting")
+
+
 class TestAdapterSettingFactories:
     """Tests for per-adapter setting factory functions."""
 
@@ -245,13 +306,6 @@ class TestAdapterSettingFactories:
         assert setting.id == "network:9:throughput_booster"
         assert setting.recommended_value == "Disabled"
 
-    def test_create_packet_coalescing_valid(self) -> None:
-        """Factory should create valid D0 packet coalescing setting."""
-        setting = create_packet_coalescing_setting(10, "Wi-Fi")
-        assert isinstance(setting, SettingExecutor)
-        assert setting.id == "network:10:packet_coalescing"
-        assert setting.recommended_value == "Disabled"
-
     def test_create_rss_base_processor_valid(self) -> None:
         """Factory should create valid RSS base processor setting."""
         setting = create_rss_base_processor_setting(11, "Ethernet", 2)
@@ -274,7 +328,6 @@ class TestAdapterSettingFactories:
         [
             create_uapsd_setting,
             create_throughput_booster_setting,
-            create_packet_coalescing_setting,
             # target_core is derived by the caller; 2 stands in as a fixture
             lambda idx, name: create_rss_base_processor_setting(idx, name, 2),
             create_msi_mode_setting,
@@ -409,3 +462,85 @@ class TestWifiRadioWhenWired:
         command = self._setting().apply_command
         assert "-EA Stop" in command
         assert "'error: '" in command
+
+
+def test_dscp_policy_flag_is_written_as_the_string_windows_reads() -> None:
+    """``Do not use NLA`` is REG_SZ "1" in Microsoft's own instructions.
+
+    The action wrote a DWORD, which the QoS service does not honour, so the DSCP
+    policies it created stayed inert on every machine outside a domain.
+    """
+    from fpstune.settings.executors.powershell_actions import ACTION_COMMANDS
+
+    script = ACTION_COMMANDS["dscp_qos_toggle"]
+    assert "-Name 'Do not use NLA' -Value '1' -Type String" in script
+    assert "-Type DWord" not in script.split("Do not use NLA", 1)[1].split("\n", 1)[0]
+
+
+@pytest.mark.parametrize(
+    ("factory", "keyword"),
+    [
+        (create_interrupt_moderation_setting, "InterruptModeration"),
+        (create_flow_control_setting, "FlowControl"),
+        (create_roaming_aggressiveness_setting, "RoamAggressiveness"),
+        (network_module.create_advanced_eee_setting, "AdvancedEEE"),
+    ],
+)
+def test_detect_reads_every_spelling_apply_writes(factory: object, keyword: str) -> None:
+    """Apply writes whichever of '*Keyword' and the bare vendor 'Keyword' the
+    driver publishes; detect only asked for '*Keyword', so on a driver with the
+    bare spelling a write that worked was read back as not supported."""
+    setting = factory(5, "Ethernet")  # type: ignore[operator]
+    assert setting.detect_args["batch_adapter_keyword"] == [f"*{keyword}", keyword]
+    assert f"'*{keyword}','{keyword}'" in setting.detect_command
+    assert f"'*{keyword}','{keyword}'" in setting.apply_command.replace("@(", "").replace(")", "")
+
+
+def test_msi_default_restores_what_was_there_instead_of_deleting() -> None:
+    """Many NIC INFs set MSISupported=1 themselves. Reset used to delete the value,
+    which switched message-signalled interrupts *off* on that hardware."""
+    command = create_msi_mode_setting(5, "Ethernet").apply_command
+    branches = command.split("} elseif (", 1)
+    assert len(branches) == 2
+    enable, restore = branches
+    # The first enabling write keeps the prior value (or -1 for "absent")...
+    assert "fpstuneOriginalMSISupported" in enable
+    # ...and default deletes MSISupported only when it was absent before.
+    assert "$null -ne $cur.fpstuneOriginalMSISupported" in restore
+    assert "if ($was -eq -1) { Remove-ItemProperty" in restore
+
+
+def test_msi_finds_its_device_by_pnp_id_not_display_name() -> None:
+    """Two identical NICs share a FriendlyName; the first match was the wrong one."""
+    setting = create_msi_mode_setting(5, "Ethernet")
+    for command in (setting.detect_command, setting.apply_command):
+        assert "FriendlyName" not in command
+        assert "$a.PnPDeviceID" in command
+
+
+class TestIpv6ResolversFollowTheChoice:
+    """A dual-stack line asks its IPv6 resolver first. Setting only the IPv4 pair
+    left the router's IPv6 resolver answering, so the filtering and encryption
+    the user chose applied to whichever lookups happened to go over IPv4."""
+
+    @pytest.mark.parametrize("choice", sorted(network_module.RESOLVER_IPV6))
+    def test_apply_writes_the_ipv6_pair_and_detect_requires_it(self, choice: str) -> None:
+        pair = network_module.RESOLVER_IPV6[choice]
+        quoted = ",".join(f"'{address}'" for address in pair)
+        assert f"$v6 = @({quoted})" in DNS_SECURITY.apply_command
+        assert f"{choice} = '{','.join(sorted(pair))}'" in DNS_SECURITY.detect_command
+        assert "-AddressFamily IPv6" in DNS_SECURITY.detect_command
+
+    def test_ipv6_is_only_written_where_it_is_bound(self) -> None:
+        assert "Get-NetIPInterface -InterfaceIndex $adapter.ifIndex" in DNS_SECURITY.apply_command
+
+    def test_every_ipv6_resolver_has_a_doh_template(self) -> None:
+        for pair in network_module.RESOLVER_IPV6.values():
+            for address in pair:
+                assert address in network_module._DOH_TEMPLATES, address
+
+    def test_doh_flags_go_under_doh6_for_an_ipv6_server(self) -> None:
+        key = network_module._DOH_INTERFACE_KEY_PS
+        assert "'Doh6'" in key and "'Doh'" in key
+        # Both families are read, not just IPv4.
+        assert "-AddressFamily IPv4" not in DNS_OVER_HTTPS.apply_command

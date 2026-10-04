@@ -319,18 +319,22 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         </div>
       )}
 
-      {/* This adapter's own tweaks, next to the adapter they belong to.
-          Matching on the interface index is what makes them this adapter's: the
-          registry names per-adapter settings `network:<ifindex>:<name>`, and the
-          index is the identifier fpstune stores precisely because adapter names are
-          localised. An adapter with no index (disabled, so never enumerated) has no
-          per-adapter settings to show. */}
-      {adapter.interface_index != null && (
-        <DeviceTweakList
-          match={(setting) =>
-            setting.id.startsWith(`network:${adapter.interface_index}:`)
-          }
-        />
+      {/* This adapter's own tweaks, next to the adapter they belong to. The
+          registry names per-adapter settings `network:<setting_key>:<name>`, and the
+          backend derives that key from the adapter's PnP device id (C5), so the
+          match survives a renamed adapter or a reassigned interface index. A
+          disabled adapter is never enumerated and has no per-adapter settings. */}
+      {adapter.interface_index != null && adapter.setting_key && (
+        <>
+          <DeviceTweakList
+            match={(setting) =>
+              setting.id.startsWith(`network:${adapter.setting_key}:`)
+            }
+          />
+          <p className="text-xs text-muted-foreground">
+            {t("hw.adapterRestartNote")}
+          </p>
+        </>
       )}
     </div>
   );

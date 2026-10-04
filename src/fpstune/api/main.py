@@ -158,6 +158,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from fpstune.benchmark.scheduler import stop_bench_scheduler
 
         stop_bench_scheduler()
+    # A scene left on screen renders at full speed until somebody kills it, and
+    # a killed capture keeps its trace session; closing fpstune ends both.
+    with contextlib.suppress(Exception):
+        from fpstune.benchmark.gpu_scene import terminate_running
+
+        terminate_running()
+    # A network setting written seconds before exit still waits for its
+    # adapter restart; run it now so the driver loads what verify confirmed.
+    with contextlib.suppress(Exception):
+        from fpstune.settings.executors.adapter_restart import flush_pending
+
+        flush_pending()
     # Brief grace window for in-flight GPU detection
     with contextlib.suppress(Exception):
         from fpstune.utils.detect import is_gpu_detecting

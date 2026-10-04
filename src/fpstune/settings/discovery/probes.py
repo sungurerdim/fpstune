@@ -21,7 +21,7 @@ import sys
 import threading
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, TypeVar, cast
+from typing import Any, NamedTuple, TypeVar, cast
 
 from fpstune.utils.system_tools import powershell_exe
 
@@ -30,6 +30,20 @@ logger = logging.getLogger(__name__)
 _T = TypeVar("_T")
 
 DEFAULT_ADAPTER_DISCOVERY_TIMEOUT = 10.0
+
+
+class NetworkAdapter(NamedTuple):
+    """One physical adapter as discovery sees it.
+
+    ``interface_index`` addresses commands for this session; ``instance_id`` (the PnP
+    device id) is what names the adapter's settings, because an interface index
+    is reassigned when a driver is reinstalled or a USB adapter is replugged (C5).
+    """
+
+    interface_index: int
+    name: str
+    media_type: str
+    instance_id: str
 
 
 def positive_ints(raw: Any) -> list[int]:
@@ -129,7 +143,7 @@ class HardwareProbes:
 
         probes: list[Callable[[], object]] = [
             self.active_adapters,
-            self.rss_queue_options,
+            self.adapter_advanced,
             self.default_route_interface_index,
             get_gpu_info,
             hardware_manager.detect_monitors,
@@ -181,19 +195,32 @@ class HardwareProbes:
                 guids[int(index_text)] = guid.lower().strip("{}")
         return guids
 
-    def active_adapters(self) -> list[tuple[int, str, str]]:
+    def active_adapters(self) -> list[NetworkAdapter]:
         """Memoised; the real query is _query_active_adapters."""
         return self.probe_once("adapters", self._query_active_adapters)
 
+    def adapter_advanced(self) -> dict[str, Any]:
+        """Memoised; the real query is _query_adapter_advanced."""
+        return self.probe_once("adapter_advanced", self._query_adapter_advanced)
+
     def rss_queue_options(self) -> dict[int, tuple[tuple[str, ...], str]]:
-        """Memoised; the real query is _query_rss_queue_options."""
-        return self.probe_once("rss_queues", self._query_rss_queue_options)
+        """Each adapter's own ``*NumRssQueues`` values, from adapter_advanced."""
+        return self.probe_once("rss_queues", self._parse_rss_queue_options)
+
+    def adapter_property_defaults(self) -> dict[int, dict[str, str]]:
+        """``{interface_index: {lowercase keyword: DefaultRegistryValue}}``.
+
+        The driver's own default for every advanced property it publishes, which
+        is what "reset" must write — a hardcoded stock value is the right answer
+        only for the drivers it happened to be copied from (C1).
+        """
+        return self.probe_once("adapter_defaults", self._parse_adapter_property_defaults)
 
     def default_route_interface_index(self) -> int | None:
         """Memoised; the real query is _query_default_route_interface_index."""
         return self.probe_once("default_route", self._query_default_route_interface_index)
 
-    def _query_active_adapters(self) -> list[tuple[int, str, str]]:
+    def _query_active_adapters(self) -> list[NetworkAdapter]:
         """Get list of network adapters via PowerShell.
 
         Queries Windows for all network adapters (including disabled), excluding virtual ones.
@@ -204,7 +231,7 @@ class HardwareProbes:
         issues with special characters and localization in adapter names.
 
         Returns:
-            List of (interface_index, display_name, media_type) tuples. Empty if discovery fails.
+            One NetworkAdapter per physical adapter. Empty if discovery fails.
         """
         try:
             # Return InterfaceIndex,Name pairs separated by |
@@ -221,7 +248,10 @@ class HardwareProbes:
                     "-not $_.Virtual -and "
                     "$_.Name -notlike '*vEthernet*' -and "
                     "$_.InterfaceDescription -notlike '*Loopback*'"
-                    '} | ForEach-Object { "$($_.InterfaceIndex)|$($_.Name)|$($_.MediaType)" }',
+                    # The name goes last: it is the one field Windows lets a
+                    # user type, so it is the one that may contain the separator.
+                    "} | ForEach-Object { "
+                    '"$($_.InterfaceIndex)|$($_.PnPDeviceID)|$($_.MediaType)|$($_.Name)" }',
                 ],
                 capture_output=True,
                 text=True,
@@ -238,22 +268,19 @@ class HardwareProbes:
                 )
                 return []
 
-            adapters = []
+            adapters: list[NetworkAdapter] = []
             for line in result.stdout.strip().split("\n"):
                 line = line.strip()
                 if not line or "|" not in line:
                     continue
-                parts = line.split("|", 2)
-                if len(parts) >= 2:
-                    try:
-                        idx = int(parts[0])
-                        name = parts[1].strip()
-                        media_type = parts[2].strip() if len(parts) == 3 else ""
-                        if name:
-                            adapters.append((idx, name, media_type))
-                    except ValueError:
-                        logger.debug("Skipping adapter with invalid index: %r", line)
-                        continue
+                parts = line.split("|", 3)
+                if len(parts) != 4:
+                    continue
+                index_text, instance_id, media_type, name = (part.strip() for part in parts)
+                if not index_text.isdigit() or not name:
+                    logger.debug("Skipping adapter line: %r", line)
+                    continue
+                adapters.append(NetworkAdapter(int(index_text), name, media_type, instance_id))
             return adapters
 
         except subprocess.TimeoutExpired:
@@ -269,23 +296,13 @@ class HardwareProbes:
             )
             return []
 
-    def _query_rss_queue_options(self) -> dict[int, tuple[tuple[str, ...], str]]:
-        """Read each adapter's own accepted ``*NumRssQueues`` values.
+    def _query_adapter_advanced(self) -> dict[str, Any]:
+        """Every adapter's advanced properties, in one PowerShell for the machine.
 
-        Returns ``{interface_index: (queue_counts, driver_default)}``, holding
-        only adapters whose driver exposes the keyword. An adapter that is
-        absent from the result has no RSS queue control, which is exactly what
-        the setting's detect command would have reported as ``not_supported``.
-
-        Drivers describe the keyword in one of two ways and both are read here:
-        an enum publishes ``ValidRegistryValues``, while a numeric keyword
-        publishes a min/max range instead. RSS queue counts are powers of two,
-        so a range is expanded as such rather than as every integer in it.
-
-        One PowerShell for the whole machine, on the discovery path that already
-        runs two — not one per adapter.
+        Returns ``{"<interface_index>": {"defaults": {keyword: default}, "rss":
+        {...}}}``; ``rss`` is present only where the driver publishes
+        ``*NumRssQueues``. An empty dict when the query fails.
         """
-        options: dict[int, tuple[tuple[str, ...], str]] = {}
         try:
             result = subprocess.run(
                 [
@@ -299,16 +316,19 @@ class HardwareProbes:
                     "Get-NetAdapter -ErrorAction SilentlyContinue | "
                     "ForEach-Object { $map[$_.Name] = $_.InterfaceIndex }; "
                     "$out = @{}; "
-                    "Get-NetAdapterAdvancedProperty -AllProperties "
-                    "-RegistryKeyword '*NumRssQueues' -ErrorAction SilentlyContinue | "
+                    "Get-NetAdapterAdvancedProperty -AllProperties -ErrorAction SilentlyContinue | "
                     "ForEach-Object { "
                     "$idx = $map[$_.Name]; "
-                    "if ($null -ne $idx) { $out[[string]$idx] = @{ "
+                    "if ($null -ne $idx -and $_.RegistryKeyword) { "
+                    "$k = [string]$idx; "
+                    "if (-not $out.ContainsKey($k)) { $out[$k] = @{ defaults = @{} } }; "
+                    "$out[$k].defaults[$_.RegistryKeyword] = [string]$_.DefaultRegistryValue; "
+                    "if ($_.RegistryKeyword -eq '*NumRssQueues') { $out[$k].rss = @{ "
                     "valid = @($_.ValidRegistryValues); "
                     "default = [string]$_.DefaultRegistryValue; "
                     "min = $_.NumericParameterMinValue; "
-                    "max = $_.NumericParameterMaxValue } } }; "
-                    "$out | ConvertTo-Json -Compress -Depth 4",
+                    "max = $_.NumericParameterMaxValue } } } }; "
+                    "$out | ConvertTo-Json -Compress -Depth 5",
                 ],
                 capture_output=True,
                 text=True,
@@ -317,17 +337,45 @@ class HardwareProbes:
                 timeout=self.adapter_discovery_timeout,
             )
             if result.returncode != 0 or not result.stdout.strip():
-                logger.debug("RSS queue option discovery returned nothing")
-                return options
+                logger.debug("Adapter advanced-property discovery returned nothing")
+                return {}
             payload = json.loads(result.stdout.strip())
         except (subprocess.TimeoutExpired, json.JSONDecodeError, OSError, ValueError) as e:
-            logger.debug("RSS queue option discovery failed: %s", e)
-            return options
+            logger.debug("Adapter advanced-property discovery failed: %s", e)
+            return {}
+        return payload if isinstance(payload, dict) else {}
 
-        if not isinstance(payload, dict):
-            return options
+    def _parse_adapter_property_defaults(self) -> dict[int, dict[str, str]]:
+        defaults: dict[int, dict[str, str]] = {}
+        for raw_index, entry in self.adapter_advanced().items():
+            if not str(raw_index).isdigit() or not isinstance(entry, dict):
+                continue
+            table = entry.get("defaults")
+            if not isinstance(table, dict):
+                continue
+            defaults[int(raw_index)] = {
+                str(keyword).lower(): str(value).strip()
+                for keyword, value in table.items()
+                if str(value).strip()
+            }
+        return defaults
 
-        for raw_index, entry in payload.items():
+    def _parse_rss_queue_options(self) -> dict[int, tuple[tuple[str, ...], str]]:
+        """Read each adapter's own accepted ``*NumRssQueues`` values.
+
+        Returns ``{interface_index: (queue_counts, driver_default)}``, holding
+        only adapters whose driver exposes the keyword. An adapter that is
+        absent from the result has no RSS queue control, which is exactly what
+        the setting's detect command would have reported as ``not_supported``.
+
+        Drivers describe the keyword in one of two ways and both are read here:
+        an enum publishes ``ValidRegistryValues``, while a numeric keyword
+        publishes a min/max range instead. RSS queue counts are powers of two,
+        so a range is expanded as such rather than as every integer in it.
+        """
+        options: dict[int, tuple[tuple[str, ...], str]] = {}
+        for raw_index, adapter in self.adapter_advanced().items():
+            entry = adapter.get("rss") if isinstance(adapter, dict) else None
             if not isinstance(entry, dict):
                 continue
             try:

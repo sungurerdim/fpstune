@@ -21,9 +21,6 @@ from fpstune.settings.discovery.probes import HardwareProbes
 from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils.hardware_manager import hardware_manager
 
-DWM_PATH = r"SOFTWARE\Microsoft\Windows\Dwm"
-GFX_PATH = r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
-
 WINDOWS_11_BUILDS = (22631, 26100, 26200)
 
 
@@ -47,18 +44,18 @@ NO_PROBES = cast(HardwareProbes, None)
 
 class TestTheMpoDiscovererFollowsTheRunningBuild:
     @pytest.mark.parametrize(
-        ("build", "path", "name"),
+        ("build", "names"),
         [
-            (22631, DWM_PATH, "OverlayTestMode"),
-            (26100, DWM_PATH, "OverlayTestMode"),
-            (26200, GFX_PATH, "DisableOverlays"),
+            (22631, ("OverlayTestMode",)),
+            (26100, ("OverlayTestMode", "DisableOverlays")),
+            (26200, ("OverlayTestMode", "DisableOverlays")),
         ],
     )
     def test_the_registered_setting_writes_what_that_build_honours(
-        self, build: int, path: str, name: str, monkeypatch
+        self, build: int, names: tuple[str, ...], monkeypatch
     ) -> None:
         """The defect this guards: GraphicsDrivers\\DisableOverlays written on every
-        build, a silent no-op on 23H2 and 24H2 that verified as success."""
+        build, a silent no-op on 23H2 that verified as success."""
         monkeypatch.setattr(
             hardware_manager, "detect_os", lambda: SimpleNamespace(build=str(build))
         )
@@ -68,7 +65,10 @@ class TestTheMpoDiscovererFollowsTheRunningBuild:
 
         setting = registrar.get("display:mpo_disable")
         assert setting is not None
-        assert (setting.detect_args["path"], setting.detect_args["name"]) == (path, name)
+        written = tuple(
+            n for n in ("OverlayTestMode", "DisableOverlays") if n in setting.apply_command
+        )
+        assert written == names
 
     def test_an_unknown_build_registers_nothing_rather_than_guessing(self, monkeypatch) -> None:
         """No build → the static default stays; a guess would be the defect again."""

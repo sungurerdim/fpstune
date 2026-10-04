@@ -10,16 +10,48 @@ target (C1).
 from __future__ import annotations
 
 import logging
+from collections.abc import Mapping
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
+    from fpstune.settings.base import SettingExecutor
     from fpstune.settings.discovery import Registrar
-    from fpstune.settings.discovery.probes import HardwareProbes
+    from fpstune.settings.discovery.probes import HardwareProbes, NetworkAdapter
 
 logger = logging.getLogger(__name__)
 
 
-def filter_valid_adapters(adapters: list[tuple[int, str, str]]) -> list[tuple[int, str, str]]:
+def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -> SettingExecutor:
+    """``setting`` whose ``default_value`` is this driver's own default.
+
+    The hardcoded default was one vendor's: reset wrote it to every driver, so a
+    NIC that ships flow control on Rx only was "reset" to Rx & Tx. The driver
+    publishes its default with the property; where that maps to one of the
+    setting's choices it is the stock value. Anything it does not map to — no
+    keyword, an unpublished default, a raw value outside the table — leaves the
+    declared default in place.
+    """
+    from fpstune.settings.applicability import values_equal
+    from fpstune.settings.base import UNMAPPED
+    from fpstune.settings.executors import map_raw_to_display
+
+    keywords = setting.detect_args.get("batch_adapter_keyword")
+    # A catch-all row ("changed") is a reading, never a stock value.
+    if not keywords or not defaults or UNMAPPED in setting.value_map:
+        return setting
+    for keyword in [keywords] if isinstance(keywords, str) else list(keywords):
+        raw = defaults.get(str(keyword).lower())
+        if raw is None:
+            continue
+        display = map_raw_to_display(setting.value_map, raw) if setting.value_map else None
+        if display in setting.choices and not values_equal(display, setting.default_value):
+            return replace(setting, default_value=display)
+        return setting
+    return setting
+
+
+def filter_valid_adapters(adapters: list[NetworkAdapter]) -> list[NetworkAdapter]:
     """Drop adapters Windows named nothing at all; keep every other name intact.
 
     A name is never spelled into a command — ``utils/powershell.py`` rewrites an
@@ -31,20 +63,16 @@ def filter_valid_adapters(adapters: list[tuple[int, str, str]]) -> list[tuple[in
     like a guard silently drops real hardware.
 
     An empty name is different — it is the identifier the UI labels the card
-    with, and there is nothing to show.
-
-    Args:
-        adapters: List of (interface_index, display_name, media_type) tuples.
-
-    Returns:
-        The same tuples, minus any whose display name is empty.
+    with, and there is nothing to show. So is an empty PnP device id: it is
+    what names the adapter's settings (C5), and without it they could not be
+    told apart from another adapter's next session.
     """
     valid = []
-    for idx, name, media_type in adapters:
-        if not name:
-            logger.debug("Skipping adapter %d with empty name", idx)
+    for adapter in adapters:
+        if not adapter.name or not adapter.instance_id:
+            logger.debug("Skipping adapter %d with no name or device id", adapter.interface_index)
             continue
-        valid.append((idx, name, media_type))
+        valid.append(adapter)
     return valid
 
 
@@ -54,6 +82,9 @@ def register_adapter_settings(
     display_name: str,
     media_type: str = "",
     rss_queue_options: tuple[tuple[str, ...], str] | None = None,
+    *,
+    instance_id: str,
+    property_defaults: Mapping[str, str] | None = None,
 ) -> int:
     """Register per-adapter network settings, gated by adapter medium.
 
@@ -70,6 +101,9 @@ def register_adapter_settings(
         interface_index: Network adapter InterfaceIndex (numeric, safe for commands).
         display_name: Human-readable adapter name (for UI display only).
         media_type: Adapter MediaType from Get-NetAdapter (e.g. "Native 802.11", "802.3").
+        instance_id: The adapter's PnP device id; the settings are named by it.
+        property_defaults: This adapter's ``{lowercase keyword: DefaultRegistryValue}``;
+            a setting's default becomes the driver's own wherever it publishes one.
         rss_queue_options: This adapter's own ``(queue_counts, driver_default)``
             for ``*NumRssQueues``, or None when its driver does not expose the
             keyword. There is no fallback: a queue count this driver does not
@@ -92,7 +126,6 @@ def register_adapter_settings(
         create_lso_setting,
         create_msi_mode_setting,
         create_nic_power_saving_setting,
-        create_packet_coalescing_setting,
         create_power_management_setting,
         create_receive_buffers_setting,
         create_roaming_aggressiveness_setting,
@@ -120,7 +153,6 @@ def register_adapter_settings(
         create_wake_on_lan_setting(interface_index, display_name),
         create_receive_buffers_setting(interface_index, display_name),
         create_transmit_buffers_setting(interface_index, display_name),
-        create_packet_coalescing_setting(interface_index, display_name),
         create_msi_mode_setting(interface_index, display_name),
         # Vendor power savers. Absent on non-Realtek adapters, where the
         # keyword lookup answers not_supported and the setting drops out.
@@ -171,8 +203,12 @@ def register_adapter_settings(
         settings_to_register.append(create_speed_duplex_setting(interface_index, display_name))
         settings_to_register.append(create_link_capability_setting(interface_index, display_name))
 
+    from fpstune.settings.definitions.network import adapter_key, keyed_to_adapter
+
+    key = adapter_key(instance_id)
     for setting in settings_to_register:
-        registry.register(setting)
+        setting = with_driver_default(setting, property_defaults or {})
+        registry.register(keyed_to_adapter(setting, interface_index, key))
 
     return len(settings_to_register)
 
@@ -180,7 +216,7 @@ def register_adapter_settings(
 def register_path_mtu_setting(
     registry: Registrar,
     probes: HardwareProbes,
-    adapters: list[tuple[int, str, str]],
+    adapters: list[NetworkAdapter],
 ) -> int:
     """Register the MTU setting on the adapter the path MTU was measured through.
 
@@ -194,7 +230,11 @@ def register_path_mtu_setting(
     Returns:
         1 if the setting was registered, 0 otherwise.
     """
-    from fpstune.settings.definitions.network import create_mtu_setting
+    from fpstune.settings.definitions.network import (
+        adapter_key,
+        create_mtu_setting,
+        keyed_to_adapter,
+    )
     from fpstune.utils.path_mtu import probe_path_mtu
 
     if not adapters:
@@ -205,8 +245,8 @@ def register_path_mtu_setting(
         logger.debug("No default IPv4 route; MTU setting not registered")
         return 0
 
-    display_name = next((name for idx, name, _ in adapters if idx == interface_index), None)
-    if display_name is None:
+    adapter = next((a for a in adapters if a.interface_index == interface_index), None)
+    if adapter is None:
         # The default route points at something outside the physical adapter
         # list — a VPN or a virtual switch. Its MTU is that software's business.
         logger.debug(
@@ -220,7 +260,8 @@ def register_path_mtu_setting(
         logger.debug("Path MTU unmeasurable; MTU setting not registered")
         return 0
 
-    registry.register(create_mtu_setting(interface_index, display_name, path_mtu))
+    setting = create_mtu_setting(interface_index, adapter.name, path_mtu)
+    registry.register(keyed_to_adapter(setting, interface_index, adapter_key(adapter.instance_id)))
     return 1
 
 
@@ -240,16 +281,19 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
 
     # Step 3: read what each driver says about itself, once for the machine.
     rss_queue_options = probes.rss_queue_options()
+    property_defaults = probes.adapter_property_defaults()
 
     # Step 4: Register settings for each adapter using InterfaceIndex.
     # media_type gates medium-exclusive settings (single detection, no per-tweak probe).
-    for interface_index, display_name, media_type in valid_adapters:
+    for adapter in valid_adapters:
         register_adapter_settings(
             registry,
-            interface_index,
-            display_name,
-            media_type,
-            rss_queue_options.get(interface_index),
+            adapter.interface_index,
+            adapter.name,
+            adapter.media_type,
+            rss_queue_options.get(adapter.interface_index),
+            instance_id=adapter.instance_id,
+            property_defaults=property_defaults.get(adapter.interface_index),
         )
 
     # Step 5: the MTU setting, on the one adapter the measurement applies to.
@@ -271,25 +315,32 @@ def discover_wifi_advisories(registry: Registrar, probes: HardwareProbes) -> int
         Number of advisories registered.
     """
     from fpstune.settings.definitions.network import (
+        adapter_key,
         create_wifi_link_quality_setting,
         create_wifi_security_setting,
+        keyed_to_adapter,
     )
 
     adapters = filter_valid_adapters(probes.active_adapters())
-    wifi = [(index, name) for index, name, media in adapters if "802.11" in (media or "")]
+    wifi = [a for a in adapters if "802.11" in (a.media_type or "")]
     if not wifi:
         return 0
 
     guids = probes.adapter_guids()
     count = 0
-    for index, name in wifi:
+    for adapter in wifi:
+        index, name = adapter.interface_index, adapter.name
         guid = guids.get(index)
         if not guid:
             logger.debug(
                 "No InterfaceGuid for Wi-Fi adapter %d; link-quality advisory skipped", index
             )
             continue
-        registry.register(create_wifi_link_quality_setting(index, guid, name))
-        registry.register(create_wifi_security_setting(index, guid, name))
+        key = adapter_key(adapter.instance_id)
+        for setting in (
+            create_wifi_link_quality_setting(index, guid, name),
+            create_wifi_security_setting(index, guid, name),
+        ):
+            registry.register(keyed_to_adapter(setting, index, key))
         count += 2
     return count

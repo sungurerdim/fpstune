@@ -13,7 +13,7 @@ from fpstune.settings.base import (
     SettingExecutor,
     SettingValueType,
 )
-from fpstune.settings.executors.netsh import KNOWN_TCP_VALUES, NetshExecutor
+from fpstune.settings.executors.netsh import NetshExecutor
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -77,27 +77,27 @@ class TestNetshParseOutput:
         )
         assert result == "normal"
 
-    def test_strategy2_known_value_fallback(self, executor):
-        """When key not found literally, value match on known TCP values."""
-        localized_output = (
-            "TCP Globale Parameter\n"
-            "-------------------------------\n"
-            "Empfangsseitige Skalierung   : enabled\n"
-        )
-        result = executor._parse_output(
-            localized_output,
-            {"parse_key": "receive-side scaling state"},
-        )
-        assert result == "enabled"
+    def test_a_missing_label_is_unanswered_not_a_neighbours_value(self, executor):
+        """The regression: the old fallback returned the first known keyword.
 
-    def test_strategy3_whole_output_scan(self, executor):
-        """Strategy 3: scan whole output for known value as last resort."""
-        output = "some text enabled more text"
+        Here the RSS row is absent and the ECN row says ``disabled``; answering
+        ``disabled`` for RSS would report another setting's state as this one's.
+        """
+        output = (
+            "TCP Global Parameters\n"
+            "----------------------------------------------\n"
+            "ECN Capability                      : disabled\n"
+            "Receive Segment Coalescing State    : enabled\n"
+        )
+        result = executor._parse_output(output, {"parse_key": "receive-side scaling state"})
+        assert result is None
+
+    def test_a_value_word_in_free_text_is_not_an_answer(self, executor):
         result = executor._parse_output(
-            output,
+            "some text enabled more text",
             {"parse_key": "receive-side scaling state"},
         )
-        assert result == "enabled"
+        assert result is None
 
     def test_returns_none_when_no_key_and_no_known_value(self, executor):
         result = executor._parse_output(
@@ -147,70 +147,6 @@ class TestNetshParseOutput:
         output = "Type : disabled\n"
         result = executor._parse_output(output, {"parse_key": "type"})
         assert result == "disabled"
-
-
-# ---------------------------------------------------------------------------
-# _get_known_values_for_key
-# ---------------------------------------------------------------------------
-
-
-class TestGetKnownValuesForKey:
-    """Tests for NetshExecutor._get_known_values_for_key()."""
-
-    @pytest.fixture
-    def executor(self):
-        return NetshExecutor()
-
-    def test_empty_key_returns_empty(self, executor):
-        assert executor._get_known_values_for_key("") == []
-
-    def test_auto_tuning_key(self, executor):
-        vals = executor._get_known_values_for_key("receive window auto-tuning level")
-        assert set(vals) == set(KNOWN_TCP_VALUES["autotuninglevel"])
-
-    def test_rss_key(self, executor):
-        vals = executor._get_known_values_for_key("receive-side scaling state")
-        assert set(vals) == set(KNOWN_TCP_VALUES["rss"])
-
-    def test_rsc_key(self, executor):
-        vals = executor._get_known_values_for_key("receive segment coalescing state")
-        assert set(vals) == set(KNOWN_TCP_VALUES["rsc"])
-
-    def test_teredo_key(self, executor):
-        vals = executor._get_known_values_for_key("teredo state")
-        assert "disabled" in vals
-        assert "default" in vals
-
-    def test_randomize_key(self, executor):
-        vals = executor._get_known_values_for_key("randomize identifiers")
-        assert set(vals) == set(KNOWN_TCP_VALUES["randomizeidentifiers"])
-
-    def test_unknown_key_returns_empty(self, executor):
-        vals = executor._get_known_values_for_key("some_unknown_tcp_setting")
-        assert vals == []
-
-
-# ---------------------------------------------------------------------------
-# KNOWN_TCP_VALUES sanity
-# ---------------------------------------------------------------------------
-
-
-class TestKnownTcpValues:
-    """Sanity tests for the KNOWN_TCP_VALUES constant."""
-
-    def test_autotuninglevel_has_normal(self):
-        assert "normal" in KNOWN_TCP_VALUES["autotuninglevel"]
-
-    def test_autotuninglevel_has_disabled(self):
-        assert "disabled" in KNOWN_TCP_VALUES["autotuninglevel"]
-
-    def test_rss_has_enabled_and_disabled(self):
-        assert "enabled" in KNOWN_TCP_VALUES["rss"]
-        assert "disabled" in KNOWN_TCP_VALUES["rss"]
-
-    def test_teredo_has_expected_values(self):
-        expected = {"default", "disabled", "client", "enterpriseclient", "server"}
-        assert expected.issubset(set(KNOWN_TCP_VALUES["teredo"]))
 
 
 # ---------------------------------------------------------------------------

@@ -36,8 +36,11 @@ def test_every_policy_setting_resets_by_deleting() -> None:
 
 
 def test_an_absent_policy_reads_as_stock() -> None:
+    # A script detect (Recall: is the feature even installed?) maps absence in
+    # the script itself, so only a registry read is held to its value_map.
     for s in _policy_settings():
-        assert s.value_map.get(None) == s.default_value, s.id
+        if s.detect_type == DetectType.REGISTRY:
+            assert s.value_map.get(None) == s.default_value, s.id
 
 
 def test_delivery_optimization_stock_is_lan_only() -> None:

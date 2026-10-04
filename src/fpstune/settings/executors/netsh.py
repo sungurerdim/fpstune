@@ -1,12 +1,11 @@
 """Netsh executor for network configuration.
 
-LOCALIZATION CONSIDERATIONS:
-- netsh output labels ARE localized (e.g., "Receive-Side Scaling State" varies by language)
-- netsh VALUES are mostly English keywords (enabled/disabled/normal) regardless of locale
-- For reliable detection, we use multiple parsing strategies:
-  1. Try PowerShell Get-NetTCPSetting first (API returns consistent values)
-  2. Fall back to netsh with value pattern matching
-  3. Look for known values anywhere in output as last resort
+LOCALIZATION: a value is read only from the line whose label is the one the
+setting names. netsh's TCP/IPv6/Teredo labels are English even on a localised
+Windows 11 (verified on a Turkish install), and where Get-NetTCPSetting answers
+the same question it is asked first. A label that is not there is an unanswered
+question, never "the first known keyword anywhere in the output": that guess read
+another row's ``enabled`` as this row's answer.
 """
 
 from __future__ import annotations
@@ -25,19 +24,6 @@ from fpstune.utils.system_tools import system_tool
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
-
-
-# Known netsh TCP values (these are used in ALL locales for set commands)
-# Values returned by netsh queries may vary, but these patterns help detection
-KNOWN_TCP_VALUES = {
-    "autotuninglevel": ["normal", "disabled", "highlyrestricted", "restricted", "experimental"],
-    "rss": ["enabled", "disabled"],
-    "rsc": ["enabled", "disabled"],
-    "heuristics": ["enabled", "disabled"],
-    "privacy": ["enabled", "disabled"],
-    "randomizeidentifiers": ["enabled", "disabled"],
-    "teredo": ["default", "disabled", "client", "enterpriseclient", "server"],
-}
 
 
 # Every TCP property fpstune reads comes off the same Get-NetTCPSetting object,
@@ -264,87 +250,22 @@ class NetshExecutor(BaseExecutor):
         return _tcp_snapshot().get(property_name)
 
     def _parse_output(self, output: str, args: dict[str, Any]) -> str | None:
-        """Parse netsh output to extract the relevant value.
+        """The value on the line labelled ``parse_key``, or None when no line is.
 
-        LOCALIZATION-SAFE: Uses multiple strategies:
-        1. Try to match the exact key if English (works on English Windows)
-        2. Look for known values in the line after colon
-        3. Search for any known value in the entire output
-
-        netsh output format (varies by locale):
-            English: Receive-Side Scaling State          : enabled
-            German:  Empfangsseitige Skalierung          : enabled
-
-        The VALUES (enabled, disabled, normal) are always English keywords regardless of locale.
+        netsh prints ``Label : value`` rows. Only the row with this setting's own
+        label answers; there is no fallback to a known keyword elsewhere in the
+        output, because ``enabled`` on a neighbouring row is a different setting's
+        state. With no ``parse_key`` the whole trimmed output is the answer.
         """
         target_key = args.get("parse_key", "").lower()
-        lines = output.splitlines()
-
-        # Strategy 1: Try exact key match (works on English Windows)
-        for line in lines:
-            line = line.strip()
-            if not line or line.startswith("-"):
-                continue
-
-            if ":" in line:
-                parts = line.split(":", 1)
-                key = parts[0].strip().lower()
-                value = parts[1].strip().lower() if len(parts) > 1 else ""
-
-                if target_key and key == target_key:
-                    return value
-
-        # Strategy 2: Find line with known value after colon
-        # This works on any locale since the VALUES are English
-        known_values = self._get_known_values_for_key(target_key)
-        if known_values:
-            for line in lines:
-                if ":" in line:
-                    parts = line.split(":", 1)
-                    if len(parts) > 1:
-                        value = parts[1].strip().lower()
-                        if value in known_values:
-                            return value
-
-        # Strategy 3: Look for any known value in the output
-        # Last resort - scan whole output for known values
-        if known_values:
-            output_lower = output.lower()
-            for val in known_values:
-                # Match as whole word to avoid false positives
-                if re.search(rf"\b{re.escape(val)}\b", output_lower):
-                    return val
-
-        # If no specific key requested, return trimmed output
         if not target_key:
             return output.strip().lower() or None
 
+        for line in output.splitlines():
+            key, sep, value = line.partition(":")
+            if sep and key.strip().lower() == target_key:
+                return value.strip().lower()
         return None
-
-    def _get_known_values_for_key(self, parse_key: str) -> list[str]:
-        """Get known values for a parse key."""
-        if not parse_key:
-            return []
-
-        # Map parse_key patterns to known value sets
-        key_patterns = {
-            "auto-tuning": "autotuninglevel",
-            "scaling state": "rss",
-            "segment coalescing": "rsc",
-            "heuristics": "heuristics",
-            "privacy": "privacy",
-            "temporary address": "privacy",
-            "randomize": "randomizeidentifiers",
-            "teredo": "teredo",
-            "type": "teredo",  # For teredo show state
-        }
-
-        parse_key_lower = parse_key.lower()
-        for pattern, key in key_patterns.items():
-            if pattern in parse_key_lower:
-                return KNOWN_TCP_VALUES.get(key, [])
-
-        return []
 
     def _query(self, args: str) -> tuple[bool, str]:
         """Run a read-only netsh command, once per scan.

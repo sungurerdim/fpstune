@@ -318,7 +318,6 @@ NO_INSTRUMENT: dict[str, str] = {
     "frame_time_consistency": "expressed as a quality rather than a quantity",
     "network_consistency": "expressed as a quality rather than a quantity",
     "stutter_reduction": "expressed as a quality rather than a quantity",
-    "network_overhead": "no packet accounting in this build",
     "audio_attenuation_removed": "no audio path measurement",
     "battery_life": "needs hours of discharge, not a benchmark round",
     # Measurable in principle and not by anything that runs inside a round.

@@ -13,6 +13,7 @@ from fpstune.settings.base import (
     SettingScope,
     SettingValueType,
 )
+from fpstune.settings.definitions.display import directx_flag_scripts
 
 # === Game Mode ===
 # Windows feature that prioritizes games, blocks Windows Update interrupts
@@ -63,50 +64,53 @@ GAME_MODE = SettingExecutor(
 )
 
 # === Game Bar ===
-# Xbox Game Bar overlay - can add overhead
+# Two values, one concept (C8 named compound): AppCaptureEnabled is Settings'
+# "Record what happens" switch, and GameConfigStore\GameDVR_Enabled is the one
+# the capture hook in every game process checks. Writing only the first left
+# the hook loading into every game while the row read "disabled".
 GAME_BAR = SettingExecutor(
     id="game:game_bar",
     category=SettingCategory.GAME,
-    display_name="Xbox Game Bar",
-    short_name="Xbox Game Bar",
-    description="The Xbox overlay hooks every game to offer recording and widgets. Off, that hook and its "
-    "background process stop costing frames you never asked to spend.",
+    display_name="Xbox Game Bar Capture",
+    short_name="Xbox Game Bar capture",
+    description="Game Bar hooks every game so it can record on demand. Off, that hook and its background "
+    "capture stop costing frames you never asked to spend.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
-    current_impact="Enabled: Overlay always running in background",
-    recommended_impact="Disabled: No overlay overhead, use dedicated tools instead",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for overhead reduction
-    category_order=3,  # Overlay overhead
-    effect="Disables Xbox Game Bar overlay to reduce background CPU and GPU overhead",
+    current_impact="Enabled: The capture hook loads into every game",
+    recommended_impact="Disabled: No capture hook, use dedicated recording tools instead",
+    scope=SettingScope.RECOMMENDED,
+    category_order=3,
+    effect="Turns off Game Bar capture and the hook it loads into games",
     impact_scores={
         "fps": "+0-2%",
         "fps_cpu_bound": "+1-3%",
         "latency_ms": -0.5,
         "stability": "high",
     },
-    # Detection - Registry
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
-        "name": "AppCaptureEnabled",
-        "hive": "HKCU",
-    },
-    # 1 = enabled, 0 = disabled
-    value_map={1: "enabled", 0: "disabled", "1": "enabled", "0": "disabled", None: "enabled"},
-    # Apply
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\GameDVR",
-        "name": "AppCaptureEnabled",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"enabled": 1, "disabled": 0},
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$c = (Get-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR' "
+        "-Name 'AppCaptureEnabled' -ErrorAction SilentlyContinue).AppCaptureEnabled; "
+        "$d = (Get-ItemProperty -Path 'HKCU:\\System\\GameConfigStore' "
+        "-Name 'GameDVR_Enabled' -ErrorAction SilentlyContinue).GameDVR_Enabled; "
+        "if ($c -eq 0 -and $d -eq 0) { 'disabled' } else { 'enabled' }"
+    ),
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command=(
+        "$v = if ('%value%' -eq 'enabled') { 1 } else { 0 }; "
+        "foreach ($t in @(@('HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR', "
+        "'AppCaptureEnabled'), @('HKCU:\\System\\GameConfigStore', 'GameDVR_Enabled'))) { "
+        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force | Out-Null }; "
+        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $v -Type DWord -Force }"
+    ),
+    apply_args={},
+    apply_value_map={},
 )
 
 # === Background Recording (Game DVR) ===
@@ -157,10 +161,11 @@ GAME_DVR_BACKGROUND = SettingExecutor(
 )
 
 # === Hardware-Accelerated GPU Scheduling (HAGS) ===
-# Note: Research (Gamer Nexus, BabelTechReviews) shows minimal gaming benefit.
-# Main use case: Required for DLSS 3 Frame Generation.
-# Content creation (After Effects) sees up to 10% improvement.
-# Requires WDDM 2.7+ driver and Windows 10 2004+ (build 19041+)
+# Research (Gamers Nexus, BabelTechReviews) shows minimal gaming benefit; the
+# main reason is that DLSS 3 Frame Generation requires it. Needs a WDDM 2.7+
+# driver. With HwSchMode absent the driver decides — on current drivers and
+# Windows 11 that is often "on" — so an absent value is its own reading, never
+# "disabled", and reset deletes the value to hand the choice back.
 HAGS = SettingExecutor(
     id="game:hags",
     category=SettingCategory.GAME,
@@ -169,14 +174,14 @@ HAGS = SettingExecutor(
     description="Lets the GPU schedule its own work instead of the CPU. DLSS 3 Frame Generation needs it on; "
     "pair it with an fps cap for the lowest latency.",
     value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="disabled",
+    choices=("enabled", "disabled", "driver_default"),
+    default_value="driver_default",
     recommended_value="enabled",  # Keep enabled for DLSS 3 compatibility
     requires_reboot=True,
-    current_impact="Disabled: CPU handles GPU task scheduling",
+    current_impact="Not enabled: the driver or the CPU decides how GPU work is scheduled",
     recommended_impact="Enabled: Required for DLSS 3 Frame Gen. Minimal FPS impact otherwise.",
-    scope=SettingScope.RECOMMENDED,  # Not ESSENTIAL - minimal gaming benefit per benchmarks
-    category_order=2,  # GPU scheduling feature
+    scope=SettingScope.RECOMMENDED,
+    category_order=2,
     effect="Enables GPU-side scheduling, which DLSS 3 Frame Generation requires",
     impact_scores={
         "fps": "+0-1%",
@@ -184,8 +189,7 @@ HAGS = SettingExecutor(
         "latency_ms": -1.5,
         "stability": "high",
     },
-    applicable_conditions={"min_windows_build": 19041},  # Windows 10 2004+
-    # Detection - Registry
+    applicable_conditions={"min_windows_build": 19041},  # WDDM 2.7, Windows 10 2004+
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -193,9 +197,13 @@ HAGS = SettingExecutor(
         "name": "HwSchMode",
         "hive": "HKLM",
     },
-    # 2 = enabled, 1 = disabled, None = depends on Windows default
-    value_map={2: "enabled", 1: "disabled", "2": "enabled", "1": "disabled", None: "disabled"},
-    # Apply
+    value_map={
+        2: "enabled",
+        1: "disabled",
+        "2": "enabled",
+        "1": "disabled",
+        None: "driver_default",
+    },
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
@@ -204,8 +212,10 @@ HAGS = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"enabled": 2, "disabled": 1},
+    apply_value_map={"enabled": 2, "disabled": 1, "driver_default": None},
 )
+
+_VRR_DETECT, _VRR_APPLY = directx_flag_scripts("VRROptimizeEnable")
 
 # === Variable Refresh Rate (VRR) - Windows System Setting ===
 # Generic VRR for DirectX 11 games without native VRR support
@@ -229,35 +239,12 @@ WINDOWS_VRR = SettingExecutor(
     effect="Enables system-wide VRR for DX11 games that lack native VRR support",
     impact_scores={"fps": "0%", "latency_ms": -1.5, "stability": "high", "ux": "no tearing"},
     applicable_conditions={"requires_vrr": True},  # Only useful with VRR monitor
-    # Detection - PowerShell to parse DirectXUserGlobalSettings string
-    # 'disabled' is the Windows default when key doesn't exist
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$val = Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences' "
-        "-Name 'DirectXUserGlobalSettings' -ErrorAction SilentlyContinue; "
-        "if ($val -and $val.DirectXUserGlobalSettings -like '*VRROptimizeEnable=1*') { 'enabled' } "
-        "elseif ($val -and $val.DirectXUserGlobalSettings -like '*VRROptimizeEnable=0*') { 'disabled' } "
-        "else { 'disabled' }"
-    ),
+    detect_command=_VRR_DETECT,
     detect_args={},
-    value_map={},  # Direct pass-through
-    # Apply - PowerShell to set/modify DirectXUserGlobalSettings string
+    value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command=(
-        "$path = 'HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences'; "
-        "$name = 'DirectXUserGlobalSettings'; "
-        "if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }; "
-        "$current = (Get-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue).$name; "
-        "$newVal = if ('%value%' -eq 'enabled') { '1' } else { '0' }; "
-        "if ($current -match 'VRROptimizeEnable=\\d') { "
-        "$updated = $current -replace 'VRROptimizeEnable=\\d', \"VRROptimizeEnable=$newVal\"; "
-        "} elseif ($current) { "
-        '$updated = "$current;VRROptimizeEnable=$newVal"; '
-        "} else { "
-        '$updated = "VRROptimizeEnable=$newVal"; '
-        "}; "
-        "Set-ItemProperty -Path $path -Name $name -Value $updated -Type String"
-    ),
+    apply_command=_VRR_APPLY,
     apply_args={},
     apply_value_map={},
 )

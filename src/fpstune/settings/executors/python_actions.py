@@ -19,6 +19,7 @@ from typing import Any
 
 from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.base import Reading
+from fpstune.settings.executors.bnet_config import bnet_config_read, bnet_config_write
 from fpstune.utils.winapi.memory import purge_standby_list
 
 PythonAction = Callable[[dict[str, Any]], tuple[bool, str | None]]
@@ -41,8 +42,111 @@ def purge_standby(_args: dict[str, Any]) -> tuple[bool, str | None]:
     )
 
 
+_SIGN_IN_ONLY = "Saved; Windows refused the live change, so it takes effect at the next sign-in"
+
+
+def _write_user_strings(path: str, values: dict[str, str]) -> None:
+    """REG_SZ values under the console user's HKCU (``session.registry_root``)."""
+    import winreg
+
+    from fpstune.utils.winapi.session import registry_root
+
+    root, key_path = registry_root("HKCU", path)
+    with winreg.CreateKeyEx(root, key_path, 0, winreg.KEY_SET_VALUE) as key:
+        for name, value in values.items():
+            winreg.SetValueEx(key, name, 0, winreg.REG_SZ, value)
+
+
+def _user_input_action(
+    args: dict[str, Any], write: Callable[[bool], None], live: Callable[[bool], bool]
+) -> tuple[bool, str | None]:
+    """Persist to the profile, then bring the running session in line.
+
+    The registry write alone used to be the whole action, so the change waited
+    for the next sign-in while verify read the new value back as applied.
+    """
+    import sys
+
+    if sys.platform != "win32":
+        return False, "Not available on this platform"
+    disable = args.get("value") == "disable"
+    try:
+        write(disable)
+    except OSError as exc:
+        return False, f"Could not write the user's setting: {exc}"
+    return True, None if live(disable) else _SIGN_IN_ONLY
+
+
+# "Enhance pointer precision": {threshold1, threshold2, acceleration}, the order
+# SPI_SETMOUSE takes them in and the three values the Mouse key stores.
+_MOUSE_OFF = (0, 0, 0)
+_MOUSE_ON = (6, 10, 1)
+
+
+def mouse_acceleration(args: dict[str, Any]) -> tuple[bool, str | None]:
+    from fpstune.utils.winapi import spi
+
+    def write(disable: bool) -> None:
+        t1, t2, speed = _MOUSE_OFF if disable else _MOUSE_ON
+        _write_user_strings(
+            r"Control Panel\Mouse",
+            {"MouseThreshold1": str(t1), "MouseThreshold2": str(t2), "MouseSpeed": str(speed)},
+        )
+
+    return _user_input_action(
+        args, write, lambda disable: spi.set_mouse(*(_MOUSE_OFF if disable else _MOUSE_ON))
+    )
+
+
+# Sticky, Filter and Toggle Keys flags with the shortcut that opens each one
+# (bit 0x4, *_HOTKEYACTIVE) cleared or set; nothing else differs.
+_ACCESS_KEYS = (
+    (r"Control Panel\Accessibility\StickyKeys", "STICKYKEYS", 506, 510),
+    (r"Control Panel\Accessibility\Keyboard Response", "FILTERKEYS", 122, 126),
+    (r"Control Panel\Accessibility\ToggleKeys", "TOGGLEKEYS", 58, 62),
+)
+
+
+def accessibility_popups(args: dict[str, Any]) -> tuple[bool, str | None]:
+    from fpstune.utils.winapi import spi
+
+    def write(disable: bool) -> None:
+        for path, _structure, off, on in _ACCESS_KEYS:
+            _write_user_strings(path, {"Flags": str(off if disable else on)})
+
+    def live(disable: bool) -> bool:
+        # Every structure is set even after one refuses, so none is left behind.
+        results = [
+            spi.set_access_flags(getattr(spi, structure), off if disable else on)
+            for _path, structure, off, on in _ACCESS_KEYS
+        ]
+        return all(results)
+
+    return _user_input_action(args, write, live)
+
+
+def animations(args: dict[str, Any]) -> tuple[bool, str | None]:
+    """Window and in-window animations: what Settings' "Animation effects" switches."""
+    from fpstune.utils.winapi import spi
+
+    def write(disable: bool) -> None:
+        _write_user_strings(
+            r"Control Panel\Desktop\WindowMetrics", {"MinAnimate": "0" if disable else "1"}
+        )
+
+    ok, message = _user_input_action(args, write, lambda disable: spi.set_animations(not disable))
+    if message == _SIGN_IN_ONLY:
+        # Detection reads the live state, so a refused live change is a failure.
+        return False, "Windows refused the animation change"
+    return ok, message
+
+
 PYTHON_ACTIONS: dict[str, PythonAction] = {
     "purge_standby": purge_standby,
+    "mouse_acceleration_toggle": mouse_acceleration,
+    "accessibility_popups_toggle": accessibility_popups,
+    "animations_toggle": animations,
+    "bnet_config_write": bnet_config_write,
 }
 
 
@@ -161,7 +265,23 @@ def wifi_link_quality(args: dict[str, Any]) -> str | Reading:
 # Detect counterparts of PYTHON_ACTIONS: a reading taken through a native API
 # (wlanapi here) rather than a script. The executor consults this table by the
 # setting's ``detect_command`` key before it builds any command line.
+def animations_status(_args: dict[str, Any]) -> str:
+    """Live animation state: off only when both window and in-window ones are."""
+    import sys
+
+    if sys.platform != "win32":
+        return NOT_AVAILABLE
+    from fpstune.utils.winapi import spi
+
+    state = spi.animations()
+    if state is None:
+        return NOT_AVAILABLE
+    return "enabled" if any(state) else "disabled"
+
+
 PYTHON_DETECTORS: dict[str, PythonDetector] = {
+    "animations_status": animations_status,
+    "bnet_config_read": bnet_config_read,
     "wifi_link_quality": wifi_link_quality,
     "wifi_security": wifi_security,
 }

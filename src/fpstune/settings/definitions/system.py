@@ -583,41 +583,59 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
 # Background Apps Settings
 # =============================================================================
 
+# Windows 11 has no global "background apps" switch any more; the HKCU
+# GlobalUserDisabled value behind the Windows 10 toggle is not the documented
+# control. The documented one is the AppPrivacy policy, where 2 = Force Deny
+# (Microsoft Learn, "Manage connections from Windows operating system components
+# to Microsoft services", section 18.21). Reset deletes it: no policy is stock.
 BACKGROUND_APPS = SettingExecutor(
     id="services:background_apps",
     category=SettingCategory.SYSTEM,
     display_name="Background Apps",
     short_name="Background apps",
-    description="Allow apps to run in background. Disabling saves significant RAM.",
+    description="Whether Store apps may keep running after they are closed. Off, they stop running "
+    "behind a game, and they also stop sending notifications until they are opened.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
-    current_impact="Enabled: Apps run and update in background → RAM/CPU usage",
-    recommended_impact="Disabled: No background apps → ~500MB-1.2GB RAM saved",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for RAM/CPU
-    category_order=3,  # Background apps impact
-    effect="Disables background app activity to save significant RAM and CPU",
-    impact_scores={"ram_saved": "100-500MB", "cpu_usage": -1, "stability": "high"},
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services",
+    ],
+    current_impact="Enabled: Store apps keep running in the background after they are closed",
+    recommended_impact="Disabled: Store apps run only while open → less background RAM and CPU",
+    scope=SettingScope.COMPLETE,
+    category_order=3,
+    effect="Stops Store apps from running in the background through the documented policy",
+    impact_scores={"ram_saved": "50-200MB", "cpu_usage": -0.5, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications",
-        "name": "GlobalUserDisabled",
-        "hive": "HKCU",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy",
+        "name": "LetAppsRunInBackground",
+        "hive": "HKLM",
     },
-    # 0 or None = background apps enabled, 1 = disabled
-    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
+    # 0 = user in control, 1 = force allow, 2 = force deny, absent = no policy.
+    value_map={
+        2: "disabled",
+        "2": "disabled",
+        1: "enabled",
+        "1": "enabled",
+        0: "enabled",
+        "0": "enabled",
+        None: "enabled",
+    },
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\BackgroundAccessApplications",
-        "name": "GlobalUserDisabled",
-        "hive": "HKCU",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy",
+        "name": "LetAppsRunInBackground",
+        "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 1, "enabled": 0},
+    apply_value_map={"disabled": 2, "enabled": None},
 )
 
 SERVICE_UCPD = SettingExecutor(
@@ -727,41 +745,48 @@ TELEMETRY_TASKS = SettingExecutor(
 # Privacy Settings (Registry-based)
 # =============================================================================
 
+# The documented control is the "Turn off the advertising ID" policy; the
+# AdvertisingInfo\Enabled value under HKLM\...\CurrentVersion is not read per
+# user and was never what the Settings toggle writes.
 PRIVACY_ADVERTISING_ID = SettingExecutor(
     id="privacy:advertising_id",
     category=SettingCategory.SYSTEM,
     display_name="Advertising ID",
     short_name="Advertising ID",
-    description="Unique ID for targeted ads across apps. Disabling improves privacy.",
+    description="A unique ID apps can read to follow one person across apps for ads. Off by policy, no "
+    "app on this machine can read it.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services",
+    ],
     current_impact="Enabled: Apps can track you with unique advertising ID",
     recommended_impact="Disabled: No cross-app ad tracking → better privacy",
-    scope=SettingScope.COMPLETE,  # Privacy improvement
-    category_order=16,  # After telemetry tasks
-    effect="Disables unique advertising ID to prevent cross-app ad tracking",
+    scope=SettingScope.COMPLETE,
+    category_order=16,
+    effect="Turns off the advertising ID for every account through the documented policy",
     impact_scores={"privacy": "improved", "cpu_usage": -0.1},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-        "name": "Enabled",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo",
+        "name": "DisabledByGroupPolicy",
         "hive": "HKLM",
     },
-    # 1 or None = enabled, 0 = disabled
-    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
+    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\AdvertisingInfo",
-        "name": "Enabled",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\AdvertisingInfo",
+        "name": "DisabledByGroupPolicy",
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 1},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 PRIVACY_ACTIVITY_HISTORY = SettingExecutor(
@@ -885,84 +910,6 @@ PRIVACY_EDGE_TELEMETRY = SettingExecutor(
     apply_value_map={"disabled": 0, "enabled": None},
 )
 
-PRIVACY_CORTANA = SettingExecutor(
-    id="privacy:cortana",
-    category=SettingCategory.SYSTEM,
-    display_name="Cortana",
-    short_name="Cortana",
-    description="Deprecated in Windows 11 and still able to collect voice and usage data when left on. Off, "
-    "it stops running and stops sending.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Cortana may run in background → collects voice/search data",
-    recommended_impact="Disabled: No Cortana background activity → better privacy",
-    scope=SettingScope.COMPLETE,  # Privacy improvement
-    category_order=20,  # After Edge telemetry
-    effect="Disables Cortana to prevent background voice and search data collection",
-    impact_scores={"privacy": "improved", "ram_saved": "20-50MB", "cpu_usage": -0.1},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\Windows Search",
-        "name": "AllowCortana",
-        "hive": "HKLM",
-    },
-    # 0 = disabled, 1 or None = enabled
-    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\Windows Search",
-        "name": "AllowCortana",
-        "hive": "HKLM",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"disabled": 0, "enabled": None},
-)
-
-PRIVACY_BING_SEARCH = SettingExecutor(
-    id="privacy:bing_search",
-    category=SettingCategory.SYSTEM,
-    display_name="Bing Search in Start Menu",
-    short_name="Web results in Start menu",
-    description="Web search results in Start menu. Disabling keeps searches local-only.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Search queries sent to Bing for web results",
-    recommended_impact="Disabled: Local search only → faster and private",
-    scope=SettingScope.COMPLETE,  # Privacy + minor performance
-    category_order=21,  # After Cortana
-    effect="Disables Bing web search in Start menu for local-only, faster search",
-    # Bing in the Start menu affects Start-menu search, not game latency. The -12.0
-    # was the impact_scores sweep's clipping cap, and the frontend sums latency_ms
-    # into the figure shown on Home, so it credited a privacy tweak with input-lag
-    # savings. The real gain is stated in recommended_impact.
-    impact_scores={"privacy": "improved", "latency_ms": 0.0, "cpu_usage": -0.1},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-        "name": "BingSearchEnabled",
-        "hive": "HKCU",
-    },
-    # 0 = disabled, 1 or None = enabled
-    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\Search",
-        "name": "BingSearchEnabled",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"disabled": 0, "enabled": 1},
-)
 
 PRIVACY_INPUT_PERSONALIZATION = SettingExecutor(
     id="privacy:input_personalization",
@@ -1000,96 +947,32 @@ PRIVACY_INPUT_PERSONALIZATION = SettingExecutor(
     apply_value_map={"disabled": "disable", "enabled": "enable"},
 )
 
-PRIVACY_ACCEPTED_POLICY = SettingExecutor(
-    id="privacy:accepted_policy",
-    category=SettingCategory.SYSTEM,
-    display_name="Personalization Privacy Policy",
-    short_name="Personalization consent flag",
-    description="Tracks acceptance of personalization privacy policy for speech/typing.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Personalization data collection accepted",
-    recommended_impact="Disabled: Personalization policy not accepted → better privacy",
-    scope=SettingScope.COMPLETE,  # Privacy improvement
-    category_order=23,
-    effect="Revokes personalization privacy policy acceptance",
-    impact_scores={"privacy": "improved", "cpu_usage": 0},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\Personalization\Settings",
-        "name": "AcceptedPrivacyPolicy",
-        "hive": "HKCU",
-    },
-    # 1 or None = accepted (enabled), 0 = not accepted (disabled)
-    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\Personalization\Settings",
-        "name": "AcceptedPrivacyPolicy",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"disabled": 0, "enabled": 1},
-)
 
-PRIVACY_TILE_NOTIFICATIONS = SettingExecutor(
-    id="privacy:tile_notifications",
-    category=SettingCategory.SYSTEM,
-    display_name="Live Tile Notifications (Win10)",
-    short_name="Live tile notifications",
-    description="Live Tiles in Start menu. Only affects Windows 10 (removed in Win11).",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Live Tiles fetch and display content → network activity",
-    recommended_impact="Disabled: No tile updates → less network activity",
-    scope=SettingScope.COMPLETE,  # Win10 only
-    category_order=24,
-    effect="Disables Live Tile content fetching to reduce network activity (Win10)",
-    impact_scores={"privacy": "improved", "network_overhead": "reduced", "cpu_usage": -0.1},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications",
-        "name": "NoTileApplicationNotification",
-        "hive": "HKCU",
-    },
-    # 1 = disabled, 0 or None = enabled
-    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\CurrentVersion\PushNotifications",
-        "name": "NoTileApplicationNotification",
-        "hive": "HKCU",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"disabled": 1, "enabled": None},
-)
-
+# 0 ("Security") is honoured on Enterprise and Education only; Home and Pro read
+# it as 1. Writing 1 states what every edition will actually do, so the
+# recommendation reads back the same everywhere. 0 and 1 both display as the
+# minimum, because on the editions most players run they are the same level.
 PRIVACY_ALLOW_TELEMETRY = SettingExecutor(
     id="privacy:allow_telemetry",
     category=SettingCategory.SYSTEM,
     display_name="Diagnostic Data Level (Policy)",
     short_name="Diagnostic data level",
-    description="System-wide telemetry policy. Enterprise=Off, Home/Pro=Basic minimum.",
+    description="How much diagnostic data Windows sends. Required is the lowest level Home and Pro honour, "
+    "and the policy keeps it there whatever Settings says.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
-    current_impact="Enabled: Full diagnostic data collection active",
-    recommended_impact="Disabled: Minimum telemetry → Off on Enterprise, Basic on Home/Pro",
-    scope=SettingScope.COMPLETE,  # Privacy improvement
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services",
+    ],
+    current_impact="Enabled: Optional diagnostic data may be collected",
+    recommended_impact="Disabled: Required diagnostic data only, the minimum Home and Pro allow",
+    scope=SettingScope.COMPLETE,
     category_order=25,
-    effect="Sets Windows telemetry to minimum allowed level for your edition",
+    effect="Limits Windows diagnostic data to the required level by policy",
     impact_scores={"privacy": "improved", "cpu_usage": -0.2},
     detect_type=DetectType.REGISTRY,
     detect_command="",
@@ -1098,12 +981,11 @@ PRIVACY_ALLOW_TELEMETRY = SettingExecutor(
         "name": "AllowTelemetry",
         "hive": "HKLM",
     },
-    # 0 = disabled (minimum), 1-3 or None = various levels enabled
     value_map={
         0: "disabled",
         "0": "disabled",
-        1: "enabled",
-        "1": "enabled",
+        1: "disabled",
+        "1": "disabled",
         2: "enabled",
         "2": "enabled",
         3: "enabled",
@@ -1118,7 +1000,7 @@ PRIVACY_ALLOW_TELEMETRY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": None},
+    apply_value_map={"disabled": 1, "enabled": None},
 )
 
 PRIVACY_COPILOT = SettingExecutor(
@@ -1190,37 +1072,42 @@ PRIVACY_WINDOWS_ADS = SettingExecutor(
     apply_value_map={"disabled": "disable", "enabled": "enable"},
 )
 
+# Windows 11 search ignores the older DisableWebSearch and BingSearchEnabled
+# values; the policy it honours is "Turn off display of recent search entries
+# in the File Explorer search box" (WindowsExplorer.admx), which also removes
+# web suggestions from the taskbar and Start search. Per user, read at sign-in.
 PRIVACY_WEB_SEARCH_POLICY = SettingExecutor(
     id="privacy:web_search_policy",
     category=SettingCategory.SYSTEM,
-    display_name="Web Search in Start (Policy)",
-    short_name="Web search in Start (policy)",
-    description="Policy-level block for web search in Start menu. Stronger than BingSearchEnabled.",
+    display_name="Web Results in Windows Search",
+    short_name="Web results in search",
+    description="Whether typing in Start or taskbar search also sends the text to Bing for web results. Off, "
+    "search stays on this machine; it takes effect at the next sign-in.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Start menu searches the web via Bing",
-    recommended_impact="Disabled: Local search only → no web queries",
+    requires_reboot=True,
+    current_impact="Enabled: Start and taskbar searches query Bing as you type",
+    recommended_impact="Disabled: Local results only → nothing typed leaves the machine",
     scope=SettingScope.COMPLETE,
     category_order=28,
-    effect="Policy-level block for web search in Start menu (stronger than BingSearchEnabled)",
-    impact_scores={"privacy": "improved", "latency_ms": 0, "fps": "0%"},
+    effect="Removes web suggestions from Start and taskbar search",
+    impact_scores={"privacy": "improved", "cpu_usage": -0.1},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\Windows Search",
-        "name": "DisableWebSearch",
-        "hive": "HKLM",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\Explorer",
+        "name": "DisableSearchBoxSuggestions",
+        "hive": "HKCU",
     },
     value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\Windows Search",
-        "name": "DisableWebSearch",
-        "hive": "HKLM",
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\Explorer",
+        "name": "DisableSearchBoxSuggestions",
+        "hive": "HKCU",
         "type": "REG_DWORD",
     },
     apply_value_map={"disabled": 1, "enabled": None},
@@ -1330,41 +1217,6 @@ PERF_FAST_STARTUP = SettingExecutor(
     apply_value_map={"disabled": "disable", "enabled": "enable"},
 )
 
-PERF_MENU_DELAY = SettingExecutor(
-    id="perf:menu_delay",
-    category=SettingCategory.SYSTEM,
-    display_name="Menu Show Delay",
-    description="Delay before menus appear. Lower = snappier UI.",
-    value_type=SettingValueType.CHOICE,
-    choices=("400ms", "50ms"),
-    default_value="400ms",
-    recommended_value="50ms",
-    requires_reboot=False,
-    current_impact="Default: 400ms delay before menus appear",
-    recommended_impact="Fast: 50ms delay → snappier menus",
-    scope=SettingScope.COMPLETE,
-    category_order=35,
-    effect="Reduces menu show delay from 400ms to 50ms for snappier UI",
-    impact_scores={"ux": "improved", "stability": "high"},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"Control Panel\Desktop",
-        "name": "MenuShowDelay",
-        "hive": "HKCU",
-    },
-    # Registry returns string values - handle all common cases
-    value_map={"0": "50ms", "50": "50ms", "100": "50ms", "400": "400ms", None: "400ms"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"Control Panel\Desktop",
-        "name": "MenuShowDelay",
-        "hive": "HKCU",
-        "type": "REG_SZ",
-    },
-    apply_value_map={"50ms": "50", "400ms": "400"},
-)
 
 # === SvcHost Split Threshold ===
 # Windows splits services into separate svchost.exe processes when RAM < threshold.
@@ -1828,8 +1680,8 @@ SYSTEM_HYPER_V = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="Hyper-V Hypervisor",
     short_name="Hyper-V virtualization",
-    description="Runs Windows as a virtual machine guest under the Hyper-V hypervisor. "
-    "Causes 5-15% FPS loss from second-level address translation (SLAT) overhead.",
+    description="Runs Windows as a guest under the Hyper-V hypervisor, which costs CPU-bound frames. With "
+    "Memory Integrity on, the hypervisor stays for security and part of that cost remains.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
@@ -1862,8 +1714,15 @@ SYSTEM_HYPER_V = SettingExecutor(
     # The try/catch is also what lets this share a batched session: a raise
     # inside the group's scriptblock costs the setting its batched result and
     # sends it back to its own process.
+    #
+    # The feature can be installed while no hypervisor runs (hypervisorlaunchtype
+    # off), and then there is no overhead to remove. Win32_ComputerSystem's
+    # HypervisorPresent answers that without elevation, so a machine with no
+    # hypervisor reads as already optimal before the feature query is spent.
     detect_command=(
         "try { "
+        "if (-not (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).HypervisorPresent) "
+        "{ 'disabled'; return }; "
         "$f = Get-WindowsOptionalFeature -Online "
         "-FeatureName Microsoft-Hyper-V -ErrorAction Stop; "
         "if ($f.State -eq 'Enabled') { 'enabled' } else { 'disabled' } "
@@ -3255,38 +3114,42 @@ SERVICES_SETTINGS: list[SettingExecutor] = [
     SERVICE_UCPD,
 ]
 
+# Recall exists only where Windows installed its optional feature (Copilot+
+# PCs). Everywhere else the policy is a value nothing reads, so the setting
+# reports not_available instead of offering a no-op. Microsoft: with
+# AllowRecallEnablement = 0 Recall is disabled and removed, after a restart.
 PRIVACY_RECALL = SettingExecutor(
     id="privacy:recall",
     category=SettingCategory.SYSTEM,
     display_name="Windows Recall (AI Screenshot)",
     short_name="Windows Recall screenshots",
-    description="Captures periodic screenshots for AI search. Disabling saves disk space and CPU.",
+    description="On Copilot+ PCs, Recall can save periodic screenshots for AI search. The policy removes the "
+    "feature, so it can neither be switched on nor spend disk and CPU on snapshots.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
-    requires_reboot=False,
+    requires_reboot=True,
     evidence_level="proven",
     sources=["https://learn.microsoft.com/en-us/windows/client-management/manage-recall"],
-    current_impact="Enabled: Periodic screenshots captured → disk usage + CPU overhead",
-    recommended_impact="Disabled: No screenshot capture → saves disk space and CPU cycles",
+    current_impact="Enabled: Recall can be switched on → snapshots spend disk space and CPU",
+    recommended_impact="Disabled: Recall is removed after a restart → no snapshots, no index",
     scope=SettingScope.COMPLETE,
     category_order=16,
-    effect="Disables Windows Recall AI screenshot feature for privacy and resource savings",
-    impact_scores={
-        "disk_freed": "25-150GB",
-        "privacy": "improved",
-        "cpu_usage": -2,
-        "ram_saved": "200-400MB",
-    },
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Policies\Microsoft\Windows\WindowsAI",
-        "name": "AllowRecallEnablement",
-        "hive": "HKLM",
-    },
-    value_map={0: "disabled", 1: "enabled", "0": "disabled", "1": "enabled", None: "enabled"},
+    effect="Removes Windows Recall through its documented policy",
+    impact_scores={"privacy": "improved", "cpu_usage": -0.5},
+    applicable_conditions={"requires_admin": True},
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "try { $f = Get-WindowsOptionalFeature -Online -FeatureName 'Recall' -ErrorAction Stop } "
+        "catch { $f = $null }; "
+        "if (-not $f) { 'not_available' } else { "
+        "$v = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI' "
+        "-Name 'AllowRecallEnablement' -ErrorAction SilentlyContinue).AllowRecallEnablement; "
+        "if ($null -ne $v -and $v -eq 0) { 'disabled' } else { 'enabled' } }"
+    ),
+    detect_args={},
+    value_map={},
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
@@ -3457,45 +3320,6 @@ PRIVACY_FEEDBACK_REMINDERS = SettingExecutor(
     apply_value_map={"disabled": "disable", "enabled": "enable"},
 )
 
-PRIVACY_CEIP = SettingExecutor(
-    id="privacy:ceip",
-    category=SettingCategory.SYSTEM,
-    display_name="Customer Experience Improvement Program",
-    short_name="Experience improvement program",
-    description=(
-        "Sends usage and reliability data to Microsoft as part of CEIP. "
-        "Disabling reduces background telemetry and CPU overhead."
-    ),
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    current_impact="Enabled: Usage and reliability data sent to Microsoft",
-    recommended_impact="Disabled: No CEIP data collection → reduced CPU overhead",
-    scope=SettingScope.COMPLETE,
-    category_order=59,
-    effect="Disables Customer Experience Improvement Program telemetry",
-    impact_scores={"privacy": "improved", "cpu_usage": -1, "fps_1_percent_low": "+0-1%"},
-    detect_type=DetectType.REGISTRY,
-    detect_command="",
-    detect_args={
-        "path": r"SOFTWARE\Microsoft\SQMClient\Windows",
-        "name": "CEIPEnable",
-        "hive": "HKLM",
-    },
-    # 1 or None = enabled, 0 = disabled
-    value_map={1: "enabled", "1": "enabled", 0: "disabled", "0": "disabled", None: "enabled"},
-    apply_type=DetectType.REGISTRY,
-    apply_command="",
-    apply_args={
-        "path": r"SOFTWARE\Microsoft\SQMClient\Windows",
-        "name": "CEIPEnable",
-        "hive": "HKLM",
-        "type": "REG_DWORD",
-    },
-    apply_value_map={"enabled": 1, "disabled": 0},
-)
 
 PRIVACY_APP_TELEMETRY = SettingExecutor(
     id="privacy:app_telemetry",
@@ -3538,11 +3362,7 @@ PRIVACY_SETTINGS: list[SettingExecutor] = [
     PRIVACY_ACTIVITY_HISTORY,
     PRIVACY_CONSUMER_FEATURES,
     PRIVACY_EDGE_TELEMETRY,
-    PRIVACY_CORTANA,
-    PRIVACY_BING_SEARCH,
     PRIVACY_INPUT_PERSONALIZATION,
-    PRIVACY_ACCEPTED_POLICY,
-    PRIVACY_TILE_NOTIFICATIONS,
     PRIVACY_ALLOW_TELEMETRY,
     PRIVACY_COPILOT,
     PRIVACY_WINDOWS_ADS,
@@ -3552,7 +3372,6 @@ PRIVACY_SETTINGS: list[SettingExecutor] = [
     PRIVACY_APP_LAUNCH_TRACKING,
     PRIVACY_ONLINE_SPEECH,
     PRIVACY_FEEDBACK_REMINDERS,
-    PRIVACY_CEIP,
     PRIVACY_APP_TELEMETRY,
 ]
 
@@ -3644,24 +3463,30 @@ PERF_NUMLOCK_DEFAULT = SettingExecutor(
     apply_value_map={"on": "2", "off": "0"},
 )
 
+# NOC_GLOBAL_SETTING_TOASTS_ENABLED is the Settings > Notifications master
+# switch: it silences every toast all day, not only during games. Windows'
+# own Do Not Disturb already turns on by itself while a game runs fullscreen,
+# so the honest offer is the master switch, named as what it is, for players
+# who game windowed. Offered, never assumed: it also hides security alerts.
 PERF_FOCUS_ASSIST = SettingExecutor(
     id="perf:focus_assist",
     category=SettingCategory.SYSTEM,
-    display_name="Focus Assist (Game Notifications)",
-    short_name="Notifications during games",
-    description="Suppresses notifications during fullscreen games. Prevents notification-caused stutter.",
+    display_name="All Notifications",
+    short_name="All notifications",
+    description="Turns every notification banner off, all the time, not only during games. Windows already "
+    "mutes them in fullscreen games, so this matters for borderless and windowed play.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Enabled: Notifications can cause frame drops during gaming",
-    recommended_impact="Disabled: No notification popups → uninterrupted gaming",
-    scope=SettingScope.RECOMMENDED,
+    current_impact="Enabled: Notification banners can appear over a borderless or windowed game",
+    recommended_impact="Disabled: No banners at all → nothing draws over the game",
+    scope=SettingScope.COMPLETE,
     category_order=45,
-    effect="Suppresses Windows notifications during gaming to prevent frame drops",
-    impact_scores={"fps": "0%", "fps_1_percent_low": "+0-1%", "latency_ms": 0, "stability": "high"},
+    effect="Turns off all notification banners, including outside games",
+    impact_scores={"fps_1_percent_low": "+0-1%", "latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -3669,7 +3494,7 @@ PERF_FOCUS_ASSIST = SettingExecutor(
         "name": "NOC_GLOBAL_SETTING_TOASTS_ENABLED",
         "hive": "HKCU",
     },
-    value_map={0: "disabled", 1: "enabled", None: "enabled"},
+    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
     apply_type=DetectType.REGISTRY,
     apply_command="",
     apply_args={
@@ -3678,7 +3503,7 @@ PERF_FOCUS_ASSIST = SettingExecutor(
         "hive": "HKCU",
         "type": "REG_DWORD",
     },
-    apply_value_map={"disabled": 0, "enabled": 1},
+    apply_value_map={"disabled": 0, "enabled": None},
 )
 
 PERF_VBS_CORE_ISOLATION = SettingExecutor(
@@ -3892,8 +3717,6 @@ PERFORMANCE_SETTINGS: list[SettingExecutor] = [
     PERF_ACCESSIBILITY_POPUPS,
     PERF_MOUSE_ACCELERATION,
     PERF_FAST_STARTUP,
-    # PERF_MENU_DELAY removed: conflicts with visual:animations (both use HKCU\Control Panel\Desktop\MenuShowDelay)
-    # visual:animations sets it to "0" (disabled) which is already more aggressive than 50ms
     PERF_SVCHOST_SPLIT,
     # PERF_NETWORK_THROTTLING removed: conflicts with network:network_throttling_index
     # (same registry key: NetworkThrottlingIndex)

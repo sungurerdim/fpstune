@@ -183,31 +183,27 @@ _ADAPTER_POWER_KEY = "adapter_pnp_power"
 def _fetch_adapter_power_snapshot() -> dict[str, str]:
     """Read the PnP power-management state of every adapter in one call.
 
-    ``network:<n>:power_management`` resolves an adapter to its PnP device and
-    reads ``PnPCapabilities``. The lookup is per-adapter, but the expensive part
-    is ``Get-PnpDevice``, which enumerates every device on the machine — so a
-    two-NIC machine paid for that enumeration twice, measured at 2.86 s and
-    2.62 s of a 21 s scan. Enumerating once and indexing by InterfaceIndex costs
-    the same as doing it for one adapter.
+    ``power_management`` resolves an adapter to its driver key and reads
+    ``PnPCapabilities``. One PowerShell for every adapter instead of one per
+    adapter: the session start is the expensive part.
 
-    PnPCapabilities: 24 = "allow the computer to turn this device off" cleared,
-    anything else (including absent) = still allowed.
+    PnPCapabilities lives in the adapter's driver key (Control\\Class\\{guid}\\NNNN,
+    reached from its PnP device id): bits 0x18 set = "allow the computer to turn
+    this device off" cleared; anything else (including absent) = still allowed.
     """
     if sys.platform != "win32":
         return {}
 
     cmd = (
-        "$pnp = @{}; "
-        "Get-PnpDevice -Class Net -EA SilentlyContinue | ForEach-Object { "
-        "$pnp[$_.FriendlyName] = $_.InstanceId }; "
         "$out = @{}; "
         "Get-NetAdapter -EA SilentlyContinue | ForEach-Object { "
-        "$id = $pnp[$_.InterfaceDescription]; "
         "$state = 'Enabled'; "
-        "if ($id) { "
-        '$p = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$id\\Device Parameters"; '
-        "$v = (Get-ItemProperty -Path $p -Name 'PnPCapabilities' -EA SilentlyContinue).PnPCapabilities; "
-        "if ($v -eq 24) { $state = 'Disabled' } }; "
+        "$drv = (Get-PnpDeviceProperty -InstanceId $_.PnPDeviceID "
+        "-KeyName 'DEVPKEY_Device_Driver' -EA SilentlyContinue).Data; "
+        "if ($drv) { "
+        '$k = "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\$drv"; '
+        "$v = [int](Get-ItemProperty -Path $k -Name 'PnPCapabilities' -EA SilentlyContinue).PnPCapabilities; "
+        "if (($v -band 0x18) -eq 0x18) { $state = 'Disabled' } }; "
         "$out[[string]$_.InterfaceIndex] = $state }; "
         "$out | ConvertTo-Json -Compress"
     )

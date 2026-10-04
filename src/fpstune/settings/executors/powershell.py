@@ -507,6 +507,26 @@ def _batch_config_reading(batch_config: str, setting: SettingExecutor) -> Any:
     raise KeyError(f"unknown batch_config {batch_config!r} on {setting.id}")
 
 
+def _finish_apply(setting: SettingExecutor, output: str | None) -> tuple[bool, str | None]:
+    """The outcome of a command that exited 0, and what follows a write.
+
+    A script that catches its own failure reports it as a final
+    ``error:<message>`` line and exits 0; that is a failed write, and the line
+    is the only place the reason survives. Per-adapter writes run with
+    ``-NoRestart``, so a successful one asks for the single restart that loads
+    it once the burst of writes is over.
+    """
+    last_line = ((output or "").strip().splitlines()[-1:] or [""])[0].strip()
+    if last_line.startswith("error:"):
+        return False, last_line[len("error:") :].strip() or "Command failed"
+
+    if setting.apply_args.get("restart_adapter"):
+        from fpstune.settings.executors.adapter_restart import schedule_adapter_restart
+
+        schedule_adapter_restart(setting.apply_args.get("ifindex"))
+    return True, None
+
+
 class PowerShellExecutor(BaseExecutor):
     """Execute PowerShell commands for network adapter and other settings.
 
@@ -809,8 +829,7 @@ class PowerShellExecutor(BaseExecutor):
 
         if not success:
             return False, f"PowerShell failed: {output}"
-
-        return True, None
+        return _finish_apply(setting, output)
 
     def _run(
         self, command: str, timeout: int = 30, on_line: LineCallback | None = None

@@ -35,21 +35,21 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**419 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**404 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
-| Game Configs | 197 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm) |
-| System | 65 | Services, privacy, telemetry, scheduler |
+| Game Configs | 195 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm) |
+| System | 60 | Services, privacy, telemetry, scheduler |
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
 | GPU | 28 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
-| Network | 28 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
+| Network | 25 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
 | Power | 29 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
-| Launchers | 12 | Steam, Battle.net overlay/GPU/shader settings |
+| Launchers | 9 | Steam, Battle.net overlay/GPU/shader settings |
 | Core | 4 | Priority separation and MMCSS, held at Windows' own values |
 | Game | 5 | Game Mode, Game Bar, HAGS |
-| Audio | 5 | Audio enhancements, loudness EQ |
-| Visual | 3 | Animations, transparency, smooth scrolling |
+| Audio | 4 | Per-output effects, sample rate, exclusive access, voice ducking |
+| Visual | 2 | Animations, transparency |
 | Storage | 3 | NVMe, disk timeout, write caching |
 | Timer | 1 | Timer resolution |
 
@@ -364,7 +364,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
                     system*.py, display.py, gpu.py, benchmark*.py, safety.py, debug.py
   settings/         Settings engine
-    definitions/    15 category files producing the 419 settings in 13 categories —
+    definitions/    15 category files producing the 404 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal

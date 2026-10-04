@@ -22,6 +22,7 @@ from unittest.mock import patch
 import pytest
 
 from fpstune.settings.definitions.network import (
+    adapter_key,
     create_rss_queues_setting,
     rss_queue_recommendation,
 )
@@ -31,6 +32,9 @@ from fpstune.settings.discovery.probes import (
     powers_of_two_between,
 )
 from fpstune.settings.registry import SettingsRegistry
+
+ADAPTER_ID = "PCI\\VEN_10EC&DEV_8125&SUBSYS_86771043&REV_05\\01000000684CE00000"
+KEY = adapter_key(ADAPTER_ID)
 
 
 class TestParsingWhatTheDriverPublishes:
@@ -127,21 +131,25 @@ def _registry_reading(payload: object) -> dict:
 
 class TestDiscoveryReadsTheMachine:
     def test_an_enum_driver_is_read_whole(self) -> None:
-        options = _registry_reading({"14": {"valid": ["1", "2", "4", "8", "16"], "default": "16"}})
+        options = _registry_reading(
+            {"14": {"rss": {"valid": ["1", "2", "4", "8", "16"], "default": "16"}}}
+        )
         assert options == {14: (("1", "2", "4", "8", "16"), "16")}
 
     def test_a_range_driver_is_expanded(self) -> None:
         """Some drivers publish min/max instead of an enum; both are real."""
-        options = _registry_reading({"7": {"valid": [], "min": 1, "max": 8, "default": "8"}})
+        options = _registry_reading(
+            {"7": {"rss": {"valid": [], "min": 1, "max": 8, "default": "8"}}}
+        )
         assert options == {7: (("1", "2", "4", "8"), "8")}
 
     def test_an_adapter_that_publishes_nothing_is_absent(self) -> None:
         """Absent from the result means 'register no setting for this adapter'."""
-        assert _registry_reading({"3": {"valid": [], "default": ""}}) == {}
+        assert _registry_reading({"3": {"rss": {"valid": [], "default": ""}}}) == {}
 
     def test_a_default_the_driver_does_not_accept_is_not_believed(self) -> None:
         """A default outside the enum would be a value the UI can never restore."""
-        options = _registry_reading({"5": {"valid": ["1", "2"], "default": "32"}})
+        options = _registry_reading({"5": {"rss": {"valid": ["1", "2"], "default": "32"}}})
         assert options == {5: (("1", "2"), "2")}
 
     def test_a_failed_query_registers_nothing_rather_than_guessing(self) -> None:
@@ -166,19 +174,68 @@ class TestRegistrationIsGatedOnTheReading:
 
     def _register(self, rss_queue_options):
         registry = SettingsRegistry(discover_dynamic=False)
-        register_adapter_settings(registry, 14, "Ethernet", "802.3", rss_queue_options)
+        register_adapter_settings(
+            registry, 14, "Ethernet", "802.3", rss_queue_options, instance_id=ADAPTER_ID
+        )
         return {s.id for s in registry.get_all()}
 
     def test_registered_when_the_driver_publishes_values(self) -> None:
-        assert "network:14:rss_queues" in self._register((("1", "2", "4", "8"), "8"))
+        assert f"network:{KEY}:rss_queues" in self._register((("1", "2", "4", "8"), "8"))
 
     def test_not_registered_when_it_does_not(self) -> None:
         """Same user-visible outcome as the `not_supported` detect would give,
         without paying for a scan of a setting that can never apply."""
-        assert "network:14:rss_queues" not in self._register(None)
+        assert f"network:{KEY}:rss_queues" not in self._register(None)
 
     def test_the_other_adapter_settings_are_unaffected(self) -> None:
         """Gating one setting must not drop the fifteen beside it."""
         ids = self._register(None)
-        assert "network:14:interrupt_moderation" in ids
-        assert "network:14:flow_control" in ids
+        assert f"network:{KEY}:interrupt_moderation" in ids
+        assert f"network:{KEY}:flow_control" in ids
+
+
+class TestResetWritesTheDriversOwnDefault:
+    """The declared default was one vendor's; reset wrote it to every driver."""
+
+    def test_the_driver_default_replaces_the_declared_one(self) -> None:
+        from fpstune.settings.definitions.network import create_flow_control_setting
+        from fpstune.settings.discovery.network import with_driver_default
+
+        declared = create_flow_control_setting(14, "Ethernet")
+        raw_default = next(
+            raw
+            for raw, label in declared.value_map.items()
+            if isinstance(raw, int) and label != declared.default_value
+        )
+        adopted = with_driver_default(declared, {"*flowcontrol": str(raw_default)})
+        assert adopted.default_value == declared.value_map[raw_default]
+        assert adopted.default_value in adopted.choices
+
+    def test_the_bare_vendor_spelling_counts_too(self) -> None:
+        from fpstune.settings.definitions.network import create_interrupt_moderation_setting
+        from fpstune.settings.discovery.network import with_driver_default
+
+        declared = create_interrupt_moderation_setting(14, "Ethernet")
+        adopted = with_driver_default(declared, {"interruptmoderation": "0"})
+        assert adopted.default_value == "Disabled"
+
+    @pytest.mark.parametrize("defaults", [{}, {"*flowcontrol": "77"}, {"*othername": "0"}])
+    def test_nothing_mappable_keeps_the_declared_default(self, defaults: dict) -> None:
+        from fpstune.settings.definitions.network import create_flow_control_setting
+        from fpstune.settings.discovery.network import with_driver_default
+
+        declared = create_flow_control_setting(14, "Ethernet")
+        assert with_driver_default(declared, defaults).default_value == declared.default_value
+
+    def test_the_probe_reads_every_keywords_default(self) -> None:
+        registry = SettingsRegistry(discover_dynamic=False)
+        payload = {"14": {"defaults": {"*FlowControl": "1", "*EEE": "0", "Empty": ""}}}
+        completed = subprocess.CompletedProcess(
+            args=["powershell"], returncode=0, stdout=json.dumps(payload), stderr=""
+        )
+        with patch("fpstune.settings.discovery.probes.subprocess.run", return_value=completed):
+            assert registry._probes.adapter_property_defaults() == {
+                14: {"*flowcontrol": "1", "*eee": "0"}
+            }
+            # Same query answers RSS: no second PowerShell for the machine.
+            assert registry._probes.rss_queue_options() == {}

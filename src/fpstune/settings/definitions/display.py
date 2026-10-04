@@ -20,6 +20,43 @@ from fpstune.settings.base import (
     SettingValueType,
 )
 
+_DX_PATH = "HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences"
+
+
+def directx_flag_scripts(flag: str) -> tuple[str, str]:
+    """Detect and apply scripts for one ``Name=0|1`` entry in DirectXUserGlobalSettings.
+
+    The value is one REG_SZ of ``;``-terminated entries that Windows itself
+    writes as ``SwapEffectUpgradeEnable=1;VRROptimizeEnable=0;``. The entry is
+    matched as a whole token: a substring match read ``XSwapEffectUpgradeEnable=1``
+    as this flag, and appending to a value that already ended in ``;`` wrote
+    ``;;``. Every other entry is kept verbatim, in order.
+    """
+    token = f"'^\\s*{flag}='"
+    read = (
+        f"$cur = (Get-ItemProperty -Path '{_DX_PATH}' -Name 'DirectXUserGlobalSettings' "
+        "-ErrorAction SilentlyContinue).DirectXUserGlobalSettings; "
+    )
+    detect = (
+        read + f"$t = @(\"$cur\" -split ';' | Where-Object {{ $_ -match {token} }}) | "
+        "Select-Object -Last 1; "
+        "if ($t -and ($t -split '=', 2)[1].Trim() -eq '1') { 'enabled' } else { 'disabled' }"
+    )
+    apply = (
+        f"if (-not (Test-Path '{_DX_PATH}')) {{ New-Item -Path '{_DX_PATH}' -Force | Out-Null }}; "
+        + read
+        + f"$keep = @(\"$cur\" -split ';' | Where-Object {{ $_.Trim() -and $_ -notmatch {token} }}); "
+        "$bit = if ('%value%' -eq 'enabled') { '1' } else { '0' }; "
+        f"$updated = ((@($keep) + \"{flag}=$bit\") -join ';') + ';'; "
+        f"Set-ItemProperty -Path '{_DX_PATH}' -Name 'DirectXUserGlobalSettings' "
+        "-Value $updated -Type String"
+    )
+    return detect, apply
+
+
+_FLIP_DETECT, _FLIP_APPLY = directx_flag_scripts("SwapEffectUpgradeEnable")
+
+
 # === Windowed Games Optimization (Flip-Model Presentation) ===
 # Microsoft T1 source: Windows 11 enables flip-model presentation for DX10-DX11
 # windowed/borderless games, providing measurable lower frame latency + Auto HDR + VRR.
@@ -44,44 +81,59 @@ WINDOWED_FLIP_MODEL = SettingExecutor(
     applicable_conditions={"is_windows_11": True},  # Windows 11 only
     effect="Reduces frame latency in windowed/borderless games via modern flip-model presentation",
     impact_scores={"latency_ms": -3.5, "fps": "0%", "stability": "high"},
-    # Detection - PowerShell to parse DirectXUserGlobalSettings semicolon-separated string
-    # Registry value is REG_SZ like "SwapEffectUpgradeEnable=1;AutoHDREnable=1;VRROptimizeEnable=1"
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$val = Get-ItemProperty -Path 'HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences' "
-        "-Name 'DirectXUserGlobalSettings' -ErrorAction SilentlyContinue; "
-        "if ($val -and $val.DirectXUserGlobalSettings -like '*SwapEffectUpgradeEnable=1*') { 'enabled' } "
-        "elseif ($val -and $val.DirectXUserGlobalSettings -like '*SwapEffectUpgradeEnable=0*') { 'disabled' } "
-        "else { 'disabled' }"
-    ),
+    detect_command=_FLIP_DETECT,
     detect_args={},
-    value_map={},  # PowerShell returns choice names directly
-    # Apply - PowerShell to set/modify DirectXUserGlobalSettings string (preserves other keys)
+    value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command=(
-        "$path = 'HKCU:\\Software\\Microsoft\\DirectX\\UserGpuPreferences'; "
-        "$name = 'DirectXUserGlobalSettings'; "
-        "if (-not (Test-Path $path)) { New-Item -Path $path -Force | Out-Null }; "
-        "$current = (Get-ItemProperty -Path $path -Name $name -ErrorAction SilentlyContinue).$name; "
-        "$newVal = if ('%value%' -eq 'enabled') { '1' } else { '0' }; "
-        "if ($current -match 'SwapEffectUpgradeEnable=\\d') { "
-        "$updated = $current -replace 'SwapEffectUpgradeEnable=\\d', \"SwapEffectUpgradeEnable=$newVal\"; "
-        "} elseif ($current) { "
-        '$updated = "$current;SwapEffectUpgradeEnable=$newVal"; '
-        "} else { "
-        '$updated = "SwapEffectUpgradeEnable=$newVal"; '
-        "}; "
-        "Set-ItemProperty -Path $path -Name $name -Value $updated -Type String"
-    ),
+    apply_command=_FLIP_APPLY,
     apply_args={},
     apply_value_map={},
 )
 
 
 # === Multi-Plane Overlay (MPO) ===
-# The build at which the DWM keys stop being honoured and the GraphicsDrivers
-# value takes over. 25H2 is 26200; 24H2 is 26100; 23H2 is 22631.
-_MPO_GRAPHICSDRIVERS_BUILD = 26200
+# 24H2 is 26100, 25H2 is 26200; 23H2 is 22631. From 24H2 on, builds have been
+# seen honouring either value depending on the servicing update, so both are
+# written there; before 24H2 only the DWM value exists.
+_MPO_BOTH_VALUES_BUILD = 26100
+
+_DWM_VALUE = (r"SOFTWARE\Microsoft\Windows\Dwm", "OverlayTestMode", 5)
+_GRAPHICS_VALUE = (r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "DisableOverlays", 1)
+
+
+def _mpo_values(build: int) -> tuple[tuple[str, str, int], ...]:
+    if build >= _MPO_BOTH_VALUES_BUILD:
+        return (_DWM_VALUE, _GRAPHICS_VALUE)
+    return (_DWM_VALUE,)
+
+
+def _mpo_scripts(values: tuple[tuple[str, str, int], ...]) -> tuple[str, str]:
+    """Detect and apply scripts over every value this build may honour.
+
+    Disabled means every value is in place; anything less is still MPO on.
+    Re-enabling deletes the values rather than zeroing them, because removing
+    the override is what restores Windows' own behaviour — a 0 is still one.
+    """
+    # One `+= ,@(...)` per value: `@(@(a, b, c))` with a single inner array
+    # unrolls into a flat three-item array, which a one-value build would hit.
+    targets = "$targets = @(); " + "".join(
+        f"$targets += ,@('HKLM:\\{path}', '{name}', {on}); " for path, name, on in values
+    )
+    detect = (
+        targets + "$set = @($targets | Where-Object { "
+        "(Get-ItemProperty -Path $_[0] -Name $_[1] -ErrorAction SilentlyContinue).($_[1]) -eq $_[2] "
+        "}).Count; "
+        "if ($set -eq $targets.Count) { 'disabled' } else { 'enabled' }"
+    )
+    apply = (
+        targets + "foreach ($t in $targets) { "
+        "if ('%value%' -eq 'disabled') { "
+        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force | Out-Null }; "
+        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $t[2] -Type DWord -Force "
+        "} else { Remove-ItemProperty -Path $t[0] -Name $t[1] -ErrorAction SilentlyContinue } }"
+    )
+    return detect, apply
 
 
 def create_mpo_setting(build: int) -> SettingExecutor:
@@ -89,28 +141,18 @@ def create_mpo_setting(build: int) -> SettingExecutor:
 
     Which registry value disables MPO is a property of the Windows build, and
     writing the wrong one is silent: the value lands, detection reads it back and
-    reports success, and MPO stays on. fpstune wrote the GraphicsDrivers value
-    unconditionally, so on 23H2 and 24H2 the tweak did nothing and said it had
-    worked.
+    reports success, and MPO stays on. fpstune once wrote the GraphicsDrivers
+    value unconditionally, so on 23H2 the tweak did nothing and said it had
+    worked. Neither value is documented by Microsoft.
 
-    - 25H2 (26200+): the DWM values are ignored; ``GraphicsDrivers\\DisableOverlays``
-      is the value that takes effect.
-    - Earlier builds: ``Dwm\\OverlayTestMode = 5``.
-
-    Neither value is documented by Microsoft. Reverting deletes the value rather
-    than zeroing it, because removing the override is what restores Windows'
-    own behaviour — a 0 is still an override.
+    Not offered on a VRR panel: MPO is part of how a windowed game's frames
+    reach a G-Sync/FreeSync display directly, and switching it off has been
+    reported to stop VRR engaging — the one place the tweak costs more than the
+    flicker it fixes.
     """
-    if build >= _MPO_GRAPHICSDRIVERS_BUILD:
-        path, name, on_value = (
-            r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers",
-            "DisableOverlays",
-            1,
-        )
-        where = "GraphicsDrivers\\DisableOverlays (Windows 25H2 and later)"
-    else:
-        path, name, on_value = r"SOFTWARE\Microsoft\Windows\Dwm", "OverlayTestMode", 5
-        where = "Dwm\\OverlayTestMode (Windows 24H2 and earlier)"
+    values = _mpo_values(build)
+    where = " and ".join(f"{path.rsplit(chr(92), 1)[-1]}\\{name}" for path, name, _ in values)
+    detect, apply = _mpo_scripts(values)
 
     return SettingExecutor(
         id="display:mpo_disable",
@@ -124,17 +166,15 @@ def create_mpo_setting(build: int) -> SettingExecutor:
         default_value="enabled",
         recommended_value="disabled",
         requires_reboot=True,
-        # Demoted from "proven". The value is undocumented by Microsoft, absent
-        # from NVIDIA's current instructions, and changes between Windows
-        # builds — that is the definition of experimental, whatever the blogs
-        # quoting a 20-40% figure say. C1's promotion rule then requires
-        # advanced + a warning.
+        # Undocumented by Microsoft, absent from NVIDIA's current instructions,
+        # and changes between Windows builds: experimental, so C1's promotion
+        # rule requires advanced + a warning.
         evidence_level="experimental",
         risk_level="advanced",
         risk_warning=(
-            "Undocumented, and the value that works changes between Windows builds. At least one "
-            "report has it breaking variable refresh rate; on a G-Sync/FreeSync display, verify "
-            "VRR still engages after the reboot and revert this if it does not."
+            "Undocumented, and the value that works changes between Windows builds. Only offered "
+            "without a G-Sync/FreeSync display, because on one it can stop variable refresh rate "
+            "from engaging."
         ),
         sources=[
             "https://nvidia.custhelp.com/app/answers/detail/a_id/5157/~/what-is-multi-plane-overlay-%28mpo%29-in-windows-11",
@@ -146,36 +186,28 @@ def create_mpo_setting(build: int) -> SettingExecutor:
         scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
         category_order=5,
         effect="Stops the display engine compositing in hardware where that misbehaves",
-        # The old "+0-15%" and "-1.5 ms" came from a single blog post. The honest
-        # statement is that this fixes a defect when the defect is present and
-        # does nothing when it is not — a range implies it always pays.
+        # This fixes a defect when the defect is present and does nothing when it
+        # is not — a range would imply it always pays.
         impact_scores={
             "frame_time_consistency": "fixes flicker/stutter when present",
             "latency_ms": 0.0,
         },
-        detect_type=DetectType.REGISTRY,
-        detect_command="",
-        detect_args={"path": path, "name": name, "hive": "HKLM"},
-        value_map={
-            on_value: "disabled",
-            str(on_value): "disabled",
-            0: "enabled",
-            "0": "enabled",
-            None: "enabled",
-        },
-        apply_type=DetectType.REGISTRY,
-        apply_command="",
-        apply_args={"path": path, "name": name, "hive": "HKLM", "type": "REG_DWORD"},
-        # None deletes the value: removing the override is what hands the
-        # decision back to Windows, where a 0 is still an override.
-        apply_value_map={"disabled": on_value, "enabled": None},
+        applicable_conditions={"requires_vrr": False},
+        detect_type=DetectType.POWERSHELL,
+        detect_command=detect,
+        detect_args={},
+        value_map={},
+        apply_type=DetectType.POWERSHELL,
+        apply_command=apply,
+        apply_args={},
+        apply_value_map={},
     )
 
 
 # Static fallback for the registry list; discovery re-registers it from the
-# detected build. 25H2 is the current shipping build, so it is the safer default
-# for a machine whose version could not be read.
-MPO_DISABLE = create_mpo_setting(_MPO_GRAPHICSDRIVERS_BUILD)
+# detected build. Both values is the safer default for a machine whose version
+# could not be read: the extra one is a value nothing reads.
+MPO_DISABLE = create_mpo_setting(_MPO_BOTH_VALUES_BUILD)
 
 
 # Static list - Flip-Model is static, display resolution/refresh are dynamic

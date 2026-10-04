@@ -1,71 +1,75 @@
 """Which registry value disables MPO is a property of the Windows build.
 
 The concrete defect: fpstune wrote GraphicsDrivers\\DisableOverlays on every
-machine. On 23H2 and 24H2 that value is not the one Windows honours, so the
-tweak did nothing — and because detection reads back the value fpstune itself
-wrote, it reported success. Same silent-no-op shape as the MW3 config keys.
+machine. On 23H2 that value is not the one Windows honours, so the tweak did
+nothing — and because detection reads back the value fpstune itself wrote, it
+reported success. From 24H2 on, builds have honoured either value depending on
+the servicing update, so both are written there.
 """
 
 from __future__ import annotations
 
 import pytest
 
-from fpstune.settings.definitions.display import create_mpo_setting
+from fpstune.settings.definitions.display import _mpo_values, create_mpo_setting
 
-DWM_PATH = r"SOFTWARE\Microsoft\Windows\Dwm"
-GFX_PATH = r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers"
+DWM = (r"SOFTWARE\Microsoft\Windows\Dwm", "OverlayTestMode", 5)
+GFX = (r"SYSTEM\CurrentControlSet\Control\GraphicsDrivers", "DisableOverlays", 1)
 
 
 class TestKeyFollowsTheBuild:
     @pytest.mark.parametrize(
-        ("build", "path", "name", "on_value"),
+        ("build", "values"),
         [
-            (22631, DWM_PATH, "OverlayTestMode", 5),  # 23H2
-            (26100, DWM_PATH, "OverlayTestMode", 5),  # 24H2
-            (26200, GFX_PATH, "DisableOverlays", 1),  # 25H2
-            (27000, GFX_PATH, "DisableOverlays", 1),  # later
+            (22631, (DWM,)),  # 23H2
+            (26100, (DWM, GFX)),  # 24H2
+            (26200, (DWM, GFX)),  # 25H2
+            (27000, (DWM, GFX)),  # later
         ],
     )
-    def test_writes_the_value_that_build_honours(
-        self, build: int, path: str, name: str, on_value: int
+    def test_writes_every_value_that_build_may_honour(
+        self, build: int, values: tuple[tuple[str, str, int], ...]
     ) -> None:
-        s = create_mpo_setting(build)
-        assert s.detect_args["path"] == path
-        assert s.detect_args["name"] == name
-        assert s.apply_args["path"] == path
-        assert s.apply_value_map["disabled"] == on_value
+        assert _mpo_values(build) == values
 
-    def test_detect_and_apply_never_point_at_different_values(self) -> None:
+    @pytest.mark.parametrize("build", [22631, 26100, 26200])
+    def test_detect_and_apply_cover_the_same_values(self, build: int) -> None:
         # Reading one value and writing another is how a tweak reports a state
         # it did not set.
-        for build in (22631, 26100, 26200, 27000):
-            s = create_mpo_setting(build)
-            assert s.detect_args["path"] == s.apply_args["path"], build
-            assert s.detect_args["name"] == s.apply_args["name"], build
+        s = create_mpo_setting(build)
+        for path, name, on in _mpo_values(build):
+            entry = f",@('HKLM:\\{path}', '{name}', {on})"
+            assert entry in s.detect_command, (build, name)
+            assert entry in s.apply_command, (build, name)
 
-    def test_the_written_value_is_the_one_detection_maps_to_disabled(self) -> None:
-        for build in (22631, 26200):
-            s = create_mpo_setting(build)
-            written = s.apply_value_map["disabled"]
-            assert s.value_map[written] == "disabled", build
+    def test_23h2_never_touches_the_graphicsdrivers_value(self) -> None:
+        s = create_mpo_setting(22631)
+        assert "DisableOverlays" not in s.detect_command
+        assert "DisableOverlays" not in s.apply_command
 
-    def test_the_build_where_the_key_changes_is_named_once(self) -> None:
-        from fpstune.settings.definitions.display import _MPO_GRAPHICSDRIVERS_BUILD
-
-        assert create_mpo_setting(_MPO_GRAPHICSDRIVERS_BUILD - 1).detect_args["path"] == DWM_PATH
-        assert create_mpo_setting(_MPO_GRAPHICSDRIVERS_BUILD).detect_args["path"] == GFX_PATH
+    def test_disabled_only_when_every_value_is_in_place(self) -> None:
+        # One value of two is still MPO on, on a build that reads the other.
+        assert "$set -eq $targets.Count" in create_mpo_setting(26200).detect_command
 
 
 class TestRevertRemovesTheOverride:
     def test_reverting_deletes_rather_than_zeroes(self) -> None:
         # A 0 is still an override; deleting the value is what hands the
         # decision back to Windows.
-        for build in (22631, 26200):
-            assert create_mpo_setting(build).apply_value_map["enabled"] is None, build
+        apply = create_mpo_setting(26200).apply_command
+        assert "Remove-ItemProperty" in apply
+        assert "-Value 0" not in apply
 
-    def test_absent_value_reads_as_enabled(self) -> None:
-        # Which is Windows' own default — MPO on.
-        assert create_mpo_setting(26200).value_map[None] == "enabled"
+
+class TestNotOfferedUnderVrr:
+    def test_a_vrr_panel_makes_it_not_applicable(self) -> None:
+        from fpstune.settings.applicability import ApplicabilityChecker, HardwareContext
+
+        s = create_mpo_setting(26200)
+        vrr = ApplicabilityChecker(HardwareContext(has_vrr_monitor=True)).is_applicable(s)
+        fixed = ApplicabilityChecker(HardwareContext(has_vrr_monitor=False)).is_applicable(s)
+        assert vrr[0] is False
+        assert fixed == (True, "")
 
 
 class TestEvidenceMatchesReality:
@@ -93,6 +97,7 @@ class TestEvidenceMatchesReality:
         assert scores.get("latency_ms") == 0.0
         assert "fps_1_percent_low" not in scores
 
-    def test_the_description_says_which_value_it_writes(self) -> None:
+    def test_the_description_says_which_values_it_writes(self) -> None:
         assert "DisableOverlays" in create_mpo_setting(26200).description
-        assert "OverlayTestMode" in create_mpo_setting(22631).description
+        assert "OverlayTestMode" in create_mpo_setting(26200).description
+        assert "DisableOverlays" not in create_mpo_setting(22631).description

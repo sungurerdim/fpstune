@@ -163,17 +163,12 @@ export const settingsTr: Record<
   "visual:animations": {
     name: "Pencere animasyonları",
     description:
-      "Windows arayüz animasyonlarını ve menü gecikmelerini denetler. Kapatmak görsel gecikmeyi kaldırır ve GPU/CPU döngülerini oyunlara bırakır.",
+      "Windows pencereleri açarken, küçültürken ve aralarında geçerken canlandırır. Kapalıyken pencereler ve menüler hemen belirir; birleştirici aradaki kareleri çizmeyi bırakır.",
   },
   "visual:transparency": {
     name: "Saydamlık efektleri",
     description:
       "Pencere ve menülerin arkasındaki bulanıklık, ekranda kaldığı sürece GPU tarafından yeniden çizilir — arkada bir oyun çalışırken bile. Kapalıyken bu iş oyuna gider.",
-  },
-  "visual:smooth_scrolling": {
-    name: "Akıcı kaydırma",
-    description:
-      "Gezgin'de ve uygulamalarda animasyonlu kaydırmayı denetler. Kapatmak animasyon yükü olmadan anında kaydırma tepkisi verir.",
   },
   "storage:trim_enabled": {
     name: "SSD TRIM",
@@ -215,15 +210,10 @@ export const settingsTr: Record<
     description:
       "TCP'nin onay göndermeden önce ne kadar beklediği. Yalnızca TCP'yi ilgilendirir, UDP üzerinden çalışan bir oyun bunu hiç hissetmez ve Windows varsayılanı zaten doğrudur.",
   },
-  "network:scaling_heuristics": {
-    name: "Otomatik ayarın Windows engeli",
-    description:
-      "Windows 8.1 ve sonrası bu anahtarı yok sayar, yani modern bir makinede hiçbir şeyi değiştirmez. Eski bir rehberin ya da iyileştiricinin açtığı değeri geri almak için vardır.",
-  },
   "network:congestion_provider": {
     name: "Tıkanıklık kontrol algoritması",
     description:
-      "Hat yoğunken TCP'nin nasıl geri çekildiği. CUBIC modern bir bağlantıda eski algoritmalardan daha hızlı toparlanır; bu da indirme ve güncellemelerde daha kısa bekleme demektir.",
+      "Hat yoğunken TCP'nin nasıl geri çekildiği. Windows 11'in kendi seçimi olan CUBIC, modern bir bağlantıda eski algoritmalardan daha hızlı toparlanır.",
   },
   "network:receive_side_scaling": {
     name: "Ağ yükünü çekirdeklere dağıt",
@@ -233,7 +223,7 @@ export const settingsTr: Record<
   "network:receive_segment_coalescing": {
     name: "Gelen paketleri biriktirme",
     description:
-      "Gelen TCP segmentlerini işletim sistemine vermeden önce büyük öbeklerde birleştirir. Kapatmak bu biriktirmenin yapay gecikmesini önler.",
+      "Bir indirmenin gelen TCP segmentlerini işlemci görmeden birleştirir. Oyun trafiği UDP'dir ve hiç birleştirilmez; kapatmak yalnızca indirmeleri daha çok işlemciye mal eder.",
   },
   "network:throttling_index": {
     name: "Medya için ağ kısması",
@@ -273,12 +263,7 @@ export const settingsTr: Record<
   "network:qos_bandwidth": {
     name: "QoS bant genişliği payı",
     description:
-      "Windows'un QoS için ayırdığı bant genişliği yüzdesi (NonBestEffortLimit). 0 = ayırma yok.",
-  },
-  "network:qos_nla": {
-    name: "QoS ev-dışı ağ istisnası",
-    description:
-      "QoS'un ev dışı ağlarda kısmasını önler. 'Do not use NLA'=1 yazar.",
+      "Windows'un sesli sohbet gibi QoS isteyen uygulamalara ayırabileceği bant payı. Pay yalnızca böyle bir uygulama isterken kullanılır; 0 sınırı hiçbir şey kazandırmaz.",
   },
   "network:tcp_fast_open": {
     name: "TCP hızlı açılış",
@@ -295,25 +280,20 @@ export const settingsTr: Record<
     description:
       "Eşzamanlı TCP bağlantısı üst sınırı. Sınıra ulaşmak yeni bağlantıları doğrudan başarısız kılar; bu da açılmayan bir başlatıcı ya da mağaza sayfası olarak görünür.",
   },
-  "network:tcp_timed_wait_delay": {
-    name: "Kapanan port bekleme süresi",
-    description:
-      "Kapanan soketlerin port yeniden kullanılmadan önce beklediği süre. Düşük değer portların daha hızlı dönmesi demektir.",
-  },
   "network:ipv6_privacy": {
     name: "IPv6 gizlilik adresleri",
     description:
-      "Gizlilik için geçici IPv6 adresleri üretir. Kapatmak ek yükü azaltır.",
+      "Giden bağlantılara kısa ömürlü IPv6 adresleri verir, sunucular makineyi oturumlar boyunca izleyemez. Kapatmak ölçülebilir bir şey kazandırmaz, bu korumayı kaybettirir.",
   },
   "network:ipv6_random_identifiers": {
     name: "IPv6 rastgele kimlikler",
     description:
-      "Windows gizlilik için IPv6 adresini döndürür ve her döndürme o adresi kullanan bağlantıları düşürür. Kapalıyken uzun bir oturum kendi adresi yüzünden kesilmez.",
+      "IPv6 arayüz kimliğini ağ kartının donanım adresinden türetmek yerine rastgele yapar. Kapalıyken aynı cihaz parmak izi makineyle her ağa taşınır.",
   },
   "network:teredo": {
     name: "Teredo tüneli",
     description:
-      "IPv4 NAT üzerinden IPv6 tünelleme. Oyun için gerekmez; etkinken gecikme ekler.",
+      "IPv6'yı IPv4 NAT üzerinden taşır. Xbox ağ özellikleri ve bazı eşler arası oyunlar diğer oyunculara ulaşmak için kullanır; yerel IPv6 veya IPv4 çalışırken trafik taşımaz.",
   },
   "network:tcp_timestamps": {
     name: "TCP zaman damgaları",
@@ -555,7 +535,7 @@ export const settingsTr: Record<
   "services:background_apps": {
     name: "Arka plan uygulamaları",
     description:
-      "Uygulamaların arka planda çalışmasına izin verir. Kapatmak ciddi RAM kazandırır.",
+      "Store uygulamalarının kapatıldıktan sonra çalışmaya devam edip edemeyeceği. Kapalıyken oyunun arkasında çalışmazlar; açılana kadar bildirim de göndermezler.",
   },
   "services:telemetry_tasks": {
     name: "Telemetri zamanlanmış görevleri",
@@ -615,7 +595,7 @@ export const settingsTr: Record<
   "system:hyper_v": {
     name: "Hyper-V sanallaştırma",
     description:
-      "Windows'u Hyper-V hipervizörü altında sanal makine konuğu olarak çalıştırır. İkinci düzey adres çevirisi (SLAT) yükünden %5-15 FPS kaybına yol açar.",
+      "Windows'u Hyper-V hipervizörü altında konuk olarak çalıştırır; bu, CPU'ya bağlı karelere mal olur. Bellek Bütünlüğü açıkken hipervizör güvenlik için kalır ve bu maliyetin bir kısmı sürer.",
   },
   "system:vm_platform": {
     name: "Sanal makine platformu",
@@ -654,7 +634,7 @@ export const settingsTr: Record<
   "privacy:advertising_id": {
     name: "Reklam kimliği",
     description:
-      "Uygulamalar arası hedefli reklam için benzersiz kimlik. Kapatmak gizliliği artırır.",
+      "Uygulamaların, bir kişiyi reklam için uygulamalar arasında izlemek üzere okuyabildiği benzersiz kimlik. İlkeyle kapalıyken bu makinedeki hiçbir uygulama onu okuyamaz.",
   },
   "privacy:activity_history": {
     name: "Etkinlik geçmişi",
@@ -671,35 +651,15 @@ export const settingsTr: Record<
     description:
       "Edge tarayıcısının tanılama verisi toplaması. Kapatmak gizliliği artırır.",
   },
-  "privacy:cortana": {
-    name: "Cortana",
-    description:
-      "Windows 11'de kullanımdan kaldırıldı ve açık bırakıldığında hâlâ ses ve kullanım verisi toplayabiliyor. Kapalıyken çalışmayı da göndermeyi de bırakır.",
-  },
-  "privacy:bing_search": {
-    name: "Başlat menüsünde web sonuçları",
-    description:
-      "Başlat menüsündeki web arama sonuçları. Kapatmak aramaları yalnızca yerelde tutar.",
-  },
   "privacy:input_personalization": {
     name: "Yazma kişiselleştirmesi",
     description:
       "Kişiselleştirme modellerini eğitmek için yazma ve el yazısı verisi toplar. Kapatmak hem metin hem mürekkep toplamayı engeller.",
   },
-  "privacy:accepted_policy": {
-    name: "Kişiselleştirme onay bayrağı",
-    description:
-      "Konuşma/yazma kişiselleştirme gizlilik ilkesinin kabulünü izler.",
-  },
-  "privacy:tile_notifications": {
-    name: "Canlı kutucuk bildirimleri",
-    description:
-      "Başlat menüsündeki canlı kutucuklar. Yalnızca Windows 10'u etkiler (Windows 11'de kaldırıldı).",
-  },
   "privacy:allow_telemetry": {
     name: "Tanılama verisi düzeyi",
     description:
-      "Sistem geneli telemetri ilkesi. Enterprise=Kapalı; Home/Pro'da asgari Temel.",
+      "Windows'un ne kadar tanılama verisi gönderdiği. Gerekli düzey, Home ve Pro'nun uyguladığı en düşük düzeydir; ilke, Ayarlar ne derse desin onu orada tutar.",
   },
   "privacy:copilot": {
     name: "Windows Copilot",
@@ -712,14 +672,14 @@ export const settingsTr: Record<
       "Dosya Gezgini, Başlat menüsü ve kilit ekranındaki reklamlar ile kendiliğinden kurulan uygulamalar.",
   },
   "privacy:web_search_policy": {
-    name: "Başlat'ta web araması (ilke)",
+    name: "Aramada web sonuçları",
     description:
-      "Başlat menüsünde web aramasını ilke düzeyinde engeller. BingSearchEnabled'dan daha güçlüdür.",
+      "Başlat veya görev çubuğu aramasına yazılanların web sonuçları için Bing'e de gönderilip gönderilmediği. Kapalıyken arama bu makinede kalır; bir sonraki oturum açışta geçerli olur.",
   },
   "privacy:recall": {
     name: "Windows Recall ekran kayıtları",
     description:
-      "Yapay zekâ araması için düzenli ekran görüntüleri alır. Kapatmak disk alanı ve CPU kazandırır.",
+      "Copilot+ bilgisayarlarda Recall, yapay zekâ araması için düzenli ekran görüntüleri kaydedebilir. İlke özelliği kaldırır; böylece ne açılabilir ne de anlık görüntülere disk ve CPU harcar.",
   },
   "privacy:camera_indicator": {
     name: "Kamera kullanım göstergesi",
@@ -740,11 +700,6 @@ export const settingsTr: Record<
     name: "Geri bildirim istekleri",
     description:
       "Windows geri bildirim hatırlatmalarını (SIUF) denetler. Kapatmak oyun sırasında bölünmeyi önler.",
-  },
-  "privacy:ceip": {
-    name: "Deneyim geliştirme programı",
-    description:
-      "CEIP kapsamında kullanım ve güvenilirlik verilerini Microsoft'a gönderir. Kapatmak arka plan telemetrisini ve CPU yükünü azaltır.",
   },
   "privacy:app_telemetry": {
     name: "Uygulama uyumluluk telemetrisi",
@@ -802,9 +757,9 @@ export const settingsTr: Record<
       "Windows açılır açılmaz numpad'in etkin olup olmadığı. Kapalıyken numpad'e atanmış bir tuş, bir kez basılana dek hiçbir şey yapmaz ve bu maç ortasında fark edilir.",
   },
   "perf:focus_assist": {
-    name: "Oyunda bildirimler",
+    name: "Tüm bildirimler",
     description:
-      "Tam ekran oyun sırasında bildirimleri bastırır. Bildirim kaynaklı takılmayı önler.",
+      "Yalnızca oyunlarda değil, her zaman tüm bildirim başlıklarını kapatır. Windows tam ekran oyunlarda onları zaten susturur; bu, kenarlıksız ve pencereli oyun için önemlidir.",
   },
   "system:vbs_core_isolation": {
     name: "Çekirdek yalıtımı (VBS)",
@@ -982,9 +937,9 @@ export const settingsTr: Record<
       "Windows'un maç ortasında güncelleme ve arka plan kurulumu başlatmasını engeller, GPU'da önceliği oyuna verir. Kapalıyken bir güncelleme raundun ortasına düşebilir.",
   },
   "game:game_bar": {
-    name: "Xbox Game Bar",
+    name: "Xbox Game Bar kaydı",
     description:
-      "Xbox katmanı kayıt ve pencere sunmak için her oyuna bağlanır. Kapalıyken bu bağlanma ve arka plan süreci, hiç istemediğiniz kareleri harcamayı bırakır.",
+      "Game Bar istendiğinde kayıt yapabilmek için her oyuna bağlanır. Kapalıyken bu bağlanma ve arka plan yakalaması, hiç istemediğiniz kareleri harcamayı bırakır.",
   },
   "game:background_recording": {
     name: "Arka plan kaydı",
@@ -1003,25 +958,20 @@ export const settingsTr: Record<
     description:
       "Ekranın yenileme hızını GPU'nun ürettiği kareye uydurur; böylece DX11 oyunlarında yırtılma, V-Sync'in getirdiği giriş gecikmesi olmadan biter. FreeSync veya G-Sync monitör gerekir.",
   },
-  "audio:enhancements": {
-    name: "Ses geliştirmeleri",
-    description:
-      "Windows ses DSP efektleri (ekolayzır, yankı, ses dengeleme). İşleme oyunla hoparlör arasına girer ve keskinleştirmesi gereken yön ipuçlarını bulanıklaştırır.",
-  },
   "audio:endpoint_enhancements": {
     name: "Çıkış bazlı ses efektleri",
     description:
-      "Tek bir çıkış için açık bırakılmış aygıta özel ses efektleri. Oyunla hoparlör arasına girip bir ayak sesinin hangi yönden geldiğini bulanıklaştırırlar.",
+      "Bir çıkışta çalışan aygıta özel ses efektleri. Oyunla hoparlör arasına girip bir ayak sesinin hangi yönden geldiğini bulanıklaştırırlar.",
   },
   "audio:device_format": {
     name: "Ses örnekleme hızı",
     description:
-      "Her giriş ve çıkışın çalıştığı hız. Eşleşmeyen her şey Windows karıştırıcısında her tamponda yeniden örneklenir; bu boşuna CPU harcar.",
+      "Sürücüsü 48 kHz'i varsayılan alan her giriş ve çıkışın çalıştığı hız. Eşleşmeyen her şey Windows karıştırıcısında her tamponda yeniden örneklenir ve CPU harcar.",
   },
-  "audio:exclusive_mode": {
-    name: "Özel ses modu",
+  "audio:endpoint_exclusive_mode": {
+    name: "Özel mod erişimi",
     description:
-      "Uygulamalara özel ses erişimi verir. Gecikme düşer ama diğer sesleri engeller.",
+      "Uygulamaların her giriş ve çıkışı karıştırıcıyı atlayarak özel olarak kullanıp kullanamayacağı. Engellemek Windows'un en düşük gecikmeli ses yolunu kaldırır ve hiçbir şey kazandırmaz.",
   },
   "audio:communications_ducking": {
     name: "Sesli sohbette kısma",
@@ -1031,7 +981,7 @@ export const settingsTr: Record<
   "launcher:steam:downloads_during_gameplay": {
     name: "Oyundayken Steam indirmeleri",
     description:
-      "Oyundayken Steam'in güncelleme indirmesine izin verir. Kapatmak bant genişliği çekişmesini ve CPU sıçramalarını önler.",
+      "Oyundayken Steam'in güncelleme indirmesine izin verir. Steam bunu kapalı getirir; açıkken bir yama maçla hat ve disk için yarışır.",
   },
   "launcher:steam:overlay": {
     name: "Steam katmanı",
@@ -1068,25 +1018,10 @@ export const settingsTr: Record<
     description:
       "Battle.net arayüzü GPU ile çizilir. Kapatmak başlatıcı açıkken boştaki GPU kullanımını azaltır.",
   },
-  "launcher:bnet:p2p": {
-    name: "Battle.net P2P indirmeleri",
-    description:
-      "Eşten eşe güncelleme dağıtımı. Kapatmak yükleme bant genişliği kullanımını durdurur.",
-  },
-  "launcher:bnet:background_download": {
-    name: "Battle.net arka plan indirmeleri",
-    description:
-      "Oyundayken güncelleme indirir. Kapatmak bant genişliği çekişmesini önler.",
-  },
   "launcher:bnet:download_limit": {
     name: "Battle.net indirme sınırı",
     description:
-      "Battle.net indirme hızını sınırlar. Sınırı kaldırmak için en yükseğe ayarlayın.",
-  },
-  "launcher:bnet:background_download_limit": {
-    name: "Battle.net arka plan sınırı",
-    description:
-      "Battle.net arka plan indirme hızını sınırlar. Arkada daha hızlı güncelleme için sınırı kaldırın.",
+      "Battle.net'in yama indirmelerine koyduğu sınır. İstemci sınırsız gelir; başka bir araçtan kalan sınır her güncellemeyi uzatır.",
   },
   "game_config:cs2:sdr": {
     name: "CS2 Steam Datagram Relay",
@@ -1107,11 +1042,6 @@ export const settingsTr: Record<
     name: "CS2 FPS sınırı",
     description:
       "CS2 autoexec.cfg'ye 'fps_max 0' ekleyerek motorun FPS sınırını kaldırır. En düşük giriş gecikmesi için GPU'nun mümkün olan her kareyi çizmesine izin verir.",
-  },
-  "game_config:cs2:disable_ragdolls": {
-    name: "CS2 ragdoll kapatma",
-    description:
-      "'cl_disable_ragdolls 1' yazar — cesetlerdeki istemci tarafı ragdoll fiziğini kapatır. Çoklu ölümlü çatışmalarda CPU kazandırır ve bilinen bir takılma kaynağını kaldırır.",
   },
   "game_config:cs2:tracers_firstperson": {
     name: "CS2 kendi izli mermilerini gizle",
@@ -1186,7 +1116,7 @@ export const settingsTr: Record<
   "game_config:mw3:nvidia_reflex": {
     name: "MW3 NVIDIA Reflex",
     description:
-      "NVIDIA Reflex Düşük Gecikme. 'Enabled + boost' GPU'yu yükten bağımsız azami saate zorlar ve çizim kuyruğu gecikmesini azaltır. RTX kartlarda bedava giriş gecikmesi kazancı.",
+      "NVIDIA Reflex Düşük Gecikme; çizim kuyruğunu boş tutar. 'Enabled + boost' GPU saatini her sahnede azamide tutar; yalnız CPU darboğazında yarar, diğer durumlarda ısı maliyetidir.",
   },
   "game_config:mw3:dlss_frame_generation": {
     name: "MW3 DLSS kare üretimi",
@@ -1251,7 +1181,7 @@ export const settingsTr: Record<
   "game_config:mw3:detail_quality": {
     name: "MW3 ayrıntı kalitesi",
     description:
-      "Geometri ve model ayrıntı düzeyi (oyun içi Detail Quality Level). Düşük; bitki örtüsü, kaya ve çıkartma gibi dağınıklığı sadeleştirir, düşman modellerine dokunmaz.",
+      "Geometri ve model ayrıntı düzeyi (oyun içi Detail Quality Level). Düşük, uzaktaki modelleri sadeleştirir ve düşman modellerinin korunduğu kanıtlanmış değil; bu yüzden oyunun kendi Orta düzeyi korunur.",
   },
   "game_config:mw3:persistent_effects": {
     name: "MW3 kalıcı efektler",
@@ -1378,11 +1308,6 @@ export const settingsTr: Record<
     description:
       "Su kenarındaki sabit geometrinin kalıcı ıslaklık görünümü. Kapalı, rekabetçi etkisi olmadan ıslak yüzey shader geçişini kaldırır.",
   },
-  "game_config:mw3:velocity_blur": {
-    name: "MW3 hız bulanıklığı",
-    description:
-      "Sahnedeki hareketli nesnelere hız tabanlı bulanıklık uygular. Kapatmak hızlı hedeflerdeki bulanıklığı kaldırır ve çatışma netliğini artırır.",
-  },
   "game_config:mw3:vsync": {
     name: "MW3 V-Sync (oyun içi)",
     description:
@@ -1476,7 +1401,7 @@ export const settingsTr: Record<
   "game_config:mw4:nvidia_reflex": {
     name: "MW4 NVIDIA Reflex",
     description:
-      "NVIDIA'nın düşük gecikme modu; karelerin GPU önünde birikmesine izin vermek yerine çizim kuyruğunu kısa tutar. 'Enabled + boost' ayrıca GPU saatini yüksek tutar.",
+      "NVIDIA'nın düşük gecikme modu; çizim kuyruğunu kısa tutar. 'Enabled + boost' saatleri de sabitler; yalnız CPU darboğazında yarar, diğer karelerde ısıdır.",
   },
   "game_config:mw4:fps_cap_out_of_focus": {
     name: "MW4 odak dışı kare sınırı",
@@ -1701,7 +1626,7 @@ export const settingsTr: Record<
   "game_config:mw4:vrs": {
     name: "MW4 değişken oranlı gölgeleme",
     description:
-      "Düşük kontrastlı alanları kaba oranda gölgeler, gözün baktığı yerde ayrıntıyı korur. Oyuncunun zaten okumadığı bölgelerden kare geri kazandırır.",
+      "Düşük kontrastlı alanları kaba oranda gölgeler. MW4 bunu açık getirir ve fpstune oyunun kendi seçimini korur; MW3 kapalı getirir ve yalnız Tam kapsamda sunulur.",
   },
   "game_config:mw4:dynamic_scene_resolution": {
     name: "MW4 dinamik çözünürlük",
@@ -2027,11 +1952,6 @@ export const settingsTr: Record<
     name: "Gönderme arabellekleri",
     description:
       "Ağ kartının paket gönderme arabelleği boyutu. Yüksek değer, ani yüklemelerde daha az takılma demektir.",
-  },
-  "network:*:packet_coalescing": {
-    name: "Uyanıkken paket biriktirme",
-    description:
-      "Etkin güç durumunda gelen paketleri CPU bildirimlerini azaltmak için biriktirir. Kapatmak DPC gecikme sıçramalarını kaldırmak için paket başına işlemeye zorlar.",
   },
   "network:*:msi_mode": {
     name: "Kesme modu (MSI)",

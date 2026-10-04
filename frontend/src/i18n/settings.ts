@@ -7,14 +7,14 @@ import type { Setting } from "../types/setting";
  *
  * The backend stays English per C4 — descriptions are code-adjacent prose
  * reviewed against the registry — and the Turkish forms live here, keyed by
- * setting id. Per-adapter settings carry a machine-specific interface index
- * in their id (network:17:eee), which must never appear in source (C9), so
+ * setting id. Per-adapter settings carry a machine-specific adapter key
+ * in their id (network:nic3f09a1c2d4:eee), which must never appear in source (C9), so
  * they fall back to a name-keyed table matched on the id's stable last
  * segment. An id neither table knows falls back to the English copy —
  * honest, and visible, rather than a blank.
  */
 
-const PER_ADAPTER = /^network:\d+:(.+)$/;
+const PER_ADAPTER = /^network:[^:]+:(.+)$/;
 
 function entryFor(
   id: string,

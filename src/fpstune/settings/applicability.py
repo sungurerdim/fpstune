@@ -136,6 +136,7 @@ class ApplicabilityChecker:
     - max_windows_build: int - Windows build must be <= this value
     - is_windows_11: bool - Must be Windows 11
     - requires_admin: bool - Must be running as admin
+    - requires_vrr: bool - True needs a VRR panel; False rules one out
     - feature: str - Feature must be available
     - feature_absent: str - Feature must NOT be present (e.g., "docker" absent = safe to disable Hyper-V)
     - features_any: list[str] - Any of these features must be available
@@ -223,6 +224,10 @@ class ApplicabilityChecker:
                 )
             if not self.context.has_vrr_monitor:
                 return False, "Requires G-Sync/FreeSync/VRR compatible monitor"
+        # The mirror: a setting that would get in VRR's way. Only a panel known
+        # to support VRR rules it out; an unread panel keeps it on offer.
+        if conditions.get("requires_vrr") is False and self.context.has_vrr_monitor:
+            return False, "Not offered with a G-Sync/FreeSync/VRR monitor: it can stop VRR engaging"
 
         # Single feature check
         if "feature" in conditions:

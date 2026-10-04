@@ -80,10 +80,12 @@ class TestRegistrationIsGated:
         self, monkeypatch: pytest.MonkeyPatch, cpu: SimpleNamespace, expected_present: bool
     ) -> None:
         from fpstune.settings import registry as registry_mod
+        from fpstune.settings.definitions.network import adapter_key
         from fpstune.settings.discovery.network import register_adapter_settings
 
         monkeypatch.setattr("fpstune.utils.detect.get_cpu_detailed_info", lambda *_a, **_k: cpu)
         reg = registry_mod.SettingsRegistry(discover_dynamic=False)
-        register_adapter_settings(reg, 5, "Ethernet", "802.3")
-        present = reg.get("network:5:rss_base_processor") is not None
+        instance_id = "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE"
+        register_adapter_settings(reg, 5, "Ethernet", "802.3", instance_id=instance_id)
+        present = reg.get(f"network:{adapter_key(instance_id)}:rss_base_processor") is not None
         assert present is expected_present

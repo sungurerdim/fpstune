@@ -61,7 +61,11 @@ class TestNothingRecommendsBurningPowerForNothing:
         frame rate is identical — clock-up is already immediate via the scale-up
         policy — and the thermal budget is spent before the match begins.
         """
-        assert _setting("power:cpu_min_state").recommended_value == 5
+        setting = _setting("power:cpu_min_state")
+        assert setting.recommended_value < 100
+        # A guard tracks the floor the processor driver publishes, so a machine
+        # whose Windows default is not 5 is not pushed off its own value.
+        assert setting.recommended_value == setting.default_value
 
     def test_cores_are_allowed_to_rest(self) -> None:
         """`Processor idle disable = 1` forbids every C-state, permanently.

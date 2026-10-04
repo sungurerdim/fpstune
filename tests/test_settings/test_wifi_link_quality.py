@@ -14,10 +14,10 @@ from typing import Any, cast
 import pytest
 
 from fpstune.settings.applicability import ABSENT_READINGS, NOT_AVAILABLE
-from fpstune.settings.definitions.network import create_wifi_link_quality_setting
+from fpstune.settings.definitions.network import adapter_key, create_wifi_link_quality_setting
 from fpstune.settings.discovery import all_discoverers
 from fpstune.settings.discovery.network import discover_wifi_advisories
-from fpstune.settings.discovery.probes import HardwareProbes
+from fpstune.settings.discovery.probes import HardwareProbes, NetworkAdapter
 from fpstune.settings.executors import python_actions
 from fpstune.settings.executors.powershell import PowerShellExecutor
 from fpstune.settings.executors.python_actions import (
@@ -151,7 +151,7 @@ class _FakeRegistrar:
         return list(self.registered)
 
 
-def _probes(adapters: list[tuple[int, str, str]], guids: dict[int, str]) -> HardwareProbes:
+def _probes(adapters: list[NetworkAdapter], guids: dict[int, str]) -> HardwareProbes:
     fake = SimpleNamespace(active_adapters=lambda: adapters, adapter_guids=lambda: guids)
     return cast(HardwareProbes, fake)
 
@@ -159,17 +159,37 @@ def _probes(adapters: list[tuple[int, str, str]], guids: dict[int, str]) -> Hard
 class TestDiscovery:
     def test_one_advisory_per_wifi_adapter_keyed_by_its_index(self) -> None:
         registrar = _FakeRegistrar()
-        adapters = [(7, "Ethernet", "802.3"), (12, "Wi-Fi", "Native 802.11")]
+        adapters = [
+            NetworkAdapter(
+                7,
+                "Ethernet",
+                "802.3",
+                "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE",
+            ),
+            NetworkAdapter(
+                12,
+                "Wi-Fi",
+                "Native 802.11",
+                "PCI\\VEN_8086&DEV_51F0&SUBSYS_00948086&REV_01\\3&11583659&0&A3",
+            ),
+        ]
         count = discover_wifi_advisories(registrar, _probes(adapters, {7: "eth-guid", 12: GUID}))
 
         assert count == 2
+        key = adapter_key("PCI\\VEN_8086&DEV_51F0&SUBSYS_00948086&REV_01\\3&11583659&0&A3")
         ids = [s.id for s in registrar.registered]
-        assert ids == ["network:12:wifi_link_quality", "network:12:wifi_security"]
+        assert ids == [f"network:{key}:wifi_link_quality", f"network:{key}:wifi_security"]
         assert all(s.detect_args["interface_guid"] == GUID for s in registrar.registered)
 
     def test_a_radio_without_a_guid_is_skipped_rather_than_registered_blind(self) -> None:
         registrar = _FakeRegistrar()
-        count = discover_wifi_advisories(registrar, _probes([(12, "Wi-Fi", "Native 802.11")], {}))
+        wifi = NetworkAdapter(
+            12,
+            "Wi-Fi",
+            "Native 802.11",
+            "PCI\\VEN_8086&DEV_51F0&SUBSYS_00948086&REV_01\\3&11583659&0&A3",
+        )
+        count = discover_wifi_advisories(registrar, _probes([wifi], {}))
         assert (count, registrar.registered) == (0, [])
 
     def test_an_ethernet_only_machine_registers_nothing_and_asks_for_no_guids(self) -> None:
@@ -181,7 +201,15 @@ class TestDiscovery:
         probes = cast(
             HardwareProbes,
             SimpleNamespace(
-                active_adapters=lambda: [(7, "Ethernet", "802.3")], adapter_guids=explode
+                active_adapters=lambda: [
+                    NetworkAdapter(
+                        7,
+                        "Ethernet",
+                        "802.3",
+                        "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE",
+                    )
+                ],
+                adapter_guids=explode,
             ),
         )
         assert discover_wifi_advisories(registrar, probes) == 0

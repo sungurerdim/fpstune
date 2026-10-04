@@ -21,8 +21,9 @@ from collections.abc import Iterator
 
 import pytest
 
+from fpstune.settings.definitions.network import adapter_key
 from fpstune.settings.discovery.network import register_path_mtu_setting
-from fpstune.settings.discovery.probes import HardwareProbes
+from fpstune.settings.discovery.probes import HardwareProbes, NetworkAdapter
 from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils import path_mtu
 
@@ -190,7 +191,18 @@ def test_an_unmeasurable_path_is_also_remembered(monkeypatch: pytest.MonkeyPatch
     assert len(runs) == 2  # one per target, then cached
 
 
-ADAPTERS = [(17, "Ethernet", "802.3"), (4, "Wi-Fi", "Native 802.11")]
+ETHERNET_ID = "PCI\\VEN_8086&DEV_15BC&SUBSYS_86721043&REV_00\\3&11583659&0&FE"
+ADAPTERS = [
+    NetworkAdapter(17, "Ethernet", "802.3", ETHERNET_ID),
+    NetworkAdapter(
+        4,
+        "Wi-Fi",
+        "Native 802.11",
+        "PCI\\VEN_8086&DEV_51F0&SUBSYS_00948086&REV_01\\3&11583659&0&A3",
+    ),
+]
+ETHERNET = adapter_key(ETHERNET_ID)
+WIFI = adapter_key(ADAPTERS[1].instance_id)
 
 
 def _registry_with(
@@ -219,11 +231,11 @@ def test_the_setting_lands_on_the_adapter_the_probe_travelled(
     """
     registry, count = _registry_with(monkeypatch, route=17, measured=1492)
     assert count == 1
-    setting = registry.get("network:17:mtu")
+    setting = registry.get(f"network:{ETHERNET}:mtu")
     assert setting is not None
     assert setting.recommended_value == 1492
     assert setting.default_value == 1500  # so reset means the Windows default
-    assert registry.get("network:4:mtu") is None
+    assert registry.get(f"network:{WIFI}:mtu") is None
 
 
 def test_nothing_is_registered_when_the_probe_could_not_conclude(
@@ -232,7 +244,7 @@ def test_nothing_is_registered_when_the_probe_could_not_conclude(
     """No measurement, no setting — rather than a setting carrying a guess."""
     registry, count = _registry_with(monkeypatch, route=17, measured=None)
     assert count == 0
-    assert registry.get("network:17:mtu") is None
+    assert registry.get(f"network:{ETHERNET}:mtu") is None
 
 
 def test_nothing_is_registered_without_a_default_route(
@@ -248,7 +260,7 @@ def test_a_route_on_a_vpn_or_virtual_switch_is_left_alone(
     """Index 42 is not one of the physical adapters, so its MTU is not fpstune's."""
     registry, count = _registry_with(monkeypatch, route=42, measured=1492)
     assert count == 0
-    assert registry.get("network:42:mtu") is None
+    assert not [s for s in registry.get_all() if s.id.endswith(":mtu")]
 
 
 @pytest.mark.skipif(sys.platform != "win32", reason="Runs the shipped probe script")

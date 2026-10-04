@@ -93,6 +93,38 @@ class TestApplyRejectsRatherThanRaises:
         assert run.call_args.args[0].endswith("-NlMtuBytes 1500")
 
 
+class TestApplyReportsTheScriptsOwnFailure:
+    """A script that catches its failure prints ``error:<reason>`` and exits 0.
+
+    The executor used to call that a success: the write had failed, the reason
+    was discarded, and the UI only learned something was wrong when verify
+    read back the old value with no explanation attached.
+    """
+
+    def _apply(self, output: str) -> tuple[bool, str | None]:
+        with (
+            patch("sys.platform", "win32"),
+            patch(
+                "fpstune.settings.executors.game_processes.refuse_if_game_is_running",
+                return_value=None,
+            ),
+            patch(
+                "fpstune.settings.executors.powershell.run_powershell",
+                return_value=(True, output),
+            ),
+        ):
+            return PowerShellExecutor().apply(_setting(), "1500")
+
+    def test_an_error_line_is_a_failure_carrying_its_reason(self) -> None:
+        success, error = self._apply("error:Access is denied.")
+        assert success is False
+        assert error == "Access is denied."
+
+    def test_only_the_final_line_decides(self) -> None:
+        """A progress line that mentions an error earlier is not the outcome."""
+        assert self._apply("error: retrying\nok") == (True, None)
+
+
 class TestDetectRejectsRatherThanRaises:
     @pytest.mark.parametrize("hostile", HOSTILE_VALUES)
     def test_unplaceable_detect_argument_returns_an_error(self, hostile: str) -> None:

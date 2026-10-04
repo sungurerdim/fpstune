@@ -132,7 +132,7 @@ class TestTheWarmUpRunsThemTogether:
 
         with (
             patch.object(probes, "active_adapters", side_effect=lambda: asked.append("adapters")),
-            patch.object(probes, "rss_queue_options", side_effect=lambda: asked.append("rss")),
+            patch.object(probes, "adapter_advanced", side_effect=lambda: asked.append("advanced")),
             patch.object(
                 probes,
                 "default_route_interface_index",
@@ -150,7 +150,7 @@ class TestTheWarmUpRunsThemTogether:
         ):
             probes.warm()
 
-        assert sorted(asked) == ["adapters", "gpu", "monitors", "os", "route", "rss"]
+        assert sorted(asked) == ["adapters", "advanced", "gpu", "monitors", "os", "route"]
 
     def test_they_overlap_rather_than_queue(self) -> None:
         """The point of the warm-up, asserted by arrangement rather than clock.
@@ -168,7 +168,7 @@ class TestTheWarmUpRunsThemTogether:
 
         with (
             patch.object(probes, "active_adapters", side_effect=arrive),
-            patch.object(probes, "rss_queue_options", side_effect=arrive),
+            patch.object(probes, "adapter_advanced", side_effect=arrive),
             patch.object(probes, "default_route_interface_index", side_effect=arrive),
             patch("fpstune.utils.detect.get_gpu_info", side_effect=arrive),
             patch(

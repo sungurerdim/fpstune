@@ -21,6 +21,7 @@ from typing import Any, cast
 
 from fpstune.settings.applicability import NOT_INSTALLED as _NOT_INSTALLED
 from fpstune.settings.executors.game_config_writer import key_prefix
+from fpstune.settings.executors.mw3_paths import MW3_OPTIONS_FILE, MW3_PLAYERS_DIRS
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
 from fpstune.utils.logger import get_logger
 
@@ -32,8 +33,6 @@ logger = get_logger()
 # this module does not emit — or, as happened, fail to know one it does.
 NOT_INSTALLED = _NOT_INSTALLED
 
-MW3_PLAYERS_DIR = Path("Call of Duty MWIII/players")
-MW3_RELATIVE_PATH = MW3_PLAYERS_DIR / "options.4.cod23.cst"
 
 # MW3's *second* config file: graphics live in options.4.cod23.cst above, while
 # audio, input, aim and FOV live in a per-account gamerprofile one level down.
@@ -80,12 +79,14 @@ MW4_PROFILE_GLOB = "players*/*/g.*.cod26.[0-9]*.l.txt"
 _CACHE_KEY = "game_config_files"
 
 
-def _documents_dir() -> Path | None:
-    """Resolve the user's Documents folder, honouring OneDrive redirection.
+def _console_user_folder(value_name: str) -> Path | None:
+    """One of the console user's shell folders, as Explorer resolved it.
 
-    ``[Environment]::GetFolderPath('MyDocuments')`` follows the Shell Folders
-    redirection; reading ``%USERPROFILE%\\Documents`` directly would miss the
-    OneDrive case entirely.
+    Read from the console user's ``Shell Folders`` key, not the elevated token's:
+    under another administrator's credentials HKEY_CURRENT_USER, ``%LOCALAPPDATA%``
+    and ``Path.home()`` are all that administrator's, whose folders hold no game
+    config at all. ``Shell Folders`` also follows OneDrive redirection, which
+    reading ``%USERPROFILE%\\Documents`` directly would miss.
     """
     if sys.platform != "win32":
         return None
@@ -94,22 +95,39 @@ def _documents_dir() -> Path | None:
 
         from fpstune.utils.winapi.session import registry_root
 
-        # The console user's Documents, not the elevated token's: under another
-        # administrator's credentials HKEY_CURRENT_USER is that administrator's
-        # hive, whose Documents folder holds no game config at all.
         root, key_path = registry_root(
             "HKCU", r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
         )
         with winreg.OpenKey(root, key_path) as key:
-            personal, _ = winreg.QueryValueEx(key, "Personal")
-        expanded = Path(str(personal))
+            folder, _ = winreg.QueryValueEx(key, value_name)
+        expanded = Path(str(folder))
         if expanded.exists():
             return expanded
     except Exception as exc:  # pragma: no cover - environment dependent
-        logger.debug("Documents folder lookup failed: %s", exc)
+        logger.debug("%s folder lookup failed: %s", value_name, exc)
+    return None
 
+
+def _documents_dir() -> Path | None:
+    """Resolve the console user's Documents folder, honouring OneDrive redirection."""
+    if sys.platform != "win32":
+        return None
+    found = _console_user_folder("Personal")
+    if found is not None:
+        return found
     fallback = Path.home() / "Documents"
     return fallback if fallback.exists() else None
+
+
+def _local_app_data_dir() -> Path | None:
+    """Resolve the console user's LocalAppData, where MW4 keeps its configs."""
+    if sys.platform != "win32":
+        return None
+    found = _console_user_folder("Local AppData")
+    if found is not None:
+        return found
+    env = os.environ.get("LOCALAPPDATA")
+    return Path(env) if env else None
 
 
 def _steam_library_paths() -> list[Path]:
@@ -213,14 +231,27 @@ def _newest_by_mtime(candidates: Iterable[Path]) -> Path | None:
     return max(files, key=lambda p: p.stat().st_mtime)
 
 
-def mw3_profile_path() -> Path | None:
-    """Discover MW3's per-account gamerprofile. Never a held path or id (C9)."""
-    documents = _documents_dir()
+def mw3_players_dir(documents: Path | None = None) -> Path | None:
+    """MW3's players folder: whichever candidate the game wrote its options to last.
+
+    The standalone install and the Call of Duty HQ launcher use different
+    folders (``mw3_paths``); when only one holds the options file that one wins,
+    and with neither the standalone folder is returned if it exists at all.
+    """
+    documents = documents if documents is not None else _documents_dir()
     if documents is None:
         return None
+    folders = [documents / rel for rel in MW3_PLAYERS_DIRS]
+    newest = _newest_by_mtime([folder / MW3_OPTIONS_FILE for folder in folders])
+    if newest is not None:
+        return newest.parent
+    return next((folder for folder in folders if folder.is_dir()), None)
 
-    players = documents / MW3_PLAYERS_DIR
-    if not players.is_dir():
+
+def mw3_profile_path() -> Path | None:
+    """Discover MW3's per-account gamerprofile. Never a held path or id (C9)."""
+    players = mw3_players_dir()
+    if players is None or not players.is_dir():
         return None
 
     try:
@@ -241,11 +272,11 @@ def mw4_config_paths() -> tuple[Path | None, Path | None]:
     if sys.platform != "win32":
         return None, None
 
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
+    local_app_data = _local_app_data_dir()
+    if local_app_data is None:
         return None, None
 
-    root = Path(local_app_data) / MW4_ROOT
+    root = local_app_data / MW4_ROOT
     if not root.is_dir():
         return None, None
 
@@ -298,8 +329,9 @@ def _load_snapshot() -> dict[str, Any]:
 
     documents = _documents_dir()
     if documents:
-        mw3_path = documents / MW3_RELATIVE_PATH
-        if mw3_path.exists():
+        mw3_players = mw3_players_dir(documents)
+        mw3_path = mw3_players / MW3_OPTIONS_FILE if mw3_players is not None else None
+        if mw3_path is not None and mw3_path.exists():
             snapshot["mw3"] = _read_text(mw3_path)
 
         hots_path = documents / HOTS_RELATIVE_PATH

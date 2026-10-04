@@ -36,6 +36,7 @@ move is still per game, and stays in `headroom_policy`.
 from __future__ import annotations
 
 import json
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -90,7 +91,7 @@ _TIER_FLOORS: tuple[tuple[float, str], ...] = (
 # must not produce a cap that costs the user frames they could have had.
 MIN_FRAME_CAP = 30
 
-# How far below the panel a frame cap sits, in Hz.
+# The least a frame cap sits below the panel, in Hz.
 VRR_HEADROOM_HZ = 3
 
 # What one measurement attempt ended up doing. Named rather than collapsed into
@@ -105,20 +106,23 @@ BUSY = "busy"
 
 
 def frame_cap_for_refresh(max_hz: int) -> int:
-    """The frame rate a panel of this refresh should be held at.
+    """The frame rate a VRR panel of this refresh should be held at.
 
-    Blur Busters' G-SYNC 101 measurements settle on refresh minus three: below
-    the panel's own ceiling the frame rate stays inside the VRR window, where
-    the display governs presentation and V-Sync never engages. Above it, V-Sync
-    takes over and the latency the whole configuration was chosen to avoid
-    arrives anyway.
+    ``hz - hz²/3600``, never closer to the panel than ``VRR_HEADROOM_HZ``: 57 at
+    60 Hz, 138 at 144, 224 at 240, 324 at 360. It is the cap NVIDIA Reflex sets
+    on its own when it runs with V-Sync and G-SYNC, and it grows with the rate
+    because frame-time variance does: Blur Busters' G-SYNC 101 measurements put
+    a flat "refresh minus three" at the edge of the VRR window at 144 Hz, and
+    at 240 Hz and above a cap that close is overshot often enough for V-Sync to
+    engage and bring back the latency the configuration was chosen to avoid.
 
     One function rather than the expression written out at each site, because
     the driver cap, the in-game caps and the measurement target all have to
     agree about what "fast enough" means on this panel. When they disagree the
     lowest one silently wins and every other setting looks broken.
     """
-    return max(max_hz - VRR_HEADROOM_HZ, MIN_FRAME_CAP)
+    cap = min(max_hz - VRR_HEADROOM_HZ, math.floor(max_hz - max_hz * max_hz / 3600))
+    return max(cap, MIN_FRAME_CAP)
 
 
 def panel_target_fps() -> int | None:

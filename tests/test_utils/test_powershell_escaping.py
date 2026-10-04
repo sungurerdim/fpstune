@@ -159,15 +159,6 @@ class TestRealActionCommands:
         assert "$newVal = 'x''; Start-Process calc; '''" in rendered
         assert "$newVal = 'x';" not in rendered
 
-    def test_bnet_json_toggle_section_key_value_all_escaped(self):
-        rendered = substitute_placeholders(
-            ACTION_COMMANDS["bnet_json_toggle"],
-            section="Client'; calc; '",
-            key="HardwareAcceleration",
-            value="false",
-        )
-        assert "$section = 'Client''; calc; '''" in rendered
-
     def test_mw3_pause_rendering_toggle_value_escaped(self):
         rendered = substitute_placeholders(
             ACTION_COMMANDS["mw3_pause_rendering_toggle"], value="0'; calc; '"

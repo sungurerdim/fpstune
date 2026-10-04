@@ -39,7 +39,7 @@ def registry() -> SettingsRegistry:
     if built.get("game_config:mw3:vram_scale") is None:
         built.register(create_mw3_vram_scale_setting(8 * 1024))
     if built.get("game_config:mw3:fps_cap_ingame") is None:
-        built.register(create_mw3_fps_cap_setting(240))
+        built.register(create_mw3_fps_cap_setting(240, vrr=True))
     return built
 
 

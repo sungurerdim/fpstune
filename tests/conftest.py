@@ -28,6 +28,19 @@ if sys.platform != "win32":
 
 
 @pytest.fixture(autouse=True)
+def _no_real_shell_folders(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Game config paths come from the test, never from the runner's own profile.
+
+    The product reads the console user's Shell Folders first, so a test that
+    builds a fake install under a temporary %LOCALAPPDATA% would otherwise be
+    pointed at the real one on a Windows runner.
+    """
+    from fpstune.settings.executors import game_config_cache
+
+    monkeypatch.setattr(game_config_cache, "_console_user_folder", lambda _name: None)
+
+
+@pytest.fixture(autouse=True)
 def _quiet_logging():
     """Reduce logging noise during tests."""
     # Save original levels

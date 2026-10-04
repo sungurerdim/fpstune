@@ -813,7 +813,9 @@ GPU_LAPTOP_ASSIGNMENT = SettingExecutor(
     risk_level="low",
     current_impact="Not configured: a game may run on the integrated GPU",
     recommended_impact="dGPU preferred: every game fpstune knows about runs on the discrete GPU",
-    scope=SettingScope.COMPLETE,
+    # ESSENTIAL: on a hybrid machine a game on the integrated chip loses most of
+    # its frame rate, more than every other tweak together gains.
+    scope=SettingScope.ESSENTIAL,
     category_order=19,
     effect="Points the games fpstune knows about at the discrete GPU",
     # Deliberately no invented percentage. The gap is not a percentage — it is the
@@ -907,7 +909,10 @@ AMD_ANTI_LAG = SettingExecutor(
     sources=["https://www.amd.com/en/products/software/adrenalin/anti-lag-2.html"],
     current_impact="Disabled: Normal render queue → 20-40ms input delay",
     recommended_impact="Enabled: Synchronized CPU/GPU → reduced input latency",
-    scope=SettingScope.ESSENTIAL,  # High impact on input latency
+    # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
+    # which AMD Software also uses for its own UI state, and no AMD machine has
+    # confirmed the driver reads the value from there. Offered, never assumed.
+    scope=SettingScope.COMPLETE,
     category_order=1,  # Primary AMD latency setting
     effect="Synchronizes CPU and GPU workloads for reduced input latency",
     impact_scores={"fps": "0%", "latency_ms": -10, "stability": "high"},
@@ -944,7 +949,10 @@ AMD_SHADER_CACHE = SettingExecutor(
     requires_reboot=False,
     current_impact="Disabled: Shaders recompile on every game launch",
     recommended_impact="Enabled: Shaders cached → faster startup, reduced stutter",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for stutter reduction
+    # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
+    # which AMD Software also uses for its own UI state, and no AMD machine has
+    # confirmed the driver reads the value from there. Offered, never assumed.
+    scope=SettingScope.COMPLETE,
     category_order=3,  # Stutter reduction
     effect="Caches compiled shaders for faster startup and reduced stutter",
     impact_scores={"fps": "0%", "fps_1_percent_low": "+5-20%", "stutter_reduction": "high"},
@@ -981,7 +989,10 @@ AMD_VSYNC = SettingExecutor(
     requires_reboot=False,
     current_impact="On: Frames sync to monitor → 8-16ms extra input lag",
     recommended_impact="Off: Free frame rendering → minimum input lag",
-    scope=SettingScope.ESSENTIAL,  # High impact on input latency
+    # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
+    # which AMD Software also uses for its own UI state, and no AMD machine has
+    # confirmed the driver reads the value from there. Offered, never assumed.
+    scope=SettingScope.COMPLETE,
     category_order=2,  # Critical for input lag
     effect="Disables frame sync to monitor refresh for minimum latency",
     impact_scores={"fps": "0%", "latency_ms": -12.0, "visual_quality": "may tear"},
@@ -1185,7 +1196,10 @@ AMD_CHILL = SettingExecutor(
     ],
     current_impact="Enabled: Frames are cut while you hold still → the flick off that corner starts from a lower rate",
     recommended_impact="Disabled: The frame rate never depends on how much you were moving a moment ago",
-    scope=SettingScope.RECOMMENDED,
+    # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
+    # which AMD Software also uses for its own UI state, and no AMD machine has
+    # confirmed the driver reads the value from there. Offered, never assumed.
+    scope=SettingScope.COMPLETE,
     category_order=6,
     effect="Stops the driver cutting frames based on how much you were moving",
     # Was `{"fps": "+0-40%", "gpu_temp_c": 5}`. The 40% was the ceiling Chill
@@ -1246,7 +1260,10 @@ AMD_FRTC = SettingExecutor(
     evidence_level="proven",
     current_impact="Disabled: No global FPS cap from FRTC",
     recommended_impact="Disabled: GPU renders at maximum possible framerate",
-    scope=SettingScope.RECOMMENDED,
+    # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
+    # which AMD Software also uses for its own UI state, and no AMD machine has
+    # confirmed the driver reads the value from there. Offered, never assumed.
+    scope=SettingScope.COMPLETE,
     category_order=7,
     effect="Disables global FPS cap for uncapped GPU performance",
     impact_scores={"fps": "0%", "latency_ms": -1},

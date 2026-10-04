@@ -64,37 +64,47 @@ class TestRefreshRateDerivation:
 
 class TestFpsCapDerivation:
     def test_leaves_vrr_headroom_below_the_panel_rate(self) -> None:
-        assert create_mw3_fps_cap_setting(300).recommended_value == 297
+        assert create_mw3_fps_cap_setting(240, vrr=True).recommended_value == 224
 
     def test_regression_the_stale_162_case(self) -> None:
-        # 162 came from 165 - 3 and was still in place on a 300 Hz panel.
-        assert create_mw3_fps_cap_setting(165).recommended_value == 162
-        assert create_mw3_fps_cap_setting(300).recommended_value != 162
+        # 162 was a literal derived from a 165 Hz panel and still in place on a
+        # 300 Hz one; the cap must move with the panel.
+        assert create_mw3_fps_cap_setting(165, vrr=True).recommended_value == 157
+        assert create_mw3_fps_cap_setting(300, vrr=True).recommended_value == 275
 
     def test_matches_the_nvidia_path_formula(self) -> None:
-        # NvProfileExecutor.get_vrr_optimization_info_for_monitor uses
-        # max(refresh - 3, 30); the two caps must not disagree.
+        # The driver cap and the in-game cap come from one function; if they
+        # disagree the lower one silently becomes the ceiling.
         from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
         for hz in (60, 144, 165, 300):
             driver_side = NvProfileExecutor().get_vrr_optimization_info_for_monitor(
                 refresh_rate=hz, supports_vrr=True
             )["recommended_fps_limit"]
-            assert create_mw3_fps_cap_setting(hz).recommended_value == driver_side
+            assert create_mw3_fps_cap_setting(hz, vrr=True).recommended_value == driver_side
 
     def test_floors_at_30_for_low_refresh_panels(self) -> None:
         # MaxFpsInGame's own range is 30-300; 30 - 3 would fall outside it.
-        setting = create_mw3_fps_cap_setting(30)
+        setting = create_mw3_fps_cap_setting(30, vrr=True)
         assert setting.recommended_value == 30
         assert setting.min_value == 30
 
-    def test_stays_inside_the_cst_range(self) -> None:
-        setting = create_mw3_fps_cap_setting(300)
+    @pytest.mark.parametrize("hz", [60, 144, 240, 360, 480, 540])
+    def test_stays_inside_the_cst_range(self, hz: int) -> None:
+        # A 480 Hz panel derives 416, which the game rejects rather than clamps.
+        setting = create_mw3_fps_cap_setting(hz, vrr=True)
         assert setting.min_value is not None and setting.max_value is not None
         assert setting.min_value <= int(setting.recommended_value) <= setting.max_value
 
+    @pytest.mark.parametrize("hz", [60, 144, 240])
+    def test_a_fixed_refresh_panel_is_not_capped_below_the_games_top(self, hz: int) -> None:
+        # With no VRR window there is nothing a cap protects; 57 on a 60 Hz panel
+        # threw away every frame above it and the latency they would have cut.
+        setting = create_mw3_fps_cap_setting(hz, vrr=False)
+        assert setting.recommended_value == setting.max_value == 300
+
     def test_is_an_int_not_a_choice(self) -> None:
-        assert create_mw3_fps_cap_setting(240).value_type is SettingValueType.INT
+        assert create_mw3_fps_cap_setting(240, vrr=True).value_type is SettingValueType.INT
 
 
 class TestResolutionDerivation:
@@ -134,8 +144,40 @@ class TestMenuFpsCapDerivation:
         # The whole point is that menus cost less than matches. If these ever
         # converge the setting has stopped doing anything.
         assert create_mw3_menu_fps_cap_setting(300).recommended_value < (
-            create_mw3_fps_cap_setting(300).recommended_value
+            create_mw3_fps_cap_setting(300, vrr=True).recommended_value
         )
+
+
+class TestReflexWithoutBoost:
+    """Boost pins GPU clocks in every frame for a gain that exists only CPU-bound."""
+
+    def test_mw3_and_mw4_recommend_plain_enabled(self) -> None:
+        from fpstune.settings.definitions.game_configs import MW3_NVIDIA_REFLEX
+        from fpstune.settings.definitions.game_configs_mw4 import MW4_NVIDIA_REFLEX
+
+        for s in (MW3_NVIDIA_REFLEX, MW4_NVIDIA_REFLEX):
+            assert s.recommended_value == "Enabled", s.id
+            assert "boost" not in s.recommended_impact.lower(), s.id
+
+
+class TestMenuSceneResolutionAgrees:
+    def test_mw4_takes_the_largest_reduction_like_mw3(self) -> None:
+        # MW4 sat at "min" on the reading that "full" meant native pixels;
+        # MW3's value hints carry the game's labels and "full" is Maximal.
+        from fpstune.settings.definitions.game_configs_mw4 import MW4_MENU_SCENE_RESOLUTION
+
+        assert MW4_MENU_SCENE_RESOLUTION.recommended_value == "full"
+        assert MW3_MENU_RENDER_RESOLUTION.recommended_value == "full"
+
+
+class TestModelDetailIsInformation:
+    def test_mw3_detail_quality_keeps_the_stock_tier(self) -> None:
+        # Low promised "characters unaffected" with nothing behind it; model
+        # detail on enemies is information (consequence 5).
+        from fpstune.settings.definitions.game_configs import MW3_DETAIL_QUALITY
+
+        assert MW3_DETAIL_QUALITY.recommended_value == "Medium Quality"
+        assert MW3_DETAIL_QUALITY.default_value == "Medium Quality"
 
 
 class TestPauseRenderingIsACompound:
@@ -270,6 +312,8 @@ class TestDriverVsyncFollowsThePanel:
 
         class FixedRefresh:
             supports_vrr = False
+            is_primary = True
+            is_active = True
 
         reg = registry_mod.SettingsRegistry(discover_dynamic=False)
         monkeypatch.setattr(
@@ -471,7 +515,8 @@ class TestQualityGates:
     def settings(self) -> list:
         return [
             create_mw3_refresh_rate_setting(300, "AW2725DF"),
-            create_mw3_fps_cap_setting(300),
+            create_mw3_fps_cap_setting(300, vrr=True),
+            create_mw3_fps_cap_setting(144, vrr=False),
             create_mw3_resolution_setting(2560, 1440),
             create_mw3_menu_fps_cap_setting(300),
             MW3_PAUSE_RENDERING,

@@ -82,7 +82,11 @@ def discover_mw3_display_settings(registry: Registrar, probes: HardwareProbes) -
     if max_hz:
         label = monitor.friendly_name or monitor.name
         registry.register(create_mw3_refresh_rate_setting(max_hz, label))
-        registry.register(create_mw3_fps_cap_setting(max_hz))
+        # The primary panel's VRR, the same panel the rate came from: a VRR
+        # second screen says nothing about the one the game runs on.
+        registry.register(
+            create_mw3_fps_cap_setting(max_hz, vrr=bool(getattr(monitor, "supports_vrr", False)))
+        )
         # The menu cap is derived from the same refresh rate: a fixed 90 would
         # exceed a 60 Hz panel and render frames it never shows.
         registry.register(create_mw3_menu_fps_cap_setting(max_hz))

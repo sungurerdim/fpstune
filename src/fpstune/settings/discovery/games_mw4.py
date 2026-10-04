@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 from fpstune.settings.panel import primary_monitor, refresh_ceiling_hz
 
 if TYPE_CHECKING:
+    from fpstune.settings.base import SettingExecutor
     from fpstune.settings.discovery import Registrar
     from fpstune.settings.discovery.probes import HardwareProbes
 
@@ -82,7 +83,9 @@ def discover_mw4_display_settings(registry: Registrar, probes: HardwareProbes) -
         logger.debug("MW4 frame caps not registered: panel refresh rate unknown")
         return registered
 
-    registry.register(create_mw4_fps_cap_setting(max_hz))
+    registry.register(
+        create_mw4_fps_cap_setting(max_hz, vrr=bool(getattr(monitor, "supports_vrr", False)))
+    )
     registry.register(create_mw4_menu_fps_cap_setting(max_hz))
     registry.register(create_mw4_refresh_rate_setting(max_hz))
     registered += 3
@@ -183,9 +186,42 @@ def adopt_mw4_ranges(registry: Registrar, probes: HardwareProbes) -> int:  # noq
         if setting.value_type not in (SettingValueType.INT, SettingValueType.FLOAT):
             continue
         if (low, high) != (setting.min_value, setting.max_value):
-            registry.register(replace(setting, min_value=low, max_value=high))
+            registry.register(_with_range(setting, low, high))
             adopted += 1
 
     if adopted:
         logger.debug("MW4: %d setting ranges taken from the installed config", adopted)
     return adopted
+
+
+# Settings whose answer is a position in the key's range rather than a number of
+# their own: the in-game cap is the range's top on a fixed-refresh panel and a
+# derived cap inside it on a VRR one.
+_RANGE_BOUND = frozenset({"game_config:mw4:fps_cap_ingame"})
+
+
+def _with_range(setting: SettingExecutor, low: float, high: float) -> SettingExecutor:
+    """``setting`` with the installed build's range, its answer kept inside it.
+
+    For a range-bound setting the declared top was a stand-in for "the top",
+    so it moves to the file's top; a derived value is clamped, because a 480 Hz
+    panel's cap of 416 is rejected by a build whose range stops at 300.
+    """
+    from dataclasses import replace
+
+    if setting.id not in _RANGE_BOUND:
+        return replace(setting, min_value=low, max_value=high)
+
+    def place(value: object) -> int:
+        number = int(value)  # type: ignore[call-overload]
+        if number == setting.max_value:
+            number = int(high)
+        return int(min(max(number, low), high))
+
+    return replace(
+        setting,
+        min_value=low,
+        max_value=high,
+        default_value=place(setting.default_value),
+        recommended_value=place(setting.recommended_value),
+    )

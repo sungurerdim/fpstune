@@ -304,10 +304,10 @@ class TestCs2SpendsOnlyDecoration:
         assert not stale, f"listed as decorative but no longer shipped: {sorted(stale)}"
 
     def test_the_off_detector_can_tell_the_two_apart(self) -> None:
-        # cs2:disable_ragdolls writes 1 to *disable*, so "writes 0" is not a
-        # synonym for "turns a feature off" and the guard must not be read as one.
+        # engine_low_latency_sleep_after_client_tick writes "true" to turn a
+        # behaviour *on*, so only a 0 over a shipped 1 reads as a feature off.
         by_cvar = {(s.apply_args or {}).get("cvar"): s for s in CS2_SETTINGS}
-        ragdolls = by_cvar.get("cl_disable_ragdolls")
-        assert ragdolls is not None
-        assert not self._switches_a_feature_off(ragdolls)
+        sleep = by_cvar.get("engine_low_latency_sleep_after_client_tick")
+        assert sleep is not None
+        assert not self._switches_a_feature_off(sleep)
         assert self._switches_a_feature_off(by_cvar["cl_autohelp"])

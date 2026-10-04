@@ -464,31 +464,53 @@ def create_mw4_menu_fps_cap_setting(max_hz: int) -> SettingExecutor:
     )
 
 
-def create_mw4_fps_cap_setting(max_hz: int) -> SettingExecutor:
-    """Build the MW4 in-game frame cap from the attached panel's max refresh.
+# The range MaxFpsInGame is declared with until the installed build states its
+# own; ``adopt_mw4_ranges`` replaces it, and moves a top-of-range answer with it.
+MW4_FPS_CAP_RANGE = (30, 300)
+
+
+def create_mw4_fps_cap_setting(max_hz: int, *, vrr: bool) -> SettingExecutor:
+    """Build the MW4 in-game frame cap from the primary panel.
 
     The cap comes from ``frame_cap_for_refresh`` rather than being written out
     here, so the driver cap, the in-game cap and the measurement target are one
     rule — when they disagree, the lower one silently wins and the other looks
-    broken.
+    broken. That rule is for a VRR panel. A fixed-refresh panel has no window to
+    stay inside, so a cap only lowers the ceiling (consequence 3) and the answer
+    is the top of the key's range.
     """
-    target = frame_cap_for_refresh(max_hz)
+    low, high = MW4_FPS_CAP_RANGE
+    if vrr:
+        target = min(max(frame_cap_for_refresh(max_hz), low), high)
+        description = (
+            "Maximum frames per second during a match. Held below this variable-refresh "
+            "panel's rate so the frame rate never leaves the VRR window, which is where "
+            "tearing and V-Sync latency come back."
+        )
+        current_impact = "Above or far below the cap: VRR window left, or the panel underused"
+        recommended_impact = f"{target}: Full use of the panel with VRR headroom kept"
+    else:
+        target = high
+        description = (
+            "Maximum frames per second during a match. This panel has no variable refresh, "
+            "so a cap below the game's own top only lowers the frame rate and adds latency."
+        )
+        current_impact = "Below the game's top: Frames the GPU could render are never drawn"
+        recommended_impact = f"{target}: The game's own ceiling, so the cap never binds first"
     return _make_mw4_setting(
         setting_id="game_config:mw4:fps_cap_ingame",
         display_name="MW4 In-Game Frame Rate Limit",
         short_name="MW4 In-Game Frame Rate Limit",
-        description="Maximum frames per second during a match. Held just below the panel's "
-        "refresh rate so a variable-refresh display never reaches its ceiling, which is where "
-        "tearing and latency spikes come back.",
+        description=description,
         key="MaxFpsInGame@0",
         choices=(),
         value_type=SettingValueType.INT,
         default_value=target,
         recommended_value=target,
-        min_value=30,
-        max_value=300,
-        current_impact="Above or far below the panel rate: frames discarded, or the panel underused",
-        recommended_impact=f"{target}: Full use of the panel with VRR headroom kept",
+        min_value=low,
+        max_value=high,
+        current_impact=current_impact,
+        recommended_impact=recommended_impact,
         effect="Matches the in-game frame cap to the attached monitor",
         impact_scores={"fps": f"ceiling {target}", "latency_ms": -2.0},
         category_order=29,
@@ -582,16 +604,16 @@ MW4_NVIDIA_REFLEX = _make_mw4_setting(
     setting_id="game_config:mw4:nvidia_reflex",
     display_name="MW4 NVIDIA Reflex",
     short_name="MW4 NVIDIA Reflex",
-    description="NVIDIA's low-latency mode, which keeps the render queue short instead of letting frames pile "
-    "up ahead of the GPU. Enabled + boost also holds clocks up so a sudden frame does not wait "
-    "for the card.",
+    description="NVIDIA's low-latency mode keeps the render queue short. Enabled + boost also "
+    "pins GPU clocks, which helps only when the CPU is the limit and costs heat otherwise.",
     key="NvidiaReflex@0",
     choices=("Disabled", "Enabled", "Enabled + boost"),
     default_value="Disabled",
-    recommended_value="Enabled + boost",
+    # Enabled, not boost (consequence 4): the same answer as MW3's Reflex.
+    recommended_value="Enabled",
     current_impact="Disabled: Render queue accumulates — roughly 10-20 ms of added input lag",
-    recommended_impact="Enabled + boost: Short render queue and held clocks — lower input lag",
-    effect="Shortens the render queue and holds GPU clocks for input latency",
+    recommended_impact="Enabled: Short render queue — lower input lag without pinned clocks",
+    effect="Shortens the render queue for input latency",
     impact_scores={"latency_ms": -3, "stability": "high"},
     category_order=4,
     scope=SettingScope.ESSENTIAL,
@@ -1377,14 +1399,17 @@ MW4_VRS = _make_mw4_setting(
     setting_id="game_config:mw4:vrs",
     display_name="MW4 Variable Rate Shading",
     short_name="MW4 Variable Rate Shading",
-    description="Shades low-contrast areas at a coarser rate while keeping detail where the eye "
-    "is looking. It returns frames from regions a player is not reading anyway.",
+    description="Shades low-contrast areas at a coarser rate. MW4 ships it on; fpstune keeps the "
+    "game's own choice here, where MW3 ships it off and offers it only in Complete.",
     key="VRS@0",
     choices=("false", "true"),
     default_value="true",
+    # A guard on stock, not a recommendation of VRS: the cost MW3's copy names -
+    # coarser shading where a flanker appears - is the same feature here, so it
+    # is neither turned on where the game ships it off nor off where it ships on.
     recommended_value="true",
-    current_impact="true: Coarser shading on flat regions, full rate where detail matters",
-    recommended_impact="true: Guards a saving that costs nothing a player looks at",
+    current_impact="false: Every pixel shaded at full rate, against the game's own default",
+    recommended_impact="true: The game's own default, with coarser shading on flat regions",
     effect="Keeps variable rate shading enabled",
     impact_scores={"fps": "+3-8%", "stability": "high"},
     category_order=81,
@@ -2355,13 +2380,14 @@ MW4_MENU_SCENE_RESOLUTION = _make_mw4_setting(
     key="SustainabilityMenuSceneResolution@0",
     choices=("off", "min", "full"),
     default_value="min",
-    recommended_value="min",
-    current_impact="min: Menu backdrops rendered cheaply — the correct state",
-    recommended_impact="min: Guards a thermal saving with no in-match cost",
-    effect="Keeps menu backdrops rendered at reduced resolution",
-    # MW3's sibling recommends `full`. Kept at `min` here and the disagreement is
-    # deliberate: nothing in a menu is a target, so the argument that protects
-    # in-match clarity does not reach it, and consequence 4 says the heat is real.
+    # `full` names the largest reduction, as in MW3 (whose value hints carry the
+    # game's own labels: off = Native, min = Optimal, full = Maximal). Nothing in
+    # a menu is a target, so the most heat saved is the answer (consequence 4);
+    # this sat at `min` on a misreading that `full` meant more pixels.
+    recommended_value="full",
+    current_impact="min: Menu backdrops reduced part of the way — heat still spent on a menu",
+    recommended_impact="full: Menu backdrops at the largest reduction, with no in-match cost",
+    effect="Renders menu backdrops at the largest resolution reduction",
     impact_scores={"fps_menu_ceiling": 0, "stability": "high"},
     category_order=120,
     evidence_level="likely",
@@ -2565,7 +2591,9 @@ def create_mw4_aa_technique_setting(gpu_vendor: str) -> SettingExecutor:
         "a preference — and the wrong one leaves dedicated hardware unused.",
         key="AATechniquePreferredMP@0",
         choices=("SMAA", "DLSS", "XeSS", "FSR AA"),
-        default_value=preferred,
+        # Stock is the vendor-neutral path, as MW3's "Filmic SMAA T2x" is; a
+        # default equal to the recommendation made reset a no-op.
+        default_value="SMAA",
         recommended_value=preferred,
         current_impact="A technique from another vendor: generic path, dedicated hardware idle",
         recommended_impact=f"{preferred}: The path this card has hardware for",

@@ -432,19 +432,49 @@ class TestDerivedFromHardware:
     """
 
     def test_ingame_cap_keeps_vrr_headroom_below_the_panel(self) -> None:
-        """Hz - 3 is the same rule the NVIDIA driver path uses; if the two
-        disagree the lower one silently wins and the other looks broken."""
+        """The driver path uses the same function; if the two disagree the lower
+        one silently wins and the other looks broken."""
         from fpstune.settings.definitions.game_configs_mw4 import create_mw4_fps_cap_setting
 
-        for panel_hz, expected in [(60, 57), (144, 141), (240, 237), (360, 357)]:
-            setting = create_mw4_fps_cap_setting(panel_hz)
+        for panel_hz, expected in [(60, 57), (144, 138), (240, 224), (300, 275)]:
+            setting = create_mw4_fps_cap_setting(panel_hz, vrr=True)
             assert setting.recommended_value == expected, f"{panel_hz} Hz panel"
 
     def test_ingame_cap_never_drops_below_a_playable_floor(self) -> None:
         """A 30 Hz panel would otherwise derive a 27 fps cap."""
         from fpstune.settings.definitions.game_configs_mw4 import create_mw4_fps_cap_setting
 
-        assert create_mw4_fps_cap_setting(30).recommended_value == 30
+        assert create_mw4_fps_cap_setting(30, vrr=True).recommended_value == 30
+
+    def test_ingame_cap_is_clamped_to_the_keys_range(self) -> None:
+        """A 480 Hz panel derives 416; a value outside the key's range is rejected."""
+        from fpstune.settings.definitions.game_configs_mw4 import create_mw4_fps_cap_setting
+
+        setting = create_mw4_fps_cap_setting(480, vrr=True)
+        assert setting.recommended_value == setting.max_value
+
+    def test_a_fixed_refresh_panel_gets_the_games_top_not_a_cap(self) -> None:
+        """No VRR window to stay inside: a cap only removes frames (consequence 3)."""
+        from fpstune.settings.definitions.game_configs_mw4 import create_mw4_fps_cap_setting
+
+        setting = create_mw4_fps_cap_setting(144, vrr=False)
+        assert setting.recommended_value == setting.max_value
+
+    @pytest.mark.parametrize(
+        ("vrr", "file_range", "expected"),
+        [(False, (30, 480), 480), (True, (30, 480), 224), (True, (30, 200), 200)],
+    )
+    def test_the_installed_range_moves_the_cap_with_it(
+        self, vrr: bool, file_range: tuple[int, int], expected: int
+    ) -> None:
+        """The declared 300 is a stand-in: a fixed panel's answer is the file's
+        own top, and a VRR cap the file's range cannot hold is clamped into it."""
+        from fpstune.settings.definitions.game_configs_mw4 import create_mw4_fps_cap_setting
+        from fpstune.settings.discovery.games_mw4 import _with_range
+
+        adopted = _with_range(create_mw4_fps_cap_setting(240, vrr=vrr), *file_range)
+        assert adopted.recommended_value == adopted.default_value == expected
+        assert (adopted.min_value, adopted.max_value) == file_range
 
     def test_menu_cap_never_exceeds_what_the_panel_can_show(self) -> None:
         """A fixed 120 on a 60 Hz panel never binds, so the GPU renders 60 frames
@@ -940,7 +970,9 @@ class TestVendorMatrixIsComplete:
         by_id = {s.id.split(":")[-1]: s for s in MW4_SETTINGS}
         assert by_id["amd_antilag"].recommended_value == "true"
         assert by_id["intel_xell"].recommended_value == "true"
-        assert by_id["nvidia_reflex"].recommended_value == "Enabled + boost"
+        # Enabled, not boost: boost pins clocks for a gain that exists only
+        # CPU-bound, which neither counterpart has an equivalent of.
+        assert by_id["nvidia_reflex"].recommended_value == "Enabled"
         for name in ("amd_antilag", "intel_xell", "nvidia_reflex"):
             assert by_id[name].scope.name == "ESSENTIAL", name
 
@@ -1001,7 +1033,9 @@ class TestAntiAliasingFollowsTheCard:
 
         setting = create_mw4_aa_technique_setting(vendor)
         assert setting.recommended_value == expected
-        assert setting.default_value == expected
+        # Stock is the generic path; a default equal to the recommendation made
+        # reset write the recommendation back.
+        assert setting.default_value == "SMAA"
 
     def test_an_unknown_vendor_falls_back_to_the_generic_path(self) -> None:
         """SMAA runs anywhere. Recommending a vendor path to a card that has no

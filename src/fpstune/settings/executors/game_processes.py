@@ -69,6 +69,17 @@ GAME_LABELS: dict[str, str] = {
     "hots": "Heroes of the Storm",
 }
 
+# Launchers rewrite their own config files from memory the same way: Steam saves
+# config.vdf and localconfig.vdf when it exits, Battle.net its Battle.net.config.
+# Kept apart from GAME_PROCESSES because that table also answers "is a game
+# being played" for the bench scheduler, and an idle Steam client is not a game.
+LAUNCHER_PROCESSES: dict[str, tuple[str, ...]] = {
+    "steam": ("steam",),
+    "bnet": ("Battle.net",),
+}
+
+LAUNCHER_LABELS: dict[str, str] = {"steam": "Steam", "bnet": "Battle.net"}
+
 # A bulk apply asks this once per setting. The snapshot is cheap but not free,
 # and a game does not open or close inside two seconds of a sequential apply.
 _CACHE_TTL_SECONDS = 2.0
@@ -194,6 +205,17 @@ def refuse_if_game_is_running(setting_id: str) -> str | None:
     be undone is not obvious, so the message says what to do rather than what
     went wrong.
     """
+    launcher = launcher_of_setting(setting_id)
+    if launcher is not None:
+        if not launcher_is_running(launcher):
+            return None
+        label = LAUNCHER_LABELS.get(launcher, launcher)
+        return (
+            f"{label} is running. It keeps its settings in memory and writes them "
+            f"back when it closes, so this change would be silently undone. Exit "
+            f"{label} completely, including from the notification area, and apply again."
+        )
+
     game = game_of_setting(setting_id)
     if game is None or not game_is_running(game):
         return None
@@ -204,3 +226,18 @@ def refuse_if_game_is_running(setting_id: str) -> str | None:
         f"back when it closes, so this change would be silently undone. Close "
         f"the game and apply again."
     )
+
+
+def launcher_of_setting(setting_id: str) -> str | None:
+    """``launcher:steam:overlay`` → ``steam``; None for anything else."""
+    parts = setting_id.split(":")
+    if len(parts) >= 3 and parts[0] == "launcher" and parts[1] in LAUNCHER_PROCESSES:
+        return parts[1]
+    return None
+
+
+def launcher_is_running(launcher: str) -> bool:
+    """Is the named launcher holding its config in memory right now?"""
+    candidates = LAUNCHER_PROCESSES.get(launcher, ())
+    running = running_process_names()
+    return any(name.casefold() in running for name in candidates)

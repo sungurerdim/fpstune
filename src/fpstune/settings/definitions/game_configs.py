@@ -25,6 +25,7 @@ from fpstune.settings.base import (
     SettingScope,
     SettingValueType,
 )
+from fpstune.settings.executors.mw3_paths import MW3_PLAYERS_PS
 from fpstune.settings.performance_headroom import frame_cap_for_refresh
 
 # === Steam / CS2 Path Helper ===
@@ -315,9 +316,7 @@ MW3_TEXTURE_STREAMING = SettingExecutor(
     # Detection: check gamerprofile HTTPStreamLimitMBytes value
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$docPath = [System.Environment]::GetFolderPath('MyDocuments'); "
-        "$codPath = Join-Path $docPath 'Call of Duty MWIII\\players'; "
-        "if (-not (Test-Path $codPath)) { Write-Output 'not_installed'; return }; "
+        MW3_PLAYERS_PS + "if (-not (Test-Path $codPath)) { Write-Output 'not_installed'; return }; "
         # Same file choice as the apply command, backups excluded: reading a
         # backup would report a state the game does not have.
         "$cfg = Get-ChildItem -Path $codPath -Recurse -Filter 'gamerprofile*.BASE.cst' "
@@ -440,33 +439,9 @@ CS2_FPS_MAX = SettingExecutor(
 # These settings each write a single console command to autoexec.cfg behind
 # a unique fpstune marker block, so the change is reversible.
 
-CS2_DISABLE_RAGDOLLS = _make_cs2_cvar_setting(
-    setting_id="game_config:cs2:disable_ragdolls",
-    display_name="CS2 Disable Ragdolls",
-    short_name="CS2 Disable Ragdolls",
-    description="Sets 'cl_disable_ragdolls 1' — kills client-side ragdoll "
-    "physics on player corpses. Saves CPU cycles in firefights with multiple "
-    "deaths and removes a known stutter source on entry-frag rounds.",
-    cvar="cl_disable_ragdolls",
-    cvar_value="1",
-    default_cvar_value="0",
-    marker="cs2_disable_ragdolls",
-    current_impact="0 (default): Each death runs full ragdoll sim → CPU spike + brief stutter",
-    recommended_impact="1: No per-death physics simulation → no CPU spike on entry frags",
-    effect="Disables ragdoll physics — measurable 1% low FPS gain in fights",
-    impact_scores={"fps_1_percent_low": "+1-3%", "cpu_usage": -0.5},
-    category_order=11,
-    evidence_level="proven",
-    # Stays in the default scopes under consequence 5: a corpse falling
-    # realistically decides nothing, so the physics simulation is decoration.
-    # What was removed is the line "Bodies snap to static pose" — that is a claim
-    # about what stays on the screen, and whether the body remains at all decides
-    # whether this is decoration or the loss of a marker saying an enemy died
-    # here. Nothing in this repo establishes it, and a byte scan of the shipped
-    # modules recovers cvar names but not the game's own description of them, so
-    # the reassurance is dropped rather than repeated. Settling it needs the game
-    # running; until then the copy claims only the part that is known.
-)
+# cl_disable_ragdolls stood here. It is cheat-protected in CS2 (sv_cheats 1),
+# so the line in autoexec.cfg was ignored on every server a match is played on
+# while detection, reading only fpstune's own marker, reported it applied.
 
 CS2_TRACERS_FIRSTPERSON = _make_cs2_cvar_setting(
     setting_id="game_config:cs2:tracers_firstperson",
@@ -1031,7 +1006,6 @@ CS2_SETTINGS: list[SettingExecutor] = [
     CS2_MAXPING,
     CS2_QOS_TIMEOUT,
     CS2_FPS_MAX,
-    CS2_DISABLE_RAGDOLLS,
     CS2_TRACERS_FIRSTPERSON,
     CS2_LOW_LATENCY_SLEEP,
     CS2_AUTOHELP,
@@ -1079,8 +1053,7 @@ MW3_WORLD_STREAMING = SettingExecutor(
     impact_scores={"bandwidth": "reduced", "fps_1_percent_low": "+2-8%", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$docPath = [System.Environment]::GetFolderPath('MyDocuments'); "
-        "$optPath = Join-Path $docPath 'Call of Duty MWIII\\players\\options.4.cod23.cst'; "
+        MW3_PLAYERS_PS + "$optPath = Join-Path $codPath 'options.4.cod23.cst'; "
         "if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; return }; "
         "$c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8); "
         'if ($c -match \'(?m)^\\s*WorldStreamingQuality:[\\d.]+\\s*=\\s*"([^"]+)"\') { '
@@ -1132,8 +1105,7 @@ MW3_LOCAL_TEXTURE_QUALITY = SettingExecutor(
     impact_scores={"fps_1_percent_low": "+2-8%", "vram_mb": -500, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$docPath = [System.Environment]::GetFolderPath('MyDocuments'); "
-        "$optPath = Join-Path $docPath 'Call of Duty MWIII\\players\\options.4.cod23.cst'; "
+        MW3_PLAYERS_PS + "$optPath = Join-Path $codPath 'options.4.cod23.cst'; "
         "if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; return }; "
         "$c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8); "
         'if ($c -match \'(?m)^\\s*VirtualTexturingMemoryMode:[\\d.]+\\s*=\\s*"([^"]+)"\') { '
@@ -1156,7 +1128,7 @@ MW3_LOCAL_TEXTURE_QUALITY = SettingExecutor(
 # =============================================================================
 # MW3 — options.4.cod23.cst In-Game Settings (helper-based)
 # =============================================================================
-# All settings below edit Documents\Call of Duty MWIII\players\options.4.cod23.cst
+# All settings below edit options.4.cod23.cst in MW3's players folder (mw3_paths)
 # via the generic mw3_options_toggle apply command. Detect reads the cst file
 # and extracts the key's current value.
 
@@ -1164,8 +1136,8 @@ MW3_LOCAL_TEXTURE_QUALITY = SettingExecutor(
 # the suffix of longer keys like 'ScreenSpaceShadowQuality'. Without this,
 # ShadowQuality would incorrectly read ScreenSpaceShadowQuality's value.
 _MW3_CST_DETECT_TEMPLATE = (
-    "$docPath = [System.Environment]::GetFolderPath('MyDocuments'); "
-    "$optPath = Join-Path $docPath 'Call of Duty MWIII\\players\\options.4.cod23.cst'; "
+    MW3_PLAYERS_PS.replace("{", "{{").replace("}", "}}")
+    + "$optPath = Join-Path $codPath 'options.4.cod23.cst'; "
     "if (-not (Test-Path $optPath)) {{ Write-Output 'not_installed'; return }}; "
     "$c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8); "
     'if ($c -match \'(?m)^\\s*{key_name}:[\\d.]+\\s*=\\s*"([^"]+)"\') {{ '
@@ -1260,14 +1232,16 @@ MW3_NVIDIA_REFLEX = _make_mw3_cst_setting(
     setting_id="game_config:mw3:nvidia_reflex",
     display_name="MW3 NVIDIA Reflex",
     short_name="MW3 NVIDIA Reflex",
-    description="NVIDIA Reflex Low Latency. 'Enabled + boost' forces the GPU to maximum clock "
-    "regardless of workload, reducing render queue latency. Free input lag reduction on RTX cards.",
+    description="NVIDIA Reflex Low Latency keeps the render queue empty. 'Enabled + boost' also "
+    "pins the GPU clock, which helps only CPU-bound and costs heat in every other frame.",
     cst_key="NvidiaReflex:0.0",
     choices=("Disabled", "Enabled", "Enabled + boost"),
     default_value="Disabled",
-    recommended_value="Enabled + boost",
+    # Enabled, not boost (consequence 4): boost buys latency only in a CPU-bound
+    # frame, and pins the clock - and the heat - in every other one.
+    recommended_value="Enabled",
     current_impact="Disabled: Render queue accumulates → ~10-20 ms extra input lag",
-    recommended_impact="Enabled + boost: Forces max GPU clock + Reflex pipeline → ~5-15 ms lower input lag",
+    recommended_impact="Enabled: Reflex pipeline keeps the queue empty → ~5-15 ms lower input lag",
     effect="Free input latency reduction on NVIDIA RTX GPUs (no FPS cost)",
     impact_scores={"latency_ms": -3, "stability": "high"},
     category_order=14,
@@ -1595,16 +1569,20 @@ MW3_DETAIL_QUALITY = _make_mw3_cst_setting(
     setting_id="game_config:mw3:detail_quality",
     display_name="MW3 Detail Quality Level",
     short_name="MW3 Detail Quality Level",
-    description="Geometry and model level of detail, the in-game Detail Quality Level option. Low simplifies "
-    "clutter such as foliage, rocks and decals without touching enemy character models.",
+    description="Geometry and model level of detail, the in-game Detail Quality Level option. Low "
+    "simplifies models at range, and nothing establishes that enemy models are spared, so the "
+    "game's own Medium is kept.",
     cst_key="ModelQuality:0.0",
     choices=("Low Quality", "Medium Quality", "High Quality"),
     default_value="Medium Quality",
-    recommended_value="Low Quality",
-    current_impact="Medium/High: Detailed clutter and foliage → ~3-7% GPU + slight VRAM",
-    recommended_impact="Low: Simpler clutter → ~3-7% FPS, characters unaffected",
-    effect="Lowers world clutter detail without touching enemy character meshes",
-    impact_scores={"fps_gpu_bound": "+2-4%"},
+    # Medium, the stock tier (consequence 5): model detail on enemies is an
+    # information channel. The old copy promised "characters unaffected" for Low
+    # with nothing behind it; Low stays a choice the player can make.
+    recommended_value="Medium Quality",
+    current_impact="Low: Models simplified at range → a distant enemy can read as clutter",
+    recommended_impact="Medium: The game's own model detail → distant enemies keep their shape",
+    effect="Keeps model detail at the game's own Medium tier",
+    impact_scores={"fps_gpu_bound": "0%", "stability": "high"},
     category_order=29,
     evidence_level="proven",
     sources=_MW3_SOURCES,
@@ -1968,8 +1946,7 @@ MW3_PAUSE_RENDERING = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$docPath = [System.Environment]::GetFolderPath('MyDocuments'); "
-        "$optPath = Join-Path $docPath 'Call of Duty MWIII\\players\\options.4.cod23.cst'; "
+        MW3_PLAYERS_PS + "$optPath = Join-Path $codPath 'options.4.cod23.cst'; "
         "if (-not (Test-Path $optPath)) { Write-Output 'not_installed'; return }; "
         "$c = [System.IO.File]::ReadAllText($optPath, [System.Text.Encoding]::UTF8); "
         "$found = $false; $anyTrue = $false; "
@@ -2255,24 +2232,11 @@ MW3_WATER_WAVE_WETNESS = _make_mw3_cst_setting(
     sources=_MW3_SOURCES,
 )
 
-MW3_VELOCITY_BLUR = _make_mw3_cst_setting(
-    setting_id="game_config:mw3:velocity_blur",
-    display_name="MW3 Velocity-Based Blur",
-    short_name="MW3 Velocity-Based Blur",
-    description="Applies a velocity-based motion blur pass to moving objects in the scene. "
-    "Disabling removes blur from fast-moving targets and improves clarity during gunfights.",
-    cst_key="EnableVelocityBasedBlur:0.0",
-    choices=("false", "true"),
-    default_value="true",
-    recommended_value="false",
-    current_impact="true: Motion blur applied to moving objects → reduced target clarity",
-    recommended_impact="false: No velocity blur → sharper enemy tracking during movement",
-    effect="Disables velocity-based motion blur — cleaner visuals on fast-moving targets",
-    impact_scores={"fps_gpu_bound": "+0-1%", "target_clarity": "high"},
-    category_order=59,
-    evidence_level="likely",
-    sources=_MW3_SOURCES,
-)
+# MW3_VELOCITY_BLUR stood here, writing EnableVelocityBasedBlur:0.0 as the
+# multiplayer motion-blur switch. The note above MW3_SHADOW_QUALITY records why it
+# is not: the key stays "true" while the in-game World Motion Blur reads off. A
+# setting that writes a key whose meaning is unknown, and claims a clarity gain
+# for it, is not shipped.
 
 MW3_VSYNC = _make_mw3_cst_setting(
     setting_id="game_config:mw3:vsync",
@@ -2624,27 +2588,52 @@ def create_mw3_refresh_rate_setting(max_hz: int, monitor_label: str) -> SettingE
     )
 
 
-def create_mw3_fps_cap_setting(max_hz: int) -> SettingExecutor:
-    """Build the MW3 in-game frame cap, derived from the monitor's max refresh."""
-    # The same VRR headroom rule the driver cap derives from, taken from the one
-    # function rather than written out again, so the two cannot disagree.
-    target = frame_cap_for_refresh(max_hz)
+# MaxFpsInGame's own range, as the cst file states it ("30 to 300").
+_MW3_FPS_CAP_RANGE = (30, 300)
+
+
+def create_mw3_fps_cap_setting(max_hz: int, *, vrr: bool) -> SettingExecutor:
+    """Build the MW3 in-game frame cap from the primary panel.
+
+    On a VRR panel it is the same cap the driver and the measurement target
+    derive from (``frame_cap_for_refresh``), so the frame rate stays inside the
+    VRR window. On a fixed-refresh panel there is no window to stay inside and a
+    cap below the game's own top only lowers the ceiling (consequence 3), so the
+    answer is the top of the key's range. Either way the value is clamped to
+    that range: a 480 Hz panel derives 416, which the game would reject.
+    """
+    low, high = _MW3_FPS_CAP_RANGE
+    if vrr:
+        target = min(max(frame_cap_for_refresh(max_hz), low), high)
+        description = (
+            "Maximum frames per second while in a match. Held below this variable-refresh "
+            "panel's rate so the frame rate never leaves the VRR window, which is where "
+            "tearing and V-Sync latency return."
+        )
+        current_impact = "Above or far below the cap: VRR window left, or the panel underused"
+        recommended_impact = f"{target}: Full use of the panel with VRR headroom kept"
+    else:
+        target = high
+        description = (
+            "Maximum frames per second while in a match. This panel has no variable refresh, "
+            "so a cap below the game's own top only lowers the frame rate and adds latency."
+        )
+        current_impact = "Below the game's top: Frames the GPU could render are never drawn"
+        recommended_impact = f"{target}: The game's own ceiling, so the cap never binds first"
     return _make_mw3_cst_setting(
         setting_id="game_config:mw3:fps_cap_ingame",
         display_name="MW3 In-Game Frame Rate Limit",
         short_name="MW3 In-Game Frame Rate Limit",
-        description="Maximum frames per second while in a match. Set just below the monitor's "
-        "refresh rate so a variable-refresh display never hits its ceiling, which is where "
-        "tearing and latency spikes return.",
+        description=description,
         cst_key="MaxFpsInGame:0.0",
         choices=(),
         value_type=SettingValueType.INT,
         default_value=target,
         recommended_value=target,
-        min_value=30,
-        max_value=300,
-        current_impact="Below the panel rate: Frames discarded that the GPU already rendered",
-        recommended_impact=f"{target}: Full use of the panel with VRR headroom kept",
+        min_value=low,
+        max_value=high,
+        current_impact=current_impact,
+        recommended_impact=recommended_impact,
         effect="Matches the in-game frame cap to the attached monitor",
         impact_scores={"fps": f"ceiling {target}", "latency_ms": -2.0},
         category_order=37,
@@ -2767,7 +2756,6 @@ MW3_SETTINGS: list[SettingExecutor] = [
     MW3_DLSS_MODE,
     MW3_SUN_SHADOW_CASCADE,
     MW3_WATER_WAVE_WETNESS,
-    MW3_VELOCITY_BLUR,
     MW3_VSYNC,
     MW3_VSYNC_MENU,
     MW3_CLOUD_SAVEGAME,

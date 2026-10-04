@@ -14,7 +14,7 @@ panel's own ``get_vrr_optimization_info_for_monitor`` handed back "fullscreen"
 and V-Sync "off" — telling the user, in a different part of the same product, to
 undo it. These tests exist so the two paths cannot drift apart again.
 
-Source for the -3 margin and the V-Sync pairing:
+Source for the V-Sync pairing and the cap margin (``frame_cap_for_refresh``):
 https://blurbusters.com/gsync/gsync101-input-lag-tests-and-settings/
 """
 
@@ -34,11 +34,12 @@ from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
 
 class TestDriverFpsCapFollowsThePanel:
-    def test_vrr_panel_gets_the_refresh_minus_three_cap(self) -> None:
-        assert create_nvidia_fps_limiter_setting(True, 300).recommended_value == 297
+    def test_vrr_panel_gets_the_reflex_cap(self) -> None:
+        assert create_nvidia_fps_limiter_setting(True, 240).recommended_value == 224
 
     @pytest.mark.parametrize(
-        ("hz", "expected"), [(60, 57), (144, 141), (165, 162), (240, 237), (300, 297)]
+        ("hz", "expected"),
+        [(60, 57), (144, 138), (165, 157), (240, 224), (300, 275), (360, 324)],
     )
     def test_tracks_whatever_panel_is_attached(self, hz: int, expected: int) -> None:
         # The defect this guards: a cap that was right for the monitor that used
@@ -84,7 +85,7 @@ class TestDriverFpsCapFollowsThePanel:
         # while recommended_impact still read "0: Unlimited FPS", so the row
         # showed a recommendation and a description that contradicted it.
         s = create_nvidia_fps_limiter_setting(True, 300)
-        assert "297" in s.recommended_impact
+        assert "275" in s.recommended_impact
         assert "Unlimited FPS" not in s.recommended_impact
 
     def test_the_driver_cap_and_the_mw3_cap_are_the_same_number(self) -> None:
@@ -93,7 +94,7 @@ class TestDriverFpsCapFollowsThePanel:
         for hz in (60, 144, 165, 240, 300):
             assert (
                 create_nvidia_fps_limiter_setting(True, hz).recommended_value
-                == create_mw3_fps_cap_setting(hz).recommended_value
+                == create_mw3_fps_cap_setting(hz, vrr=True).recommended_value
             )
 
 
@@ -156,7 +157,7 @@ class TestDiscoveryRegistersTheDerivedCap:
         )
         assert discover_vrr_dependent_settings(reg, reg._probes) == 2
         cap = reg.get("gpu-nvidia:fps_limit")
-        assert cap is not None and cap.recommended_value == 297
+        assert cap is not None and cap.recommended_value == 275
 
     def test_an_unreadable_refresh_rate_still_registers_vsync(
         self, monkeypatch: pytest.MonkeyPatch
@@ -198,6 +199,37 @@ class TestDiscoveryRegistersTheDerivedCap:
             lambda *_a, **_k: [FixedRefresh()],
         )
         assert discover_vrr_dependent_settings(reg, reg._probes) == 0
+
+    def test_a_vrr_second_screen_does_not_configure_a_fixed_primary(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # Games open on the primary panel. Driver V-Sync on for a fixed 144 Hz
+        # primary, because a VRR panel sat beside it, adds V-Sync latency to
+        # the screen that has no VRR to absorb it.
+        from fpstune.settings import registry as registry_mod
+
+        class FixedPrimary:
+            supports_vrr = False
+            is_primary = True
+            is_active = True
+            max_refresh_rate_hz = 144
+            native_refresh_rate_hz = 144
+
+        class VrrSecondary:
+            supports_vrr = True
+            is_primary = False
+            is_active = True
+            max_refresh_rate_hz = 240
+            native_refresh_rate_hz = 240
+
+        reg = registry_mod.SettingsRegistry(discover_dynamic=False)
+        monkeypatch.setattr(
+            "fpstune.utils.hardware_manager.hardware_manager.detect_monitors",
+            lambda *_a, **_k: [FixedPrimary(), VrrSecondary()],
+        )
+        assert discover_vrr_dependent_settings(reg, reg._probes) == 0
+        vsync = reg.get("gpu-nvidia:vsync")
+        assert vsync is not None and vsync.recommended_value == "off"
 
     def test_an_unknown_panel_registers_neither_setting(
         self, monkeypatch: pytest.MonkeyPatch

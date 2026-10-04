@@ -139,7 +139,7 @@ def test_derived_settings_declare_their_scope_deliberately() -> None:
     )
 
     derived = [
-        create_mw4_fps_cap_setting(240),
+        create_mw4_fps_cap_setting(240, vrr=True),
         create_mw4_menu_fps_cap_setting(240),
         create_mw4_refresh_rate_setting(240),
         create_mw4_resolution_setting(2560, 1440),

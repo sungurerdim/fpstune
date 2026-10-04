@@ -78,17 +78,19 @@ def discover_vrr_dependent_settings(registry: Registrar, probes: HardwareProbes)
         logger.warning("VRR-dependent settings skipped, monitor detection failed: %s", e)
         return 0
 
-    if not any(m.supports_vrr for m in monitors):
-        logger.debug("VRR-dependent settings skipped: no VRR monitor detected")
+    # The primary panel decides, the one games open on — the same reading the
+    # MW3 and MW4 caps derive from, so the driver cap and the in-game cap cannot
+    # be built from two different panels. A VRR second screen beside a fixed
+    # primary would otherwise turn V-Sync on for the screen that has no VRR.
+    monitor = primary_monitor(monitors)
+    if monitor is None or not getattr(monitor, "supports_vrr", False):
+        logger.debug("VRR-dependent settings skipped: the primary panel has no VRR")
         return 0
 
     registry.register(create_nvidia_vsync_setting(vrr_available=True))
     registered = 1
 
-    # The same reading the MW3 and MW4 caps derive from, so the driver cap and
-    # the in-game cap cannot be built from two different readings of one panel.
-    monitor = primary_monitor(monitors)
-    max_hz = refresh_ceiling_hz(monitor) if monitor is not None else 0
+    max_hz = refresh_ceiling_hz(monitor)
     if max_hz:
         registry.register(create_nvidia_fps_limiter_setting(vrr_available=True, max_hz=max_hz))
         registered += 1

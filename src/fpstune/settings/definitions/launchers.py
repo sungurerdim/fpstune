@@ -5,19 +5,25 @@ via VDF files, JSON config, and registry.
 
 Detection notes:
 - Steam settings use PowerShell to read VDF (plain text key-value) files.
-- Battle.net settings use PowerShell to read/write Battle.net.config JSON.
+- Battle.net settings read and write Battle.net.config in Python (executors/bnet_config.py).
 - All settings return "not_installed" when the launcher is not found.
 """
 
 from __future__ import annotations
 
 from fpstune.settings.base import (
+    UNMAPPED,
     DetectType,
     SettingCategory,
     SettingExecutor,
     SettingScope,
     SettingValueType,
 )
+
+# Battle.net.config keys the client is on record reading (the Lutris installer
+# writes both: https://lutris.net/games/install/37360/view).
+_BNET_HW_ACCEL = "Client.HardwareAcceleration"
+_BNET_DOWNLOAD_LIMIT = "Client.Install.DownloadLimitNextPatchInBps"
 
 # === Steam Path Detection Helper ===
 # Reused in all Steam detect commands
@@ -36,10 +42,12 @@ STEAM_DOWNLOADS_DURING_GAMEPLAY = SettingExecutor(
     display_name="Steam Downloads During Gameplay",
     short_name="Steam downloads while playing",
     description="Allow Steam to download game updates while you are in-game. "
-    "Disabling prevents bandwidth contention and CPU spikes.",
+    "Steam ships with this off; turned on, a patch competes with the match for the line and the disk.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
-    default_value="enabled",
+    # Steam's own default is off, so this is a guard (consequence 2): reset used
+    # to turn it on, writing a stock value Steam never had.
+    default_value="disabled",
     recommended_value="disabled",
     requires_reboot=False,
     evidence_level="likely",
@@ -58,7 +66,7 @@ STEAM_DOWNLOADS_DURING_GAMEPLAY = SettingExecutor(
         "$c = [System.IO.File]::ReadAllText($vdf, [System.Text.Encoding]::UTF8); "
         'if ($c -match \'"AllowDownloadsDuringGameplay"\\s+"([^"]+)"\') { '
         "if ($Matches[1] -eq '0') { Write-Output 'disabled' } else { Write-Output 'enabled' } "
-        "} else { Write-Output 'enabled' }"
+        "} else { Write-Output 'disabled' }"
     ),
     detect_args={},
     value_map={},
@@ -259,102 +267,21 @@ BNET_HARDWARE_ACCEL = SettingExecutor(
     effect="Disabling Battle.net hardware acceleration frees GPU resources for games",
     impact_scores={"vram_mb": -20, "cpu_usage": 0.5, "stability": "improved"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$bnetCfg = Join-Path $env:APPDATA 'Battle.net\\Battle.net.config'; "
-        "if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; return }; "
-        "try { "
-        "$j = Get-Content $bnetCfg -Raw | ConvertFrom-Json; "
-        "$val = $j.Application.BrowserHardwareAcceleration; "
-        "if ($null -eq $val) { Write-Output 'enabled' } "
-        "elseif ($val -eq 'false' -or $val -eq $false) { Write-Output 'disabled' } "
-        "else { Write-Output 'enabled' } "
-        "} catch { Write-Output 'not_installed' }"
-    ),
-    detect_args={},
-    value_map={},
+    detect_command="bnet_config_read",
+    detect_args={"key": _BNET_HW_ACCEL},
+    # The client stores the flag as the string "true"/"false"; absent is its
+    # default, which is on.
+    value_map={"true": "enabled", "false": "disabled", "absent": "enabled"},
     apply_type=DetectType.POWERSHELL,
-    apply_command="bnet_json_toggle",
-    apply_args={"section": "Application", "key": "BrowserHardwareAcceleration"},
+    apply_command="bnet_config_write",
+    apply_args={"key": _BNET_HW_ACCEL, "allowed": "true,false"},
     apply_value_map={"disabled": "false", "enabled": "true"},
 )
 
-BNET_P2P = SettingExecutor(
-    id="launcher:bnet:p2p",
-    category=SettingCategory.LAUNCHER,
-    display_name="Battle.net P2P Downloads",
-    short_name="Battle.net P2P downloads",
-    description="Peer-to-peer update distribution. Disabling stops upload bandwidth usage.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    evidence_level="likely",
-    sources=["https://us.battle.net/support/en/article/76459"],
-    current_impact="Enabled: Battle.net uploads game data to other users → background upload bandwidth",
-    recommended_impact="Disabled: No P2P uploads → full upload bandwidth available for gaming",
-    scope=SettingScope.RECOMMENDED,
-    category_order=11,
-    effect="Disabling P2P eliminates background upload bandwidth usage",
-    impact_scores={"latency_ms": -1, "stability": "improved"},
-    detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$bnetCfg = Join-Path $env:APPDATA 'Battle.net\\Battle.net.config'; "
-        "if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; return }; "
-        "try { "
-        "$j = Get-Content $bnetCfg -Raw | ConvertFrom-Json; "
-        "$val = $j.Client.P2PEnabled; "
-        "if ($null -eq $val) { Write-Output 'enabled' } "
-        "elseif ($val -eq 'false' -or $val -eq $false) { Write-Output 'disabled' } "
-        "else { Write-Output 'enabled' } "
-        "} catch { Write-Output 'not_installed' }"
-    ),
-    detect_args={},
-    value_map={},
-    apply_type=DetectType.POWERSHELL,
-    apply_command="bnet_json_toggle",
-    apply_args={"section": "Client", "key": "P2PEnabled"},
-    apply_value_map={"disabled": "false", "enabled": "true"},
-)
-
-BNET_BACKGROUND_DOWNLOAD = SettingExecutor(
-    id="launcher:bnet:background_download",
-    category=SettingCategory.LAUNCHER,
-    display_name="Battle.net Background Downloads",
-    short_name="Battle.net background downloads",
-    description="Download game updates while in-game. Disabling prevents bandwidth contention.",
-    value_type=SettingValueType.CHOICE,
-    choices=("enabled", "disabled"),
-    default_value="enabled",
-    recommended_value="disabled",
-    requires_reboot=False,
-    evidence_level="likely",
-    sources=["https://us.battle.net/support/en/article/76459"],
-    current_impact="Enabled: Updates download during gameplay → bandwidth spikes, CPU overhead",
-    recommended_impact="Disabled: No downloads during gameplay → consistent network performance",
-    scope=SettingScope.RECOMMENDED,
-    category_order=12,
-    effect="Prevents Battle.net from downloading during active gaming sessions",
-    impact_scores={"latency_ms": -2, "stability": "improved"},
-    detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$bnetCfg = Join-Path $env:APPDATA 'Battle.net\\Battle.net.config'; "
-        "if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; return }; "
-        "try { "
-        "$j = Get-Content $bnetCfg -Raw | ConvertFrom-Json; "
-        "$val = $j.Client.BackgroundDownload; "
-        "if ($null -eq $val) { Write-Output 'enabled' } "
-        "elseif ($val -eq 'false' -or $val -eq $false) { Write-Output 'disabled' } "
-        "else { Write-Output 'enabled' } "
-        "} catch { Write-Output 'not_installed' }"
-    ),
-    detect_args={},
-    value_map={},
-    apply_type=DetectType.POWERSHELL,
-    apply_command="bnet_json_toggle",
-    apply_args={"section": "Client", "key": "BackgroundDownload"},
-    apply_value_map={"disabled": "false", "enabled": "true"},
-)
+# launcher:bnet:p2p and launcher:bnet:background_download stood here, writing
+# Client.P2PEnabled and Client.BackgroundDownload. Neither key appears in any
+# Battle.net.config on record (Blizzard retired peer-to-peer patching), so both
+# reported "disabled" after writing a key the client never reads.
 
 STEAM_DOWNLOAD_THROTTLE = SettingExecutor(
     id="launcher:steam:download_throttle",
@@ -364,7 +291,9 @@ STEAM_DOWNLOAD_THROTTLE = SettingExecutor(
     description="Cap Steam download speed (KB/s). Set to -1 to remove the limit entirely.",
     value_type=SettingValueType.CHOICE,
     choices=("unlimited", "limited"),
-    default_value="limited",
+    # Steam ships with no cap (the key is absent), so this guards against one
+    # left behind; reset used to write a 10 MB/s cap and call it stock.
+    default_value="unlimited",
     recommended_value="unlimited",
     requires_reboot=False,
     evidence_level="likely",
@@ -440,76 +369,36 @@ BNET_DOWNLOAD_LIMIT = SettingExecutor(
     category=SettingCategory.LAUNCHER,
     display_name="Battle.net Download Speed Limit",
     short_name="Battle.net download cap",
-    description="Cap Battle.net download speed. Set to maximum to remove the limit.",
+    description="The cap Battle.net puts on patch downloads. The client ships with none; a cap left "
+    "by another tool or an old setting only makes every update take longer.",
     value_type=SettingValueType.CHOICE,
     choices=("unlimited", "limited"),
-    default_value="limited",
+    default_value="unlimited",
+    # A guard on the client's own default (consequence 2): "limited" is a
+    # reading of some other number, never something fpstune writes.
     recommended_value="unlimited",
     requires_reboot=False,
     evidence_level="likely",
-    sources=["https://us.battle.net/support/en/article/76459"],
-    current_impact="Limited: Battle.net caps download speed → slower game updates",
-    recommended_impact="Unlimited: Full ISP bandwidth used for downloads",
+    sources=["https://lutris.net/games/install/37360/view"],
+    current_impact="Limited: Battle.net caps patch downloads → slower game updates",
+    recommended_impact="Unlimited: The client's own default, patches use the full line",
     scope=SettingScope.RECOMMENDED,
     category_order=13,
-    effect="Removes Battle.net download speed cap for faster game updates",
-    impact_scores={"throughput": "high", "latency_ms": 0, "stability": "high"},
+    effect="Removes a Battle.net download cap left behind",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$bnetCfg = Join-Path $env:APPDATA 'Battle.net\\Battle.net.config'; "
-        "if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; return }; "
-        "try { "
-        "$j = Get-Content $bnetCfg -Raw | ConvertFrom-Json; "
-        "$val = $j.Client.DownloadLimit; "
-        "if ($null -eq $val -or [int]$val -ge 9999999) { Write-Output 'unlimited' } "
-        "else { Write-Output 'limited' } "
-        "} catch { Write-Output 'not_installed' }"
-    ),
-    detect_args={},
-    value_map={},
+    detect_command="bnet_config_read",
+    detect_args={"key": _BNET_DOWNLOAD_LIMIT},
+    value_map={"0": "unlimited", "absent": "unlimited", UNMAPPED: "limited"},
     apply_type=DetectType.POWERSHELL,
-    apply_command="bnet_json_toggle",
-    apply_args={"section": "Client", "key": "DownloadLimit"},
-    apply_value_map={"unlimited": "9999999", "limited": "1024"},
+    apply_command="bnet_config_write",
+    apply_args={"key": _BNET_DOWNLOAD_LIMIT, "allowed": "0"},
+    apply_value_map={"unlimited": "0"},
 )
 
-BNET_BACKGROUND_DOWNLOAD_LIMIT = SettingExecutor(
-    id="launcher:bnet:background_download_limit",
-    category=SettingCategory.LAUNCHER,
-    display_name="Battle.net Background Download Limit",
-    short_name="Battle.net background cap",
-    description="Cap Battle.net background download speed. Remove limit for faster in-background updates.",
-    value_type=SettingValueType.CHOICE,
-    choices=("unlimited", "limited"),
-    default_value="limited",
-    recommended_value="unlimited",
-    requires_reboot=False,
-    evidence_level="likely",
-    sources=["https://us.battle.net/support/en/article/76459"],
-    current_impact="Limited: Background downloads throttled → slow patching when minimized",
-    recommended_impact="Unlimited: Full bandwidth available for background patching",
-    scope=SettingScope.RECOMMENDED,
-    category_order=14,
-    effect="Removes Battle.net background download speed cap",
-    impact_scores={"throughput": "medium", "latency_ms": 0, "stability": "high"},
-    detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "$bnetCfg = Join-Path $env:APPDATA 'Battle.net\\Battle.net.config'; "
-        "if (-not (Test-Path $bnetCfg)) { Write-Output 'not_installed'; return }; "
-        "try { "
-        "$j = Get-Content $bnetCfg -Raw | ConvertFrom-Json; "
-        "$val = $j.Client.BackgroundDownloadLimit; "
-        "if ($null -eq $val -or [int]$val -ge 9999999) { Write-Output 'unlimited' } "
-        "else { Write-Output 'limited' } "
-        "} catch { Write-Output 'not_installed' }"
-    ),
-    detect_args={},
-    value_map={},
-    apply_type=DetectType.POWERSHELL,
-    apply_command="bnet_json_toggle",
-    apply_args={"section": "Client", "key": "BackgroundDownloadLimit"},
-    apply_value_map={"unlimited": "9999999", "limited": "512"},
-)
+# launcher:bnet:background_download_limit stood here, writing
+# Client.BackgroundDownloadLimit, a key no Battle.net.config on record carries.
+# The client's one download cap is Client.Install.DownloadLimitNextPatchInBps.
 
 STEAM_SETTINGS: list[SettingExecutor] = [
     STEAM_DOWNLOADS_DURING_GAMEPLAY,
@@ -523,10 +412,7 @@ STEAM_SETTINGS: list[SettingExecutor] = [
 
 BNET_SETTINGS: list[SettingExecutor] = [
     BNET_HARDWARE_ACCEL,
-    BNET_P2P,
-    BNET_BACKGROUND_DOWNLOAD,
     BNET_DOWNLOAD_LIMIT,
-    BNET_BACKGROUND_DOWNLOAD_LIMIT,
 ]
 
 LAUNCHER_SETTINGS: list[SettingExecutor] = [*STEAM_SETTINGS, *BNET_SETTINGS]

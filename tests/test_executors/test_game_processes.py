@@ -118,6 +118,35 @@ class TestTheRefusal:
         _fake_processes(monkeypatch, {"cod26-cod"})
         assert gp.refuse_if_game_is_running("system:network_afd_receive_window") is None
 
+    @pytest.mark.parametrize(
+        ("process", "setting_id", "label"),
+        [
+            ("steam", "launcher:steam:overlay", "Steam"),
+            ("battle.net", "launcher:bnet:hardware_accel", "Battle.net"),
+        ],
+    )
+    def test_a_running_launcher_refuses_its_own_settings(
+        self, monkeypatch, process: str, setting_id: str, label: str
+    ) -> None:
+        """Steam and Battle.net save their config from memory on exit, so a write
+        made while they run is reverted after apply and verify both passed."""
+        _fake_processes(monkeypatch, {process})
+        message = gp.refuse_if_game_is_running(setting_id)
+        assert message is not None and label in message and "undone" in message
+
+    def test_a_closed_launcher_does_not_refuse(self, monkeypatch) -> None:
+        _fake_processes(monkeypatch, {"explorer"})
+        assert gp.refuse_if_game_is_running("launcher:steam:overlay") is None
+
+    def test_steam_running_does_not_block_battle_net(self, monkeypatch) -> None:
+        _fake_processes(monkeypatch, {"steam"})
+        assert gp.refuse_if_game_is_running("launcher:bnet:hardware_accel") is None
+
+    def test_a_launcher_is_not_a_game_to_the_scheduler(self) -> None:
+        # GAME_PROCESSES also tells the bench scheduler a game is being played;
+        # an idle Steam client must not hold every measurement off.
+        assert "steam" not in {n for names in gp.GAME_PROCESSES.values() for n in names}
+
     def test_a_cleanup_action_is_never_blocked(self, monkeypatch) -> None:
         _fake_processes(monkeypatch, {"cod26-cod"})
         assert gp.refuse_if_game_is_running("game_cleanup:mw3:shader_cache") is None

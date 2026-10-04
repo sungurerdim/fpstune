@@ -25,7 +25,7 @@ jobs:
     name: Tag matches the project version
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Compare
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -45,7 +45,7 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: The executable CI built and started
         uses: actions/download-artifact@v4
@@ -93,7 +93,7 @@ jobs:
           subject-path: dist/fpstune.exe
 
       - name: Publish
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/fpstune.exe

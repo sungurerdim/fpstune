@@ -754,17 +754,17 @@ export const settingsTr: Record<
   "perf:shutdown_service_timeout": {
     name: "Kapanışta hizmet bekleme",
     description:
-      "Kapanışta Windows'un her hizmete bitirmesi için tanıdığı süre. Kısaltmak hizmetleri yazma yaparken sonlandırır, birimi kirli bırakıp sonraki açılışta disk denetimine zorlayabilir; bu yüzden Windows'un kendi 5 saniyesi geri getirilir.",
+      "Kapanışta her hizmete tanınan süre. Kısaltmak hizmetleri yazarken sonlandırır; birim kirli kalıp açılışta disk denetimi gerekebilir.",
   },
   "perf:shutdown_app_timeout": {
     name: "Kapanışta uygulama bekleme",
     description:
-      "Windows'un programların kapanmasını ve yanıt vermesini ne kadar beklediği. Daha kısa bekleme, hâlâ kaydeden programları sonlandırır; bu yüzden değerler silinir ve Windows'un kendi süreleri geçerli olur.",
+      "Windows'un programların kapanmasını ne kadar beklediği. Kısa bekleme hâlâ kaydeden programları sonlandırır; Windows'un kendi süreleri geri getirilir.",
   },
   "perf:shutdown_auto_end_tasks": {
     name: "Kapanışta zorla kapat",
     description:
-      "Kapanışta kapanmamış programların sorulmadan sonlandırılıp sonlandırılmayacağı. Sonlandırmak kaydedilmemiş işi kaybettirir ve yazmalarını yarıda keser; bu yüzden Windows'un soran kendi davranışı geri getirilir.",
+      "Kapanışta kapanmamış programların sorulmadan sonlandırılması. Kaydedilmemiş işi kaybettirir ve yazmaları keser; Windows'un soran davranışı geri getirilir.",
   },
   "perf:gpu_tdr_delay": {
     name: "GPU takılma toleransı",

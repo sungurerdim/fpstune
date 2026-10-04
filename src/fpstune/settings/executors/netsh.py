@@ -21,6 +21,7 @@ from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
 from fpstune.utils.powershell import run_powershell, substitute_placeholders
+from fpstune.utils.system_tools import system_tool
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -364,7 +365,7 @@ class NetshExecutor(BaseExecutor):
 
         try:
             result = subprocess.run(
-                ["netsh"] + args.split(),
+                [system_tool("netsh.exe")] + args.split(),
                 capture_output=True,
                 text=True,
                 timeout=10,

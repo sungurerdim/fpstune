@@ -16,6 +16,8 @@ import threading
 from collections.abc import Callable
 from typing import Any
 
+from fpstune.utils.system_tools import powershell_exe
+
 _PLACEHOLDER = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)%")
 
 # A value substituted outside any quotes becomes its own token of the generated
@@ -302,7 +304,7 @@ def _powershell_argv(command: str) -> list[str]:
     # Prefix command with UTF-8 encoding for international Windows
     utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
     return [
-        "powershell",
+        powershell_exe(),
         "-NoProfile",
         "-ExecutionPolicy",
         "Bypass",
@@ -511,7 +513,7 @@ def run_powershell(
 
         process = subprocess.Popen(
             [
-                "powershell",
+                powershell_exe(),
                 "-NoProfile",
                 "-ExecutionPolicy",
                 "Bypass",

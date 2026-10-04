@@ -20,7 +20,8 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        // `fpstune serve --dev` passes the API port it actually bound.
+        target: `http://127.0.0.1:${process.env.FPSTUNE_API_PORT ?? '8000'}`,
         changeOrigin: true,
       },
     },

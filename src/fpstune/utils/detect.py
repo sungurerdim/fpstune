@@ -19,6 +19,7 @@ from fpstune.utils.monitor_topology import (
     build_monitor_rows,
     parse_wmi_monitor_lines,
 )
+from fpstune.utils.system_tools import nvidia_smi, powershell_exe
 from fpstune.utils.winapi import display as winapi_display
 from fpstune.utils.winapi.cpu_topology import core_split
 
@@ -276,7 +277,7 @@ $reg = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVe
 "DisplayVersion=$($reg.DisplayVersion)"
 """
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                [powershell_exe(), "-NoProfile", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 timeout=8,
@@ -481,11 +482,14 @@ def _detect_gpu_sync() -> GpuInfo | None:
     # Try nvidia-smi first (most reliable for NVIDIA GPUs).
     # Pass argv list (no shell) so PATH lookup happens through CreateProcess
     # without exposing a shell=True interpolation surface.
+    smi = nvidia_smi()
     try:
+        if smi is None:
+            raise FileNotFoundError("nvidia-smi.exe is not installed")
         logger.info("GPU detection: Trying nvidia-smi...")
         result = subprocess.run(
             [
-                "nvidia-smi",
+                smi,
                 "--query-gpu=name,driver_version,memory.total",
                 "--format=csv,noheader,nounits",
             ],
@@ -522,7 +526,7 @@ def _detect_gpu_sync() -> GpuInfo | None:
         try:
             logger.info("GPU detection: Using PowerShell Get-CimInstance...")
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", _GPU_DETECT_PS],
+                [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=15,
@@ -609,7 +613,7 @@ def get_cpu_info() -> dict[str, str]:
             try:
                 result = subprocess.run(
                     [
-                        "powershell",
+                        powershell_exe(),
                         "-NoProfile",
                         "-Command",
                         "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
@@ -739,7 +743,7 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
         try:
             # Get ALL CPU info in single PowerShell call (optimized)
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", _CPU_DETECT_PS],
+                [powershell_exe(), "-NoProfile", "-Command", _CPU_DETECT_PS],
                 capture_output=True,
                 text=True,
                 timeout=8,
@@ -909,7 +913,7 @@ def get_monitors() -> list[MonitorInfo]:
         with debug_context("get_monitors", "hardware") as dbg:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-ExecutionPolicy",
                     "Bypass",

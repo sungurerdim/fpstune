@@ -20,6 +20,7 @@ from typing import Any
 
 from fpstune.benchmark.result_store import ResultStore
 from fpstune.utils.config import get_config_dir
+from fpstune.utils.system_tools import system_tool
 
 
 @dataclass
@@ -265,7 +266,7 @@ class NetworkBenchmark:
         for i in range(count):
             try:
                 result = subprocess.run(
-                    ["ping", "-n", "1", "-w", "1000", target],
+                    [system_tool("PING.EXE"), "-n", "1", "-w", "1000", target],
                     capture_output=True,
                     text=True,
                     timeout=2,

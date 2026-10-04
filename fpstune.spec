@@ -15,11 +15,51 @@
 # literal import, so the analyser cannot see it; collecting the package wholesale
 # is both simpler and correct.
 
+import tomllib
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.win32.versioninfo import (
+    FixedFileInfo,
+    StringFileInfo,
+    StringStruct,
+    StringTable,
+    VarFileInfo,
+    VarStruct,
+    VSVersionInfo,
+)
 
 project_root = Path(SPECPATH)
+
+# The Windows version resource (Properties > Details), read from pyproject.toml
+# so the exe states the same version as `fpstune --version` and the tag.
+version = tomllib.loads((project_root / "pyproject.toml").read_text(encoding="utf-8"))[
+    "project"
+]["version"]
+numbers = tuple(int(part) for part in (version.split("+")[0].split("-")[0].split(".") + ["0"] * 4)[:4])
+version_info = VSVersionInfo(
+    ffi=FixedFileInfo(filevers=numbers, prodvers=numbers),
+    kids=[
+        StringFileInfo(
+            [
+                StringTable(
+                    "040904B0",
+                    [
+                        StringStruct("CompanyName", "fpstune"),
+                        StringStruct("FileDescription", "fpstune - Windows 11 gaming performance tuner"),
+                        StringStruct("FileVersion", version),
+                        StringStruct("InternalName", "fpstune"),
+                        StringStruct("LegalCopyright", "MIT License"),
+                        StringStruct("OriginalFilename", "fpstune.exe"),
+                        StringStruct("ProductName", "fpstune"),
+                        StringStruct("ProductVersion", version),
+                    ],
+                )
+            ]
+        ),
+        VarFileInfo([VarStruct("Translation", [1033, 1200])]),
+    ],
+)
 
 frontend_dist = project_root / "frontend" / "dist"
 if not frontend_dist.is_dir():
@@ -96,5 +136,5 @@ exe = EXE(
     # which reads to a user as "it did nothing".
     uac_admin=True,
     uac_uiaccess=False,
-    version_file=None,
+    version=version_info,
 )

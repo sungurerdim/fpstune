@@ -9,8 +9,14 @@ most obvious place to hide it.
 
 It is also **off unless asked for**. A tool that reaches the network on startup
 without being told to is doing something the user did not choose, and on this
-one that would contradict the promise in SECURITY.md. `fpstune update` asks;
-nothing else does.
+one that would contradict the promise in SECURITY.md. `fpstune update` and the
+UI's update button ask; nothing else does.
+
+Installing is just as deliberate. The release's own ``fpstune.exe.sha256`` is
+fetched beside the executable and the download is refused unless they agree;
+then the running executable is renamed aside (Windows allows renaming a running
+image, not overwriting it) and the new one takes its name. The next start
+removes the old copy. Nothing is executed during the update.
 
 Failure is not an error. No network, GitHub down, rate limited, behind a proxy
 that blocks it — none of those are worth interrupting anyone over, so they all
@@ -20,12 +26,17 @@ to know the answer is "up to date".
 
 from __future__ import annotations
 
+import contextlib
+import hashlib
 import json
 import logging
+import os
 import re
+import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 from fpstune import __version__
 
@@ -35,6 +46,10 @@ RELEASES_API = "https://api.github.com/repos/sungurerdim/fpstune/releases/latest
 RELEASES_PAGE = "https://github.com/sungurerdim/fpstune/releases"
 
 _TIMEOUT_SECONDS = 8
+_DOWNLOAD_TIMEOUT_SECONDS = 60
+_MAX_EXE_BYTES = 200 * 1024 * 1024
+_EXE_ASSET = "fpstune.exe"
+_SHA_ASSET = "fpstune.exe.sha256"
 
 
 @dataclass(frozen=True)
@@ -45,6 +60,8 @@ class UpdateCheck:
     latest: str | None = None
     url: str = RELEASES_PAGE
     error: str | None = None
+    exe_url: str | None = None
+    sha256_url: str | None = None
 
     @property
     def reachable(self) -> bool:
@@ -92,8 +109,74 @@ def check_for_update(timeout: float = _TIMEOUT_SECONDS) -> UpdateCheck:
         # This is the odder case of a release with no tag name.
         return UpdateCheck(current=__version__, error="the latest release has no version")
 
+    assets = {
+        str(a.get("name")): str(a.get("browser_download_url"))
+        for a in payload.get("assets") or []
+        if isinstance(a, dict) and a.get("browser_download_url")
+    }
     return UpdateCheck(
         current=__version__,
         latest=tag,
         url=str(payload.get("html_url") or RELEASES_PAGE),
+        exe_url=assets.get(_EXE_ASSET),
+        sha256_url=assets.get(_SHA_ASSET),
     )
+
+
+def _fetch(url: str, limit: int) -> bytes:
+    request = urllib.request.Request(url, headers={"User-Agent": "fpstune"})  # noqa: S310
+    with urllib.request.urlopen(request, timeout=_DOWNLOAD_TIMEOUT_SECONDS) as response:  # noqa: S310
+        data: bytes = response.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError(f"{url} is larger than {limit} bytes")
+    return data
+
+
+def install_update(check: UpdateCheck, executable: Path | None = None) -> tuple[bool, str]:
+    """Replace the running executable with the release ``check`` found.
+
+    Only a packaged build updates itself; a source checkout updates with git.
+    Returns (installed, message), the message being what to tell the user.
+    """
+    target = executable or Path(sys.executable)
+    if executable is None and not getattr(sys, "frozen", False):
+        return False, "A source checkout updates with git, not by replacing an executable."
+    if not check.update_available:
+        return False, "No newer release to install."
+    if not check.exe_url or not check.sha256_url:
+        return False, f"Release {check.latest} has no {_EXE_ASSET} with a checksum beside it."
+
+    try:
+        expected = _fetch(check.sha256_url, 4096).decode("ascii", "replace").split()[0].lower()
+        binary = _fetch(check.exe_url, _MAX_EXE_BYTES)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, IndexError) as exc:
+        return False, f"Download failed: {exc}"
+
+    actual = hashlib.sha256(binary).hexdigest()
+    if actual != expected:
+        return False, "The download does not match its published checksum; nothing was changed."
+
+    staged = target.with_name(target.name + ".new")
+    previous = target.with_name(target.name + ".old")
+    try:
+        staged.write_bytes(binary)
+        with contextlib.suppress(FileNotFoundError):
+            previous.unlink()
+        os.replace(target, previous)
+        try:
+            os.replace(staged, target)
+        except OSError:
+            os.replace(previous, target)
+            raise
+    except OSError as exc:
+        with contextlib.suppress(OSError):
+            staged.unlink()
+        return False, f"Could not replace {target.name}: {exc}"
+    return True, f"fpstune {check.latest} is installed. Close and reopen fpstune to use it."
+
+
+def remove_replaced_executable(executable: Path | None = None) -> None:
+    """Delete the copy an update renamed aside, once it is no longer running."""
+    target = executable or Path(sys.executable)
+    with contextlib.suppress(OSError):
+        target.with_name(target.name + ".old").unlink()

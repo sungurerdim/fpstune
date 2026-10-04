@@ -124,6 +124,7 @@ from fpstune.settings.executors.game_processes import (
 from fpstune.settings.panel import primary_monitor
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
+from fpstune.utils.system_tools import system_tool
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -304,7 +305,7 @@ def _kill_tree(pid: int) -> None:
     """
     try:
         subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
+            [system_tool("taskkill.exe"), "/PID", str(pid), "/T", "/F"],
             capture_output=True,
             timeout=_KILL_TIMEOUT_SECONDS,
             creationflags=_no_window(),

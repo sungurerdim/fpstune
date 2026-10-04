@@ -346,8 +346,9 @@ class TestNetshApplyValueIsOneToken:
                 success, error = executor.apply(setting, value)
 
             assert success is True, f"{value!r} was refused: {error}"
-            assert run.call_args.args[0] == [
-                "netsh",
+            argv = run.call_args.args[0]
+            assert argv[0].lower().endswith("netsh.exe"), "netsh must run from System32"
+            assert argv[1:] == [
                 "int",
                 "tcp",
                 "set",

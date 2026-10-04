@@ -69,6 +69,7 @@ from fpstune.benchmark.operation_lock import operation_lock
 from fpstune.benchmark.suite import Bench, BenchResult, run_bench_with_deadline
 from fpstune.settings.executors.game_processes import GAME_PROCESSES, game_is_running
 from fpstune.utils.logger import get_logger
+from fpstune.utils.system_tools import system_tool
 
 logger = get_logger()
 
@@ -202,7 +203,7 @@ def sweep_leftover_tools(names: list[str] | None = None) -> int:
     for name in targets:
         try:
             completed = subprocess.run(
-                ["taskkill", "/F", "/IM", name],
+                [system_tool("taskkill.exe"), "/F", "/IM", name],
                 capture_output=True,
                 text=True,
                 timeout=15,

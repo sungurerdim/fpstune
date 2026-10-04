@@ -26,6 +26,7 @@ from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from fpstune.utils.config import get_config_dir
+from fpstune.utils.system_tools import powershell_exe
 
 if TYPE_CHECKING:
     from fpstune.utils.detect import CpuDetailedInfo, GpuInfo, MonitorInfo
@@ -244,7 +245,7 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Ob
 }
 """
     result = subprocess.run(  # noqa: S603 - fixed argv, constant script
-        ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+        [powershell_exe(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
         capture_output=True,
         text=True,
         timeout=30,
@@ -266,7 +267,7 @@ def _registry_vram_mb() -> int | None:
     from fpstune.utils.detect import _GPU_DETECT_PS
 
     result = subprocess.run(  # noqa: S603 - fixed argv, constant script
-        ["powershell", "-NoProfile", "-Command", _GPU_DETECT_PS],
+        [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS],
         capture_output=True,
         text=True,
         timeout=30,

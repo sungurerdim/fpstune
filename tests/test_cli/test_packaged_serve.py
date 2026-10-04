@@ -94,7 +94,7 @@ class TestPackagedServeSpawnsNothing:
             ),
             patch("uvicorn.run", fake_run),
         ):
-            cli._serve_packaged(port=8123, no_browser=True)
+            cli._serve_in_process(port=8123, no_browser=True)
 
         assert served["port"] == 8123
         assert served["host"] == "127.0.0.1"
@@ -102,7 +102,7 @@ class TestPackagedServeSpawnsNothing:
     @pytest.mark.usefixtures("frozen")
     def test_it_serves_the_bundled_ui(self, capsys) -> None:
         with patch("uvicorn.run"):
-            cli._serve_packaged(port=8123, no_browser=True)
+            cli._serve_in_process(port=8123, no_browser=True)
 
         printed = capsys.readouterr().out
         assert "/ui" in printed, "the packaged build must point at the UI it carries"
@@ -122,7 +122,7 @@ class TestPackagedServeSpawnsNothing:
             patch.object(runtime, "_SOURCE_ROOT", empty),
             patch("uvicorn.run"),
         ):
-            cli._serve_packaged(port=8123, no_browser=True)
+            cli._serve_in_process(port=8123, no_browser=True)
 
         printed = capsys.readouterr().out
         assert "carries no UI" in printed
@@ -135,7 +135,7 @@ class TestPackagedServeSpawnsNothing:
         handler."""
         cli._lock_sock = None
         with patch("uvicorn.run", side_effect=KeyboardInterrupt):
-            cli._serve_packaged(port=8123, no_browser=True)
+            cli._serve_in_process(port=8123, no_browser=True)
         assert cli._lock_sock is None
 
 

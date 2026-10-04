@@ -15,6 +15,7 @@ import threading
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.utils.system_tools import powershell_exe, system_tool
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -275,7 +276,7 @@ class BcdEditExecutor(BaseExecutor):
         try:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-ExecutionPolicy",
                     "Bypass",
@@ -375,7 +376,7 @@ class BcdEditExecutor(BaseExecutor):
 
         try:
             result = subprocess.run(
-                ["bcdedit"] + args.split(),
+                [system_tool("bcdedit.exe")] + args.split(),
                 capture_output=True,
                 text=True,
                 timeout=10,

@@ -41,6 +41,18 @@ export const en = {
   "scope.restoreFirst": "Create a System Restore point first (recommended)",
 
   // Tabs
+  // Version and update (header)
+  "update.version": "v{version}",
+  "update.check": "Check for updates",
+  "update.checking": "Checking…",
+  "update.upToDate": "fpstune {version} is the latest release.",
+  "update.available": "fpstune {latest} is available (you have {current}).",
+  "update.install": "Update to {latest}",
+  "update.installing": "Downloading and verifying…",
+  "update.unreachable": "Could not check for updates: {reason}",
+  "update.openReleases": "Open the releases page",
+  "header.admin": "Admin",
+  "header.notAdmin": "Not Admin",
   "tab.home": "Home",
   "tab.software": "Software Tweaks",
   "tab.hardware": "Hardware Tweaks",

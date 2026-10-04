@@ -23,6 +23,8 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar, cast
 
+from fpstune.utils.system_tools import powershell_exe
+
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
@@ -157,7 +159,7 @@ class HardwareProbes:
         try:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-Command",
                     "Get-NetAdapter -IncludeHidden | ForEach-Object { "
@@ -209,7 +211,7 @@ class HardwareProbes:
             # InterfaceIndex is numeric, always safe for commands
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-Command",
                     # Get all physical adapters - exclude only true virtual adapters
@@ -287,7 +289,7 @@ class HardwareProbes:
         try:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-Command",
                     # Get-NetAdapterAdvancedProperty does not expose
@@ -358,7 +360,7 @@ class HardwareProbes:
         try:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-Command",
                     "$r = Get-NetRoute -DestinationPrefix '0.0.0.0/0' "

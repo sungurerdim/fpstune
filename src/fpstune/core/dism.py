@@ -10,6 +10,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from fpstune.utils.system_tools import system_tool
+
 
 @dataclass
 class CleanupResult:
@@ -49,7 +51,7 @@ class Dism:
         try:
             # DISM requires elevation
             result = subprocess.run(
-                ["dism.exe", "/Online", *args],
+                [system_tool("Dism.exe"), "/Online", *args],
                 capture_output=True,
                 text=True,
                 timeout=timeout,

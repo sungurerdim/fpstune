@@ -1,9 +1,8 @@
 # Taskfile for fpstune. Install go-task once: https://taskfile.dev/installation/
 # Then run: task <name>. Run `task` with no args to list everything.
+# Everything goes through uv, which also provides Python 3.12 and Node.js
+# (the dev extra installs the nodejs-wheel package), so nothing else is needed.
 version: "3"
-
-vars:
-  PYTEST_ARGS: "-v --tb=short"
 
 tasks:
   default:
@@ -13,15 +12,10 @@ tasks:
     silent: true
 
   install:
-    desc: Install Python deps from uv.lock + frontend node_modules
+    desc: Python (from uv.lock), Node.js and the UI's node_modules
     cmds:
-      - uv sync --frozen --extra dev
-      - cd frontend && npm install
-
-  install-uv:
-    desc: Install Python deps from pyproject.toml without lockfile
-    cmds:
-      - uv pip install -e .[dev]
+      - uv sync --locked --extra dev
+      - cd frontend && uv run --locked npm ci
 
   lock:
     desc: Regenerate uv.lock from pyproject.toml
@@ -33,87 +27,64 @@ tasks:
     cmds:
       - uv lock --check
 
-  winget:
-    desc: Point the winget manifests at a built exe (submission stays manual)
-    cmds:
-      # The release workflow runs this same script against its own build. Doing
-      # it locally is for rehearsing, or for filling in a manifest after a
-      # release that was published before this wiring existed.
-      #
-      # Nothing here submits: it writes winget/manifests/... and prints the
-      # `winget validate` command. Opening the microsoft/winget-pkgs pull
-      # request is a deliberate human step, because the binary is unsigned and
-      # every submission of it goes to human review anyway.
-      - python scripts/update_winget_manifest.py --exe dist/fpstune.exe
-
   lint:
-    desc: Run ruff + mypy on src/
+    desc: ruff + mypy
     cmds:
-      - ruff check src tests
-      - ruff format --check src tests
-      - mypy src
+      - uv run ruff check src tests
+      - uv run ruff format --check src tests
+      - uv run mypy src
 
   fmt:
     desc: Auto-format Python with ruff
     cmds:
-      - ruff format src tests
-      - ruff check --fix src tests
+      - uv run ruff format src tests
+      - uv run ruff check --fix src tests
 
   test:
-    desc: Run Python pytest suite (with coverage + fail_under gate)
+    desc: pytest with the coverage gate
     cmds:
-      - pytest {{.PYTEST_ARGS}} --cov=src/fpstune --cov-report=term-missing
+      - uv run pytest -v --tb=short --cov=src/fpstune --cov-report=term-missing
 
   test-fast:
-    desc: Python pytest without coverage instrumentation
+    desc: pytest without coverage
     cmds:
-      - pytest --no-cov {{.PYTEST_ARGS}}
+      - uv run pytest --no-cov -q
 
   test-frontend:
-    desc: Run vitest suite
+    desc: vitest
     dir: frontend
     cmds:
-      - npm test -- --run
+      - uv run --locked npm run test:run
 
   test-all:
     desc: Backend + frontend tests
     deps: [test-fast, test-frontend]
 
   serve:
-    desc: Run the FastAPI dev server (auto-reload)
+    desc: Start fpstune from source (builds the UI first when it is stale)
     cmds:
-      - uvicorn fpstune.api.main:app --reload --host 127.0.0.1 --port 8000
+      - uv run fpstune serve
 
   dev:
-    desc: Run backend (uvicorn) + frontend (vite) in parallel via two terminals
+    desc: Start fpstune with the Vite dev server and live reload
     cmds:
-      - cmd: echo "Run in two terminals - task serve, task dev-frontend"
-
-  dev-frontend:
-    desc: Run the Vite dev server
-    dir: frontend
-    cmds:
-      - npm run dev
-
-  build-frontend:
-    desc: Production build of the React UI
-    dir: frontend
-    cmds:
-      - npm run build
+      - uv run fpstune serve --dev
 
   build:
-    desc: Build the PyInstaller exe (uses fpstune.spec)
+    desc: Build dist\fpstune.exe the way CI does (UI first, then PyInstaller)
     cmds:
-      - python -m PyInstaller fpstune.spec
+      - cmd /c build_exe.bat --no-pause
+
+  winget:
+    desc: Point the winget manifests at a built exe (submission stays manual)
+    cmds:
+      # Nothing here submits: it writes winget/manifests/... The winget-pkgs
+      # pull request is a deliberate human step, because the binary is unsigned
+      # and every submission of it goes to human review anyway.
+      - uv run python scripts/update_winget_manifest.py --exe dist/fpstune.exe
 
   clean:
     desc: Remove build / cache artifacts
     cmds:
-      - cmd: rm -rf build dist .pytest_cache .ruff_cache .mypy_cache htmlcov .audit
+      - cmd: rm -rf build dist .pytest_cache .ruff_cache .mypy_cache htmlcov
         ignore_error: true
-
-  audit:
-    desc: Run the full ds-blueprint analysis (Claude Code skill)
-    cmds:
-      - cmd: echo "Open in Claude Code and run /ds-blueprint"
-        silent: true

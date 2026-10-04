@@ -49,8 +49,12 @@ Concretely, fpstune:
 The only network requests fpstune makes are ones you trigger. As of this
 commit they are, in full: downloading PresentMon and FurMark from their own
 project pages when you use the feature that needs them, and measuring your own
-connection (ping, path MTU). NVIDIA driver settings are read and written through
-the NVIDIA driver's own `nvapi64.dll`; nothing is downloaded for them. Nothing is sent
+connection (ping, path MTU), and — only when you press the update button or run
+`fpstune update` — asking GitHub for the latest release and, on a second press,
+downloading that release's `fpstune.exe` together with its published SHA-256,
+which must match before anything is replaced. NVIDIA driver settings are read and
+written through the NVIDIA driver's own `nvapi64.dll`; nothing is downloaded for
+them. Nothing is sent
 about you, your hardware, or what you changed.
 
 ## Threat model

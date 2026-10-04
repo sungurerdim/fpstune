@@ -107,14 +107,18 @@ exits. If you decline the prompt, nothing happens and nothing is changed.
 
 ### From Source
 
+Needs only [uv](https://docs.astral.sh/uv/) (`winget install --id astral-sh.uv -e`):
+it installs Python 3.12 and, through the dev extra, Node.js into the project.
+
 ```bash
 git clone https://github.com/sungurerdim/fpstune.git
 cd fpstune
-python scripts/dev_setup.py     # installs uv/pip deps + npm install
+start.bat                       # or: uv run fpstune serve
 ```
 
-On a source checkout, `start.bat` (or `start.ps1`) does the same thing the
-executable would: it self-elevates, then launches the UI in a new terminal.
+The first start builds the UI once; after that `serve` behaves exactly like the
+executable — one process, the UI served from `frontend/dist`, elevation requested
+by fpstune itself. `uv run fpstune serve --dev` runs Vite with live reload instead.
 
 ---
 
@@ -130,10 +134,9 @@ This is the path that applies settings, because it is the path that shows what
 each change costs as well as what it gains, and verifies afterwards that the
 change actually took effect.
 
-Or manually, for development:
+For development, with live reload:
 ```bash
-task serve          # FastAPI on :8000 (dev auto-reload)
-task dev-frontend   # Vite on :5173 (separate terminal)
+uv run fpstune serve --dev   # API plus Vite, both reloading on edit
 ```
 
 ### CLI
@@ -149,7 +152,7 @@ fpstune nvidia-dump  # save every NVIDIA global driver setting to a file, for di
 fpstune benchmark    # measure this machine (--after to compare against a baseline)
 fpstune cleanup      # free disk space
 fpstune bios         # reboot straight into BIOS/UEFI setup (--cancel to abort)
-fpstune serve        # start the web UI by hand (ports, --api-only, --no-browser)
+fpstune serve        # start the web UI by hand (--port, --no-browser; --dev from source)
 fpstune update       # check whether a newer release exists
 fpstune -v status    # any command, with the full log
 ```
@@ -168,23 +171,23 @@ resolution). `--help` on any of them lists the rest of its tree.
 
 ```bash
 task                # list all tasks
-task serve          # FastAPI dev server (auto-reload)
-task dev-frontend   # Vite dev server
+task install        # Python, Node.js and the UI's node_modules, all through uv
+task serve          # start from source (UI built first when stale)
+task dev            # API plus Vite with live reload
 task test-fast      # pytest without coverage
 task test-frontend  # vitest run
 task lint           # ruff + mypy
-task build          # PyInstaller exe
+task build          # dist\fpstune.exe, the way CI builds it
 task lock           # regenerate uv.lock
 ```
 
-### Manual (no Taskfile)
+### Without the Taskfile
 
 ```bash
-pip install -e ".[dev]"
-uvicorn fpstune.api.main:app --host 127.0.0.1 --port 8000
-cd frontend && npm install && npm run dev
-pytest tests/ -x --tb=short
-ruff check src/
+uv sync --locked --extra dev
+uv run fpstune serve --dev
+uv run pytest -x --tb=short
+uv run ruff check src tests
 ```
 
 ---
@@ -392,22 +395,21 @@ frontend/src/       React + Vite + TypeScript + Tailwind
 
 ## Requirements
 
-- **Windows 11** (21H2+) — primary target, fully tested
-- Windows 10 (1903+) — basic compatibility
+- **Windows 11**, any edition and display language
 - Administrator privileges required
-- Python 3.12+ (source installation only). The floor is the oldest version CI
-  actually runs, never a wider range nobody executes: every push runs the whole
-  backend suite on 3.12 and on 3.13, and the released exe is built on 3.12
+- From source: only uv (Python 3.12 and Node.js come with it). CI runs the
+  backend suite on Python 3.12, the interpreter the executable ships with
 
 ---
 
 ## Building
 
 ```bash
-pip install -e ".[dev]"         # PyInstaller is already a locked dev dependency
-python scripts/build_exe.py     # single-file Windows exe (expects frontend/dist to exist)
-python scripts/build_all.py     # frontend build + tests + exe + staged release folder
+build_exe.bat                   # or: task build — UI first, then PyInstaller; dist\fpstune.exe
 ```
+
+The CI `package` job builds the same way, then starts the exe and checks that it
+serves its UI and its settings before keeping it as an artifact.
 
 ---
 

@@ -1141,3 +1141,24 @@ export const gpuSceneApi = {
       method: "POST",
     }),
 };
+
+export interface UpdateStatus {
+  current: string;
+  latest: string | null;
+  update_available: boolean;
+  can_install: boolean;
+  url: string;
+  error: string | null;
+}
+
+export interface UpdateInstallResult {
+  installed: boolean;
+  message: string;
+}
+
+/** Only ever called from the user's own button press — never on load. */
+export const updateApi = {
+  check: () => fetchJson<UpdateStatus>("/update/check"),
+  install: () =>
+    fetchJson<UpdateInstallResult>("/update/install", { method: "POST" }),
+};

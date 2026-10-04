@@ -37,6 +37,18 @@ export const tr: Record<keyof typeof en, string> = {
   "scope.restoreFirst": "Önce Sistem Geri Yükleme noktası oluştur (önerilir)",
 
   // Tabs
+  // Version and update (header)
+  "update.version": "v{version}",
+  "update.check": "Güncellemeleri denetle",
+  "update.checking": "Denetleniyor…",
+  "update.upToDate": "fpstune {version} en son sürüm.",
+  "update.available": "fpstune {latest} yayında (sizdeki {current}).",
+  "update.install": "{latest} sürümüne güncelle",
+  "update.installing": "İndiriliyor ve doğrulanıyor…",
+  "update.unreachable": "Güncellemeler denetlenemedi: {reason}",
+  "update.openReleases": "Sürümler sayfasını aç",
+  "header.admin": "Yönetici",
+  "header.notAdmin": "Yönetici değil",
   "tab.home": "Ana Sayfa",
   "tab.software": "Yazılım İnce Ayarları",
   "tab.hardware": "Donanım İnce Ayarları",

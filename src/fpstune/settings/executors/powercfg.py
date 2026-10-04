@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from fpstune.settings.applicability import NOT_SUPPORTED, values_equal
 from fpstune.settings.base import Reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.utils.system_tools import powershell_exe, system_tool
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -631,7 +632,7 @@ if (Test-Path -LiteralPath $path) {{
 """
         try:
             result = subprocess.run(
-                ["powershell", "-NoProfile", "-Command", ps_script],
+                [powershell_exe(), "-NoProfile", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 timeout=10,
@@ -736,7 +737,7 @@ if (Test-Path -LiteralPath $path) {{
 
         try:
             result = subprocess.run(
-                ["powercfg"] + args.split(),
+                [system_tool("powercfg.exe")] + args.split(),
                 capture_output=True,
                 text=True,
                 timeout=10,

@@ -29,3 +29,22 @@ def system32() -> str:
 def system_tool(name: str) -> str:
     """Absolute path of a tool that ships in System32 (``"sc.exe"``, ...)."""
     return os.path.join(system32(), name)
+
+
+def powershell_exe() -> str:
+    """Windows PowerShell 5.1, which every Windows 11 edition ships."""
+    return os.path.join(system32(), "WindowsPowerShell", "v1.0", "powershell.exe")
+
+
+def nvidia_smi() -> str | None:
+    """nvidia-smi.exe where an NVIDIA driver installs it, or None.
+
+    DCH drivers place it in System32; older ones under NVSMI in Program Files.
+    """
+    candidates = [os.path.join(system32(), "nvidia-smi.exe")]
+    program_files = os.environ.get("PROGRAMW6432") or os.environ.get("PROGRAMFILES")
+    if program_files:
+        candidates.append(
+            os.path.join(program_files, "NVIDIA Corporation", "NVSMI", "nvidia-smi.exe")
+        )
+    return next((path for path in candidates if os.path.isfile(path)), None)

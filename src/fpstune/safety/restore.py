@@ -9,6 +9,7 @@ import threading
 from dataclasses import dataclass
 
 from fpstune.utils.powershell import escape_single_quoted
+from fpstune.utils.system_tools import powershell_exe
 
 logger = logging.getLogger(__name__)
 
@@ -77,7 +78,7 @@ def create_restore_point_async() -> None:
         try:
             result = subprocess.run(
                 [
-                    "powershell",
+                    powershell_exe(),
                     "-NoProfile",
                     "-ExecutionPolicy",
                     "Bypass",
@@ -163,7 +164,7 @@ class RestorePointManager:
             """
 
             result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-Command", ps_script],
+                [powershell_exe(), "-NoProfile", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 timeout=120,  # Restore points can take a while
@@ -197,7 +198,7 @@ class RestorePointManager:
             """
 
             result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-Command", ps_script],
+                [powershell_exe(), "-NoProfile", "-Command", ps_script],
                 capture_output=True,
                 text=True,
                 timeout=30,
@@ -228,80 +229,3 @@ class RestorePointManager:
             return restore_points
         except (subprocess.SubprocessError, OSError):
             return []
-
-    def is_system_restore_enabled(self) -> bool:
-        """Check if System Restore is enabled.
-
-        Returns:
-            True if System Restore is enabled on the system drive.
-        """
-        if not self._available:
-            return False
-
-        try:
-            ps_script = """
-            [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
-            $status = Get-ComputerRestorePoint -ErrorAction SilentlyContinue
-            if ($status -ne $null) { "enabled" } else { "disabled" }
-            """
-
-            result = subprocess.run(
-                ["powershell.exe", "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=30,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            return "enabled" in result.stdout.lower()
-        except (subprocess.SubprocessError, OSError):
-            return False
-
-    def get_restore_point_by_fpstune(self) -> RestorePointInfo | None:
-        """Get the most recent restore point created by fpstune.
-
-        Returns:
-            RestorePointInfo or None if not found.
-        """
-        restore_points = self.list_restore_points(limit=50)
-
-        for rp in restore_points:
-            if "fpstune" in rp.description.lower():
-                return rp
-
-        return None
-
-    def restore_to_point(self, sequence_number: int) -> bool:
-        """Initiate system restore to a specific restore point.
-
-        WARNING: This will restart the computer!
-
-        Args:
-            sequence_number: Restore point sequence number.
-
-        Returns:
-            True if restore was initiated (computer will restart).
-        """
-        if not self._available:
-            return False
-
-        try:
-            # This requires elevation and will restart the computer
-            result = subprocess.run(
-                [
-                    "rstrui.exe",
-                    f"/RUNONCE:{sequence_number}",
-                ],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only
-                encoding="utf-8",
-                errors="replace",
-            )
-
-            return result.returncode == 0
-        except (subprocess.SubprocessError, OSError):
-            return False

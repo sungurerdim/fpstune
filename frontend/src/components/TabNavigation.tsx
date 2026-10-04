@@ -19,6 +19,7 @@ import { api } from "../lib/api";
 import { useStore, type TabId } from "../store";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { ActivityLog } from "./ActivityLog";
+import { UpdateControl } from "./UpdateControl";
 import { tabButtonId, tabPanelId } from "./ui/tabIds";
 
 // Order follows what the user does, not what the app builds: tune the software,
@@ -174,6 +175,7 @@ export function TabNavigation() {
 
         {/* Chrome: activity, admin, OS */}
         <div className="flex items-center gap-2.5 shrink-0">
+          <UpdateControl />
           <ActivityLog />
           <div
             className={cn(
@@ -184,12 +186,12 @@ export function TabNavigation() {
             {systemInfo?.is_admin ? (
               <>
                 <ShieldCheck className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Admin</span>
+                <span className="hidden lg:inline">{t("header.admin")}</span>
               </>
             ) : (
               <>
                 <ShieldAlert className="w-3.5 h-3.5" />
-                <span className="hidden lg:inline">Not Admin</span>
+                <span className="hidden lg:inline">{t("header.notAdmin")}</span>
               </>
             )}
           </div>

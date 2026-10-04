@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import socket
 import sys
+from pathlib import Path
 from typing import TYPE_CHECKING
 
 import click
@@ -36,6 +38,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 from fpstune.utils.detect import get_gpu_info as get_gpu_info  # noqa: F401
 from fpstune.utils.detect import get_os_info as get_os_info  # noqa: F401
+from fpstune.utils.system_tools import system_tool
 
 _LOCK_PORT = 59471  # Fixed internal port used as single-instance mutex
 
@@ -69,10 +72,12 @@ def _acquire_instance_lock() -> socket.socket | None:
         return None
 
 
-def _write_pid_file(pid: int) -> None:
+def _write_pid_file(pid: int, port: int) -> None:
+    import json
+
     try:
-        with open(_get_pid_file(), "w") as f:
-            f.write(str(pid))
+        with open(_get_pid_file(), "w", encoding="utf-8") as f:
+            json.dump({"pid": pid, "port": port}, f)
     except OSError:
         pass
 
@@ -85,100 +90,34 @@ def _remove_pid_file() -> None:
         os.unlink(_get_pid_file())
 
 
-def _read_pid_file() -> int | None:
+def _running_instance_url() -> str | None:
+    """The UI of the fpstune already running here, if one answers.
+
+    The PID file names the port it serves on; asking that port's /health is the
+    whole check. A stale file, a reused port or another program on it simply
+    does not answer as fpstune, so nothing is ever killed on a guess.
+    """
+    import json
+    import urllib.request
+
     try:
-        with open(_get_pid_file()) as f:
-            return int(f.read().strip())
+        with open(_get_pid_file(), encoding="utf-8") as f:
+            port = int(json.load(f)["port"])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    url = f"http://127.0.0.1:{port}"
+    try:
+        with urllib.request.urlopen(f"{url}/health", timeout=2) as response:  # noqa: S310
+            body = json.loads(response.read().decode("utf-8"))
     except (OSError, ValueError):
         return None
-
-
-def _is_fpstune_process(pid: int) -> bool:
-    """Return True only if pid's command line contains 'fpstune'.
-
-    Uses PowerShell / WMI to read the command line without importing psutil.
-    Never returns True for a PID that doesn't match — fails safe to False.
-    """
-    import subprocess
-
-    try:
-        result = subprocess.run(
-            [
-                "powershell",
-                "-NoProfile",
-                "-Command",
-                f"(Get-CimInstance Win32_Process -Filter 'ProcessId={pid}' -ErrorAction SilentlyContinue).CommandLine",
-            ],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        cmdline = result.stdout.strip().lower()
-        return bool(cmdline) and "fpstune" in cmdline
-    except Exception:
-        return False
-
-
-def _kill_pid_tree(pid: int) -> bool:
-    """Kill a process and its full child tree on Windows. Returns True on success."""
-    import subprocess
-
-    try:
-        subprocess.run(
-            ["taskkill", "/PID", str(pid), "/T", "/F"],
-            capture_output=True,
-            timeout=10,
-        )
-        return True
-    except Exception:
-        return False
-
-
-def _kill_previous_instance() -> bool:
-    """Surgically kill the previous fpstune serve process.
-
-    Strategy 1 — PID file: fast, uses stored PID from last run.
-    Strategy 2 — Lock port: find the PID holding port 59471 via netstat.
-
-    In both cases the PID is confirmed to be fpstune before killing.
-    Unrelated processes (different command line) are never touched.
-    Returns True if a previous instance was found and killed.
-    """
-    import subprocess
-
-    killed = False
-
-    # Strategy 1: PID file from the previous run
-    pid = _read_pid_file()
-    if pid and _is_fpstune_process(pid):
-        killed = _kill_pid_tree(pid)
-
-    if not killed:
-        # Strategy 2: Scan netstat for the lock port owner
-        try:
-            result = subprocess.run(
-                ["netstat", "-ano", "-p", "TCP"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-            )
-            for line in result.stdout.splitlines():
-                if f":{_LOCK_PORT}" in line and "LISTENING" in line:
-                    parts = line.split()
-                    pid_str = parts[-1] if parts else ""
-                    if pid_str.isdigit():
-                        candidate = int(pid_str)
-                        if _is_fpstune_process(candidate):
-                            killed = _kill_pid_tree(candidate)
-                            break
-        except Exception:
-            pass
-
-    return killed
+    if not isinstance(body, dict) or "subsystems" not in body:
+        return None
+    return f"{url}/ui"
 
 
 def _find_free_port(preferred: int, max_attempts: int = 10) -> int:
-    """Return the first available TCP port starting from preferred."""
+    """The first TCP port from ``preferred`` this process can bind."""
     for port in range(preferred, preferred + max_attempts):
         try:
             with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -186,7 +125,10 @@ def _find_free_port(preferred: int, max_attempts: int = 10) -> int:
                 return port
         except OSError:
             continue
-    return preferred
+    raise click.ClickException(
+        f"Ports {preferred}-{preferred + max_attempts - 1} are all in use. "
+        f"Close the program holding them, or start with --port <number>."
+    )
 
 
 @click.group(invoke_without_command=True)
@@ -280,7 +222,7 @@ def bios(delay: int, cancel: bool) -> None:
     import subprocess as sp
 
     if cancel:
-        result = sp.run(["shutdown", "/a"], capture_output=True, text=True)
+        result = sp.run([system_tool("shutdown.exe"), "/a"], capture_output=True, text=True)
         if result.returncode == 0:
             console.print("[green]\u2713[/] Scheduled reboot cancelled")
         else:
@@ -291,7 +233,7 @@ def bios(delay: int, cancel: bool) -> None:
     console.print("[dim]Run 'fpstune bios --cancel' to abort[/]\n")
 
     result = sp.run(
-        ["shutdown", "/r", "/fw", "/t", str(delay)],
+        [system_tool("shutdown.exe"), "/r", "/fw", "/t", str(delay)],
         capture_output=True,
         text=True,
     )
@@ -313,67 +255,115 @@ def bios(delay: int, cancel: bool) -> None:
 
 @main.command()
 @click.option("--port", "-p", default=8000, help="API server port")
-@click.option("--ui-port", default=5173, help="Frontend dev server port")
 @click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
-@click.option("--api-only", is_flag=True, help="Only start API server (no frontend)")
-def serve(port: int, ui_port: int, no_browser: bool, api_only: bool) -> None:
+@click.option("--dev", is_flag=True, help="Source only: Vite dev server with live reload")
+@click.option("--ui-port", default=5173, help="Vite dev server port (with --dev)")
+@click.option("--api-only", is_flag=True, help="With --dev: start the API without Vite")
+def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) -> None:
     """Start the fpstune web UI.
 
-    A packaged build serves the UI from inside the executable and runs the API
-    in this process. A source checkout runs the API and the Vite dev server as
-    child processes, so both reload on edit.
+    The API runs in this process and serves the built UI, from the executable
+    or, in a source checkout, from frontend/dist (built first if it is missing
+    or older than its source). --dev runs Vite with live reload instead.
 
     \b
     Examples:
-        fpstune serve              # start everything, open the browser
-        fpstune serve --api-only   # API only
+        fpstune serve              # start, open the browser
         fpstune serve --no-browser # don't open the browser
+        fpstune serve --dev        # source checkout: Vite with live reload
     """
     import os
 
     ui.print_banner()
 
-    if not _claim_single_instance():
-        raise SystemExit(1)
-    _write_pid_file(os.getpid())
+    if not _claim_single_instance(open_browser=not no_browser):
+        return
 
     port = _find_free_port(port)
+    _write_pid_file(os.getpid(), port)
 
     if not _ensure_administrator():
         return
 
-    if is_frozen():
-        _serve_packaged(port=port, no_browser=no_browser)
-    else:
+    if dev and not is_frozen():
         _serve_from_source(port=port, ui_port=ui_port, no_browser=no_browser, api_only=api_only)
+        return
+    if not is_frozen() and not _ensure_built_ui():
+        raise SystemExit(1)
+    _serve_in_process(port=port, no_browser=no_browser)
 
 
-def _claim_single_instance() -> bool:
-    """Take the single-instance lock, replacing an older instance if there is one."""
-    import time
+def _claim_single_instance(*, open_browser: bool) -> bool:
+    """Take the single-instance lock, or hand the user to the instance that has it.
 
+    A second start never kills the first: it opens the running instance's UI and
+    stops. That is what a user starting fpstune again wants, and it needs no
+    process inspection — the previous version matched netstat's English
+    "LISTENING", which a Turkish or German Windows never prints.
+    """
     global _lock_sock
     _lock_sock = _acquire_instance_lock()
     if _lock_sock is not None:
         return True
 
-    ui.step("Another fpstune is already running", "shutting it down")
-    if _kill_previous_instance():
-        time.sleep(1.5)  # let the OS release the port
-        _lock_sock = _acquire_instance_lock()
+    url = _running_instance_url()
+    if url is not None:
+        ui.ok("fpstune is already running", url)
+        if open_browser:
+            import webbrowser
 
-    if _lock_sock is None:
-        ui.fail("Could not take the instance lock")
+            webbrowser.open(url)
+        return False
+
+    ui.fail("Another fpstune is starting or shutting down")
+    ui.hint(["Wait a few seconds and start it again"])
+    raise SystemExit(1)
+
+
+def _ensure_built_ui() -> bool:
+    """Build frontend/dist when it is missing or older than its source.
+
+    Node comes with the dev extra (`uv sync --extra dev` installs the
+    nodejs-wheel package), so a checkout needs nothing but uv; a system-wide
+    Node.js works as well.
+    """
+    import shutil
+    import subprocess
+
+    source = frontend_source()
+    if source is None:
+        return frontend_dist() is not None
+
+    dist_index = source / "dist" / "index.html"
+    watched = [source / "index.html", source / "package-lock.json", source / "vite.config.ts"]
+    newest = max(
+        [p.stat().st_mtime for p in watched if p.exists()]
+        + [p.stat().st_mtime for p in (source / "src").rglob("*") if p.is_file()],
+        default=0.0,
+    )
+    if dist_index.exists() and dist_index.stat().st_mtime >= newest:
+        return True
+
+    npm = shutil.which("npm")
+    if npm is None:
+        ui.fail("The UI needs building once, and npm was not found")
         ui.hint(
             [
-                "Close the other fpstune window",
-                "If none is open, wait a few seconds and try again",
+                "Run: uv sync --extra dev   (installs Node.js into this project's environment)",
+                "Then start fpstune again with: uv run fpstune serve",
             ]
         )
         return False
 
-    ui.ok("Replaced the previous instance")
-    return True
+    steps = [] if (source / "node_modules").is_dir() else [[npm, "ci"]]
+    steps.append([npm, "run", "build"])
+    for argv in steps:
+        ui.step(f"Building the UI: {' '.join(argv[1:])}")
+        result = subprocess.run(argv, cwd=source, check=False)
+        if result.returncode != 0:
+            ui.fail(f"'{' '.join(argv[1:])}' failed", f"exit code {result.returncode}")
+            return False
+    return dist_index.exists()
 
 
 def _ensure_administrator() -> bool:
@@ -408,8 +398,8 @@ def _ensure_administrator() -> bool:
     raise SystemExit(1)
 
 
-def _serve_packaged(*, port: int, no_browser: bool) -> None:
-    """Run the API in this process and serve the UI bundled beside it.
+def _serve_in_process(*, port: int, no_browser: bool) -> None:
+    """Run the API in this process and serve the built UI.
 
     Deliberately spawns nothing. ``sys.executable`` in a frozen build is
     ``fpstune.exe``, so the old ``[sys.executable, "-m", "uvicorn", ...]``
@@ -489,7 +479,11 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
     # FORCE_COLOR asks their loggers (Rich honours it, so does Vite) to colour
     # anyway; `relay` parses those escapes and this console renders them by
     # whatever means it has. Only asked for when there is a terminal to render.
-    child_env = {**os.environ, "FORCE_COLOR": "1"} if ui.console.is_terminal else None
+    # FPSTUNE_API_PORT points Vite's /api proxy at the port actually chosen; it
+    # was fixed at 8000, so a fallback port left the dev UI talking to nothing.
+    child_env = {**os.environ, "FPSTUNE_API_PORT": str(port)}
+    if ui.console.is_terminal:
+        child_env["FORCE_COLOR"] = "1"
 
     if not api_only and frontend_dir is None:
         ui.warn("No frontend source tree here", "serving the API alone")
@@ -520,30 +514,35 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
         ui.fail("Could not start the API", str(e))
         return
 
-    if not api_only and frontend_dir is not None:
+    import shutil
+
+    npm = shutil.which("npm")
+    if not api_only and frontend_dir is not None and npm is None:
+        ui.warn("npm not found", "run 'uv sync --extra dev'; serving the API alone")
+        api_only = True
+
+    if not api_only and frontend_dir is not None and npm is not None:
         if not (frontend_dir / "node_modules").exists():
             ui.step("Installing frontend dependencies", "first run only")
             install = subprocess.run(
-                ["npm", "install"],
+                [npm, "ci"],
                 cwd=frontend_dir,
                 capture_output=True,
                 text=True,
-                shell=sys.platform == "win32",
                 encoding="utf-8",
                 errors="replace",
             )
             if install.returncode != 0:
-                ui.warn("npm install failed", "continuing; the dev server may not start")
+                ui.warn("npm ci failed", "continuing; the dev server may not start")
 
         ui.step(f"Starting the frontend on port {ui_port}")
         try:
             frontend_process = subprocess.Popen(
-                ["npm", "run", "dev", "--", "--port", str(ui_port)],
+                [npm, "run", "dev", "--", "--port", str(ui_port)],
                 cwd=frontend_dir,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=child_env,
-                shell=sys.platform == "win32",
                 creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
             )
             processes.append(("Frontend", frontend_process))
@@ -649,5 +648,56 @@ def update_command() -> None:
     ui.blank()
 
 
+def run() -> None:
+    """Entry point: the CLI, with a crash report instead of a vanishing window.
+
+    The packaged exe opens its own console, which closes the moment the process
+    ends — so an unhandled error used to leave nothing at all to report. The
+    traceback now goes to a file, its path is printed, and the window waits.
+    """
+    if is_frozen():
+        from fpstune.utils.updates import remove_replaced_executable
+
+        remove_replaced_executable()
+    try:
+        main()
+    except (SystemExit, KeyboardInterrupt):
+        raise
+    except Exception:
+        path = _write_crash_report()
+        ui.blank()
+        ui.fail("fpstune stopped because of an unexpected error")
+        if path is not None:
+            ui.info("Details were saved to", str(path))
+            ui.info("Please attach that file when reporting the problem")
+        if is_frozen() and sys.stdin is not None and sys.stdin.isatty():
+            with contextlib.suppress(EOFError, KeyboardInterrupt):
+                input("Press Enter to close this window...")
+        raise SystemExit(1) from None
+
+
+def _write_crash_report() -> Path | None:
+    """Traceback, version and platform — nothing about the user — to a file."""
+    import platform
+    import traceback
+    from datetime import datetime
+
+    from fpstune.utils.config import get_config_dir
+
+    try:
+        folder = get_config_dir() / "logs"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / f"crash-{datetime.now():%Y%m%d-%H%M%S}.txt"
+        path.write_text(
+            f"fpstune {__version__}\n"
+            f"{platform.platform()} | Python {platform.python_version()} | "
+            f"frozen={is_frozen()}\n\n{traceback.format_exc()}",
+            encoding="utf-8",
+        )
+        return path
+    except OSError:
+        return None
+
+
 if __name__ == "__main__":
-    main()
+    run()

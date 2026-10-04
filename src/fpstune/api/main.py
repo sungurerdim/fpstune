@@ -33,12 +33,21 @@ from fpstune.api.routes import (
     system_power_router,
     system_router,
     system_storage_router,
+    updates_router,
 )
 from fpstune.api.routes.debug import router as debug_router
 from fpstune.utils.debug import is_debug_enabled
 from fpstune.utils.detect import start_gpu_detection_async
 from fpstune.utils.logger import get_logger as _get_shared_logger
 from fpstune.utils.runtime import frontend_dist, is_frozen
+
+_SYSTEM_ROUTERS = (
+    system_router,
+    system_network_router,
+    system_audio_router,
+    system_power_router,
+    system_storage_router,
+)
 
 # Python's mimetypes reads the Windows registry, and on machines where an editor
 # or SDK registered ".js" as text/plain the browser refuses the UI's module
@@ -265,17 +274,15 @@ def create_app() -> FastAPI:
         return await call_next(request)
 
     # Include routers
-    app.include_router(system_router, prefix="/api", tags=["System"])
-    app.include_router(system_network_router, prefix="/api", tags=["System"])
-    app.include_router(system_audio_router, prefix="/api", tags=["System"])
-    app.include_router(system_power_router, prefix="/api", tags=["System"])
-    app.include_router(system_storage_router, prefix="/api", tags=["System"])
+    for system in _SYSTEM_ROUTERS:
+        app.include_router(system, prefix="/api", tags=["System"])
     app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(settings_stream_router, prefix="/api/settings", tags=["Settings"])
     app.include_router(display_router, prefix="/api", tags=["Display"])
     app.include_router(safety_router, prefix="/api", tags=["Safety"])
     app.include_router(benchmark_router, prefix="/api/benchmark", tags=["Benchmark"])
     app.include_router(benchmark_suite_router, prefix="/api/benchmark", tags=["Benchmark"])
+    app.include_router(updates_router, prefix="/api", tags=["Update"])
     if debug_mode:
         app.include_router(debug_router, tags=["Debug"])
 
@@ -319,6 +326,7 @@ def create_app() -> FastAPI:
 
         return {
             "status": "healthy" if required_ok else "degraded",
+            "version": __version__,
             "platform": sys.platform,
             "is_admin": is_admin(),
             "subsystems": subsystems,

@@ -16,15 +16,13 @@
 git clone https://github.com/sungurerdim/fpstune.git
 cd fpstune
 
-# Python backend
-pip install -e ".[dev]"
-
-# Frontend
-cd frontend && npm install && cd ..
+# Python 3.12, Node.js and every dependency, from the lockfiles (needs only uv)
+uv sync --locked --extra dev
+cd frontend && uv run npm ci && cd ..
 
 # Verify
-pytest tests/ -x --tb=short
-cd frontend && npm run lint && npx tsc --noEmit
+uv run pytest -x --tb=short
+cd frontend && uv run npm run lint && uv run npx tsc --noEmit
 ```
 
 ## Running Locally
@@ -122,9 +120,6 @@ What `scripts/` holds, so nobody has to reverse-engineer it:
 
 | Script | What it does |
 |--------|--------------|
-| `dev_setup.py` | One-shot dev environment: Python deps + `npm install` |
-| `build_exe.py` | Single-file PyInstaller exe (expects `frontend/dist` to exist) |
-| `build_all.py` | Frontend build + tests + exe + staged release folder |
 | `sync_version.py` | Copies the `pyproject.toml` version into `__init__.py` and `package.json`; `tests/test_release_contract.py` fails when a copy drifts |
 | `update_winget_manifest.py` | Points the `winget/` manifests at a built exe: rewrites version, download URL, `ReleaseDate` and checksum from that binary's own bytes. The release workflow runs it against the exe it just built, checks the manifest parses as YAML and carries that exe's checksum, and uploads the result as a `winget-manifest` artifact; `task winget` runs the same script locally |
 | `measure_scan.py` | Before/after cost measurement for detection-pipeline changes; internal tooling |

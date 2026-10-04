@@ -3,8 +3,8 @@ setlocal
 :: fpstune - build the current tree into dist\fpstune.exe and say where it landed.
 :: Double-click to rebuild after a pull. Pass --no-pause when calling from a script.
 ::
-:: The same steps as .github\workflows\release.yml, minus the test suite: Python
-:: dependencies from the lockfile (PyInstaller among them), the UI bundle the exe
+:: The same steps as the CI package job, minus the tests: Python, Node.js and
+:: PyInstaller from the lockfile (uv provides all three), the UI bundle the exe
 :: serves from inside itself, then PyInstaller over fpstune.spec. Each step stops
 :: the build when it fails, so a stale UI can never be packaged as a new build.
 
@@ -12,15 +12,14 @@ chcp 65001 >nul
 cd /d "%~dp0"
 
 where uv >nul 2>&1 || (echo uv was not found on PATH. Install it: https://docs.astral.sh/uv/ & goto :fail)
-where npm >nul 2>&1 || (echo npm was not found on PATH. Install Node.js LTS: https://nodejs.org/ & goto :fail)
 
-echo [1/3] Python dependencies (uv sync --frozen --extra dev)
-call uv sync --frozen --extra dev || goto :fail
+echo [1/3] Python and Node.js (uv sync --locked --extra dev)
+call uv sync --locked --extra dev || goto :fail
 
-echo [2/3] UI bundle (npm install, npm run build)
+echo [2/3] UI bundle (npm ci, npm run build)
 pushd frontend
-call npm install || (popd & goto :fail)
-call npm run build || (popd & goto :fail)
+call uv run --locked npm ci || (popd & goto :fail)
+call uv run --locked npm run build || (popd & goto :fail)
 popd
 
 echo [3/3] Executable (pyinstaller fpstune.spec)

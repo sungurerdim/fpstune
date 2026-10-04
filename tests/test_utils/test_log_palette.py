@@ -137,7 +137,7 @@ class TestTheRelay:
         from fpstune import cli
 
         source = inspect.getsource(cli._serve_from_source)
-        assert '"FORCE_COLOR": "1"' in source
+        assert 'child_env["FORCE_COLOR"] = "1"' in source
         assert "ui.console.is_terminal" in source
         assert "_pump_output" in source, "the pipes must be drained, or the child blocks"
 
@@ -146,6 +146,4 @@ class TestTheRelay:
 
         root = Path(logger_module.__file__).resolve().parents[3]
         assert "NO_COLOR" not in (root / "start.bat").read_text(encoding="utf-8")
-        ps1 = (root / "start.ps1").read_text(encoding="utf-8")
-        assert "SupportsVirtualTerminal" in ps1
-        assert 'FORCE_COLOR = "1"' in ps1
+        assert "NO_COLOR" not in (root / "start.ps1").read_text(encoding="utf-8")

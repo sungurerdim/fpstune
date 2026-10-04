@@ -343,281 +343,79 @@ class TestBulkStreamReset:
 
 
 # ---------------------------------------------------------------------------
-# NVPROFILE batch path
+# NVIDIA settings take the same per-setting path as every other setting
 # ---------------------------------------------------------------------------
 
 
-def _real_nvprofile_setting():
-    """A real SettingExecutor — MagicMock would make is_action/is_readonly
-    truthy and silently skip the very verification these tests assert on."""
-    from fpstune.settings.base import (
-        DetectType,
-        SettingCategory,
-        SettingExecutor,
-        SettingValueType,
-    )
+class TestNvidiaSettingsAreNotBatched:
+    """NVIDIA settings used to be pooled into one nvidiaProfileInspector call
+    that skipped the operation lock, value validation and per-setting results.
+    Each is now one driver write through the path every setting takes."""
 
-    return SettingExecutor(
-        id="gpu-nvidia:low_latency",
-        category=SettingCategory.GPU,
-        display_name="Low Latency Mode",
-        description="NVIDIA Reflex / Ultra Low Latency mode.",
-        value_type=SettingValueType.CHOICE,
-        choices=("off", "on", "ultra"),
-        default_value="off",
-        recommended_value="on",
-        detect_type=DetectType.NVPROFILE,
-        detect_command="",
-        detect_args={"setting": "low_latency"},
-        apply_type=DetectType.NVPROFILE,
-        apply_command="",
-        apply_args={"setting": "low_latency"},
-    )
-
-
-class TestNvprofileVerificationIsReal:
-    """The NVIDIA batch previously emitted matches=True with the *requested*
-    value without ever reading anything back.
-
-    It now performs a real read-back. The verdict is still reported as unknown,
-    because NVIDIA detection currently reads fpstune's own cache — but the
-    reported value must come from the read-back, and the stream must never
-    claim a check it did not perform.
-    """
-
-    def test_requested_value_is_never_echoed_as_the_result(self, client: TestClient) -> None:
-        setting = _real_nvprofile_setting()
-
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
-
-        # NPI reports success, but the value read back is still the old one.
-        stale = MagicMock()
-        stale.value = "off"
-        mock_engine = MagicMock()
-        mock_engine.detect_one.return_value = stale
-
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings_stream.DetectionEngine", return_value=mock_engine),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
-        ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
-            response = client.post(
-                "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:low_latency"]},
-            )
-
-        assert response.status_code == 200
-        events = _parse_sse(response.text)
-        verified = next(e for e in events if e.get("event") == "verified")
-        # "on" was requested; the read-back said "off" — the request must not
-        # be presented as the outcome.
-        assert verified["current_value"] == "off"
-        assert verified["matches"] is not True
-        mock_engine.detect_one.assert_called_once()
-
-    def test_readback_match_is_verified_with_detected_value(self, client: TestClient) -> None:
-        setting = _real_nvprofile_setting()
-
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
-
-        fresh = MagicMock()
-        fresh.value = "on"
-        mock_engine = MagicMock()
-        mock_engine.detect_one.return_value = fresh
-
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings_stream.DetectionEngine", return_value=mock_engine),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
-        ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
-            response = client.post(
-                "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:low_latency"]},
-            )
-
-        events = _parse_sse(response.text)
-        verified = next(e for e in events if e.get("event") == "verified")
-        # The reported value must come from the read-back, not the request.
-        assert verified["current_value"] == "on"
-        # Still unknown rather than True: NVIDIA detection reads fpstune's own
-        # cache, so a match proves nothing about the driver.
-        assert verified["matches"] is None
-        mock_engine.detect_one.assert_called_once()
-
-
-class TestNvprofileBatchPath:
-    """Tests for the NVPROFILE group handling in _stream_grouped."""
-
-    def test_nvprofile_settings_use_bulk_apply(self, client: TestClient) -> None:
-        """NVPROFILE settings must be grouped into a single NPI call."""
+    def test_nvidia_setting_runs_through_the_single_setting_apply(self, client: TestClient) -> None:
         setting = _make_setting(
             "gpu-nvidia:low_latency",
             apply_type_value="nvprofile",
-            recommended_value="ultra",
+            recommended_value="on",
+            default_value="off",
         )
-        setting.apply_args = {"setting": "low_latency"}
-
+        setting.is_action = False
+        apply_resp = _make_apply_response(success=True, new_value="on")
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
             patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
+            patch(
+                "fpstune.api.routes.settings_stream._apply_single_setting",
+                return_value=(setting, apply_resp),
+            ) as single,
         ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
             response = client.post(
                 "/api/settings/bulk/stream-apply",
                 json={"ids": ["gpu-nvidia:low_latency"]},
             )
 
-        assert response.status_code == 200
         events = _parse_sse(response.text)
+        single.assert_called_once()
+        assert single.call_args.args[1] == "on"
         done = next(e for e in events if e.get("event") == "done")
-        assert done["succeeded"] == 1
-        assert done["failed"] == 0
-        # Bulk apply was called once (not per-setting subprocess)
-        mock_nv_cls.apply_bulk.assert_called_once()
+        assert (done["succeeded"], done["failed"]) == (1, 0)
 
-    def test_nvprofile_bulk_failure_emits_failed_for_each(self, client: TestClient) -> None:
-        setting = _make_setting(
-            "gpu-nvidia:vsync",
-            apply_type_value="nvprofile",
-            recommended_value="off",
-        )
-        setting.apply_args = {"setting": "vsync"}
-
+    def test_one_failing_nvidia_setting_does_not_fail_its_neighbours(
+        self, client: TestClient
+    ) -> None:
+        ok = _make_setting("gpu-nvidia:vsync", apply_type_value="nvprofile")
+        bad = _make_setting("gpu-nvidia:vrr_mode", apply_type_value="nvprofile")
         mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
+        mock_registry.get.side_effect = lambda sid: {
+            "gpu-nvidia:vsync": ok,
+            "gpu-nvidia:vrr_mode": bad,
+        }[sid]
+
+        def apply(setting, *_a, **_k):
+            if setting is bad:
+                return setting, _make_apply_response(success=False, error="driver refused")
+            return setting, _make_apply_response(success=True, new_value="1")
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
             patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
+            patch("fpstune.api.routes.settings_stream._apply_single_setting", side_effect=apply),
         ):
-            mock_nv_cls.apply_bulk.return_value = (False, "NPI not found")
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:vsync"]},
+                json={"ids": ["gpu-nvidia:vsync", "gpu-nvidia:vrr_mode"]},
             )
 
-        assert response.status_code == 200
         events = _parse_sse(response.text)
         failed = [e for e in events if e.get("event") == "failed"]
-        assert len(failed) == 1
-        assert "NPI not found" in failed[0]["error"]
-
+        assert [e["id"] for e in failed] == ["gpu-nvidia:vrr_mode"]
         done = next(e for e in events if e.get("event") == "done")
-        assert done["failed"] == 1
-        assert done["succeeded"] == 0
+        assert (done["succeeded"], done["failed"]) == (1, 1)
 
+    def test_the_batch_entry_point_is_gone(self) -> None:
+        from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
-class TestNvprofileBatchGoesThroughFinalize:
-    """ARCH-12 regression: the NVIDIA batch verified inline and bypassed
-    _finalize_apply_response — no log_activity, no ApplicabilityChecker, no
-    cleanup-cache invalidation, so bulk-applied NVIDIA tweaks never appeared in
-    the Activity drawer.
-    """
-
-    def test_batch_apply_logs_an_activity_entry(self, client: TestClient) -> None:
-        setting = _real_nvprofile_setting()
-
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
-
-        fresh = MagicMock()
-        fresh.value = "on"
-        mock_engine = MagicMock()
-        mock_engine.detect_one.return_value = fresh
-
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings_stream.DetectionEngine", return_value=mock_engine),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
-            patch("fpstune.api.routes.settings.log_activity") as mock_log,
-        ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
-            response = client.post(
-                "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:low_latency"]},
-            )
-
-        assert response.status_code == 200
-        messages = [call.args[0] for call in mock_log.call_args_list]
-        assert any("Low Latency Mode" in message for message in messages), (
-            "the NVIDIA batch apply left no Activity entry"
-        )
-
-    def test_apply_skips_an_inapplicable_setting_without_writing(self, client: TestClient) -> None:
-        setting = _real_nvprofile_setting()
-
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
-
-        checker = MagicMock()
-        checker.is_applicable.return_value = (False, "No NVIDIA GPU detected")
-
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch(
-                "fpstune.api.routes.settings_stream._get_hardware_context",
-                return_value=MagicMock(),
-            ),
-            patch("fpstune.api.routes.settings_stream.ApplicabilityChecker", return_value=checker),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
-        ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
-            response = client.post(
-                "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:low_latency"]},
-            )
-
-        assert response.status_code == 200
-        events = _parse_sse(response.text)
-        skipped = [e for e in events if e.get("event") == "skipped"]
-        assert len(skipped) == 1
-        # The old path wrote first and asked never: the NPI call must not run
-        # for a setting the hardware cannot hold.
-        mock_nv_cls.apply_bulk.assert_not_called()
-
-        done = next(e for e in events if e.get("event") == "done")
-        assert done["succeeded"] == 1
-        assert done["failed"] == 0
-
-    def test_reset_reports_an_inapplicable_setting_as_failed(self, client: TestClient) -> None:
-        setting = _real_nvprofile_setting()
-
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = setting
-
-        checker = MagicMock()
-        checker.is_applicable.return_value = (False, "No NVIDIA GPU detected")
-
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch(
-                "fpstune.api.routes.settings_stream._get_hardware_context",
-                return_value=MagicMock(),
-            ),
-            patch("fpstune.api.routes.settings_stream.ApplicabilityChecker", return_value=checker),
-            patch("fpstune.settings.executors.nvprofile.NvProfileExecutor") as mock_nv_cls,
-        ):
-            mock_nv_cls.apply_bulk.return_value = (True, None)
-            response = client.post(
-                "/api/settings/bulk/stream-reset",
-                json={"ids": ["gpu-nvidia:low_latency"]},
-            )
-
-        assert response.status_code == 200
-        events = _parse_sse(response.text)
-        failed = [e for e in events if e.get("event") == "failed"]
-        assert len(failed) == 1
-        assert "No NVIDIA GPU detected" in failed[0]["error"]
-        mock_nv_cls.apply_bulk.assert_not_called()
+        assert not hasattr(NvProfileExecutor, "apply_bulk")

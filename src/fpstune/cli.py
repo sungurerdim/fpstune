@@ -18,6 +18,7 @@ from fpstune.commands import (
     gpu,
     gpu_bench,
     network_bench,
+    nvidia_dump,
     status,
 )
 from fpstune.commands import presentation as ui
@@ -205,6 +206,7 @@ def main(ctx: click.Context, verbose: bool) -> None:
     Or use subcommands:
         fpstune status    What this machine is set to, and what is left to do
         fpstune gpu       How this GPU is configured
+        fpstune nvidia-dump  Save NVIDIA driver settings to a file, for diagnosis
         fpstune benchmark Measure this machine, before and after
         fpstune cleanup   Free disk space
         fpstune serve     Start the web UI (same as no args)
@@ -252,6 +254,7 @@ main.add_command(fps)
 main.add_command(gpu)
 main.add_command(gpu_bench)
 main.add_command(network_bench)
+main.add_command(nvidia_dump)
 main.add_command(status)
 
 

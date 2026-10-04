@@ -52,7 +52,6 @@ from fpstune.settings.applicability import (
 from fpstune.settings.base import (
     CATEGORY_METADATA,
     MODULE_METADATA,
-    DetectType,
     SettingExecutor,
     SettingValueType,
     get_all_categories_metadata,
@@ -341,27 +340,12 @@ def _verify_setting_applied(
 
     # Skip verification for advisory/detect-only settings. The test is
     # is_readonly, NOT an empty apply_command: the registry, powercfg and
-    # nvprofile executors carry their target in apply_args and leave
+    # NVIDIA executors carry their target in apply_args and leave
     # apply_command empty, so an empty command is no evidence that a setting
     # is advisory. Testing the command here silently exempted 108 settings.
     if setting.is_readonly:
         debug_log("settings", "  Skipping verification (advisory: is_readonly)")
         return True, None, None
-
-    # NVIDIA settings are only verifiable when NVAPI can read the driver back.
-    # Without it, detection returns fpstune's own JSON cache — the value apply
-    # just wrote — so a match would be a tautology proving nothing. In that case
-    # report the apply as unverified rather than claiming a check that did not
-    # happen; with NVAPI available the comparison below is a real observation.
-    # The test is per setting, not just "is NVAPI loadable": a setting absent
-    # from the driver profile also falls back to the cache, and that fallback is
-    # exactly the tautology being avoided.
-    if setting.detect_type == DetectType.NVPROFILE:
-        from fpstune.settings.executors.nvprofile import read_setting_from_driver
-
-        if read_setting_from_driver(str(setting.detect_args.get("setting", ""))) is None:
-            debug_log("settings", "  Unverifiable (no driver read-back; value came from cache)")
-            return True, None, None
 
     # If detection returned None, we can't verify - report as failure
     if detected_value is None:

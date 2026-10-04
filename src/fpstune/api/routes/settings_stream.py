@@ -23,16 +23,14 @@ from fastapi.responses import StreamingResponse
 from fpstune.api.routes.settings import (
     _apply_single_setting,
     _create_restore_point_async,
-    _finalize_apply_response,
     _get_hardware_context,
     _get_registry,
     _reset_single_setting,
 )
 from fpstune.api.schemas import ApplyResponse, BulkStreamRequest
 from fpstune.settings import SettingsRegistry
-from fpstune.settings.applicability import ApplicabilityChecker, HardwareContext
+from fpstune.settings.applicability import HardwareContext
 from fpstune.settings.base import SettingExecutor
-from fpstune.settings.detection import DetectionEngine
 
 router = APIRouter()
 
@@ -198,83 +196,6 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
     ]
 
 
-async def _stream_nvidia(
-    settings: list[SettingExecutor],
-    action: str,
-    hardware_context: HardwareContext | None,
-    tally: _Tally,
-) -> AsyncIterator[str]:
-    """One nvidiaProfileInspector call for every NVIDIA setting in the run."""
-    from fpstune.settings.executors.nvprofile import NvProfileExecutor
-
-    for s in settings:
-        # An NVIDIA write is one batched call with nothing to print.
-        yield _started(s, reports_progress=False)
-
-    # Applicability mirrors _apply_one: checked before any write, with the same
-    # asymmetry — apply skips an inapplicable setting benignly, reset reports it
-    # as a failure with the reason.
-    applicable: list[SettingExecutor] = []
-    checker = ApplicabilityChecker(hardware_context) if hardware_context else None
-    for s in settings:
-        if checker is not None:
-            is_applicable, reason = await asyncio.to_thread(checker.is_applicable, s)
-            if not is_applicable:
-                if action == "apply":
-                    tally.succeeded += 1
-                    yield _sse({"event": "skipped", "id": s.id})
-                else:
-                    tally.failed += 1
-                    yield _sse(
-                        {
-                            "event": "failed",
-                            "id": s.id,
-                            "error": reason or "Setting not applicable to this system",
-                        }
-                    )
-                continue
-        applicable.append(s)
-
-    if not applicable:
-        return
-
-    updates: dict[str, Any] = {
-        s.apply_args["setting"]: apply_target(s, action)
-        for s in applicable
-        if s.apply_args.get("setting")
-    }
-    nv_success, nv_error = await asyncio.to_thread(NvProfileExecutor.apply_bulk, updates)
-
-    # The batch write is one NPI call, but everything after it is per setting and
-    # goes through _finalize_apply_response — the single post-apply path. Detect,
-    # verify and log_activity all live there; re-implementing them here is how
-    # NVIDIA tweaks vanished from the Activity drawer. This is the one path that
-    # does not run a command per setting, so it does not go through
-    # `_apply_and_finalize` — and it does not need to: an NVIDIA profile setting
-    # is never a cleanup, so there is no size to measure around the write.
-    engine = DetectionEngine(hardware_context=hardware_context)
-    activity_label = "Applied" if action == "apply" else "Reset"
-
-    for s in applicable:
-        target = apply_target(s, action)
-        response = await asyncio.to_thread(
-            _finalize_apply_response,
-            s,
-            target,
-            engine,
-            nv_success,
-            None if nv_success else (nv_error or "NVIDIA apply failed"),
-            activity_label,
-        )
-        if response.success:
-            tally.succeeded += 1
-        else:
-            tally.failed += 1
-            response.error = response.error or "NVIDIA apply failed"
-        for event in _outcome_events(s.id, response):
-            yield event
-
-
 async def _stream_each(
     settings: list[SettingExecutor],
     action: str,
@@ -344,15 +265,9 @@ async def _stream_grouped(
     registry: SettingsRegistry,
     hardware_context: HardwareContext | None,
 ) -> AsyncIterator[str]:
-    """Yield SSE events grouping NVPROFILE settings into one NPI call.
-
-    NVPROFILE group: single nvidiaProfileInspector invocation for all GPU settings.
-    Other groups: asyncio.Semaphore(4) bounded parallelism, each streaming its own
-    command's output.
-    """
+    """Yield SSE events for every requested setting, each reporting as it goes."""
     tally = _Tally()
-    nv_settings: list[SettingExecutor] = []
-    other_settings: list[SettingExecutor] = []
+    known: list[SettingExecutor] = []
 
     for setting_id in ids:
         setting = registry.get(setting_id)
@@ -362,17 +277,10 @@ async def _stream_grouped(
                 {"event": "failed", "id": setting_id, "error": f"Unknown setting: {setting_id}"}
             )
             continue
-        if setting.apply_type.value == "nvprofile":
-            nv_settings.append(setting)
-        else:
-            other_settings.append(setting)
+        known.append(setting)
 
-    if nv_settings:
-        async for event in _stream_nvidia(nv_settings, action, hardware_context, tally):
-            yield event
-
-    if other_settings:
-        async for event in _stream_each(other_settings, action, hardware_context, tally):
+    if known:
+        async for event in _stream_each(known, action, hardware_context, tally):
             yield event
 
     if action == "apply" and tally.succeeded:
@@ -420,7 +328,7 @@ async def bulk_stream_reset(request: BulkStreamRequest) -> StreamingResponse:
     """SSE bulk reset — resets each setting to its default_value.
 
     Streams per-setting events: started → applied → verified → (failed | done).
-    NVPROFILE settings are batched into one NPI call. Others run 4-at-a-time.
+    Settings run four at a time.
     Failures do not abort the stream; all IDs are processed.
     """
     registry = await asyncio.to_thread(_get_registry)

@@ -53,15 +53,6 @@ Caveat: `settings/registry.py` imports specific symbols from `network.py`
 (the per-adapter factories and `create_mtu_setting`). Those imports must be
 re-pointed at the new submodules.
 
-## Split `core/nv_profile.py`
-
-Largest single class. Boundaries:
-
-- `nv_profile_download.py` — Profile Inspector binary download + cache
-- `nv_profile_xml.py` — profile XML generation
-- `nv_profile_apply.py` — subprocess invocation
-- `nv_profile.py` — facade `NvidiaProfileInspector` composing the above
-
 ## Split `utils/detect.py` and `settings/definitions/gpu.py`
 
 - `detect.py` already has internal sections; split into `detect_gpu.py`,
@@ -93,7 +84,6 @@ deprecation window.
 
 1. **PR #1** — split `definitions/system.py`. Lowest risk: only the
    aggregator is imported externally.
-2. **PR #2** — split `core/nv_profile.py`. Self-contained.
 3. **PR #3+** — remaining splits (network, gpu, detect, api.ts) one per PR.
 
 After every split, run `pytest tests/ --no-cov` to confirm the registry still

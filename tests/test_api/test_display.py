@@ -290,16 +290,14 @@ class TestVrrOptimizationInfo:
             "recommended_vsync": "off",
             "explanation": "G-Sync active: cap FPS 2 below refresh to keep VRR range engaged.",
         }
-        mock_executor._load_cache.return_value = {
-            "fps_limit": 0,
-            "vrr_mode": "off",
-            "vsync": "off",
-        }
-
         with (
             patch(
                 "fpstune.settings.executors.nvprofile.NvProfileExecutor",
                 return_value=mock_executor,
+            ),
+            patch(
+                "fpstune.api.routes.display._vrr_current",
+                return_value=(0, "fullscreen", "app"),
             ),
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
         ):
@@ -370,52 +368,59 @@ class TestApplyVrrOptimization:
             mock_hw.get_gpu_info.return_value = (mock_gpu, False)
             response = client.post(
                 "/api/display/vrr-optimization/apply",
-                json={"fps_limit": 999, "vrr_mode": "off", "vsync": "off"},
+                json={"fps_limit": 1024, "vrr_mode": "off", "vsync": "off"},
             )
 
         assert response.status_code == 400
 
-    def test_successful_apply(self, client: TestClient) -> None:
+    def test_successful_apply_writes_exactly_its_three_keys(self, client: TestClient) -> None:
+        """The old route rewrote every NVIDIA key from tuned fallbacks; this one
+        writes VRR mode, V-Sync and the cap, in one session, and nothing else."""
         mock_gpu = MagicMock()
         mock_gpu.vendor = MagicMock()
         mock_gpu.vendor.lower.return_value = "nvidia"
 
-        mock_executor = MagicMock()
-        mock_executor._load_cache.return_value = {
-            "power_mode": "optimal",
-            "low_latency": "ultra",
-            "threaded_opt": "on",
-            "shader_cache": "on",
-            "bg_app_fps": 30,
-            "aniso_sample_opt": "on",
-            "texture_lod_bias": "clamp",
-            "ogl_thread_opt": "on",
-            "cuda_force_p2": "off",
-        }
-
-        mock_nv = MagicMock()
-        mock_nv.apply_gaming_profile.return_value = (True, None)
-
         with (
-            patch(
-                "fpstune.settings.executors.nvprofile.NvProfileExecutor",
-                return_value=mock_executor,
-            ),
-            patch("fpstune.core.nv_profile.NvidiaProfileInspector", return_value=mock_nv),
+            patch("fpstune.core.nvapi.write_driver_settings") as write,
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
         ):
             mock_hw.get_gpu_info.return_value = (mock_gpu, False)
             response = client.post(
                 "/api/display/vrr-optimization/apply",
-                json={"fps_limit": 163, "vrr_mode": "fullscreen", "vsync": "off"},
+                json={"fps_limit": 163, "vrr_mode": "on", "vsync": "on"},
             )
 
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["applied_fps_limit"] == 163
-        assert data["applied_vrr_mode"] == "fullscreen"
-        assert data["applied_vsync"] == "off"
+        assert (data["applied_fps_limit"], data["applied_vrr_mode"], data["applied_vsync"]) == (
+            163,
+            "on",
+            "on",
+        )
+        write.assert_called_once_with({0x10835002: 163, 0x1194F158: 2, 0x00A879CF: 0x47814940})
+
+    def test_driver_unavailable_is_503_with_the_reason(self, client: TestClient) -> None:
+        from fpstune.core.nvapi import NvapiUnavailable
+
+        mock_gpu = MagicMock()
+        mock_gpu.vendor = MagicMock()
+        mock_gpu.vendor.lower.return_value = "nvidia"
+        with (
+            patch(
+                "fpstune.core.nvapi.write_driver_settings",
+                side_effect=NvapiUnavailable("nvapi64.dll not loadable"),
+            ),
+            patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
+        ):
+            mock_hw.get_gpu_info.return_value = (mock_gpu, False)
+            response = client.post(
+                "/api/display/vrr-optimization/apply",
+                json={"fps_limit": 0, "vrr_mode": "on", "vsync": "on"},
+            )
+
+        assert response.status_code == 503
+        assert "nvapi64.dll" in response.json()["detail"]
 
 
 # ---------------------------------------------------------------------------
@@ -426,32 +431,13 @@ class TestApplyVrrOptimization:
 class TestResetVrrOptimization:
     """Tests for POST /api/display/vrr-optimization/reset."""
 
-    def test_reset_calls_apply_with_defaults(self, client: TestClient) -> None:
+    def test_reset_restores_the_driver_defaults(self, client: TestClient) -> None:
         mock_gpu = MagicMock()
         mock_gpu.vendor = MagicMock()
         mock_gpu.vendor.lower.return_value = "nvidia"
 
-        mock_executor = MagicMock()
-        mock_executor._load_cache.return_value = {
-            "power_mode": "optimal",
-            "low_latency": "ultra",
-            "threaded_opt": "on",
-            "shader_cache": "on",
-            "bg_app_fps": 30,
-            "aniso_sample_opt": "on",
-            "texture_lod_bias": "clamp",
-            "ogl_thread_opt": "on",
-            "cuda_force_p2": "off",
-        }
-        mock_nv = MagicMock()
-        mock_nv.apply_gaming_profile.return_value = (True, None)
-
         with (
-            patch(
-                "fpstune.settings.executors.nvprofile.NvProfileExecutor",
-                return_value=mock_executor,
-            ),
-            patch("fpstune.core.nv_profile.NvidiaProfileInspector", return_value=mock_nv),
+            patch("fpstune.core.nvapi.write_driver_settings") as write,
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
         ):
             mock_hw.get_gpu_info.return_value = (mock_gpu, False)
@@ -459,10 +445,13 @@ class TestResetVrrOptimization:
 
         assert response.status_code == 200
         data = response.json()
-        assert data["success"] is True
-        assert data["applied_fps_limit"] == 0
-        assert data["applied_vrr_mode"] == "off"
-        assert data["applied_vsync"] == "off"
+        assert (data["applied_fps_limit"], data["applied_vrr_mode"], data["applied_vsync"]) == (
+            0,
+            "fullscreen",
+            "app",
+        )
+        # Stock is the driver's own: every key deleted, none written.
+        write.assert_called_once_with({0x10835002: None, 0x1194F158: None, 0x00A879CF: None})
 
 
 # ---------------------------------------------------------------------------

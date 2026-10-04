@@ -396,20 +396,10 @@ export const settingsTr: Record<
     description:
       "Negatif sapma doku filtrelemesini keskinleştirir ama uzaktaki yüzeylerde titreşim yaratır — tam da rakibin ayırt edilmesi gereken yerde. Clamp bu takası reddeder.",
   },
-  "gpu-nvidia:ogl_thread_opt": {
-    name: "OpenGL iş parçacığı",
-    description:
-      "Sürücünün OpenGL işini iş parçacıklarına dağıtıp dağıtmadığı. Auto kararı sürücüye bırakır ve çoğu oyun OpenGL değil DirectX kullanır.",
-  },
   "gpu-nvidia:cuda_force_p2": {
     name: "CUDA bellek saati sınırı",
     description:
       "CUDA uygulamaları için daha yüksek GPU güç durumu zorlar. GPU hesaplama işleri için yararlıdır.",
-  },
-  "gpu-nvidia:max_prerendered": {
-    name: "Önceden kuyruklanan kareler",
-    description:
-      "CPU'nun GPU'nun önüne kaç kare kuyruklayabileceği. Az olması giriş gecikmesini düşürür, aktarımdan biraz verir ve Düşük Gecikme Modu ile birlikte çalışır.",
   },
   "gpu-nvidia:triple_buffer": {
     name: "Üçlü arabellek",

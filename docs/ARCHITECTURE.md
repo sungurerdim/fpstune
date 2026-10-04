@@ -22,7 +22,7 @@ SettingExecutor.apply_type dispatches:
     NETSH     -> subprocess netsh
     BCDEDIT   -> subprocess bcdedit
     POWERSHELL-> run_powershell()
-    NVPROFILE -> nvidiaProfileInspector wrapper
+    NVPROFILE -> NVAPI driver settings (core/nvapi.py, core/nv_drs.py)
     |
     v
 DetectionEngine re-runs detect_command to verify
@@ -95,13 +95,12 @@ JSON response -> React Query refetch -> UI refresh
 
 ### `core/` — System integrations
 
-- `bcdedit.py` — Boot Configuration Database
 - `power_profile.py` — powercfg wrapper, named-plan management
 - `dism.py` — DISM component cleanup, AnalyzeComponentStore
-- `nvapi.py` — NVAPI queries that do not need the inspector
-- `nv_profile.py` — Downloads nvidiaProfileInspector, generates XML profile,
-  invokes the binary. (Largest single class — split still open, see
-  `docs/REFACTOR_PLAN.md`.)
+- `nvapi.py` — NVIDIA driver settings (DRS) sessions through `nvapi64.dll`: read,
+  write, restore the driver default, dump
+- `nv_drs.py` — which DRS keys and values each NVIDIA setting reads and writes,
+  copied from NVIDIA's `NvApiDriverSettings.h`
 
 ### `safety/` — Reversible state
 
@@ -145,11 +144,6 @@ Small measurements that exist to settle a specific argument rather than to run
 in the suite: `mpo_effect.py` (what Multiplane Overlay actually changes here)
 and `packet_burst.py`. They have their own test directory
 (`tests/test_diagnostics/`).
-
-### `resources/` — pinned facts shipped with the build
-
-`checksums.json` — expected checksums for the external tools fpstune downloads,
-so a fetched binary is verified rather than trusted.
 
 ### `utils/` — Cross-cutting helpers
 
@@ -215,7 +209,7 @@ so a fetched binary is verified rather than trusted.
 - PowerShell — apply/detect for non-trivial settings
 - powercfg.exe / netsh.exe / bcdedit.exe — subsystem CLIs
 - DISM — cleanup operations
-- nvidiaProfileInspector — fetched on first run, cached locally
+- nvapi64.dll — NVIDIA driver settings, shipped with every NVIDIA driver
 - WMI / CIM — hardware queries
 - PresentMon (bundled or downloaded) — FPS captures
 
@@ -247,5 +241,5 @@ See `docs/REFACTOR_PLAN.md` — it is in the repository, so a fresh clone has it
 Already landed from it: the `api/routes/system.py` split into per-subsystem
 routers, the `executors/powershell.py` action-table extraction
 (`powershell_actions.py`), and the `HardwarePanel.tsx` split into the
-`components/hardware/` package. Still open: `core/nv_profile.py`,
+`components/hardware/` package; `core/nv_profile.py` was removed with nvidiaProfileInspector. Still open:
 `frontend/src/lib/api.ts`, and the large `definitions/` files.

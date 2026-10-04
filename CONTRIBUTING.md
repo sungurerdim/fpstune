@@ -46,7 +46,7 @@ Open http://localhost:5173. The frontend proxies API requests to port 8000.
 | `src/fpstune/api/routes/` | FastAPI route handlers |
 | `src/fpstune/settings/definitions/` | SettingExecutor instances (one file per category) |
 | `src/fpstune/settings/executors/` | Registry, PowerShell, Netsh, POWERCFG executors |
-| `src/fpstune/core/` | System integrations (BcdEdit, DISM, NV Inspector) |
+| `src/fpstune/core/` | System integrations (DISM, NVIDIA driver settings via NVAPI, power profiles) |
 | `src/fpstune/safety/` | System Restore point creation and listing |
 | `src/fpstune/utils/` | Hardware detection, admin check, PowerShell runner |
 | `frontend/src/components/` | React components |

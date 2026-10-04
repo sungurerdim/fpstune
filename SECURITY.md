@@ -47,10 +47,10 @@ Concretely, fpstune:
 - no bundled third-party software
 
 The only network requests fpstune makes are ones you trigger. As of this
-commit they are, in full: downloading PresentMon, FurMark and NVIDIA Profile
-Inspector from their own project pages when you use the feature that needs
-them, asking the GitHub releases API which version of Profile Inspector is
-current, and measuring your own connection (ping, path MTU). Nothing is sent
+commit they are, in full: downloading PresentMon and FurMark from their own
+project pages when you use the feature that needs them, and measuring your own
+connection (ping, path MTU). NVIDIA driver settings are read and written through
+the NVIDIA driver's own `nvapi64.dll`; nothing is downloaded for them. Nothing is sent
 about you, your hardware, or what you changed.
 
 ## Threat model

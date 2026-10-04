@@ -1,7 +1,8 @@
 """GPU setting definitions.
 
 Contains settings for NVIDIA and AMD GPUs.
-These settings use the nv_profile executor for NVIDIA DRS settings.
+NVIDIA settings are NVIDIA Control Panel's global settings, read and written
+through NVAPI's driver settings database (executors/nvprofile.py, core/nv_drs.py).
 """
 
 from __future__ import annotations
@@ -18,15 +19,14 @@ from fpstune.settings.performance_headroom import MIN_FRAME_CAP, frame_cap_for_r
 # =============================================================================
 # NVIDIA GPU Settings
 # =============================================================================
-# Note: NVIDIA settings are applied via nvidiaProfileInspector (DRS)
-# Detection reads from saved profile or returns None (unknown)
 
 NVIDIA_LOW_LATENCY = SettingExecutor(
     id="gpu-nvidia:low_latency",
     category=SettingCategory.GPU,
     display_name="Low Latency Mode",
     short_name="Low latency mode",
-    description="NVIDIA Reflex / Ultra Low Latency mode. Controls pre-rendered frames.",
+    description="How many frames the CPU may prepare ahead of the GPU. Fewer queued frames "
+    "means lower input lag; games with NVIDIA Reflex replace this setting with their own.",
     value_type=SettingValueType.CHOICE,
     choices=("off", "on", "ultra"),
     default_value="off",
@@ -52,12 +52,10 @@ NVIDIA_LOW_LATENCY = SettingExecutor(
     effect="Reduces GPU pre-rendered frames for lower input delay",
     impact_scores={"fps": "-1-2%", "latency_ms": -8, "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia"},  # NVIDIA only
-    # Detection via NVIDIA Profile cache
     detect_type=DetectType.NVPROFILE,
     detect_command="",
     detect_args={"setting": "low_latency"},
     value_map={},
-    # Apply via NVIDIA Profile Inspector
     apply_type=DetectType.NVPROFILE,
     apply_command="",
     apply_args={"setting": "low_latency"},
@@ -162,8 +160,8 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
             "below the refresh rate, V-Sync never engages during play and acts only as the "
             "safety net that keeps tearing away if the cap is briefly overshot.",
             value_type=SettingValueType.CHOICE,
-            choices=("off", "on", "adaptive"),
-            default_value="on",
+            choices=("app", "off", "on"),
+            default_value="app",
             recommended_value="on",
             requires_reboot=False,
             current_impact="Off: Tearing returns whenever the frame rate leaves the G-Sync window",
@@ -194,11 +192,11 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
         description="Frame synchronisation in the driver. On a fixed-refresh panel V-Sync holds "
         "finished frames back until the next refresh, which is a direct addition to input lag.",
         value_type=SettingValueType.CHOICE,
-        choices=("off", "on", "adaptive"),
-        default_value="on",
+        choices=("app", "off", "on"),
+        default_value="app",
         recommended_value="off",
         requires_reboot=False,
-        current_impact="On: Frames held for the next refresh → 8-16 ms extra input lag",
+        current_impact="Application-controlled or On: A game with V-Sync on holds frames for the next refresh → 8-16 ms extra input lag",
         recommended_impact="Off: Frames presented as soon as they are ready → minimum input lag",
         scope=SettingScope.ESSENTIAL,
         category_order=2,
@@ -313,12 +311,12 @@ def create_nvidia_fps_limiter_setting(vrr_available: bool, max_hz: int = 0) -> S
             "presentation and V-Sync never engages.",
             value_type=SettingValueType.INT,
             choices=(),
-            # Derived rather than stock, so default equals recommended and the
-            # setting acts as a drift guard: a cap left behind by another tool at
-            # some other panel's rate reads as a disagreement and gets corrected.
-            default_value=target,
+            # Stock is no cap; reset removes the driver cap. A cap left behind
+            # by another tool at some other panel's rate differs from the target
+            # and reads as a disagreement either way.
+            default_value=0,
             recommended_value=target,
-            min_value=30,
+            min_value=0,
             max_value=1000,
             requires_reboot=False,
             evidence_level="proven",
@@ -400,8 +398,10 @@ NVIDIA_VRR_MODE = SettingExecutor(
     "without the input lag V-Sync costs. 'On' covers borderless and windowed, not only exclusive "
     "fullscreen.",
     value_type=SettingValueType.CHOICE,
-    choices=("off", "on", "fullscreen"),
-    default_value="off",
+    choices=("off", "fullscreen", "on"),
+    # VRR_MODE_DEFAULT is FULLSCREEN_ONLY: the driver ships G-Sync for exclusive
+    # fullscreen alone.
+    default_value="fullscreen",
     # 'on' rather than 'fullscreen', and not interchangeable with it. 'fullscreen' is
     # NVCP's "Enable G-SYNC for full screen mode", which silently drops VRR in
     # borderless — the mode game_config:mw3:display_mode now recommends, and the mode
@@ -409,7 +409,7 @@ NVIDIA_VRR_MODE = SettingExecutor(
     # for those games with nothing in the UI to say so.
     recommended_value="on",
     requires_reboot=False,
-    current_impact="Off: Monitor runs at fixed refresh rate, may cause screen tearing",
+    current_impact="Fullscreen only (driver default): Borderless and windowed games run at a fixed refresh rate and tear",
     recommended_impact="On: Tear-free adaptive refresh in borderless and exclusive fullscreen alike",
     scope=SettingScope.RECOMMENDED,
     category_order=6,  # Sync technology
@@ -518,11 +518,11 @@ NVIDIA_TEXTURE_LOD_BIAS = SettingExecutor(
     default_value="allow",
     recommended_value="clamp",
     requires_reboot=False,
-    current_impact="Allow: Games can apply negative LOD bias → potentially blurry textures",
-    recommended_impact="Clamp: Prevents negative LOD bias → sharper textures at distance",
+    current_impact="Allow: Games may apply a negative LOD bias → shimmering textures at range",
+    recommended_impact="Clamp: No negative bias → stable, shimmer-free textures at distance",
     scope=SettingScope.COMPLETE,  # Minor improvement
     category_order=11,  # Texture optimization
-    effect="Clamps LOD bias to prevent blurry distant textures",
+    effect="Clamps negative LOD bias to stop distant textures shimmering",
     impact_scores={"fps": "0%", "visual_quality": "improved", "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia"},  # NVIDIA only
     detect_type=DetectType.NVPROFILE,
@@ -535,51 +535,24 @@ NVIDIA_TEXTURE_LOD_BIAS = SettingExecutor(
     apply_value_map={},
 )
 
-NVIDIA_OGL_THREAD_OPT = SettingExecutor(
-    id="gpu-nvidia:ogl_thread_opt",
-    category=SettingCategory.GPU,
-    display_name="OpenGL Threading Optimization",
-    short_name="OpenGL threading",
-    description="Whether the driver spreads OpenGL work across threads. Auto lets the driver decide, and most "
-    "games use DirectX rather than OpenGL.",
-    value_type=SettingValueType.CHOICE,
-    choices=("off", "on", "auto"),
-    default_value="auto",
-    recommended_value="auto",
-    requires_reboot=False,
-    current_impact="Auto: Driver decides OpenGL threading per-application",
-    recommended_impact="Auto: Driver optimizes per-game → no stutter risk",
-    scope=SettingScope.COMPLETE,  # OpenGL is rare, marginal benefit
-    category_order=12,  # OpenGL optimization
-    effect="Lets NVIDIA driver choose optimal OpenGL threading",
-    impact_scores={"fps": "0%", "latency_ms": 0, "stability": "high"},
-    applicable_conditions={"gpu_vendor": "nvidia"},  # NVIDIA only
-    detect_type=DetectType.NVPROFILE,
-    detect_command="",
-    detect_args={"setting": "ogl_thread_opt"},
-    value_map={},
-    apply_type=DetectType.NVPROFILE,
-    apply_command="",
-    apply_args={"setting": "ogl_thread_opt"},
-    apply_value_map={},
-)
-
 NVIDIA_CUDA_FORCE_P2 = SettingExecutor(
     id="gpu-nvidia:cuda_force_p2",
     category=SettingCategory.GPU,
     display_name="CUDA Force P2 State",
-    short_name="CUDA memory clock cap",
-    description="Forces higher GPU power state for CUDA applications. Useful for GPU compute.",
+    short_name="CUDA P2 state",
+    description="Whether CUDA compute work runs in the P2 power state, as the driver ships. Games "
+    "do not use it; this keeps the driver default in place if another tool changed it.",
     value_type=SettingValueType.CHOICE,
-    choices=("off", "on"),
-    default_value="off",
-    recommended_value="off",  # Only useful for CUDA workloads
+    choices=("on", "off"),
+    # nvidiaProfileInspector lists the driver default as On.
+    default_value="on",
+    recommended_value="on",
     requires_reboot=False,
-    current_impact="Off: GPU uses adaptive power state for CUDA",
-    recommended_impact="On: Forces P2 state → more stable CUDA performance",
+    current_impact="Off: CUDA work runs outside the driver's default power state",
+    recommended_impact="On: The driver's own CUDA power behaviour",
     scope=SettingScope.COMPLETE,  # Specialized use case
-    category_order=13,  # CUDA optimization
-    effect="Forces higher GPU power state for consistent CUDA performance",
+    category_order=13,
+    effect="Keeps the driver's default power state for CUDA work",
     impact_scores={"fps": "0%", "latency_ms": 0, "stability": "medium"},
     applicable_conditions={"gpu_vendor": "nvidia"},  # NVIDIA only
     detect_type=DetectType.NVPROFILE,
@@ -589,45 +562,6 @@ NVIDIA_CUDA_FORCE_P2 = SettingExecutor(
     apply_type=DetectType.NVPROFILE,
     apply_command="",
     apply_args={"setting": "cuda_force_p2"},
-    apply_value_map={},
-)
-
-# =============================================================================
-# NVIDIA - Maximum Pre-rendered Frames
-# =============================================================================
-
-NVIDIA_MAX_PRERENDERED = SettingExecutor(
-    id="gpu-nvidia:max_prerendered",
-    category=SettingCategory.GPU,
-    display_name="Maximum Pre-rendered Frames",
-    short_name="Frames queued ahead",
-    description="How many frames the CPU may queue ahead of the GPU. Fewer means less input latency at some "
-    "cost to throughput, and it works alongside Low Latency Mode.",
-    value_type=SettingValueType.INT,
-    choices=(),
-    default_value=3,
-    recommended_value=1,
-    requires_reboot=False,
-    evidence_level="proven",
-    sources=[
-        "https://www.nvidia.com/en-us/geforce/guides/system-latency-optimization-guide/",
-    ],
-    current_impact="3 frames: Higher throughput but more input lag",
-    recommended_impact="1 frame: Minimum input latency, slight throughput reduction",
-    scope=SettingScope.RECOMMENDED,
-    category_order=14,
-    effect="Reduces pre-render queue to 1 frame for minimum input latency in competitive games",
-    impact_scores={"latency_ms": -3, "fps": "-0-1%"},
-    applicable_conditions={"gpu_vendor": "nvidia"},
-    min_value=1,
-    max_value=4,
-    detect_type=DetectType.NVPROFILE,
-    detect_command="",
-    detect_args={"setting": "max_prerendered"},
-    value_map={},
-    apply_type=DetectType.NVPROFILE,
-    apply_command="",
-    apply_args={"setting": "max_prerendered"},
     apply_value_map={},
 )
 
@@ -677,7 +611,7 @@ NVIDIA_VRR_APP_OVERRIDE = SettingExecutor(
     description="Whether one game may override the driver's G-Sync scope. Left at the driver default the "
     "global setting decides, which is what a borderless game needs to stay tear-free.",
     value_type=SettingValueType.CHOICE,
-    choices=("off", "driver_default", "force_on"),
+    choices=("driver_default", "off"),
     default_value="driver_default",
     recommended_value="driver_default",
     requires_reboot=False,
@@ -1221,9 +1155,7 @@ NVIDIA_SETTINGS: list[SettingExecutor] = [
     NVIDIA_BG_APP_FPS,
     NVIDIA_ANISO_SAMPLE_OPT,
     NVIDIA_TEXTURE_LOD_BIAS,
-    NVIDIA_OGL_THREAD_OPT,
     NVIDIA_CUDA_FORCE_P2,
-    NVIDIA_MAX_PRERENDERED,
     NVIDIA_TRIPLE_BUFFER,
     NVIDIA_VRR_APP_OVERRIDE,
     NVIDIA_FAN_CURVE,

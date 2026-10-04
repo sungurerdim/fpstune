@@ -1,18 +1,28 @@
-"""Read NVIDIA driver settings directly through NVAPI.
+"""NVIDIA driver settings (DRS) through NVAPI: read, write, restore stock.
 
-Why this exists: fpstune applies GPU settings by importing a .nip file with
-nvidiaProfileInspector, but NPI offers no way to read the result back — its
-export path requires GUI interaction. Detection therefore fell back to
-fpstune's own JSON cache, which apply had just written, so verifying a GPU
-setting compared a value against itself and could never fail.
+NVIDIA Control Panel's "Global Settings" live in the driver's settings database
+(DRS), not in the registry. NVAPI's DRS functions are the one supported way to
+read and change them, and they are what NVIDIA Control Panel and every profile
+tool are built on. Reaching them through ``nvapi64.dll`` — which ships with
+every NVIDIA driver — means no helper program is downloaded, unpacked or run.
 
-NVAPI's DRS (DRiver Settings) API is what NPI itself is built on, so reading
-through it observes exactly what NPI wrote.
+Three rules shape this module:
 
-Everything here is read-only and best-effort: any failure returns None so the
-caller falls back to the cache rather than reporting a wrong value.
+* **Global profile.** Writes and reads target the profile NVIDIA Control Panel
+  edits as Global Settings: ``NvAPI_DRS_GetCurrentGlobalProfile``. Reads return
+  the effective value even when it is inherited from the base profile or the
+  driver's predefined default, so what is read is what a game gets unless its
+  own application profile overrides it.
+* **Stock means absent.** Restoring a setting deletes it from the global
+  profile, so the driver's own default applies — whatever this driver version
+  ships, with nothing hardcoded here to drift from it.
+* **One session per operation, under one lock.** NVIDIA's guide is explicit
+  that sessions do not merge: two sessions loaded, changed and saved in
+  parallel would each save the database as it looked when they loaded it, and
+  the later save would silently drop the earlier one's change.
 
-Reference: NVIDIA "Driver Settings Programming Guide" (PG-12072-001).
+Reference: NVIDIA ``nvapi.h``, ``nvapi_interface.h`` and ``nvapi_lite_common.h``
+(github.com/NVIDIA/nvapi); every ID and status code below is copied from them.
 """
 
 from __future__ import annotations
@@ -20,34 +30,49 @@ from __future__ import annotations
 import ctypes
 import sys
 import threading
+from collections.abc import Callable, Iterator, Mapping
+from contextlib import contextmanager
 from ctypes import POINTER, Structure, byref, c_uint8, c_uint16, c_uint32, c_void_p
+from dataclasses import dataclass
 from typing import Any
 
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
 
-# NVAPI status codes we care about; everything else is just "failed".
-# Verified against the driver on this codebase: an oversized/undersized struct
-# returns -9, while a setting absent from the profile returns -160 (confirmed by
-# NvAPI_DRS_GetNumSettings reporting 0 settings on an untouched base profile).
+# Status codes (nvapi_lite_common.h, NvAPI_Status).
 NVAPI_OK = 0
+NVAPI_NVIDIA_DEVICE_NOT_FOUND = -6
+NVAPI_END_ENUMERATION = -7
 NVAPI_INCOMPATIBLE_STRUCT_VERSION = -9
+NVAPI_INVALID_USER_PRIVILEGE = -137
 NVAPI_SETTING_NOT_FOUND = -160
+NVAPI_PROFILE_NOT_FOUND = -163
 
-# nvapi64.dll exposes a single exported symbol, nvapi_QueryInterface, which maps
-# these well-known function IDs to real entry points.
+# nvapi64.dll exports one symbol, nvapi_QueryInterface, which maps these IDs
+# (nvapi_interface.h) to the real entry points.
 _FN_INITIALIZE = 0x0150E828
-_FN_UNLOAD = 0xD22BDD7E
 _FN_DRS_CREATE_SESSION = 0x0694D52E
 _FN_DRS_DESTROY_SESSION = 0xDAD9CFF8
 _FN_DRS_LOAD_SETTINGS = 0x375DBD6B
-_FN_DRS_GET_BASE_PROFILE = 0xDA8466A0
+_FN_DRS_SAVE_SETTINGS = 0xFCBC7E14
+_FN_DRS_GET_CURRENT_GLOBAL_PROFILE = 0x617BFF9F
 _FN_DRS_GET_SETTING = 0x73BF8338
+_FN_DRS_SET_SETTING = 0x577DD202
+_FN_DRS_DELETE_PROFILE_SETTING = 0xE4A26362
+_FN_DRS_ENUM_SETTINGS = 0xAE3039DA
+_FN_DRS_FIND_PROFILE_BY_NAME = 0x7E4A9A0B
+_FN_DRS_DELETE_PROFILE = 0x17093206
 
 # From nvapi.h.
 _NVAPI_UNICODE_STRING_MAX = 2048
 _NVAPI_BINARY_DATA_MAX = 4096
+
+# fpstune 0.1.0 imported its settings into a custom profile of this name, with
+# no executables attached — a profile that applied to nothing. It is deleted the
+# first time this release writes, so it cannot shadow or confuse anything.
+# Remove this once 0.1.0 is no longer in the field.
+_ORPHAN_PROFILE_NAME = "fpstune_gaming"
 
 
 class _NvdrsBinarySetting(Structure):
@@ -86,28 +111,56 @@ def _make_version(struct_type: type[Structure], version: int) -> int:
     return ctypes.sizeof(struct_type) | (version << 16)
 
 
-# NVDRS_SETTING_VER is version 1 of the struct.
 NVDRS_SETTING_VER = _make_version(NvdrsSetting, 1)
 
-# DRS setting types (NVDRS_SETTING_TYPE).
+# NVDRS_SETTING_TYPE.
 _NVDRS_DWORD_TYPE = 0
-_NVDRS_BINARY_TYPE = 1
-_NVDRS_STRING_TYPE = 2
-_NVDRS_WSTRING_TYPE = 3
+
+# NVDRS_SETTING_LOCATION, in nvapi.h order.
+LOCATIONS = ("current", "global", "base", "default")
 
 
 class NvapiUnavailable(Exception):
     """NVAPI could not be loaded or initialised on this system."""
 
 
-class _Nvapi:
-    """Lazily-loaded NVAPI entry points.
+class NvapiError(Exception):
+    """A DRS call failed; the message says which one and why, in words."""
 
-    Loading is attempted once; a failure is remembered so a machine without an
-    NVIDIA driver does not pay for a retry on every detection.
+    def __init__(self, call: str, status: int) -> None:
+        self.call = call
+        self.status = status
+        super().__init__(f"{call} failed: {_describe(status)} (NVAPI status {status})")
+
+
+def _describe(status: int) -> str:
+    if status == NVAPI_INVALID_USER_PRIVILEGE:
+        return "administrator rights are required to change NVIDIA driver settings"
+    if status == NVAPI_NVIDIA_DEVICE_NOT_FOUND:
+        return "no NVIDIA display driver is active"
+    if status == NVAPI_INCOMPATIBLE_STRUCT_VERSION:
+        return "this driver rejected the settings structure layout"
+    return "the NVIDIA driver refused the request"
+
+
+@dataclass(frozen=True)
+class DriverSetting:
+    """One DWORD setting as the driver reports it, for diagnostics."""
+
+    setting_id: int
+    value: int
+    location: str
+    predefined: bool
+
+
+class _Nvapi:
+    """Lazily-loaded NVAPI entry points, loaded once per process.
+
+    A failed load is remembered so a machine without an NVIDIA driver does not
+    pay for a retry on every detection.
     """
 
-    _lock = threading.Lock()
+    _load_lock = threading.Lock()
     _instance: _Nvapi | None = None
     _load_failed = False
 
@@ -124,31 +177,52 @@ class _Nvapi:
         query.restype = c_void_p
         query.argtypes = [c_uint32]
 
-        def resolve(fn_id: int, *argtypes: Any) -> Any:
+        def resolve(fn_id: int, *argtypes: Any) -> Callable[..., int]:
             address = query(fn_id)
             if not address:
                 raise NvapiUnavailable(f"NVAPI function {fn_id:#010x} not exported")
             proto = ctypes.CFUNCTYPE(ctypes.c_int, *argtypes)
             return proto(address)
 
-        self._initialize = resolve(_FN_INITIALIZE)
-        self._unload = resolve(_FN_UNLOAD)
-        self._create_session = resolve(_FN_DRS_CREATE_SESSION, POINTER(c_void_p))
-        self._destroy_session = resolve(_FN_DRS_DESTROY_SESSION, c_void_p)
-        self._load_settings = resolve(_FN_DRS_LOAD_SETTINGS, c_void_p)
-        self._get_base_profile = resolve(_FN_DRS_GET_BASE_PROFILE, c_void_p, POINTER(c_void_p))
-        self._get_setting = resolve(
+        self.initialize = resolve(_FN_INITIALIZE)
+        self.create_session = resolve(_FN_DRS_CREATE_SESSION, POINTER(c_void_p))
+        self.destroy_session = resolve(_FN_DRS_DESTROY_SESSION, c_void_p)
+        self.load_settings = resolve(_FN_DRS_LOAD_SETTINGS, c_void_p)
+        self.save_settings = resolve(_FN_DRS_SAVE_SETTINGS, c_void_p)
+        self.get_current_global_profile = resolve(
+            _FN_DRS_GET_CURRENT_GLOBAL_PROFILE, c_void_p, POINTER(c_void_p)
+        )
+        self.get_setting = resolve(
             _FN_DRS_GET_SETTING, c_void_p, c_void_p, c_uint32, POINTER(NvdrsSetting)
         )
+        self.set_setting = resolve(_FN_DRS_SET_SETTING, c_void_p, c_void_p, POINTER(NvdrsSetting))
+        self.delete_profile_setting = resolve(
+            _FN_DRS_DELETE_PROFILE_SETTING, c_void_p, c_void_p, c_uint32
+        )
+        self.enum_settings = resolve(
+            _FN_DRS_ENUM_SETTINGS,
+            c_void_p,
+            c_void_p,
+            c_uint32,
+            POINTER(c_uint32),
+            POINTER(NvdrsSetting),
+        )
+        self.find_profile_by_name = resolve(
+            _FN_DRS_FIND_PROFILE_BY_NAME,
+            c_void_p,
+            POINTER(c_uint16 * _NVAPI_UNICODE_STRING_MAX),
+            POINTER(c_void_p),
+        )
+        self.delete_profile = resolve(_FN_DRS_DELETE_PROFILE, c_void_p, c_void_p)
 
-        status = self._initialize()
+        status = self.initialize()
         if status != NVAPI_OK:
-            raise NvapiUnavailable(f"NvAPI_Initialize failed: {status}")
+            raise NvapiUnavailable(f"NvAPI_Initialize failed: {_describe(status)} ({status})")
 
     @classmethod
     def get(cls) -> _Nvapi:
         """Return the shared instance, raising NvapiUnavailable if unusable."""
-        with cls._lock:
+        with cls._load_lock:
             if cls._load_failed:
                 raise NvapiUnavailable("NVAPI previously failed to load")
             if cls._instance is None:
@@ -159,95 +233,184 @@ class _Nvapi:
                     raise
             return cls._instance
 
-    def read_settings(self, setting_ids: list[int]) -> dict[int, int]:
-        """Read DWORD settings from the base profile in one session.
 
-        The base profile is what fpstune writes, and it applies system-wide.
-        NVIDIA's guide is explicit that DRS sessions do not merge, so the
-        session is opened and destroyed around this single read.
-        """
-        session = c_void_p()
-        status = self._create_session(byref(session))
+# Every session — read or write — runs under this lock; see the module docstring.
+_session_lock = threading.Lock()
+
+
+class _Session:
+    """One loaded DRS session bound to the current global profile."""
+
+    def __init__(self, api: _Nvapi, handle: c_void_p, profile: c_void_p) -> None:
+        self._api = api
+        self._handle = handle
+        self._profile = profile
+
+    def _check(self, call: str, status: int) -> None:
         if status != NVAPI_OK:
-            raise NvapiUnavailable(f"NvAPI_DRS_CreateSession failed: {status}")
+            raise NvapiError(call, status)
 
+    def read(self, setting_id: int) -> NvdrsSetting | None:
+        setting = NvdrsSetting()
+        setting.version = NVDRS_SETTING_VER
+        status = self._api.get_setting(
+            self._handle, self._profile, c_uint32(setting_id), byref(setting)
+        )
+        if status == NVAPI_SETTING_NOT_FOUND:
+            return None
+        self._check(f"NvAPI_DRS_GetSetting({setting_id:#010x})", status)
+        return setting
+
+    def write(self, setting_id: int, value: int) -> None:
+        setting = NvdrsSetting()
+        setting.version = NVDRS_SETTING_VER
+        setting.settingId = setting_id
+        setting.settingType = _NVDRS_DWORD_TYPE
+        setting.currentValue.u32Value = value & 0xFFFFFFFF
+        status = self._api.set_setting(self._handle, self._profile, byref(setting))
+        self._check(f"NvAPI_DRS_SetSetting({setting_id:#010x})", status)
+
+    def delete(self, setting_id: int) -> None:
+        status = self._api.delete_profile_setting(self._handle, self._profile, c_uint32(setting_id))
+        # Deleting what is not there already leaves the driver default in force.
+        if status == NVAPI_SETTING_NOT_FOUND:
+            return
+        self._check(f"NvAPI_DRS_DeleteProfileSetting({setting_id:#010x})", status)
+
+    def enumerate(self) -> list[NvdrsSetting]:
+        found: list[NvdrsSetting] = []
+        batch = 64
+        start = 0
+        while True:
+            buffer = (NvdrsSetting * batch)()
+            for item in buffer:
+                item.version = NVDRS_SETTING_VER
+            count = c_uint32(batch)
+            status = self._api.enum_settings(
+                self._handle, self._profile, c_uint32(start), byref(count), buffer
+            )
+            if status == NVAPI_END_ENUMERATION:
+                return found
+            self._check("NvAPI_DRS_EnumSettings", status)
+            found.extend(buffer[: count.value])
+            if count.value < batch:
+                return found
+            start += count.value
+
+    def drop_orphan_profile(self) -> bool:
+        name = (c_uint16 * _NVAPI_UNICODE_STRING_MAX)()
+        for index, char in enumerate(_ORPHAN_PROFILE_NAME):
+            name[index] = ord(char)
+        profile = c_void_p()
+        status = self._api.find_profile_by_name(self._handle, byref(name), byref(profile))
+        if status == NVAPI_PROFILE_NOT_FOUND:
+            return False
+        self._check("NvAPI_DRS_FindProfileByName", status)
+        self._check("NvAPI_DRS_DeleteProfile", self._api.delete_profile(self._handle, profile))
+        return True
+
+    def save(self) -> None:
+        self._check("NvAPI_DRS_SaveSettings", self._api.save_settings(self._handle))
+
+
+@contextmanager
+def _session() -> Iterator[_Session]:
+    api = _Nvapi.get()
+    with _session_lock:
+        handle = c_void_p()
+        status = api.create_session(byref(handle))
+        if status != NVAPI_OK:
+            raise NvapiError("NvAPI_DRS_CreateSession", status)
         try:
-            status = self._load_settings(session)
+            status = api.load_settings(handle)
             if status != NVAPI_OK:
-                raise NvapiUnavailable(f"NvAPI_DRS_LoadSettings failed: {status}")
-
+                raise NvapiError("NvAPI_DRS_LoadSettings", status)
             profile = c_void_p()
-            status = self._get_base_profile(session, byref(profile))
+            status = api.get_current_global_profile(handle, byref(profile))
             if status != NVAPI_OK:
-                raise NvapiUnavailable(f"NvAPI_DRS_GetBaseProfile failed: {status}")
-
-            values: dict[int, int] = {}
-            for setting_id in setting_ids:
-                setting = NvdrsSetting()
-                setting.version = NVDRS_SETTING_VER
-                status = self._get_setting(session, profile, c_uint32(setting_id), byref(setting))
-
-                if status == NVAPI_SETTING_NOT_FOUND:
-                    # Never written to this profile — the driver default applies.
-                    continue
-                if status == NVAPI_INCOMPATIBLE_STRUCT_VERSION:
-                    # The struct layout no longer matches this driver; reading
-                    # on would risk misinterpreting the union.
-                    raise NvapiUnavailable(
-                        f"NVDRS_SETTING layout rejected by driver (version {NVDRS_SETTING_VER})"
-                    )
-                if status != NVAPI_OK:
-                    logger.debug("DRS_GetSetting(%#010x) failed: %s", setting_id, status)
-                    continue
-                if setting.settingType != _NVDRS_DWORD_TYPE:
-                    # Every setting fpstune manages is a DWORD; anything else
-                    # would need a different accessor, so skip rather than
-                    # reinterpret the union.
-                    logger.debug(
-                        "DRS setting %#010x is type %s, not DWORD",
-                        setting_id,
-                        setting.settingType,
-                    )
-                    continue
-
-                values[setting_id] = int(setting.currentValue.u32Value)
-
-            return values
+                raise NvapiError("NvAPI_DRS_GetCurrentGlobalProfile", status)
+            yield _Session(api, handle, profile)
         finally:
-            self._destroy_session(session)
+            api.destroy_session(handle)
 
 
 def nvapi_available() -> bool:
-    """Whether NVAPI can be used for a real read-back on this system.
-
-    Cheap after the first call: the loader caches both success and failure.
-    """
+    """Whether NVAPI loads on this system. Cheap after the first call."""
     try:
         _Nvapi.get()
-    except NvapiUnavailable:
-        return False
-    except OSError:
+    except (NvapiUnavailable, OSError):
         return False
     return True
 
 
 def read_driver_settings(setting_ids: list[int]) -> dict[int, int] | None:
-    """Read the given DRS setting IDs, or None if NVAPI is unusable.
+    """Effective DWORD values of the given settings on the global profile.
 
-    Returns only the IDs present in the base profile; a missing ID means the
-    driver default is in effect. None (rather than an empty dict) signals that
-    nothing could be read at all, so callers can fall back instead of treating
-    the absence as "everything is at default".
+    An ID missing from the result is one the driver holds no value for at any
+    level, so its built-in default applies. None means nothing could be read at
+    all — NVAPI is missing or refused — which callers must not mistake for
+    "everything is at default".
     """
     if not setting_ids:
         return {}
-
     try:
-        return _Nvapi.get().read_settings(setting_ids)
+        with _session() as session:
+            values: dict[int, int] = {}
+            for setting_id in setting_ids:
+                setting = session.read(setting_id)
+                if setting is None:
+                    continue
+                if setting.settingType != _NVDRS_DWORD_TYPE:
+                    logger.debug("DRS setting %#010x is not a DWORD; skipped", setting_id)
+                    continue
+                values[setting_id] = int(setting.currentValue.u32Value)
+            return values
     except NvapiUnavailable as exc:
         logger.debug("NVAPI read unavailable: %s", exc)
         return None
-    except OSError as exc:
-        # A driver-level fault must degrade to the cache, not crash detection.
+    except (NvapiError, OSError) as exc:
         logger.warning("NVAPI read failed: %s", exc)
         return None
+
+
+def write_driver_settings(changes: Mapping[int, int | None]) -> None:
+    """Write DWORD values to the global profile; None restores driver stock.
+
+    All changes land in one session and one save, so a multi-key setting is
+    never left half-written. Raises NvapiUnavailable or NvapiError with a
+    readable reason; nothing is saved when any write fails.
+    """
+    if not changes:
+        return
+    with _session() as session:
+        for setting_id, value in changes.items():
+            if value is None:
+                session.delete(setting_id)
+            else:
+                session.write(setting_id, value)
+        try:
+            if session.drop_orphan_profile():
+                logger.info("Removed the unused '%s' NVIDIA profile", _ORPHAN_PROFILE_NAME)
+        except NvapiError as exc:
+            # Housekeeping only; the user's change must not fail because of it.
+            logger.warning("Could not remove the unused NVIDIA profile: %s", exc)
+        session.save()
+
+
+def dump_driver_settings() -> list[DriverSetting]:
+    """Every DWORD setting present on the global profile, for diagnostics."""
+    with _session() as session:
+        return [
+            DriverSetting(
+                setting_id=int(item.settingId),
+                value=int(item.currentValue.u32Value),
+                location=(
+                    LOCATIONS[item.settingLocation]
+                    if item.settingLocation < len(LOCATIONS)
+                    else str(item.settingLocation)
+                ),
+                predefined=bool(item.isCurrentPredefined),
+            )
+            for item in session.enumerate()
+            if item.settingType == _NVDRS_DWORD_TYPE
+        ]

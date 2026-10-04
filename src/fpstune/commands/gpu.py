@@ -81,3 +81,46 @@ def gpu() -> None:
         ui.info("Run 'fpstune serve' to review and apply them")
     else:
         ui.ok(scan.summary)
+
+
+@click.command("nvidia-dump")
+def nvidia_dump() -> None:
+    """Save every NVIDIA global driver setting to a file, for diagnosis.
+
+    Read-only. Run it, change one option in NVIDIA Control Panel, run it again,
+    and the two files show exactly which driver keys that option writes.
+    """
+    import json
+    from datetime import datetime
+
+    from fpstune.core.nv_drs import KEYS
+    from fpstune.core.nvapi import NvapiError, NvapiUnavailable, dump_driver_settings
+    from fpstune.utils.config import get_config_dir
+
+    try:
+        settings = dump_driver_settings()
+    except NvapiUnavailable as exc:
+        ui.fail("NVIDIA driver settings could not be opened", str(exc))
+        return
+    except NvapiError as exc:
+        ui.fail("The NVIDIA driver refused to list its settings", str(exc))
+        return
+
+    names = {setting_id: key.key for key in KEYS.values() for setting_id in key.ids}
+    rows = [
+        {
+            "id": f"{item.setting_id:#010x}",
+            "value": f"{item.value:#010x}",
+            "location": item.location,
+            "predefined": item.predefined,
+            "fpstune_key": names.get(item.setting_id),
+        }
+        for item in sorted(settings, key=lambda s: s.setting_id)
+    ]
+
+    out_dir = get_config_dir() / "diagnostics"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f"nvidia-dump-{datetime.now():%Y%m%d-%H%M%S}.json"
+    path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+
+    ui.ok(f"{len(rows)} driver settings saved", str(path))

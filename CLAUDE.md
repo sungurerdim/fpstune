@@ -323,7 +323,7 @@ src/fpstune/
             hardware_context.py · impact_categories.py · groups.py · registry.py ·
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·
             cleanup_targets.py · detection.py · discovery/ · panel.py · virtualization.py
-  core/     BcdEdit, DISM, NV Inspector, power profiles
+  core/     DISM, NVIDIA driver settings (nvapi.py sessions, nv_drs.py key table), power profiles
   safety/   restore.py (RestorePointManager) · originals.py
   benchmark/  suite.py (Bench/BenchReading/BenchResult/SuiteRun + the per-bench deadline) ·
             benches.py (the registry, and which benches a button may start) · verify_round.py ·
@@ -379,7 +379,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply, reset and undo; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 423 `SettingExecutor` instances across 15 category files.
+- `settings/definitions/` — 421 `SettingExecutor` instances across 15 category files.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -489,9 +489,9 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(15 files, 423 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(7); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(15 files, 421 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
-External: PresentMon(frame capture); FurMark(thermal/stability); NVIDIA Profile Inspector(nv driver profiles); PowerShell/WMI(system state)
+External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none
 
 Ideal: coupling=50 cohesion=70 complexity=12 coverage=70%

@@ -369,22 +369,33 @@ class VrrOptimizationApplyResponse(BaseModel):
     applied_vsync: str
 
 
+def _vrr_current() -> tuple[int, str, str]:
+    """The driver's current frame cap, VRR scope and V-Sync, read from NVAPI.
+
+    "unknown" names a state the driver could not report; it is never filled in
+    with a guess, because a guess is what made the old panel claim settings
+    were applied when they were not.
+    """
+    from fpstune.settings.executors.nvprofile import read_setting_from_driver
+
+    fps = read_setting_from_driver("fps_limit")
+    vrr = read_setting_from_driver("vrr_mode")
+    vsync = read_setting_from_driver("vsync")
+    return (
+        int(fps) if isinstance(fps, int) else 0,
+        str(vrr) if vrr is not None else "unknown",
+        str(vsync) if vsync is not None else "unknown",
+    )
+
+
 @router.get("/vrr-optimization", response_model=VrrOptimizationInfo)
 async def get_vrr_optimization_info(
     display_index: int | None = None,
 ) -> VrrOptimizationInfo:
-    """Get VRR/G-Sync optimization info for a specific monitor.
-
-    Args:
-        display_index: 0-based monitor index. If None, uses primary monitor.
-
-    Returns recommended settings based on monitor capabilities.
-    User can then choose to apply these settings manually.
-    """
+    """VRR/G-Sync recommendation for one monitor, beside the driver's current state."""
     from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
-    # Check if NVIDIA GPU (use centralized hardware_manager). wait=True
-    # sleep-polls up to 15 s for an in-flight detection, so it runs off the loop.
+    # wait=True sleep-polls up to 15 s for an in-flight detection, so it runs off the loop.
     gpu, _ = await asyncio.to_thread(hardware_manager.get_gpu_info, wait=True)
     if not gpu or gpu.vendor.lower() != "nvidia":
         # The panel's own VRR answer is vendor-neutral (EDID), so it is still
@@ -401,8 +412,8 @@ async def get_vrr_optimization_info(
             recommended_vrr_mode="off",
             recommended_vsync="off",
             current_fps_limit=0,
-            current_vrr_mode="off",
-            current_vsync="off",
+            current_vrr_mode="unknown",
+            current_vsync="unknown",
             is_optimized=False,
             explanation=(
                 "fpstune's driver-level VRR tuning is built for NVIDIA today; "
@@ -416,7 +427,6 @@ async def get_vrr_optimization_info(
             ),
         )
 
-    # Get monitors
     monitors = await asyncio.to_thread(hardware_manager.detect_monitors)
     if not monitors:
         return VrrOptimizationInfo(
@@ -427,43 +437,27 @@ async def get_vrr_optimization_info(
             recommended_vrr_mode="off",
             recommended_vsync="off",
             current_fps_limit=0,
-            current_vrr_mode="off",
-            current_vsync="off",
+            current_vrr_mode="unknown",
+            current_vsync="unknown",
             is_optimized=False,
             explanation="No monitor detected.",
             warning="Could not detect any connected monitors.",
         )
 
-    # Get target monitor by index or primary
     if display_index is not None and 0 <= display_index < len(monitors):
         monitor = monitors[display_index]
     else:
-        monitor = next((m for m in monitors if m.is_primary), monitors[0])
+        monitor = primary_monitor(monitors) or monitors[0]
 
-    # The panel's ceiling: mode-list max first, EDID preferred rate only as a
-    # fallback (a high-refresh panel's EDID often prefers 60 Hz). The trailing
-    # 60 is the forbidden constant panel.py names; deleting it is B5's work.
-    refresh_rate = (
-        monitor.max_refresh_rate_hz
-        or monitor.native_refresh_rate_hz
-        or monitor.refresh_rate_hz
-        or 60
-    )
+    # panel.py's rule: an unknown rate stays 0 and never becomes 60.
+    refresh_rate = refresh_ceiling_hz(monitor) or monitor.refresh_rate_hz or 0
 
-    # Get VRR optimization info for this specific monitor
-    executor = NvProfileExecutor()
-    vrr_info = executor.get_vrr_optimization_info_for_monitor(
+    vrr_info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(
         refresh_rate=refresh_rate,
         supports_vrr=monitor.supports_vrr,
     )
+    current_fps, current_vrr, current_vsync = await asyncio.to_thread(_vrr_current)
 
-    # Get current settings from cache
-    cache = executor._load_cache()
-    current_fps = cache.get("fps_limit", 0)
-    current_vrr = cache.get("vrr_mode", "off")
-    current_vsync = cache.get("vsync", "off")
-
-    # Check if already optimized for this monitor
     is_optimized = bool(
         vrr_info["supports_vrr"]
         and current_vrr == vrr_info["recommended_vrr_mode"]
@@ -472,8 +466,7 @@ async def get_vrr_optimization_info(
     )
 
     # Unknown and unsupported are different answers: the EDID failing to read
-    # is a fact about detection, not about the panel, and asserting
-    # "doesn't support" on it told FreeSync owners their panel had nothing.
+    # is a fact about detection, not about the panel.
     warning = None
     if vrr_info["supports_vrr"] is None:
         warning = (
@@ -502,18 +495,26 @@ async def get_vrr_optimization_info(
     )
 
 
-@router.post("/vrr-optimization/apply", response_model=VrrOptimizationApplyResponse)
-async def apply_vrr_optimization(
-    request: VrrOptimizationApplyRequest,
-) -> VrrOptimizationApplyResponse:
-    """Apply VRR/G-Sync optimization settings.
+def _write_vrr(fps_limit: int, vrr_mode: str, vsync: str) -> None:
+    """The three keys in one driver session, so they land together or not at all."""
+    from fpstune.core.nv_drs import KEYS, EnumKey, NumberKey
+    from fpstune.core.nvapi import write_driver_settings
 
-    This sets VRR mode, VSync, and FPS limit as specified by the user.
-    """
-    from fpstune.settings.executors.nvprofile import NvProfileExecutor
+    fps_key, vrr_key, vsync_key = KEYS["fps_limit"], KEYS["vrr_mode"], KEYS["vsync"]
+    assert isinstance(fps_key, NumberKey)
+    assert isinstance(vrr_key, EnumKey) and isinstance(vsync_key, EnumKey)
+    changes = {
+        **fps_key.changes_for(fps_limit),
+        **vrr_key.changes_for(vrr_mode),
+        **vsync_key.changes_for(vsync),
+    }
+    write_driver_settings(changes)
 
-    # Check if NVIDIA GPU (use centralized hardware_manager). wait=True
-    # sleep-polls up to 15 s for an in-flight detection, so it runs off the loop.
+
+async def _apply_vrr(fps_limit: int, vrr_mode: str, vsync: str) -> VrrOptimizationApplyResponse:
+    from fpstune.core.nv_drs import KEYS, EnumKey, NumberKey
+    from fpstune.core.nvapi import NvapiError, NvapiUnavailable
+
     gpu, _ = await asyncio.to_thread(hardware_manager.get_gpu_info, wait=True)
     if not gpu or gpu.vendor.lower() != "nvidia":
         raise HTTPException(
@@ -524,90 +525,62 @@ async def apply_vrr_optimization(
             ),
         )
 
-    # Validate inputs
-    if request.vrr_mode not in ("off", "on", "fullscreen"):
+    vrr_key, vsync_key, fps_key = KEYS["vrr_mode"], KEYS["vsync"], KEYS["fps_limit"]
+    assert isinstance(vrr_key, EnumKey) and isinstance(vsync_key, EnumKey)
+    assert isinstance(fps_key, NumberKey)
+    if vrr_mode not in vrr_key.values:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid vrr_mode: {request.vrr_mode}. Must be off, on, or fullscreen.",
+            detail=f"Invalid vrr_mode: {vrr_mode}. Must be one of {', '.join(vrr_key.values)}.",
         )
-
-    if request.vsync not in ("off", "on", "adaptive"):
+    if vsync not in vsync_key.values:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid vsync: {request.vsync}. Must be off, on, or adaptive.",
+            detail=f"Invalid vsync: {vsync}. Must be one of {', '.join(vsync_key.values)}.",
         )
-
-    if request.fps_limit < 0 or request.fps_limit > 500:
+    if not 0 <= fps_limit <= fps_key.maximum:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid fps_limit: {request.fps_limit}. Must be 0-500.",
+            detail=f"Invalid fps_limit: {fps_limit}. Must be 0-{fps_key.maximum}.",
         )
 
     try:
-        executor = NvProfileExecutor()
-
-        # Load cache and update VRR settings
-        cache = executor._load_cache()
-        cache["vrr_mode"] = request.vrr_mode
-        cache["vsync"] = request.vsync
-        cache["fps_limit"] = request.fps_limit
-
-        # Apply settings via NPI
-        from fpstune.core.nv_profile import NvidiaProfileInspector
-
-        nv = NvidiaProfileInspector()
-        # NPI is an external process; run it off the event loop.
-        success, error = await asyncio.to_thread(
-            nv.apply_gaming_profile,
-            power_mode=cache.get("power_mode", "optimal"),
-            low_latency=cache.get("low_latency", "ultra"),
-            threaded_opt=cache.get("threaded_opt", "on"),
-            vsync=request.vsync,
-            shader_cache=cache.get("shader_cache", "on"),
-            fps_limit=request.fps_limit,
-            vrr_mode=request.vrr_mode,
-            bg_app_fps=cache.get("bg_app_fps", 0),  # Off — see gpu-nvidia:bg_app_fps
-            aniso_sample_opt=cache.get("aniso_sample_opt", "on"),
-            texture_lod_bias=cache.get("texture_lod_bias", "clamp"),
-            ogl_thread_opt=cache.get("ogl_thread_opt", "on"),
-            cuda_force_p2=cache.get("cuda_force_p2", "off"),
-        )
-
-        if success:
-            # Save to cache
-            executor._save_cache(cache)
-
-            return VrrOptimizationApplyResponse(
-                success=True,
-                message=f"G-Sync optimization applied: VRR={request.vrr_mode}, "
-                f"VSync={request.vsync}, FPS limit={request.fps_limit}",
-                applied_fps_limit=request.fps_limit,
-                applied_vrr_mode=request.vrr_mode,
-                applied_vsync=request.vsync,
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to apply VRR settings: {error}",
-            )
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        logger.exception("Error applying VRR optimization")
+        await asyncio.to_thread(_write_vrr, fps_limit, vrr_mode, vsync)
+    except NvapiUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"The NVIDIA driver settings interface is not available: {exc}",
+        ) from exc
+    except NvapiError as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(e),
-        ) from e
+            detail=f"The NVIDIA driver did not accept the change: {exc}",
+        ) from exc
+
+    return VrrOptimizationApplyResponse(
+        success=True,
+        message=f"G-Sync settings applied: VRR={vrr_mode}, VSync={vsync}, FPS limit={fps_limit}",
+        applied_fps_limit=fps_limit,
+        applied_vrr_mode=vrr_mode,
+        applied_vsync=vsync,
+    )
+
+
+@router.post("/vrr-optimization/apply", response_model=VrrOptimizationApplyResponse)
+async def apply_vrr_optimization(
+    request: VrrOptimizationApplyRequest,
+) -> VrrOptimizationApplyResponse:
+    """Write VRR mode, V-Sync and the frame cap — those three keys and no others."""
+    return await _apply_vrr(request.fps_limit, request.vrr_mode, request.vsync)
 
 
 @router.post("/vrr-optimization/reset", response_model=VrrOptimizationApplyResponse)
 async def reset_vrr_optimization() -> VrrOptimizationApplyResponse:
-    """Reset VRR settings to defaults (VRR off, VSync off, FPS unlimited)."""
-    return await apply_vrr_optimization(
-        VrrOptimizationApplyRequest(
-            fps_limit=0,
-            vrr_mode="off",
-            vsync="off",
-        )
+    """Return the three keys to the driver's own defaults."""
+    from fpstune.core.nv_drs import KEYS
+
+    return await _apply_vrr(
+        int(KEYS["fps_limit"].stock),
+        str(KEYS["vrr_mode"].stock),
+        str(KEYS["vsync"].stock),
     )

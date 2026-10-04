@@ -392,7 +392,7 @@ class DetectType(StrEnum):
     REGISTRY = "registry"  # Windows Registry
     POWERSHELL = "powershell"  # PowerShell commands
     NETSH = "netsh"  # netsh.exe commands
-    NVPROFILE = "nvprofile"  # NVIDIA Profile Inspector
+    NVPROFILE = "nvprofile"  # NVIDIA driver settings through NVAPI
 
 
 class _ValueMapRule:

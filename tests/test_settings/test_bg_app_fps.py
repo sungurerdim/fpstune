@@ -8,18 +8,14 @@ documented for Portal RTX (attributed to its overlay), VS Code, Electron apps,
 TETR.IO and Chromium browsers; MW3 runs under Battle.net/Steam/CoD HQ overlays,
 which is the same shape.
 
-fpstune not only recommended the cap, it imposed one implicitly:
-`NvidiaProfile.to_settings_dict()` emits every key unconditionally, so the
-dataclass default was written to the driver whenever *any* NVIDIA setting was
-applied. A user who never touched this setting still got capped by changing,
-say, shader cache. Five separate places defaulted to 30.
+Writes are per setting now, so applying any other NVIDIA setting can no longer
+carry a background cap along with it; the remaining guards are the
+recommendation and the key the setting writes.
 """
 
 from __future__ import annotations
 
-import inspect
-
-from fpstune.core.nv_profile import NvidiaProfile
+from fpstune.core import nv_drs
 from fpstune.settings.registry import SettingsRegistry
 
 
@@ -33,47 +29,19 @@ def test_the_setting_recommends_off() -> None:
     assert setting.default_value == 0
 
 
-def test_profile_defaults_to_no_cap() -> None:
-    """The dataclass default is written to the driver on every NVIDIA apply."""
-    assert NvidiaProfile().bg_app_fps == 0
+def test_off_restores_the_driver_default_on_the_real_key() -> None:
+    """Off deletes "Frame Rate Limiter - Background Application" (0x10835005).
 
-
-def test_a_profile_with_no_cap_writes_the_off_value() -> None:
-    """Off must be written explicitly, not omitted.
-
-    Omitting the key would leave an already-capped driver capped while apply
-    reported success — the defect shape this codebase has paid for repeatedly.
+    The previous table wrote 0x10835004, a key the driver does not read, so a
+    cap set in NVIDIA Control Panel could never be cleared.
     """
-    from fpstune.core.nv_profile import NvApiSettings
-
-    settings = NvidiaProfile().to_settings_dict()
-    assert NvApiSettings.BG_APP_MAX_FPS in settings
-    assert settings[NvApiSettings.BG_APP_MAX_FPS] == NvApiSettings.BG_APP_FPS_OFF
+    key = nv_drs.KEYS["bg_app_fps"]
+    assert key.ids == (0x10835005,)
+    assert key.changes_for(0) == {0x10835005: None}
 
 
-def test_no_source_file_falls_back_to_a_cap() -> None:
-    """Every default for this field, anywhere, must be 0.
-
-    Scans the shipped source rather than the three call sites known today, so a
-    fourth one added later cannot quietly restore the cap.
-    """
-    import fpstune.api.routes.display as display_mod
-    import fpstune.core.nv_profile as profile_mod
-    import fpstune.settings.executors.nvprofile as executor_mod
-
-    offenders: list[str] = []
-    for module in (profile_mod, executor_mod, display_mod):
-        source = inspect.getsource(module)
-        for lineno, line in enumerate(source.splitlines(), start=1):
-            if "bg_app_fps" not in line:
-                continue
-            code = line.split("#", 1)[0]
-            if "bg_app_fps" not in code:
-                continue
-            # Any default or fallback that is not zero.
-            for marker in ("bg_app_fps: int = ", 'cache.get("bg_app_fps", '):
-                if marker in code:
-                    tail = code.split(marker, 1)[1].lstrip()
-                    if not tail.startswith("0"):
-                        offenders.append(f"{module.__name__}:{lineno}: {line.strip()}")
-    assert offenders == [], f"a background frame cap is still defaulted somewhere: {offenders}"
+def test_applying_another_nvidia_setting_writes_only_its_own_keys() -> None:
+    for name, key in nv_drs.KEYS.items():
+        if name == "bg_app_fps":
+            continue
+        assert nv_drs.FRL_BACKGROUND not in key.ids, name

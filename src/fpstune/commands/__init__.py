@@ -2,7 +2,7 @@
 
 from fpstune.commands.benchmark import benchmark, dpc_bench, fps, gpu_bench, network_bench
 from fpstune.commands.cleanup import cleanup
-from fpstune.commands.gpu import gpu
+from fpstune.commands.gpu import gpu, nvidia_dump
 from fpstune.commands.status import status
 
 __all__ = [
@@ -13,5 +13,6 @@ __all__ = [
     "gpu",
     "gpu_bench",
     "network_bench",
+    "nvidia_dump",
     "status",
 ]

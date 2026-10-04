@@ -546,7 +546,7 @@ class TestC10VendorSymmetry:
     NVIDIA-only setting may not widen the gap silently.
     """
 
-    _VENDOR_CEILING = {"gpu-nvidia": 18}
+    _VENDOR_CEILING = {"gpu-nvidia": 16}
     _VENDOR_FLOOR = {"gpu-amd": 7, "gpu-intel": 0}
 
     def _counts(self) -> dict[str, int]:
@@ -617,8 +617,6 @@ class TestFunctionLengthCeiling:
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/main.py", "create_app"): 197,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
-        ("src/fpstune/core/nv_profile.py", "read_applied_settings"): 146,
-        ("src/fpstune/core/nv_profile.py", "to_settings_dict"): 143,
     }
 
     def _long_functions(self) -> dict[tuple[str, str], int]:

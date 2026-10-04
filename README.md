@@ -35,14 +35,14 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**423 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**421 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
 | Game Configs | 197 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm) |
 | System | 65 | Services, privacy, telemetry, scheduler |
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
-| GPU | 30 | NVIDIA and AMD driver profile optimizations |
+| GPU | 28 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
 | Network | 28 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
 | Power | 29 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
 | Launchers | 12 | Steam, Battle.net overlay/GPU/shader settings |
@@ -145,6 +145,7 @@ tuned when it had not.
 ```bash
 fpstune status       # what this machine is set to, and what is left to do
 fpstune gpu          # how this GPU is configured, and what would change
+fpstune nvidia-dump  # save every NVIDIA global driver setting to a file, for diagnosis
 fpstune benchmark    # measure this machine (--after to compare against a baseline)
 fpstune cleanup      # free disk space
 fpstune bios         # reboot straight into BIOS/UEFI setup (--cancel to abort)
@@ -360,7 +361,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
                     system*.py, display.py, gpu.py, benchmark*.py, safety.py, debug.py
   settings/         Settings engine
-    definitions/    15 category files producing the 423 settings in 13 categories —
+    definitions/    15 category files producing the 421 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal
@@ -368,7 +369,7 @@ src/fpstune/
     detection.py    Parallel detection (ThreadPoolExecutor)
     applicability.py  HardwareContext filtering + values_equal()
     base.py         SettingExecutor schema (risk_level, evidence_level, impact_scores)
-  core/             BcdEdit, DISM, NV Inspector, power profiles
+  core/             DISM, NVIDIA driver settings (NVAPI), power profiles
   safety/           System Restore points + per-machine originals (what undo writes back)
   benchmark/        PresentMon, FurMark, DPC latency, the suite, claim verification
   commands/         the CLI surface (status, gpu, benchmark, fps, cleanup, ...)

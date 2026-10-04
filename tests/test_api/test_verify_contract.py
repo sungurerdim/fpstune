@@ -110,17 +110,17 @@ class TestVerificationExemptions:
         assert verified is False
 
 
-class TestNvidiaSettingsAreReportedUnverified:
-    """NVIDIA detection returns fpstune's own JSON cache, which apply just
-    wrote. A match between them proves nothing about the driver, so the result
-    must be reported as unverified rather than as a passed check."""
+class TestNvidiaSettingsAreVerifiedAgainstTheDriver:
+    """NVIDIA detection reads the driver through NVAPI, so a match is a real
+    observation and a mismatch is a real failure — no longer the "unverified"
+    answer the old JSON-cache detection forced."""
 
     def _nv_setting(self) -> SettingExecutor:
         return SettingExecutor(
             id="gpu-nvidia:low_latency",
             category=SettingCategory.GPU,
             display_name="Low Latency Mode",
-            description="NVIDIA Reflex / Ultra Low Latency mode.",
+            description="How many frames the CPU may prepare ahead of the GPU.",
             value_type=SettingValueType.CHOICE,
             choices=("off", "on", "ultra"),
             default_value="off",
@@ -133,20 +133,17 @@ class TestNvidiaSettingsAreReportedUnverified:
             apply_args={"setting": "low_latency"},
         )
 
-    def test_matching_cache_value_is_not_claimed_as_verified(self):
+    def test_a_driver_reading_that_matches_is_verified(self):
         ok, error, verified = _verify_setting_applied(self._nv_setting(), "on", "on")
 
-        assert ok is True
-        assert error is None
-        # The apply is not failed — but it was never actually checked.
-        assert verified is None
+        assert (ok, error, verified) == (True, None, True)
 
-    def test_mismatch_is_also_reported_unverified(self):
-        """Even a mismatch here says nothing about the driver state."""
+    def test_a_driver_reading_that_differs_fails_the_apply(self):
         ok, error, verified = _verify_setting_applied(self._nv_setting(), "on", "off")
 
-        assert ok is True
-        assert verified is None
+        assert ok is False
+        assert error is not None
+        assert verified is False
 
 
 class TestDeprecatedIdCompatLayerIsGone:

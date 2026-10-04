@@ -67,15 +67,9 @@ GLOBAL_TIMER_RESOLUTION = SettingExecutor(
     recommended_impact="Enabled: All processes benefit from lowest requested resolution (0.5-1ms)",
     scope=SettingScope.ESSENTIAL,  # High impact on system-wide timing
     category_order=2,  # Second most important timer setting
-    applicable_conditions={"min_windows_build": 19041},  # Windows 10 2004+
+    applicable_conditions={"is_windows_11": True},  # the key is honoured on 11 only  # Windows 10 2004+
     effect="Enables system-wide 0.5-1ms timer resolution for smoother gameplay",
-    impact_scores={
-        "fps": "+0-5%",
-        "fps_cpu_bound": "+0-3%",
-        "fps_1_percent_low": "+1-6%",
-        "latency_ms": -1.5,
-        "stability": "high",
-    },
+    impact_scores={"latency_ms": -0.5, "power_watts": "+1-3", "stability": "high"},
     # Detection - Registry based
     detect_type=DetectType.REGISTRY,
     detect_command="",

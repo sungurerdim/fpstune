@@ -290,7 +290,7 @@ POWER_CPU_BOOST = SettingExecutor(
         "efficient_aggressive_at_guaranteed",
     ),
     default_value="aggressive",
-    recommended_value="efficient_aggressive",
+    recommended_value="aggressive",
     requires_reboot=False,
     evidence_level="proven",
     sources=[
@@ -475,7 +475,8 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("ideal", "single", "rocket"),
     default_value="ideal",
-    recommended_value="rocket",
+    # Rocket drops straight to the lowest state, so the next burst re-ramps.
+    recommended_value="ideal",
     requires_reboot=False,
     evidence_level="proven",
     current_impact="Ideal: CPU steps down frequency gradually",
@@ -483,7 +484,7 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=10,
     effect="Sets CPU frequency scale-down to Rocket policy",
-    impact_scores={"fps_cpu_bound": "+0-1%", "latency_ms": -0.1},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.POWERCFG,
     detect_command="",
     detect_args={"subgroup": CPU_SUBGROUP, "setting": PERF_DECREASE_POLICY_GUID},
@@ -1364,6 +1365,8 @@ _TRACKS_WINDOWS_DEFAULT: frozenset[str] = frozenset(
         # a dual-CCD X3D part it would undo the parking that keeps a game on the
         # cache die.
         "power:cpu_min_parking",
+        # Microsoft: PERFBOOSTMODE 4 (Efficient Aggressive) behaves as 2.
+        "power:cpu_boost",
     }
 )
 

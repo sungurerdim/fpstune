@@ -1204,15 +1204,18 @@ DNS_LOCAL_PRIORITY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
-    recommended_value="optimized",
+    # The four keys keep their relative order either way, so lowering all of
+    # them changes nothing, and lowering some reorders resolution (DNS before
+    # the hosts file). A guard: stock is restored by deleting the value.
+    recommended_value="standard",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Standard (499): Local cache checked after other resolvers → slower DNS hits",
-    recommended_impact="Optimized (4): Local cache checked first → fastest possible DNS resolution",
+    current_impact="Changed: resolution order differs from what Windows ships",
+    recommended_impact="Windows default: the resolution order Windows ships",
     scope=SettingScope.RECOMMENDED,
     category_order=8,
-    effect="Sets LocalPriority=4 so local DNS cache is consulted first",
-    impact_scores={"latency_ms": -1, "stability": "high"},
+    effect="Restores Windows' own name-resolution order",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": SERVICE_PROVIDER_KEY, "name": "LocalPriority", "hive": "HKLM"},
@@ -1231,7 +1234,7 @@ DNS_LOCAL_PRIORITY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"optimized": 4, "standard": 499},
+    apply_value_map={"optimized": 4, "standard": None},
     value_hints={"standard": "499", "optimized": "4"},
 )
 
@@ -1245,15 +1248,18 @@ DNS_HOSTS_PRIORITY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
-    recommended_value="optimized",
+    # The four keys keep their relative order either way, so lowering all of
+    # them changes nothing, and lowering some reorders resolution (DNS before
+    # the hosts file). A guard: stock is restored by deleting the value.
+    recommended_value="standard",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Standard (500): Hosts file checked after cache miss with low priority",
-    recommended_impact="Optimized (5): Hosts file checked second → overrides apply faster",
+    current_impact="Changed: resolution order differs from what Windows ships",
+    recommended_impact="Windows default: the resolution order Windows ships",
     scope=SettingScope.RECOMMENDED,
     category_order=8,
-    effect="Sets HostsPriority=5 so hosts file overrides are applied immediately after cache",
-    impact_scores={"latency_ms": 0, "stability": "high"},
+    effect="Restores Windows' own name-resolution order",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": SERVICE_PROVIDER_KEY, "name": "HostsPriority", "hive": "HKLM"},
@@ -1272,7 +1278,7 @@ DNS_HOSTS_PRIORITY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"optimized": 5, "standard": 500},
+    apply_value_map={"optimized": 5, "standard": None},
     value_hints={"standard": "500", "optimized": "5"},
 )
 
@@ -1286,15 +1292,18 @@ DNS_QUERY_PRIORITY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
-    recommended_value="optimized",
+    # The four keys keep their relative order either way, so lowering all of
+    # them changes nothing, and lowering some reorders resolution (DNS before
+    # the hosts file). A guard: stock is restored by deleting the value.
+    recommended_value="standard",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Standard (2000): DNS server queried late → slow cold-start resolution",
-    recommended_impact="Optimized (6): DNS queried early → faster cold-start name resolution",
+    current_impact="Changed: resolution order differs from what Windows ships",
+    recommended_impact="Windows default: the resolution order Windows ships",
     scope=SettingScope.RECOMMENDED,
     category_order=8,
-    effect="Sets DnsPriority=6 to bring DNS server queries earlier in the resolver chain",
-    impact_scores={"latency_ms": 0, "stability": "high"},
+    effect="Restores Windows' own name-resolution order",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": SERVICE_PROVIDER_KEY, "name": "DnsPriority", "hive": "HKLM"},
@@ -1313,7 +1322,7 @@ DNS_QUERY_PRIORITY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"optimized": 6, "standard": 2000},
+    apply_value_map={"optimized": 6, "standard": None},
     value_hints={"standard": "2000", "optimized": "6"},
 )
 
@@ -1327,15 +1336,18 @@ DNS_NETBT_PRIORITY = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("standard", "optimized"),
     default_value="standard",
-    recommended_value="optimized",
+    # The four keys keep their relative order either way, so lowering all of
+    # them changes nothing, and lowering some reorders resolution (DNS before
+    # the hosts file). A guard: stock is restored by deleting the value.
+    recommended_value="standard",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Standard (2001): NetBIOS queried last by default ordering",
-    recommended_impact="Optimized (7): NetBIOS queried after DNS in the new priority order",
+    current_impact="Changed: resolution order differs from what Windows ships",
+    recommended_impact="Windows default: the resolution order Windows ships",
     scope=SettingScope.RECOMMENDED,
     category_order=8,
-    effect="Sets NetbtPriority=7 to maintain correct resolver order after other priority tweaks",
-    impact_scores={"latency_ms": 0, "stability": "high"},
+    effect="Restores Windows' own name-resolution order",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": SERVICE_PROVIDER_KEY, "name": "NetbtPriority", "hive": "HKLM"},
@@ -1354,7 +1366,7 @@ DNS_NETBT_PRIORITY = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"optimized": 7, "standard": 2001},
+    apply_value_map={"optimized": 7, "standard": None},
     value_hints={"standard": "2001", "optimized": "7"},
 )
 
@@ -1944,7 +1956,9 @@ MAX_USER_PORT = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("default", "maximum"),
     default_value="default",
-    recommended_value="maximum",
+    # Windows 11 sizes this itself (dynamic port range 49152-65535,
+    # connections unlimited); the old value only lowers a ceiling. A guard.
+    recommended_value="default",
     requires_reboot=False,
     evidence_level="likely",
     sources=[
@@ -1990,7 +2004,9 @@ TCP_NUM_CONNECTIONS = SettingExecutor(
     value_type=SettingValueType.CHOICE,
     choices=("default", "maximum"),
     default_value="default",
-    recommended_value="maximum",
+    # Windows 11 sizes this itself (dynamic port range 49152-65535,
+    # connections unlimited); the old value only lowers a ceiling. A guard.
+    recommended_value="default",
     requires_reboot=False,
     evidence_level="likely",
     sources=[

@@ -640,7 +640,7 @@ SERVICE_UCPD = SettingExecutor(
     category_order=16,
     effect="Disables UCPD kernel driver startup to allow full control "
     "over default app settings after reboot",
-    impact_scores={"cpu_usage": 0, "system_control": "improved"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     applicable_conditions={"is_windows_11": True},
     # Kernel drivers can't be stopped via service_toggle - use registry StartType directly
     detect_type=DetectType.REGISTRY,
@@ -1390,7 +1390,7 @@ PERF_SVCHOST_SPLIT = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=36,
     effect="Combines Windows services into fewer processes to save RAM and reduce overhead",
-    impact_scores={"ram_saved": "50-150MB", "cpu_usage": -0.5, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -3860,7 +3860,7 @@ GPU_TDR_DELAY = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=33,
     effect="Extends GPU driver TDR timeout to 10s to prevent Dev Error crashes in DX12 games",
-    impact_scores={"latency_ms": 0, "stability": "high", "crash_rate": "reduced"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={

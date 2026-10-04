@@ -24,19 +24,14 @@ tasks:
       - uv pip install -e .[dev]
 
   lock:
-    desc: Regenerate uv.lock and requirements.txt from pyproject.toml
+    desc: Regenerate uv.lock from pyproject.toml
     cmds:
       - uv lock
-      - uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
 
   lock-check:
-    desc: Fail if uv.lock or requirements.txt has drifted (same gate CI runs)
+    desc: Fail if uv.lock has drifted from pyproject.toml (CI installs with --locked)
     cmds:
       - uv lock --check
-      # Byte-for-byte the `lock` task's export, so this can only fail on real
-      # drift and never on a flag difference.
-      - uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
-      - git diff --exit-code -- requirements.txt
 
   winget:
     desc: Point the winget manifests at a built exe (submission stays manual)

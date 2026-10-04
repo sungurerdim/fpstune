@@ -174,7 +174,7 @@ task test-fast      # pytest without coverage
 task test-frontend  # vitest run
 task lint           # ruff + mypy
 task build          # PyInstaller exe
-task lock           # regenerate uv.lock + requirements.txt
+task lock           # regenerate uv.lock
 ```
 
 ### Manual (no Taskfile)

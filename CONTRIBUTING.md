@@ -93,29 +93,21 @@ set above the truth gets lowered the first time it is inconvenient.
 
 Two lockfiles decide what everything here is built against: `uv.lock` for Python
 and `frontend/package-lock.json` for the React tree. Both are watched by
-Dependabot (`.github/dependabot.yml`), on a schedule chosen so a solo maintainer
-does not turn it off:
+Dependabot (`.github/dependabot.yml`), monthly, so its runs stay light on the
+Actions quota:
 
 | Ecosystem | Where | When | Batched as |
 |-----------|-------|------|------------|
-| `uv` | `/` | weekly, Monday 06:00 UTC | one PR for all minor + patch |
-| `npm` | `/frontend` | weekly, Monday 06:00 UTC | one PR for all minor + patch |
+| `uv` | `/` | monthly | one PR for all minor + patch |
+| `npm` | `/frontend` | monthly | one PR for all minor + patch |
 | `github-actions` | `/` | monthly | one PR for all minor + patch |
 
 Majors are deliberately left ungrouped — those are the ones that need reading, so
 each arrives on its own.
 
-`requirements.txt` is **generated**, not edited: `task lock` runs `uv lock` and
-then exports it from the lock. Because that export is committed by hand, the two
-can disagree and nothing would notice — `uv sync --frozen` only proves the lock
-matches `pyproject.toml`. CI's `lockfiles` job closes that: it re-runs the export
-byte-for-byte and fails on any diff, so anyone installing from `requirements.txt`
-gets the dependency set every other check ran against. `task lock-check`
-reproduces it locally.
-
-Expect Dependabot's own Python PRs to trip that job: it updates `uv.lock` without
-re-exporting. `task lock` on the branch is the fix, and the failure message says
-so.
+`uv.lock` is the only Python lockfile. CI installs with `uv sync --locked`, which
+fails when the lock no longer matches `pyproject.toml`; `task lock-check`
+reproduces that locally.
 
 ## Code Standards
 
@@ -163,10 +155,12 @@ a source checkout — the source-tree equivalent of double-clicking the exe.
 2. Make your changes (see code standards above)
 3. Run `pytest tests/ -x` and `ruff check src/`
 4. Write a clear PR description explaining what and why
-5. CI runs automatically on push, in three jobs: `backend` (ruff, mypy and the
-   coverage-gated pytest suite, once per Python version in the matrix),
-   `lockfiles` (`requirements.txt` still matches `uv.lock`), and `frontend`
-   (type-check + build, ESLint, vitest)
+5. CI runs on demand (`gh workflow run ci.yml`; GitHub Actions stays disabled
+   between runs to protect the quota), in three jobs: `backend` on Windows (ruff,
+   mypy, the coverage-gated pytest suite), `frontend` on Linux (type-check +
+   build, ESLint, vitest, axe), and `package` (PyInstaller, then the exe is
+   started and must serve `/health`, `/ui/` and the settings list). A tag runs
+   the same workflow before `release.yml` publishes the exe it built
 
 ## Key Conventions
 

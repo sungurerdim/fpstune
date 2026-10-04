@@ -1,33 +1,28 @@
 name: CI
 
+# On demand only. GitHub Actions stays disabled on this repository between
+# verification runs to protect the Actions quota; a run is started by hand
+# (`gh workflow run ci.yml`) or by release.yml, which calls this workflow so a
+# tag is never published from a commit these checks did not pass.
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_dispatch:
+  workflow_call:
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
 jobs:
   backend:
-    # Every Python version this project claims to support runs here, and no
-    # version that does not run here is claimed anywhere. `pyproject.toml`
-    # declared `>=3.11` for a year while CI only ever ran 3.12, so 3.11 was a
-    # promise nobody could have falsified — and development happens on 3.13,
-    # which was not claimed at all. This matrix is now the definition: the
-    # classifiers, `requires-python`, ruff's target-version and mypy's
-    # python_version are all read off it.
-    name: Backend ${{ matrix.python-version }} (lint + type + test)
+    # Windows, because most of what is tested here only exists there (winreg,
+    # ctypes.WinDLL, PowerShell). One leg, on the interpreter the executable
+    # ships with: a second leg doubles the Windows minutes for a version no
+    # user runs.
+    name: Backend (lint + type + test)
     runs-on: windows-latest
-    strategy:
-      # Both legs report. A failure on the floor and a failure on the newest
-      # version are different findings, and cancelling one to save a minute
-      # throws away half the answer.
-      fail-fast: false
-      matrix:
-        python-version: ["3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
 
@@ -36,18 +31,10 @@ jobs:
         with:
           enable-cache: true
 
-      - name: Set up Python
-        run: uv python install ${{ matrix.python-version }}
-
-      # `--python` explicitly, rather than trusting uv to pick: the runner ships
-      # its own interpreters, and a matrix leg that silently resolves to the
-      # wrong one tests the same version twice and reports green for a version
-      # it never ran.
+      # --locked fails when uv.lock no longer matches pyproject.toml, which
+      # --frozen would silently install around.
       - name: Install dependencies
-        run: uv sync --frozen --extra dev --python ${{ matrix.python-version }}
-
-      - name: Say which interpreter this leg actually got
-        run: uv run python -c "import sys; print(sys.version)"
+        run: uv sync --locked --extra dev --python 3.12
 
       - name: Ruff lint
         run: uv run ruff check src tests
@@ -61,53 +48,11 @@ jobs:
       - name: Pytest (coverage gate)
         run: uv run pytest --cov=src/fpstune --cov-report=term-missing
 
-  lockfiles:
-    # `requirements.txt` is generated from `uv.lock` by `task lock` and then
-    # committed by hand, so the two can disagree and nothing notices —
-    # `uv sync --frozen` above only proves the lock matches `pyproject.toml`.
-    # Anyone installing from `requirements.txt` instead of the lock would get a
-    # different dependency set than the one every check here ran against.
-    #
-    # windows-latest like everything else: this is a Windows-only project, and
-    # matching the platform the committed file was generated on removes any
-    # question of whether the export could differ.
-    name: requirements.txt still matches uv.lock
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-
-      - name: The lock must match pyproject.toml
-        run: uv lock --check
-
-      # Byte-for-byte the invocation in Taskfile.yml's `lock` task. A different
-      # flag here would make this gate fail over formatting rather than drift,
-      # which is the fastest way to get a gate ignored.
-      - name: Re-export and compare
-        shell: pwsh
-        run: |
-          # pwsh does not abort on a non-zero external exit code mid-script, so
-          # both are checked. Skipping the first one would let a failed export
-          # leave the committed file untouched and the comparison pass.
-          uv export --no-hashes --no-dev --format=requirements-txt --output-file=requirements.txt
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "uv export failed, so nothing was compared"
-            exit 1
-          }
-          git diff --exit-code -- requirements.txt
-          if ($LASTEXITCODE -ne 0) {
-            Write-Error "requirements.txt no longer matches uv.lock - run 'task lock' and commit the result"
-            exit 1
-          }
-          Write-Host "requirements.txt is what uv.lock exports"
-
   frontend:
-    name: Frontend (type + build + test)
-    runs-on: windows-latest
+    # Nothing in the UI build or its tests depends on the host OS, and a Linux
+    # minute costs half a Windows one.
+    name: Frontend (type + build + lint + test + a11y)
+    runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: frontend
@@ -117,7 +62,7 @@ jobs:
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
@@ -133,11 +78,117 @@ jobs:
       - name: Test
         run: npm run test:run
 
-      # Browser-level a11y (E7): axe's colour-contrast rule needs computed
-      # styles jsdom does not produce, so this runs in real Chromium against
-      # the production build.
+      # Browser-level a11y: axe's colour-contrast rule needs computed styles
+      # jsdom does not produce, so this runs in real Chromium.
       - name: Install Playwright Chromium
-        run: npx playwright install chromium
+        run: npx playwright install --with-deps chromium
 
       - name: Accessibility (axe, WCAG 2.1 AA)
         run: npm run test:a11y
+
+  package:
+    # The executable is what users run, so it is what gets proven: built from
+    # this commit, started, and asked to serve its UI and its settings. A
+    # `--version` check alone answers before the API is ever imported, which is
+    # how a broken import graph could ship.
+    name: Package (build + start + serve)
+    needs: [backend, frontend]
+    runs-on: windows-latest
+    env:
+      # Close to a single-file build's real size: a build that suddenly doubles
+      # has pulled in something it should not.
+      MAX_SIZE_MB: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --python 3.12
+
+      - name: Build the UI
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: PyInstaller
+        run: uv run pyinstaller fpstune.spec --noconfirm
+
+      - name: Size ceiling
+        shell: pwsh
+        run: |
+          $mb = [math]::Round((Get-Item ".\dist\fpstune.exe").Length / 1MB, 1)
+          Write-Host "fpstune.exe is $mb MB"
+          if ($mb -gt $env:MAX_SIZE_MB) { Write-Error "over the $env:MAX_SIZE_MB MB ceiling"; exit 1 }
+
+      - name: The executable starts and serves
+        shell: pwsh
+        run: |
+          $port = 18765
+          $proc = Start-Process -FilePath ".\dist\fpstune.exe" `
+            -ArgumentList "serve", "--no-browser", "--port", "$port" `
+            -PassThru -RedirectStandardOutput out.log -RedirectStandardError err.log
+          try {
+            $base = "http://127.0.0.1:$port"
+            $healthy = $false
+            for ($i = 0; $i -lt 60; $i++) {
+              if ($proc.HasExited) { break }
+              try {
+                $h = Invoke-RestMethod "$base/health" -TimeoutSec 2
+                if ($h.status) { $healthy = $true; break }
+              } catch { Start-Sleep -Seconds 1 }
+            }
+            if (-not $healthy) { throw "fpstune.exe never answered /health" }
+            Write-Host "health: $($h | ConvertTo-Json -Compress)"
+
+            $page = Invoke-WebRequest "$base/ui/" -UseBasicParsing
+            if ($page.StatusCode -ne 200 -or $page.Content -notmatch '<div id="root">') {
+              throw "/ui/ did not serve the bundled index.html"
+            }
+            # Vite builds with base './', so the page names its assets relatively.
+            $asset = [regex]::Match($page.Content, 'assets/[^"]+\.js').Value
+            if (-not $asset) { throw "index.html names no script asset" }
+            $js = Invoke-WebRequest "$base/ui/$asset" -UseBasicParsing
+            if ($js.StatusCode -ne 200 -or $js.RawContentLength -lt 1000) { throw "$asset was not served" }
+
+            $defs = $null
+            for ($i = 0; $i -lt 90; $i++) {
+              try {
+                $defs = Invoke-RestMethod "$base/api/settings/definitions" -TimeoutSec 30
+                if ($defs.Count -gt 0) { break }
+              } catch { Start-Sleep -Seconds 2 }
+            }
+            if (-not $defs -or $defs.Count -eq 0) { throw "/api/settings/definitions returned nothing" }
+            Write-Host "definitions: $($defs.Count)"
+          } finally {
+            if (-not $proc.HasExited) { & taskkill.exe /PID $proc.Id /T /F | Out-Null }
+            Write-Host "--- stdout ---"; Get-Content out.log -ErrorAction SilentlyContinue
+            Write-Host "--- stderr ---"; Get-Content err.log -ErrorAction SilentlyContinue
+          }
+
+      - name: Checksum
+        shell: pwsh
+        run: |
+          $hash = (Get-FileHash ".\dist\fpstune.exe" -Algorithm SHA256).Hash.ToLower()
+          "$hash  fpstune.exe" | Out-File -FilePath "dist/fpstune.exe.sha256" -Encoding ascii -NoNewline
+          Write-Host "sha256 $hash"
+
+      - name: Keep the build
+        uses: actions/upload-artifact@v7
+        with:
+          name: fpstune-exe
+          path: |
+            dist/fpstune.exe
+            dist/fpstune.exe.sha256
+          retention-days: 14

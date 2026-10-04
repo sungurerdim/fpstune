@@ -60,69 +60,66 @@ class TestOneVersion:
 
 
 class TestTheReleaseWorkflow:
-    """The workflow is the only thing standing between a tag and the public.
+    """The workflows are the only thing standing between a tag and the public.
 
-    Written alongside the workflow and held back from `main` for a week because
-    the OAuth token lacked `workflow` scope and could not push the file these
-    assert against — which is why every one of them names a string the workflow
-    must contain rather than a shape it must have. A test that passes against a
-    workflow nobody can push is worth nothing.
+    Each test names a string the workflow must contain rather than a shape it
+    must have, so a reworded step that drops a check fails here.
     """
 
     @pytest.fixture(scope="class")
-    def workflow(self) -> str:
+    def release(self) -> str:
         path = ROOT / ".github" / "workflows" / "release.yml"
         assert path.exists(), "there is no release workflow, so releases are hand-made"
         return path.read_text(encoding="utf-8")
 
-    def test_it_runs_the_test_suite_before_publishing(self, workflow: str) -> None:
+    @pytest.fixture(scope="class")
+    def ci(self) -> str:
+        return (ROOT / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8")
+
+    def test_a_release_runs_every_ci_check_first(self, release: str, ci: str) -> None:
         """A release must not be the first place a check runs."""
-        assert "uv run pytest" in workflow
-        assert "uv run mypy src" in workflow
-        assert "npm run test:run" in workflow
+        assert "uses: ./.github/workflows/ci.yml" in release
+        assert "workflow_call:" in ci
+        assert "uv run pytest" in ci
+        assert "uv run mypy src" in ci
+        assert "npm run test:run" in ci
 
-    def test_it_refuses_a_tag_that_disagrees_with_the_version(self, workflow: str) -> None:
-        assert "does not match pyproject version" in workflow
+    def test_ci_runs_only_when_asked(self, ci: str) -> None:
+        """Actions stays off between runs to protect the quota; a push or pull
+        request trigger would start the expensive Windows jobs unasked."""
+        triggers = ci.split("on:", 1)[1].split("concurrency:", 1)[0]
+        assert "workflow_dispatch:" in triggers
+        assert "push:" not in triggers
+        assert "pull_request:" not in triggers
 
-    def test_it_publishes_a_checksum(self, workflow: str) -> None:
+    def test_the_executable_is_started_and_serves_before_it_ships(self, ci: str) -> None:
+        """`--version` answers before the API is imported; serving proves it."""
+        assert "/health" in ci
+        assert "/ui/" in ci
+        assert "/api/settings/definitions" in ci
+
+    def test_what_is_published_is_what_ci_built(self, release: str) -> None:
+        assert "actions/download-artifact" in release
+        assert "name: fpstune-exe" in release
+        assert "pyinstaller" not in release.lower()
+
+    def test_it_refuses_a_tag_that_disagrees_with_the_version(self, release: str) -> None:
+        assert "does not match pyproject version" in release
+
+    def test_it_publishes_a_checksum(self, release: str, ci: str) -> None:
         """The binary is unsigned, so this is what a user can actually check."""
-        assert "sha256" in workflow.lower()
-        assert "fpstune.exe.sha256" in workflow
+        assert "fpstune.exe.sha256" in ci
+        assert "fpstune.exe.sha256" in release
 
-    def test_it_attests_where_the_binary_came_from(self, workflow: str) -> None:
-        """Stronger than the checksum: it ties the binary to a source commit.
+    def test_it_attests_where_the_binary_came_from(self, release: str) -> None:
+        """Stronger than the checksum: it ties the binary to a source commit."""
+        assert "attest-build-provenance" in release
+        assert "attestations: write" in release
 
-        A checksum only proves the file matches the one published beside it; it
-        says nothing about what that file was built from.
-        """
-        assert "attest-build-provenance" in workflow
-        assert "attestations: write" in workflow
-
-    def test_a_rehearsal_run_keeps_its_build_even_when_provenance_cannot(
-        self, workflow: str
-    ) -> None:
-        """The upload must come before the attestation, not after it.
-
-        Measured, on run 32598698082: every packaging step passed — PyInstaller,
-        the binary printing its own version, the size ceiling, the checksum — and
-        then provenance failed with "Feature not available for user-owned private
-        repositories". Because the upload sat behind it, the run that existed to
-        rehearse packaging handed back no exe at all. The one step that cannot
-        work on this repo took the artifact down with it.
-        """
-        upload = workflow.index("actions/upload-artifact")
-        attest = workflow.index("actions/attest-build-provenance")
-        assert upload < attest, "the build artifact is hostage to the attestation step"
-
-    def test_provenance_is_reserved_for_something_actually_published(self, workflow: str) -> None:
-        # Provenance is a claim about a published file, and a dispatch run
-        # publishes nothing, so it is gated the same way Publish is.
-        attest = workflow.index("actions/attest-build-provenance")
-        preceding = workflow[:attest]
-        assert "if: startsWith(github.ref, 'refs/tags/')" in preceding.rsplit("- name:", 1)[-1]
-
-    def test_it_verifies_the_ui_is_inside_the_binary(self, workflow: str) -> None:
-        assert "Bundled UI is missing" in workflow
+    def test_a_release_happens_only_on_a_tag(self, release: str) -> None:
+        triggers = release.split("on:", 1)[1].split("concurrency:", 1)[0]
+        assert "tags:" in triggers
+        assert "workflow_dispatch" not in triggers
 
 
 class TestTheReadmeDescribesWhatShips:

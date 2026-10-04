@@ -233,7 +233,7 @@ and `packet_burst.py`. They have their own test directory
 - Frontend: Vite + vitest, ESLint + TypeScript-ESLint, Tailwind
 - Pre-commit: lefthook
 - Build: PyInstaller via `fpstune.spec`
-- Lock: uv (`uv.lock` is the source of truth; `requirements.txt` is generated)
+- Lock: uv (`uv.lock`, installed with `--locked`)
 
 ## Known refactor backlog
 

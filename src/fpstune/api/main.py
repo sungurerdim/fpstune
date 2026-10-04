@@ -209,6 +209,9 @@ def _host_name(host_header: str) -> str:
     return host.partition(":")[0]
 
 
+# FastAPI 0.142+ ships OpenTelemetry that starts exporting by itself whenever an
+# OTEL_EXPORTER_OTLP_* variable is set on the machine. fpstune sends nothing
+# anywhere, so every part of it stays off.
 _NO_TELEMETRY: TelemetryConfig = {
     "tracing": False,
     "metrics": False,
@@ -219,11 +222,7 @@ _NO_TELEMETRY: TelemetryConfig = {
 
 
 def create_app() -> FastAPI:
-    """Create and configure the FastAPI application.
-
-    Returns:
-        Configured FastAPI application.
-    """
+    """Create and configure the FastAPI application."""
     # Interactive API docs (Swagger/ReDoc) and the debug router expose the full
     # schema plus PII-bearing diagnostics; gate both behind FPSTUNE_DEBUG so the
     # packaged production binary does not surface them.
@@ -236,9 +235,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
         docs_url="/docs" if debug_mode else None,
         redoc_url="/redoc" if debug_mode else None,
-        # FastAPI 0.142+ ships OpenTelemetry that starts exporting by itself
-        # whenever an OTEL_EXPORTER_OTLP_* variable is set on the machine.
-        # fpstune sends nothing anywhere, so every part of it stays off.
         telemetry=_NO_TELEMETRY,
     )
 

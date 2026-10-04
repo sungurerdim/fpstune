@@ -615,7 +615,7 @@ class TestFunctionLengthCeiling:
         # PowerShell process to answer.
         ("src/fpstune/settings/executors/powershell.py", "detect"): 160,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
-        ("src/fpstune/api/main.py", "create_app"): 196,
+        ("src/fpstune/api/main.py", "create_app"): 193,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
     }
 

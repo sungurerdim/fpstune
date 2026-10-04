@@ -243,14 +243,20 @@ async def _stream_each(
     tasks = [asyncio.create_task(_process_one(s)) for s in settings]
     remaining = len(settings)
 
-    while remaining > 0:
-        item = await event_queue.get()
-        if item is None:
-            remaining -= 1
-        else:
-            yield item
-
-    await asyncio.gather(*tasks, return_exceptions=True)
+    try:
+        while remaining > 0:
+            item = await event_queue.get()
+            if item is None:
+                remaining -= 1
+            else:
+                yield item
+    finally:
+        # A client that disconnected (the UI's Stop) closes this generator.
+        # Settings still waiting for a slot are cancelled so nothing is written
+        # after Stop; the at most four already writing finish their one write.
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
     for ok in result_counts.values():
         if ok:

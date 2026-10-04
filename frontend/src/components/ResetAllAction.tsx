@@ -1,26 +1,28 @@
 import { useT } from "../i18n";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { RotateCcw, Loader2 } from "lucide-react";
 import { useStore } from "../store";
 import { cn } from "../lib/utils";
-import { useBulkApply } from "../hooks/useBulkApply";
+import { useBulkStream } from "../hooks/useBulkStream";
 import { valuesEqual, type Setting } from "../types/setting";
+import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 /**
  * "Reset to Defaults" across every applicable tweak, for the Software Tweaks tab.
  *
- * Applying is deliberately NOT here. It used to be — a global "Optimize All (N)"
- * sat next to a per-band "Fix all", two buttons for one action whose counts could
- * differ the moment a filter was on. The band's button is the apply, because it is
- * scoped to the rows the user can actually see; this one stays global because
- * "put everything back" has no useful narrower meaning.
+ * Applying is deliberately NOT here: the band's own button applies, scoped to
+ * the rows the user can see. This one stays global because "put everything
+ * back" has no useful narrower meaning — and because it touches everything, it
+ * asks first, then runs through the same streamed reset as a selection, so
+ * every row shows its own outcome and Stop works.
  */
 export function ResetAllAction() {
   const { t } = useT();
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
   const isDetecting = useStore((state) => state.isAnyCategoryLoading());
-  const { apply, isApplying, lastResult } = useBulkApply();
+  const { run, isRunning } = useBulkStream();
+  const [confirming, setConfirming] = useState(false);
 
   const settingsToReset = useMemo(() => {
     const rows: Setting[] = [];
@@ -33,31 +35,32 @@ export function ResetAllAction() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settingsMap, settingsVersion]);
 
-  const resetAll = () => {
-    const payload: Record<string, unknown> = {};
-    for (const s of settingsToReset) payload[s.id] = s.defaultValue;
-    if (Object.keys(payload).length > 0) apply(payload);
-  };
-
   return (
     <div className="flex items-center gap-3 flex-wrap">
+      <ConfirmDialog
+        open={confirming}
+        title={t("resetAll.title", { count: settingsToReset.length })}
+        confirmLabel={t("resetAll.confirm")}
+        onConfirm={() => {
+          setConfirming(false);
+          run(
+            "reset",
+            settingsToReset.map((s) => s.id),
+          );
+        }}
+        onCancel={() => setConfirming(false)}
+      >
+        {t("resetAll.body")}
+      </ConfirmDialog>
       {isDetecting && (
         <span className="text-xs text-muted-foreground flex items-center gap-1">
-          <Loader2 className="w-3 h-3 animate-spin" /> Detecting...
-        </span>
-      )}
-      {lastResult && (
-        <span className="text-xs text-muted-foreground">
-          {lastResult.success} reset
-          {lastResult.error > 0 && (
-            <span className="text-destructive"> · {lastResult.error} failed</span>
-          )}
+          <Loader2 className="w-3 h-3 animate-spin" /> {t("resetAll.detecting")}
         </span>
       )}
       <button
         type="button"
-        onClick={resetAll}
-        disabled={isApplying || settingsToReset.length === 0}
+        onClick={() => setConfirming(true)}
+        disabled={isRunning || settingsToReset.length === 0}
         className={cn(
           "px-3 py-1.5 text-xs rounded-md flex items-center gap-1.5 font-medium transition-colors",
           settingsToReset.length === 0
@@ -65,7 +68,7 @@ export function ResetAllAction() {
             : "bg-muted hover:bg-muted/80 text-foreground",
         )}
       >
-        {isApplying ? (
+        {isRunning ? (
           <Loader2 className="w-3 h-3 animate-spin" />
         ) : (
           <RotateCcw className="w-3 h-3" />

@@ -8,7 +8,18 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 // at a route that no longer exists.
 export type TabId =
   "home" | "settings" | "hardware" | "games" | "cleanup" | "benchmarks";
-export type OperationStatus = "queued" | "running" | "verified" | "failed";
+export type OperationStatus =
+  | "queued"
+  | "running"
+  | "verified"
+  | "failed"
+  | "skipped";
+
+/** The bulk apply/reset in flight, kept here so a tab switch cannot lose it. */
+export interface BulkRun {
+  action: "apply" | "reset";
+  cancel: () => void;
+}
 
 /**
  * One action inside a run, as it happens.
@@ -67,8 +78,12 @@ interface AppSlice {
 
   // Per-setting operation status during bulk SSE ops
   operationStatus: Record<string, OperationStatus>;
-  setOperationStatus: (id: string, status: OperationStatus) => void;
+  /** Why a row's bulk operation failed, shown beside its failure mark. */
+  operationError: Record<string, string>;
+  setOperationStatus: (id: string, status: OperationStatus, error?: string) => void;
   clearOperationStatus: () => void;
+  bulkRun: BulkRun | null;
+  setBulkRun: (run: BulkRun | null) => void;
 
   // Cleanup/maintenance run results (keyed by setting id) for the summary panel
   cleanupResults: Record<string, CleanupResult>;
@@ -174,14 +189,27 @@ export const useStore = create<FpstuneStore>()((...args) => {
         return { selectedSettingIds: next };
       }),
     clearSelection: () =>
-      set({ selectedSettingIds: new Set<string>(), operationStatus: {} }),
+      set({
+        selectedSettingIds: new Set<string>(),
+        operationStatus: {},
+        operationError: {},
+      }),
 
     operationStatus: {},
-    setOperationStatus: (id, status) =>
-      set((state) => ({
-        operationStatus: { ...state.operationStatus, [id]: status },
-      })),
-    clearOperationStatus: () => set({ operationStatus: {} }),
+    operationError: {},
+    setOperationStatus: (id, status, error) =>
+      set((state) => {
+        const operationError = { ...state.operationError };
+        if (error) operationError[id] = error;
+        else delete operationError[id];
+        return {
+          operationStatus: { ...state.operationStatus, [id]: status },
+          operationError,
+        };
+      }),
+    clearOperationStatus: () => set({ operationStatus: {}, operationError: {} }),
+    bulkRun: null,
+    setBulkRun: (run) => set({ bulkRun: run }),
 
     cleanupResults: {},
     recordCleanupResults: (results) =>

@@ -7,29 +7,18 @@ import { useT } from "../i18n";
 import { Button } from "./ui/Button";
 import { useState } from "react";
 import { X, Zap, RotateCcw, Loader2, AlertTriangle } from "lucide-react";
-import { useQueryClient } from "@tanstack/react-query";
 import { cn } from "../lib/utils";
-import { settingsApi } from "../lib/api";
 import { useStore } from "../store";
-import { valuesEqual } from "../types/setting";
+import { useBulkStream } from "../hooks/useBulkStream";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
 
 export function SelectionToolbar() {
   const { t } = useT();
-  const queryClient = useQueryClient();
   const selectedSettingIds = useStore((s) => s.selectedSettingIds);
   const clearSelection = useStore((s) => s.clearSelection);
-  const setOperationStatus = useStore((s) => s.setOperationStatus);
-  const clearOperationStatus = useStore((s) => s.clearOperationStatus);
-  const beginOperation = useStore((s) => s.beginOperation);
-  const endOperation = useStore((s) => s.endOperation);
-  const setSettingDetectionResult = useStore(
-    (s) => s.setSettingDetectionResult,
-  );
   const settings = useStore((s) => s.settings);
+  const { run, stop, isRunning } = useBulkStream();
 
-  const [isRunning, setIsRunning] = useState(false);
-  const [cancelFn, setCancelFn] = useState<(() => void) | null>(null);
   const [pendingAction, setPendingAction] = useState<"apply" | "reset" | null>(
     null,
   );
@@ -42,59 +31,7 @@ export function SelectionToolbar() {
 
   const hasAdvanced = selectedSettings.some((s) => s?.riskLevel === "advanced");
 
-  const runBulk = (action: "apply" | "reset") => {
-    clearOperationStatus();
-    const ids = [...selectedSettingIds];
-    ids.forEach((id) => setOperationStatus(id, "queued"));
-    setIsRunning(true);
-    // Tell the store the machine is being changed, so the hardware re-read on
-    // window focus stays off the same PowerShell for the length of the run.
-    beginOperation();
-
-    const streamFn =
-      action === "apply"
-        ? settingsApi.bulkStreamApply
-        : settingsApi.bulkStreamReset;
-
-    const cancel = streamFn(
-      ids,
-      (event) => {
-        const id = event.id as string | undefined;
-        if (!id) return;
-        if (event.event === "started") {
-          setOperationStatus(id, "running");
-        } else if (event.event === "applied") {
-          setOperationStatus(id, "running");
-        } else if (event.event === "verified") {
-          setOperationStatus(id, "verified");
-          // Update store directly from SSE payload — no extra API round-trip
-          const currentValue = (event as Record<string, unknown>).current_value;
-          const setting = settings.get(id as `${string}:${string}`);
-          if (setting !== undefined && currentValue !== undefined) {
-            const isOptimized = valuesEqual(
-              currentValue,
-              setting.recommendedValue,
-            );
-            setSettingDetectionResult(
-              id as `${string}:${string}`,
-              currentValue,
-              isOptimized,
-              true,
-            );
-          }
-        } else if (event.event === "failed") {
-          setOperationStatus(id, "failed");
-        }
-      },
-      () => {
-        setIsRunning(false);
-        endOperation();
-        setCancelFn(null);
-        queryClient.invalidateQueries({ queryKey: ["activity"] });
-      },
-    );
-    setCancelFn(() => cancel);
-  };
+  const runBulk = (action: "apply" | "reset") => run(action, [...selectedSettingIds]);
 
   const handleAction = (action: "apply" | "reset") => {
     if (hasAdvanced && action === "apply") {
@@ -104,13 +41,7 @@ export function SelectionToolbar() {
     }
   };
 
-  const handleCancel = () => {
-    cancelFn?.();
-    setIsRunning(false);
-    endOperation();
-    setCancelFn(null);
-    clearOperationStatus();
-  };
+  const handleCancel = stop;
 
   return (
     <>

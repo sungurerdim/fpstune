@@ -176,6 +176,41 @@ export interface ActivityLogEntry {
   level: string;
 }
 
+/**
+ * A failed request, carrying what the backend said rather than the transport's
+ * "API error: 400 Bad Request - {json}". `detail` is FastAPI's own field and is
+ * the sentence a user should read.
+ */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly detail: string,
+  ) {
+    super(detail);
+    this.name = "ApiError";
+  }
+}
+
+async function apiErrorFrom(response: Response): Promise<ApiError> {
+  const text = await response.text().catch(() => "");
+  let detail = text || response.statusText;
+  try {
+    const parsed = JSON.parse(text) as { detail?: unknown };
+    if (typeof parsed.detail === "string") detail = parsed.detail;
+    else if (parsed.detail !== undefined) detail = JSON.stringify(parsed.detail);
+  } catch {
+    // Not JSON: the text itself is the best description there is.
+  }
+  return new ApiError(response.status, detail || `HTTP ${response.status}`);
+}
+
+/** The sentence to show for any error a request or stream produced. */
+export function errorMessage(error: unknown): string {
+  if (error instanceof ApiError) return error.detail;
+  if (error instanceof Error) return error.message;
+  return String(error);
+}
+
 async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
   const fullUrl = `${API_BASE}${url}`;
   const method = options?.method || "GET";
@@ -191,11 +226,9 @@ async function fetchJson<T>(url: string, options?: RequestInit): Promise<T> {
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      log.error(`${response.status} ${response.statusText}`, errorText);
-      throw new Error(
-        `API error: ${response.status} ${response.statusText} - ${errorText}`,
-      );
+      const error = await apiErrorFrom(response);
+      log.error(`${response.status} ${response.statusText}`, error.detail);
+      throw error;
     }
 
     const data = await response.json();
@@ -240,7 +273,10 @@ function postEventStream(
         body: JSON.stringify(body),
         signal: controller.signal,
       });
-      if (!res.body) return;
+      // A 422 or 500 comes back as a JSON body with no `data:` lines; reading it
+      // as a stream ended "successfully" with nothing done and nothing said.
+      if (!res.ok) throw await apiErrorFrom(res);
+      if (!res.body) throw new ApiError(res.status, "The server sent no response body");
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buf = "";
@@ -623,6 +659,7 @@ export const settingsApi = {
     ids: string[],
     onEvent: (event: Record<string, unknown>) => void,
     onDone?: () => void,
+    onError?: (error: unknown) => void,
   ): (() => void) =>
     postEventStream(
       "/settings/bulk/stream-reset",
@@ -630,6 +667,7 @@ export const settingsApi = {
       "bulkStreamReset",
       onEvent,
       onDone,
+      onError,
     ),
 
   /**

@@ -67,6 +67,8 @@ function select(setting: Setting) {
     settings: new Map([[setting.id, setting]]),
     selectedSettingIds: new Set([setting.id]),
     operationStatus: {},
+    operationError: {},
+    bulkRun: null,
   } as never);
 }
 
@@ -118,5 +120,21 @@ describe("SelectionToolbar's advanced gate", () => {
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
+  });
+});
+
+
+describe("SelectionToolbar's run", () => {
+  beforeEach(() => {
+    bulkStreamApply.mockClear();
+  });
+
+  it("does not start a second run while one is in flight elsewhere", () => {
+    select(makeSetting("system:plain", "low"));
+    useStore.setState({ bulkRun: { action: "apply", cancel: () => {} } } as never);
+    render(<SelectionToolbar />);
+
+    expect(screen.queryByRole("button", { name: /Apply Selected/ })).toBeNull();
+    expect(screen.getByRole("button", { name: /Stop/ })).toBeTruthy();
   });
 });

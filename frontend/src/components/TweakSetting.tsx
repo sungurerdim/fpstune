@@ -40,6 +40,7 @@ import {
   TooltipTrigger,
 } from "./ui/tooltip";
 import type { OperationStatus } from "../store";
+import { useStore } from "../store";
 
 interface TweakSettingProps {
   setting: Setting;
@@ -78,6 +79,7 @@ export function TweakSetting({
   contextIcon,
 }: TweakSettingProps) {
   const { t } = useT();
+  const operationError = useStore((s) => s.operationError[setting.id]);
   // Only show loading if never detected (initial load). Re-detect keeps previous value visible.
   const isInitialLoading =
     setting.status === "loading" && setting.currentValue === null;
@@ -210,13 +212,36 @@ export function TweakSetting({
             </span>
           )}
           {operationStatus === "running" && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-primary shrink-0" />
+            <Loader2
+              role="img"
+              aria-label={t("row.statusRunning")}
+              className="w-3.5 h-3.5 animate-spin text-primary shrink-0"
+            />
           )}
           {operationStatus === "verified" && (
-            <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0" />
+            <CheckCircle2
+              role="img"
+              aria-label={t("row.statusVerified")}
+              className="w-3.5 h-3.5 text-success shrink-0"
+            />
           )}
           {operationStatus === "failed" && (
-            <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+            <span
+              role="img"
+              aria-label={
+                operationError
+                  ? t("row.statusFailedBecause", { reason: operationError })
+                  : t("row.statusFailed")
+              }
+              title={operationError}
+            >
+              <XCircle className="w-3.5 h-3.5 text-destructive shrink-0" />
+            </span>
+          )}
+          {operationStatus === "skipped" && (
+            <span className="text-xs text-muted-foreground px-1 rounded bg-muted/50">
+              {t("row.skipped")}
+            </span>
           )}
           {isDisabled ? (
             <span className="text-muted-foreground/30 text-xs">

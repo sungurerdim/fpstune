@@ -79,7 +79,10 @@ describe("benchmarkApi talks to the ledger routes", () => {
       ),
     );
 
-    await expect(benchmarkApi.ledger()).rejects.toThrow(/500/);
+    await expect(benchmarkApi.ledger()).rejects.toMatchObject({
+      status: 500,
+      detail: "ledger unreadable",
+    });
   });
 });
 

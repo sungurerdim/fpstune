@@ -237,7 +237,7 @@ class TestNetshRun:
         assert success is True
         mock_run.assert_called_once()
         called_cmd = mock_run.call_args[0][0]
-        assert called_cmd[0] == "netsh"
+        assert called_cmd[0].lower().endswith("netsh.exe")
 
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
     def test_run_timeout_returns_false(self):

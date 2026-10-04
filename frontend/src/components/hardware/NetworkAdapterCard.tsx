@@ -12,6 +12,8 @@ import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CopyableText } from "./shared";
 import { DeviceTweakList } from "./DeviceTweakList";
+import { errorMessage } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 const log = createLogger("hardware");
 
@@ -85,7 +87,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
     },
     onError: (error: Error) => {
       log.error(`Failed to toggle adapter "${adapter.name}":`, error.message);
-      alert(`Failed to toggle adapter: ${error.message}`);
+      notifyError(t("hw.adapterToggleFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -104,8 +106,10 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         `Failed to toggle connection for "${adapter.name}":`,
         error.message,
       );
-      alert(
-        `Failed to ${adapter.is_connected ? "disconnect" : "connect"}: ${error.message}`,
+      notifyError(
+        t(adapter.is_connected ? "hw.disconnectFailed" : "hw.connectFailed", {
+          reason: errorMessage(error),
+        }),
       );
     },
   });

@@ -5,6 +5,8 @@ import { api } from "../../lib/api";
 import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { HardwareSection } from "./shared";
+import { errorMessage } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 const log = createLogger("PowerProfileCard");
 
@@ -35,7 +37,7 @@ export function PowerProfileCard() {
     onSuccess: refetch,
     onError: (error: Error) => {
       log.error("Failed to activate FPS Balanced plan:", error.message);
-      alert(`Could not activate the power plan: ${error.message}`);
+      notifyError(t("hw.powerPlanActivateFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -44,7 +46,7 @@ export function PowerProfileCard() {
     onSuccess: refetch,
     onError: (error: Error) => {
       log.error("Failed to revert power plan:", error.message);
-      alert(`Could not revert the power plan: ${error.message}`);
+      notifyError(t("hw.powerPlanRevertFailed", { reason: errorMessage(error) }));
     },
   });
 

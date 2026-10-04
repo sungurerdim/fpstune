@@ -1,6 +1,8 @@
 import { useState, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { settingsApi, type ApplyResponse } from "../lib/api";
+import { errorMessage, settingsApi, type ApplyResponse } from "../lib/api";
+import { useT } from "../i18n";
+import { localizedName } from "../i18n/settings";
 import { useStore } from "../store";
 import { hardwareManager } from "../lib/hardware-manager";
 import { detectionManager } from "../lib/detection-manager";
@@ -12,7 +14,20 @@ import { isDisplaySetting, valuesEqual, type Setting } from "../types/setting";
  * backend-detected new_value (fallback: re-detect). Always invalidates
  * ["activity"] so successes AND failures surface in the drawer.
  */
+/** A failed response for a request that never got one, so callers never see a rejection. */
+function failedResponse(setting: Setting, error: string): ApplyResponse {
+  return {
+    setting_id: setting.id,
+    success: false,
+    error,
+    new_value: null,
+    requires_reboot: false,
+    verified: null,
+  };
+}
+
 export function useApplySingle() {
+  const { t } = useT();
   const queryClient = useQueryClient();
   const setSettingDetectionResult = useStore(
     (s) => s.setSettingDetectionResult,
@@ -27,9 +42,12 @@ export function useApplySingle() {
       setPendingIds((prev) => new Set(prev).add(setting.id));
       useStore.getState().beginOperation();
       try {
-        const response = await settingsApi.applySetting(setting.id, value);
+        const response = await settingsApi
+          .applySetting(setting.id, value)
+          .catch((error: unknown) => failedResponse(setting, errorMessage(error)));
+        const name = localizedName(setting);
         if (response.success) {
-          addNotification(`Applied ${setting.displayName}`, "success");
+          addNotification(t("apply.applied", { name }), "success");
           if (response.new_value !== null && response.new_value !== undefined) {
             const isOptimized = valuesEqual(
               response.new_value,
@@ -47,9 +65,10 @@ export function useApplySingle() {
           if (isDisplaySetting(setting.id)) hardwareManager.refreshMonitors();
         } else {
           addNotification(
-            `Could not apply ${setting.displayName}: ${response.error ?? "unknown error"}`,
+            t("apply.applyFailed", { name, reason: response.error ?? t("apply.unknownError") }),
             "error",
           );
+          await detectionManager.redetectSettings([setting.id]);
         }
         return response;
       } finally {
@@ -62,7 +81,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [addNotification, queryClient, setSettingDetectionResult],
+    [addNotification, queryClient, setSettingDetectionResult, t],
   );
 
   /**
@@ -81,8 +100,14 @@ export function useApplySingle() {
       useStore.getState().beginOperation();
       try {
         const response = await settingsApi.undoSetting(setting.id);
+        const name = localizedName(setting);
         if (response.success) {
-          addNotification(`Undid ${setting.displayName}`, "success");
+          addNotification(t("apply.undone", { name }), "success");
+        } else {
+          addNotification(
+            t("apply.undoFailed", { name, reason: response.error ?? t("apply.unknownError") }),
+            "error",
+          );
         }
         // Always re-detect: the value changed and the original is now gone, and
         // both of those live in the detection result the row renders from.
@@ -91,8 +116,11 @@ export function useApplySingle() {
           hardwareManager.refreshMonitors();
         }
         return response;
-      } catch {
-        addNotification(`Could not undo ${setting.displayName}`, "error");
+      } catch (error) {
+        addNotification(
+          t("apply.undoFailed", { name: localizedName(setting), reason: errorMessage(error) }),
+          "error",
+        );
         await detectionManager.redetectSettings([setting.id]);
         return null;
       } finally {
@@ -105,7 +133,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [addNotification, queryClient],
+    [addNotification, queryClient, t],
   );
 
   /**
@@ -121,12 +149,12 @@ export function useApplySingle() {
       setPendingIds((prev) => new Set(prev).add(setting.id));
       useStore.getState().beginOperation();
       try {
-        const response = await settingsApi.resetSetting(setting.id);
+        const response = await settingsApi
+          .resetSetting(setting.id)
+          .catch((error: unknown) => failedResponse(setting, errorMessage(error)));
+        const name = localizedName(setting);
         if (response.success) {
-          addNotification(
-            `Reset ${setting.displayName} to the Windows default`,
-            "success",
-          );
+          addNotification(t("apply.reset", { name }), "success");
           if (response.new_value !== null && response.new_value !== undefined) {
             const isOptimized = valuesEqual(
               response.new_value,
@@ -144,9 +172,10 @@ export function useApplySingle() {
           if (isDisplaySetting(setting.id)) hardwareManager.refreshMonitors();
         } else {
           addNotification(
-            `Could not reset ${setting.displayName}: ${response.error ?? "unknown error"}`,
+            t("apply.resetFailed", { name, reason: response.error ?? t("apply.unknownError") }),
             "error",
           );
+          await detectionManager.redetectSettings([setting.id]);
         }
         return response;
       } finally {
@@ -159,7 +188,7 @@ export function useApplySingle() {
         queryClient.invalidateQueries({ queryKey: ["activity"] });
       }
     },
-    [addNotification, queryClient, setSettingDetectionResult],
+    [addNotification, queryClient, setSettingDetectionResult, t],
   );
 
   return {

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from unittest.mock import MagicMock, patch
@@ -419,3 +420,37 @@ class TestNvidiaSettingsAreNotBatched:
         from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
         assert not hasattr(NvProfileExecutor, "apply_bulk")
+
+
+class TestStopStopsTheServer:
+    """Stop closes the stream; settings still queued must not be written after it."""
+
+    async def test_queued_settings_are_cancelled_when_the_client_leaves(self) -> None:
+        import threading
+
+        from fpstune.api.routes import settings_stream
+
+        settings = [_make_setting(f"core:s{i}") for i in range(10)]
+        for s in settings:
+            s.is_action = False
+        release = threading.Event()
+        applied: list[str] = []
+
+        def slow_apply(setting, *_args, **_kwargs):
+            release.wait(timeout=5)
+            applied.append(setting.id)
+            return setting, _make_apply_response(success=True, new_value="1")
+
+        tally = settings_stream._Tally()
+        with patch.object(settings_stream, "_apply_single_setting", side_effect=slow_apply):
+            stream = settings_stream._stream_each(settings, "apply", None, tally)
+            first = await stream.__anext__()
+            assert '"started"' in first
+            closing = asyncio.create_task(stream.aclose())
+            await asyncio.sleep(0.05)
+            release.set()
+            await closing
+            # Anything left running would finish now; give it the chance.
+            await asyncio.sleep(0.5)
+
+        assert len(applied) <= 4, f"{len(applied)} settings were written after Stop"

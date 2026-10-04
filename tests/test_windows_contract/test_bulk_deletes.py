@@ -45,6 +45,23 @@ def _fill(directory, *, files: int, size_bytes: int, prefix: str = "f") -> None:
         (directory / f"{prefix}{index}.tmp").write_bytes(b"\0" * size_bytes)
 
 
+def _stale(*roots) -> None:
+    """Age every entry past the temp cleanup's 24-hour keep window.
+
+    Temp keeps anything modified in the last day (a running program may still
+    own it), so files a test has just written are kept unless aged first.
+    """
+    import os
+    import time
+
+    old = time.time() - 3 * 24 * 3600
+    for root in roots:
+        if not root.exists():
+            continue
+        for path in [*root.rglob("*"), root]:
+            os.utime(path, (old, old))
+
+
 def _run_delete(cleanup_type: str, action_key: str) -> str:
     """Run the shipped delete over the shipped target's own resolved paths."""
     target = CLEANUP_TARGETS[cleanup_type]
@@ -90,6 +107,7 @@ def test_temp_empties_every_folder_including_subtrees(temp_dirs) -> None:
     _fill(user_temp / "nested" / "deeper", files=4, size_bytes=MB // 4)  # 1 MB
     _fill(local / "Temp", files=2, size_bytes=MB // 2)  # 1 MB
     _fill(windir / "Temp", files=2, size_bytes=MB // 2)  # 1 MB
+    _stale(user_temp, local, windir)
 
     shown, freed = _shown_then_freed("temp", "temp_cleanup")
 
@@ -111,6 +129,7 @@ def test_temp_frees_only_what_it_could_delete(temp_dirs) -> None:
     (windir / "Temp").mkdir(parents=True)
     locked_path = user_temp / "held-open.tmp"
     locked_path.write_bytes(b"\0" * MB)
+    _stale(user_temp, local, windir)
 
     with open(locked_path, "rb"):  # Windows refuses the delete while this is open
         shown, freed = _shown_then_freed("temp", "temp_cleanup")
@@ -128,6 +147,7 @@ def test_temp_skips_folders_that_are_not_there(tmp_path, monkeypatch) -> None:
     monkeypatch.setenv("TEMP", str(user_temp))
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "no-local"))
     monkeypatch.setenv("windir", str(tmp_path / "no-win"))
+    _stale(user_temp)
 
     assert _shown_then_freed("temp", "temp_cleanup") == (MB, MB)
 
@@ -145,11 +165,27 @@ def test_temp_walks_one_folder_once_when_two_variables_name_it(tmp_path, monkeyp
     monkeypatch.setenv("TEMP", str(user_temp))
     monkeypatch.setenv("LOCALAPPDATA", str(local))
     monkeypatch.setenv("windir", str(tmp_path / "absent"))
+    _stale(user_temp)
 
     shown, freed = _shown_then_freed("temp", "temp_cleanup")
 
     assert (shown, freed) == (2 * MB, 2 * MB)
     assert list(user_temp.iterdir()) == []
+
+
+def test_temp_keeps_a_running_apps_files(temp_dirs) -> None:
+    """A one-file app's _MEI folder and anything written today stay; only
+    stale entries go — measured and deleted by the same rule."""
+    user_temp, local, windir = temp_dirs
+    _fill(user_temp / "_MEI4242", files=1, size_bytes=MB)
+    _fill(user_temp / "stale", files=1, size_bytes=MB)
+    _stale(user_temp, local, windir)
+    (user_temp / "fresh.tmp").write_bytes(b"\0" * MB)
+
+    shown, freed = _shown_then_freed("temp", "temp_cleanup")
+
+    assert (shown, freed) == (MB, MB)
+    assert sorted(p.name for p in user_temp.iterdir()) == ["_MEI4242", "fresh.tmp"]
 
 
 # --------------------------------------------------------------------------

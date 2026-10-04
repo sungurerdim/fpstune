@@ -11,6 +11,8 @@ import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { HardwareSection, NotDetected } from "./shared";
 import { DeviceTweakList } from "./DeviceTweakList";
+import { errorMessage } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 const log = createLogger("hardware");
 
@@ -112,7 +114,7 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
         `Failed to toggle audio device "${device.name}":`,
         error.message,
       );
-      alert(`Failed to toggle device: ${error.message}`);
+      notifyError(t("hw.audioDeviceFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -130,7 +132,7 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
         `Failed to toggle loudness EQ for "${device.name}":`,
         error.message,
       );
-      alert(`Failed to toggle volume normalization: ${error.message}`);
+      notifyError(t("hw.loudnessFailed", { reason: errorMessage(error) }));
     },
   });
 

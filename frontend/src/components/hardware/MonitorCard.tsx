@@ -8,6 +8,8 @@ import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { isDisplaySuboptimal } from "../../lib/displayStatus";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
+import { errorMessage } from "../../lib/api";
+import { notifyError } from "../../lib/notify";
 
 const log = createLogger("MonitorCard");
 
@@ -62,7 +64,7 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
     },
     onError: (error: Error) => {
       log.error("Failed to set all displays to native mode:", error.message);
-      alert(`Could not change every display: ${error.message}`);
+      notifyError(t("hw.displaysFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -156,7 +158,7 @@ function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
     onSuccess: refetch,
     onError: (error: Error) => {
       log.error("Failed to apply VRR optimization:", error.message);
-      alert(`Could not apply G-Sync settings: ${error.message}`);
+      notifyError(t("hw.gsyncApplyFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -165,7 +167,7 @@ function VrrOptimizationPanel({ displayIndex }: { displayIndex: number }) {
     onSuccess: refetch,
     onError: (error: Error) => {
       log.error("Failed to reset VRR optimization:", error.message);
-      alert(`Could not reset G-Sync settings: ${error.message}`);
+      notifyError(t("hw.gsyncResetFailed", { reason: errorMessage(error) }));
     },
   });
 
@@ -310,7 +312,7 @@ export function MonitorCard({
     },
     onError: (error: Error) => {
       log.error(`Failed to set display ${displayIndex} to native mode:`, error.message);
-      alert(`Could not change the display mode: ${error.message}`);
+      notifyError(t("hw.displayModeFailed", { reason: errorMessage(error) }));
     },
   });
 

@@ -4,8 +4,23 @@ from __future__ import annotations
 
 import ctypes
 import functools
+import os
+import subprocess
 import sys
 from collections.abc import Callable
+
+
+def relaunch_command() -> tuple[str, str]:
+    """Program and parameters that start this same fpstune command again.
+
+    A frozen build re-runs its own exe. From source, ``sys.argv[0]`` is the
+    ``fpstune.exe`` console-script shim, which Python cannot run as a script,
+    so the module is started instead.
+    """
+    args = sys.argv[1:]
+    if getattr(sys, "frozen", False):
+        return sys.executable, subprocess.list2cmdline(args)
+    return sys.executable, subprocess.list2cmdline(["-m", "fpstune.cli", *args])
 
 
 def is_admin() -> bool:
@@ -63,26 +78,17 @@ def elevate_if_needed() -> bool:
         return False
 
     try:
-        # Build command line for re-launching with admin
-        # Use the full Python executable path and script
-        script = sys.argv[0]
-        params = " ".join(f'"{arg}"' if " " in arg else arg for arg in sys.argv[1:])
+        program, params = relaunch_command()
 
-        # ShellExecuteW with "runas" verb triggers UAC prompt
-        # Parameters:
-        #   hwnd: None (no parent window)
-        #   lpOperation: "runas" (request elevation)
-        #   lpFile: Python executable
-        #   lpParameters: script and arguments
-        #   lpDirectory: None (use current)
-        #   nShowCmd: 1 (SW_SHOWNORMAL)
+        # ShellExecuteW with "runas" verb triggers UAC prompt. lpDirectory is the
+        # current directory: an elevated process otherwise starts in System32.
         # Windows-only: ctypes.windll only exists on Windows platform
         result = ctypes.windll.shell32.ShellExecuteW(
             None,
             "runas",
-            sys.executable,
-            f'"{script}" {params}',
-            None,
+            program,
+            params,
+            os.getcwd(),
             1,  # SW_SHOWNORMAL
         )
 

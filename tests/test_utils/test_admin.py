@@ -10,6 +10,7 @@ import pytest
 from fpstune.utils.admin import (
     elevate_if_needed,
     is_admin,
+    relaunch_command,
     require_admin,
 )
 
@@ -137,3 +138,45 @@ class TestElevateIfNeeded:
         ):
             mock_ctypes.windll.shell32.ShellExecuteW.side_effect = OSError("no shell")
             assert elevate_if_needed() is False
+
+    def test_elevated_relaunch_runs_the_module_in_the_current_directory(
+        self, tmp_path, monkeypatch
+    ):
+        """The uv console-script shim is an exe: handing it to python.exe as a script made the
+        elevated window die at once (start.bat closed before the web UI opened), and with no
+        directory the elevated process started in System32."""
+        shim = r"C:\Program Files\fpstune checkout\.venv\Scripts\fpstune.exe"
+        monkeypatch.chdir(tmp_path)
+        with (
+            patch("fpstune.utils.admin.is_admin", return_value=False),
+            patch("sys.platform", "win32"),
+            patch.object(sys, "argv", [shim, "serve", "--port", "8000"]),
+            patch("fpstune.utils.admin.ctypes") as mock_ctypes,
+            pytest.raises(SystemExit),
+        ):
+            mock_ctypes.windll.shell32.ShellExecuteW.return_value = 42
+            elevate_if_needed()
+        _, verb, program, params, directory, _ = (
+            mock_ctypes.windll.shell32.ShellExecuteW.call_args.args
+        )
+        assert verb == "runas"
+        assert program == sys.executable
+        assert params == "-m fpstune.cli serve --port 8000"
+        assert "fpstune.exe" not in params
+        assert directory == str(tmp_path)
+
+
+class TestRelaunchCommand:
+    """A frozen build re-runs its own exe with only the user's arguments."""
+
+    def test_frozen_build_reruns_itself(self, monkeypatch):
+        exe = r"C:\Program Files\fpstune\fpstune.exe"
+        monkeypatch.setattr(sys, "frozen", True, raising=False)
+        monkeypatch.setattr(sys, "executable", exe)
+        monkeypatch.setattr(sys, "argv", [exe, "serve", "--host", "127.0.0.1"])
+        assert relaunch_command() == (exe, "serve --host 127.0.0.1")
+
+    def test_argument_with_spaces_is_quoted(self, monkeypatch):
+        monkeypatch.setattr(sys, "argv", ["fpstune", "serve", "--log", r"C:\My Logs\fpstune.log"])
+        _, params = relaunch_command()
+        assert params == r'-m fpstune.cli serve --log "C:\My Logs\fpstune.log"'

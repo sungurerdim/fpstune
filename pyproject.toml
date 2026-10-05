@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "fpstune"
-version = "0.2.1"
+version = "0.2.2"
 description = "Windows gaming performance optimization tool"
 readme = "README.md"
 license = "MIT"

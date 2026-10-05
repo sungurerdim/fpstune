@@ -17,6 +17,10 @@ from fpstune.utils.winapi import display
 from fpstune.utils.winapi.display import DEVMODEW, DISPLAY_DEVICEW, AdapterRecord
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="wintypes is Windows-sized only on Windows; WCHAR is 4 bytes and DWORD 8 elsewhere",
+)
 class TestStructLayouts:
     def test_display_device_is_840_bytes(self) -> None:
         """cb=840 is the size the live probe recorded for DISPLAY_DEVICEW."""

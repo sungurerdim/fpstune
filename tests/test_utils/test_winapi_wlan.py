@@ -22,6 +22,10 @@ from fpstune.utils.winapi.wlan import (
 )
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="wintypes is Windows-sized only on Windows; WCHAR is 4 bytes and DWORD 8 elsewhere",
+)
 class TestStructLayouts:
     def test_interface_info_is_532_bytes(self) -> None:
         """GUID (16) + WCHAR[256] (512) + state (4): the item stride the list walk uses."""

@@ -65,6 +65,10 @@ class TestDecoding:
         assert ctypes.sizeof(ctypes.c_int(MEMORY_PURGE_STANDBY_LIST)) == 4
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="ctypes.wintypes is Windows-sized only on Windows; DWORD and LONG are 8 bytes on LP64",
+)
 class TestPrivilegeStructs:
     def test_token_privileges_layout_matches_win32(self) -> None:
         """DWORD count + one LUID_AND_ATTRIBUTES (8 + 4) = 16 bytes."""

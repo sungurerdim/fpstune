@@ -166,20 +166,31 @@ class TestGpuBench:
         assert "Benchmark failed" in result.output
         fm.save_result.assert_not_called()
 
-    def test_run_without_furmark_says_where_it_goes_and_downloads_nothing(self, runner) -> None:
-        """FurMark's publisher posts no checksum, so fpstune never fetches it:
-        the old path downloaded whatever a redirect served (an ARM64 .7z by
-        2026-10) and ran it elevated."""
+    def test_run_without_furmark_installs_the_pinned_release_first(self, runner) -> None:
+        """A benchmark tool downloads on first use (owner decision, 2026-10-05) —
+        through `install`, which only accepts the pinned, hashed file."""
         fm = _furmark()
         fm.is_installed.return_value = False
-        fm.install_hint.return_value = "Install FurMark 2 yourself"
+        fm.install.return_value = True
+        fm.run_benchmark.return_value = None
 
         with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
             result = runner.invoke(bench_cmds.gpu_bench, ["run"])
 
         assert result.exit_code == 0
-        assert "Install FurMark 2 yourself" in result.output
-        fm.install.assert_not_called()
+        fm.install.assert_called_once()
+        fm.run_benchmark.assert_called_once()
+
+    def test_a_failed_install_says_why_and_runs_nothing(self, runner) -> None:
+        fm = _furmark()
+        fm.is_installed.return_value = False
+        fm.install.return_value = False
+        fm.install_error = "FurMark 2.10.2 could not be installed: the hash did not match"
+
+        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
+            result = runner.invoke(bench_cmds.gpu_bench, ["run"])
+
+        assert "the hash did not match" in result.output
         fm.run_benchmark.assert_not_called()
 
     def test_run_passes_the_overrides_through(self, runner) -> None:

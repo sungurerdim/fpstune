@@ -388,15 +388,31 @@ class TestFurMarkHelpers:
         presets["custom"] = {"duration": 999}
         assert "custom" not in bench.get_presets()
 
-    def test_nothing_is_downloaded(self, bench):
-        """No published checksum means nothing to verify a download against."""
+    def test_only_the_pinned_release_is_accepted(self, bench, monkeypatch):
+        """The old path downloaded whatever a redirect served (an ARM64 .7z by
+        2026-10) and ran it elevated. Now the bytes must hash to the pinned value."""
         from fpstune.benchmark import furmark
+        from fpstune.benchmark.download import DownloadError
 
-        assert not hasattr(bench, "install")
-        assert not hasattr(furmark, "FURMARK_DOWNLOAD_URL")
-        assert str(bench._furmark_dir) in bench.install_hint()
+        seen: dict = {}
 
-    def test_a_run_without_furmark_returns_nothing(self, bench):
+        def fetch(url, _destination, *, sha256, size, progress=None):  # noqa: ARG001
+            seen.update(url=url, sha256=sha256, size=size)
+            raise DownloadError("the file's SHA-256 did not match the pinned release")
+
+        monkeypatch.setattr(furmark, "fetch_verified", fetch)
+        assert bench.install() is False
+        assert seen == {
+            "url": furmark.FURMARK_URL,
+            "sha256": furmark.FURMARK_SHA256,
+            "size": furmark.FURMARK_BYTES,
+        }
+        assert furmark.FURMARK_URL.startswith("https://")
+        assert "did not match" in bench.install_error
+        assert not bench.is_installed()
+
+    def test_a_run_whose_install_fails_returns_nothing(self, bench, monkeypatch):
+        monkeypatch.setattr(bench, "install", lambda *_a, **_k: False)
         assert bench.run_benchmark() is None
 
 
@@ -488,3 +504,44 @@ class TestFurMarkCompareFactory:
         assert isinstance(cmp, FurMarkComparison)
         assert cmp.before is before
         assert cmp.after is after
+
+
+class TestExtractRelease:
+    """The archive provides a program that runs elevated: nothing may land outside."""
+
+    @staticmethod
+    def _zip(tmp_path, names):
+        import zipfile
+
+        archive = tmp_path / "fm.zip"
+        with zipfile.ZipFile(archive, "w") as zf:
+            for name in names:
+                zf.writestr(name, b"x")
+        return archive
+
+    def test_the_top_folder_is_dropped(self, tmp_path):
+        from fpstune.benchmark.furmark import extract_release
+
+        archive = self._zip(tmp_path, ["FurMark_win64/furmark.exe", "FurMark_win64/data/a.bin"])
+        extract_release(archive, tmp_path / "out")
+        assert (tmp_path / "out" / "furmark.exe").exists()
+        assert (tmp_path / "out" / "data" / "a.bin").exists()
+
+    def test_an_entry_that_climbs_out_is_refused(self, tmp_path):
+        import pytest
+
+        from fpstune.benchmark.furmark import extract_release
+
+        archive = self._zip(tmp_path, ["FurMark_win64/../../evil.exe"])
+        with pytest.raises(ValueError, match="escapes"):
+            extract_release(archive, tmp_path / "out")
+        assert not (tmp_path / "evil.exe").exists()
+
+    def test_an_entry_outside_the_release_folder_is_refused(self, tmp_path):
+        import pytest
+
+        from fpstune.benchmark.furmark import extract_release
+
+        archive = self._zip(tmp_path, ["other/furmark.exe"])
+        with pytest.raises(ValueError, match="unexpected entry"):
+            extract_release(archive, tmp_path / "out")

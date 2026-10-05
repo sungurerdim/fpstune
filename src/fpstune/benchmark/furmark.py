@@ -4,7 +4,9 @@ FurMark 2 is a free GPU stress test and benchmark tool.
 https://geeks3d.com/furmark/
 
 This module provides:
-- Running a FurMark 2 the user installed (never downloaded: no published hash)
+- Downloading one pinned FurMark 2 release on first use, verified against a
+  SHA-256 taken from that exact file (the publisher posts none, so the hash is
+  fpstune's own, the same way gpu_scene pins Superposition's installer)
 - Standardized benchmark runs (consistent settings)
 - Result parsing and analysis
 - Before/after comparison
@@ -15,15 +17,31 @@ from __future__ import annotations
 import contextlib
 import re
 import subprocess
+import zipfile
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from fpstune.benchmark.download import DownloadError, fetch_verified
 from fpstune.benchmark.result_store import ResultStore
 from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
+
+#: One release, by version, URL and the hash of its bytes (computed 2026-10-05 from
+#: two independent downloads of the publisher's own file). A new release is a
+#: deliberate change here, never "latest".
+FURMARK_VERSION = "2.10.2"
+FURMARK_URL = (
+    "https://gpumagick.com/downloads/files/2025/fm2/"
+    "2_10_dbc69dd0a08da5ff09169a4fc759ddaa/FurMark_2.10.2_win64.zip"
+)
+FURMARK_SHA256 = "27ab2e723e2e65df720bcafea681d2104744eda4a1e0a0374d7e61eaa820e63b"
+FURMARK_BYTES = 35_267_572
+#: The folder every file sits under inside the archive.
+_ARCHIVE_ROOT = "FurMark_win64/"
 
 
 @dataclass
@@ -224,6 +242,7 @@ class FurMarkBenchmark:
 
         self._logger = get_logger()
         self._store = ResultStore(self._results_dir, self._logger)
+        self.install_error = ""
 
     @property
     def furmark_path(self) -> Path:
@@ -240,14 +259,36 @@ class FurMarkBenchmark:
         """Check if FurMark is installed."""
         return self.furmark_cli_path.exists() or self.furmark_path.exists()
 
-    def install_hint(self) -> str:
-        """What the user has to do, since fpstune does not fetch FurMark itself."""
-        return (
-            "FurMark 2 is not downloaded by fpstune: its publisher posts no checksum, "
-            "so there is nothing to verify a download against before running it as "
-            "Administrator. Install FurMark 2 (x64) from geeks3d.com yourself and copy "
-            f"the folder that holds furmark.exe to {self._furmark_dir}"
-        )
+    def install(self, progress_callback: Callable[[int], None] | None = None) -> bool:
+        """Download and unpack the pinned FurMark 2. Returns True once it is in place.
+
+        A benchmark tool, so it may come from the network (owner decision,
+        2026-10-05) — but only this file, only whole, only if it hashes to the
+        pinned value. On failure `install_error` says why and nothing
+        unverified is left on disk.
+        """
+        self.install_error = ""
+        if self.is_installed():
+            return True
+        archive = self._data_dir / f"FurMark_{FURMARK_VERSION}_win64.zip"
+        self._logger.info(f"Downloading FurMark {FURMARK_VERSION}...")
+        try:
+            fetch_verified(
+                FURMARK_URL,
+                archive,
+                sha256=FURMARK_SHA256,
+                size=FURMARK_BYTES,
+                progress=progress_callback,
+            )
+            extract_release(archive, self._furmark_dir)
+        except (DownloadError, OSError, zipfile.BadZipFile, ValueError) as exc:
+            self.install_error = f"FurMark {FURMARK_VERSION} could not be installed: {exc}"
+            self._logger.error(self.install_error)
+            return False
+        finally:
+            archive.unlink(missing_ok=True)
+        self._logger.info(f"FurMark {FURMARK_VERSION} installed")
+        return True
 
     def run_benchmark(
         self,
@@ -269,8 +310,7 @@ class FurMarkBenchmark:
         Returns:
             FurMarkResult or None if benchmark fails.
         """
-        if not self.is_installed():
-            self._logger.error(self.install_hint())
+        if not self.is_installed() and not self.install():
             return None
 
         # Get preset settings
@@ -530,3 +570,32 @@ class FurMarkBenchmark:
             Dictionary of preset configurations.
         """
         return self.PRESETS.copy()
+
+
+def extract_release(archive: Path, destination: Path) -> None:
+    """Unpack the release into `destination`, dropping the archive's own top folder.
+
+    Every member must stay inside `destination` after the root is stripped: a
+    path that climbs out (`..`, an absolute name) is refused, not written — the
+    archive is about to provide a program that runs elevated.
+    """
+    destination.mkdir(parents=True, exist_ok=True)
+    root = destination.resolve()
+    with zipfile.ZipFile(archive) as zf:
+        for member in zf.infolist():
+            name = member.filename
+            if not name.startswith(_ARCHIVE_ROOT):
+                raise ValueError(f"unexpected entry outside {_ARCHIVE_ROOT}: {name}")
+            relative = name[len(_ARCHIVE_ROOT) :]
+            if not relative:
+                continue
+            target = (destination / relative).resolve()
+            if root not in target.parents and target != root:
+                raise ValueError(f"entry escapes the install folder: {name}")
+            if member.is_dir():
+                target.mkdir(parents=True, exist_ok=True)
+                continue
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with zf.open(member) as src, open(target, "wb") as dst:
+                while chunk := src.read(1024 * 1024):
+                    dst.write(chunk)

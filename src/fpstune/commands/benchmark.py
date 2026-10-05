@@ -66,8 +66,10 @@ def benchmark(
     fm = FurMarkBenchmark()
 
     if not compare and not fm.is_installed():
-        console.print(f"[yellow]{fm.install_hint()}[/]")
-        return
+        console.print("Downloading FurMark ...")
+        if not fm.install():
+            console.print(f"[red]{fm.install_error}[/]")
+            return
 
     # Just show comparison?
     if compare:
@@ -340,15 +342,15 @@ def gpu_bench() -> None:
 
 @gpu_bench.command("install")
 def gpu_bench_install() -> None:
-    """Show where FurMark 2 goes (fpstune does not download it)."""
+    """Download the pinned FurMark 2 release and verify it."""
     fm = FurMarkBenchmark()
 
-    if fm.is_installed():
+    if fm.install():
         console.print("[green]\u2713[/] FurMark 2 is installed")
         console.print(f"  Location: {fm.furmark_cli_path}")
         return
 
-    console.print(fm.install_hint())
+    console.print(f"[red]{fm.install_error}[/]")
 
 
 @gpu_bench.command("run")
@@ -376,8 +378,10 @@ def gpu_bench_run(
     fm = FurMarkBenchmark()
 
     if not fm.is_installed():
-        console.print(f"[yellow]{fm.install_hint()}[/]")
-        return
+        console.print("Downloading FurMark ...")
+        if not fm.install():
+            console.print(f"[red]{fm.install_error}[/]")
+            return
 
     # Show settings
     settings = fm.get_presets()[preset]

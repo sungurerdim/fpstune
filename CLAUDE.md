@@ -320,7 +320,7 @@ src/fpstune/
                      benchmark_suite.py · benchmark_ledger.py · system.py ·
                      system_{network,audio,power,storage}.py · system_common.py ·
                      display.py · safety.py · updates.py · debug.py
-  settings/ definitions/ (15 category files) · executors/ · base.py · applicability.py ·
+  settings/ definitions/ (16 category files) · executors/ · base.py · applicability.py ·
             hardware_context.py · impact_categories.py · groups.py · registry.py ·
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·
             cleanup_targets.py · detection.py · discovery/ · panel.py · virtualization.py
@@ -382,7 +382,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply, reset and undo; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 404 `SettingExecutor` instances across 15 category files.
+- `settings/definitions/` — 411 `SettingExecutor` instances across 16 category files.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -394,6 +394,11 @@ Module contracts — what the tree does not tell you:
   of Duty titles: LF endings, BOM round-trip, read-only clear, atomic replace with retry, the
   whole read-modify-write under one lock, and a refusal of any value the line's own `// range`
   forbids.
+- `definitions/game_configs_titles.py` + `executors/game_ini.py` — Fortnite, Apex, Overwatch 2 and
+  Siege: only keys on record in two sources; the rewriter changes lines that already exist (never
+  adds one), keeps BOM and line endings, and runs the read-modify-write under one lock.
+- `utils/os_build.py` — the last Windows build fpstune saw; a change surfaces a notice on Home,
+  and the start-up scan is the re-check.
 - `executors/mw4_config.py` — MW4 target; the scope digit is required, because `DxrMode@0`
   (Off/On) and `@1` (Off..Ultra) are two controls.
 - `executors/mw3_profile.py` — MW3 gamerprofile target; the scope digit is *optional*, because
@@ -499,7 +504,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(15 files, 404 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(16 files, 411 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

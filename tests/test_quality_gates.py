@@ -537,10 +537,16 @@ class TestC10VendorSymmetry:
     """C10's escape hatch, made mechanical (H9).
 
     "A vendor-specific concept ships for all vendors or is named as a gap."
-    The gap below is named: fpstune ships 18 NVIDIA driver settings and 7 AMD
+    The gap below is named: fpstune ships 16 NVIDIA driver settings and 7 AMD
     ones, and zero Intel — no Arc hardware has ever been available to derive
     or verify them against, and C1 forbids shipping writes no machine of ours
-    has confirmed (issue #64 tracks the debt). The counts are frozen so the
+    has confirmed (issue #64 tracks the debt). Re-checked 2026-10-05: Intel
+    publishes no registry form of its global FPS limiter, low latency or
+    V-Sync controls (its support staff call the driver keys NDA-only, External
+    Design Specification), so the only supported route is the Intel Graphics
+    Control Library's 3D-feature API, which needs an Arc machine to verify a
+    first write against. XeLL is a per-game developer API, not a global
+    setting. The counts are frozen so the
     asymmetry can only move toward symmetry: an 8th AMD or a 1st Intel
     setting must lower/raise these numbers here, on the record, and a new
     NVIDIA-only setting may not widen the gap silently.

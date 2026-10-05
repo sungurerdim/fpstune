@@ -56,6 +56,26 @@ export const settingsTr: Record<
     description:
       "İş yokken CPU'nun inebileceği en düşük hız. 100'e çekmek her çekirdeği gün boyu en yüksek çarpanda sabitler: sürekli ısı üretir ve tek bir kare kazandırmaz.",
   },
+  "power:cpu_max_frequency": {
+    name: "CPU frekans tavanı",
+    description:
+      "Windows'un işlemcinin çıkmasına izin verdiği MHz tavanı. 0, Windows'un kendi değeridir ve sınır yok demektir; başka her değer her çekirdeği anma turbo hızının altına çiviler.",
+  },
+  "power:cpu_idle_state_max": {
+    name: "İzin verilen en derin boşta durumu",
+    description:
+      "Boştaki bir çekirdeğin bu platformun 0-20 ölçeğinde ne kadar derin uyuyabileceği. Windows'un değeri 0, yani sınır yoktur; daha düşüğe sabitlemek akıcı uyanma için gün boyu ısı biriktirir.",
+  },
+  "power:cpu_throttle_states": {
+    name: "Kısma durumu emniyeti",
+    description:
+      "Windows'un ısıyı denetlemek için kısma durumlarını da kullanıp kullanamayacağı. Otomatik Windows'un kendi değeridir; Kapalı'ya zorlamak, gerekene dek sessiz duran bir ısı emniyetini kaldırır.",
+  },
+  "power:cpu_duty_cycling": {
+    name: "Aç/kapa güç döngüsü",
+    description:
+      "Windows'un ısıyı düşürmek için işlemciyi hızla tamamen açıp kapatıp kapatamayacağı. Devre dışı Windows'un kendi değeridir; açmak oyuna soğuma olarak değil takılma olarak yansır.",
+  },
   "power:cpu_max_state": {
     name: "Azami CPU hızı",
     description:
@@ -463,6 +483,16 @@ export const settingsTr: Record<
     description:
       "Önbelleğe alınmış belleği temizler. 16 GB altı RAM'li sistemler için önerilir.",
   },
+  "system:startup_apps": {
+    name: "Windows ile başlayan uygulamalar",
+    description:
+      "Her oturum açışınızda başlayan üçüncü taraf uygulamalar. Her biri maç dahil tüm oturum boyunca arka planda bellek ve işlemci zamanı harcar.",
+  },
+  "memory:compression": {
+    name: "Bellek sıkıştırma",
+    description:
+      "Windows'un boştaki bellek sayfalarını disk belleğine yazmak yerine RAM'de sıkıştırıp sıkıştırmadığı. Kapalıyken bellek baskısı diske gider ve oyun o sayfaları geri almak için diski bekler.",
+  },
   "services:MMCSS": {
     name: "Multimedya zamanlayıcı hizmeti",
     description:
@@ -471,7 +501,7 @@ export const settingsTr: Record<
   "services:SysMain": {
     name: "Superfetch ön yükleme",
     description:
-      "Uygulamaları belleğe önceden getirir ve bellek sıkıştırmayı yönetir. SSD'li sistemlerde kapatın.",
+      "Uygulamaları önceden yükleyen ve bellek sıkıştırma dahil bellek yöneticisi ajanını çalıştıran hizmet. Durdurmak sıkıştırmayı da kapatır; bellek baskısı diske gider.",
   },
   "services:DiagTrack": {
     name: "Windows telemetri hizmeti",
@@ -921,6 +951,11 @@ export const settingsTr: Record<
     description:
       "Battle.net başlatıcısının HTTP ve varlık önbelleğini temizler; sonraki açılışta yeniden oluşur. Başlatıcı çökmelerini, kayıp simgeleri ve başarısız güncellemeleri düzeltir.",
   },
+  "maintenance:ssd_retrim": {
+    name: "SSD yeniden TRIM",
+    description:
+      "Her SSD'ye hangi blokların yeniden boş olduğunu bildirir; Windows bunu normalde haftada bir yapar. Bunu almayan bir sürücü, yedek blokları doldukça yazmada yavaşlar.",
+  },
   "maintenance:sfc_scan": {
     name: "Sistem dosyası onarımı",
     description:
@@ -1077,6 +1112,81 @@ export const settingsTr: Record<
     name: "CS2 kozmetik parçacıklar",
     description:
       "CS2 autoexec.cfg'ye 'r_drawparticles 0' yazar; parçacık çizimini kapatır. İsabet kıvılcımları ateşin nereden geldiğini söyler ve alev kaynakları molotofun alanını gösterir — bunlar bilgidir.",
+  },
+  "game_config:mw3:sprint_assist_delay_kbm": {
+    name: "MW3 otomatik koşu gecikmesi",
+    description:
+      "Koşunun kendiliğinden başlaması için bir yönün ne kadar basılı tutulması gerektiği. Her gecikme, her rotasyonun başında koşmak isterken yürüyerek geçen zamandır.",
+  },
+  "game_config:mw3:sprint_assist_delay_gamepad": {
+    name: "MW3 otomatik koşu gecikmesi (oyun kolu)",
+    description:
+      "Oyun kolunda koşunun kendiliğinden başlaması için bir yönün ne kadar basılı tutulması gerektiği. Her gecikme, her rotasyonda koşmak isterken yürüyerek geçen zamandır.",
+  },
+  "game_config:mw3:ads_timing_sensitivity": {
+    name: "MW3 nişan geçişi hassasiyet zamanlaması",
+    description:
+      "Nişan alma (ADS) geçişi sırasında nişanın fareyi ne kadar yakından izlediği. Gecikmeli ve ara değerli modlar, aynı hareketi animasyonun neresine denk geldiğine göre farklı yere düşürür.",
+  },
+  "game_config:mw3:ads_sensitivity": {
+    name: "MW3 ADS hassasiyet çarpanı",
+    description:
+      "Dürbünle bakarken görüşün ne hızlı döndüğüne uygulanan çarpan; silahın kalkış hızına değil. 1,00 dışındaki her değer, ADS devreye girerken dönüş hızını değiştirip hızlı nişan yayını bozar.",
+  },
+  "game_config:mw3:ads_zoom_sensitivity": {
+    name: "MW3 yakınlaştırma başına ADS hassasiyeti",
+    description:
+      "Her nişangâh yakınlaştırma düzeyi için ayrı hassasiyet çarpanı. Altısı tek değeri ve tek anlamı paylaşır — oyuncunun yeniden öğrenmesi gereken bir sapma — bu yüzden birlikte değişir.",
+  },
+  "game_config:mw3:ads_hold_breath_sensitivity": {
+    name: "MW3 nefes tutma ADS hassasiyeti",
+    description:
+      "Nişanı sabitlemek için nefes tutarken uygulanan hassasiyet çarpanı. 1,00'da nefes tutmak farenin nişana çevrilişini değiştirmez, yalnızca sallanmayı kaldırır.",
+  },
+  "game_config:mw3:tactical_ads_sensitivity": {
+    name: "MW3 taktik duruş ADS hassasiyeti",
+    description:
+      "Taktik duruştan nişan alırken uygulanan hassasiyet çarpanı. 1,00'da duruş, farenin nişana çevrilişinde hiçbir şeyi değiştirmez.",
+  },
+  "game_config:mw3:mouse_monitor_distance_coeff": {
+    name: "MW3 fare-monitör mesafesi katsayısı",
+    description:
+      "Oyunun monitör mesafesi modeline göre ayarlanmış, fare hareketiyle nişan arasındaki kendi ölçek katsayısı. Sahip kararı: oyunun koyduğu yerde kalır, fpstune onu hiç değiştirmez.",
+  },
+  "game_config:mw3:mouse_vertical_sensibility": {
+    name: "MW3 dikey fare hassasiyeti oranı",
+    description:
+      "Dikey nişan hassasiyetinin yataya oranı. 1,00'da dikey eksen yatayla eşleşir; çapraz bir hızlı nişan elin hedeflediği yere düşer.",
+  },
+  "game_config:mw3:mouse_acceleration": {
+    name: "MW3 fare ivmesi",
+    description:
+      "Nişanı farenin hızına göre ölçekler; aynı mesafe farklı hızlarda farklı döndürür. Bir kez tutan hızlı nişanın bir daha tutmamasının nedeni budur ve pratik onu tutarlı yapmaz.",
+  },
+  "game_config:mw3:mouse_filter": {
+    name: "MW3 fare filtreleme",
+    description:
+      "Fare girdisinin birkaç örnek üzerinden ortalamasını alır. Ortalama, nişanın elin gerisinde kalması demektir ve gecikme filtre gücüyle büyür.",
+  },
+  "game_config:mw3:mouse_smoothing": {
+    name: "MW3 fare yumuşatma",
+    description:
+      "Hareketi akıcı göstermek için fare örnekleri arasında ara değer üretir. Yumuşattığı şey, hızlı nişanın sonundaki küçük ve hızlı düzeltmedir — vuruşu indiren kısım.",
+  },
+  "game_config:mw3:ads_fov_scaling": {
+    name: "MW3 ADS görüş alanı ölçekleme",
+    description:
+      "Nişan alırken görüş alanını oyuncunun ayarında tutar. Kapalıyken nişan almak görüşü daraltıp her hedefi kaydırır; bir sonrakinin yeniden bulunması gerekir.",
+  },
+  "game_config:mw3:gamepad_aim": {
+    name: "MW3 oyun kolu ile nişan",
+    description:
+      "Nişanı fare yerine oyun kolu çubuğuyla sınırlar. Fare-klavye kullanan bir makinede fare nişan almayı tamamen bırakır ve oyun bozuk görünür.",
+  },
+  "game_config:mw3:fov": {
+    name: "MW3 görüş alanı",
+    description:
+      "Dünyanın ne kadarının aynı anda göründüğü (60-120 derece). Daha geniş, oyuncunun yanında daha fazlasını gösterir; bedeli daha küçük görünen hedef ve küçük bir çizim maliyetidir.",
   },
   "game_config:mw3:preferred_display_mode": {
     name: "MW3 tercih edilen ekran modu",
@@ -1382,6 +1492,46 @@ export const settingsTr: Record<
     name: "HotS efekt ayrıntısı",
     description:
       "Yetenek ve büyü efektlerinin ayrıntısı. Bu oyunda bir yetenek kendini efektiyle duyurur; bu, oyuncunun ne okuyabildiğine karar veren tek grafik ayarıdır.",
+  },
+  "game_config:mw4:sprint_assist_delay_gamepad": {
+    name: "MW4 otomatik koşu gecikmesi (oyun kolu)",
+    description:
+      "Oyun kolunda koşunun kendiliğinden başlaması için bir yönün ne kadar basılı tutulması gerektiği. Her gecikme, her rotasyonun başında koşmak isterken yürüyerek geçen zamandır.",
+  },
+  "game_config:mw4:ads_timing_sensitivity": {
+    name: "MW4 nişan geçişi hassasiyet zamanlaması",
+    description:
+      "Nişan alma (ADS) geçişi sırasında nişanın fareyi ne kadar yakından izlediği. Ara değerli ve gecikmeli modlar, aynı hareketi animasyonun neresine denk geldiğine göre farklı yere düşürür.",
+  },
+  "game_config:mw4:ads_sensitivity": {
+    name: "MW4 ADS hassasiyet çarpanı",
+    description:
+      "Nişan alırken fare hassasiyetine uygulanan çarpan. 1,0'da çarpan nötrdür ve oyuncu tam olarak oyunun kendi monitör mesafesi ölçeklemesinin ürettiğini hisseder.",
+  },
+  "game_config:mw4:ads_zoom_sensitivity": {
+    name: "MW4 yakınlaştırma başına ADS hassasiyeti",
+    description:
+      "Her nişangâh yakınlaştırma düzeyi için ayrı hassasiyet çarpanı. Altısı tek değeri ve tek anlamı paylaşır — oyuncunun yeniden öğrenmesi gereken bir sapma — bu yüzden birlikte değişir.",
+  },
+  "game_config:mw4:ads_hold_breath_sensitivity": {
+    name: "MW4 nefes tutma ADS hassasiyeti",
+    description:
+      "Nişanı sabitlemek için nefes tutarken uygulanan hassasiyet çarpanı. 1,0'da nefes tutmak farenin nişana çevrilişini değiştirmez, yalnızca sallanmayı kaldırır.",
+  },
+  "game_config:mw4:tactical_ads_sensitivity": {
+    name: "MW4 taktik duruş ADS hassasiyeti",
+    description:
+      "Taktik duruştan nişan alırken uygulanan hassasiyet çarpanı. 1,0'da duruş, farenin nişana çevrilişinde hiçbir şeyi değiştirmez.",
+  },
+  "game_config:mw4:mouse_monitor_distance_coeff": {
+    name: "MW4 fare-monitör mesafesi katsayısı",
+    description:
+      "Oyunun monitör mesafesi modeline göre ayarlanmış, fare hareketiyle nişan arasındaki kendi ölçek katsayısı. Sahip kararı: oyunun koyduğu yerde kalır, fpstune onu hiç değiştirmez.",
+  },
+  "game_config:mw4:mouse_vertical_sensibility": {
+    name: "MW4 dikey fare hassasiyeti oranı",
+    description:
+      "Dikey nişan hassasiyetinin yataya oranı. 1,0'da dikey eksen yatayla eşleşir; çapraz bir hızlı nişan elin hedeflediği yere düşer.",
   },
   "game_config:mw4:recommended_set": {
     name: "MW4 özel ayarları koru",
@@ -1978,6 +2128,11 @@ export const settingsTr: Record<
     description:
       "Ağ kartı kesmelerini RSS üzerinden karşılayan ilk CPU çekirdeği. Tabanı yoğun Çekirdek 0'dan taşımak DPC gecikmesini düşürür.",
   },
+  "network:*:rss_queues": {
+    name: "Ağ kuyruğu sayısı",
+    description:
+      "Ağ kesmelerini karşılayan CPU çekirdeği sayısı. Oyun için 2 kuyruk en uygunudur.",
+  },
   "network:*:speed_duplex": {
     name: "Bağlantı hızı ve dupleks",
     description:
@@ -2031,6 +2186,39 @@ export const settingsTr: Record<
   },
   "game_config:mw3:refresh_rate": {
     name: "MW3 yenileme hızı",
+    description: "",
+  },
+  "game_config:fortnite:vsync": {
+    name: "Fortnite dikey eşitleme",
+    description:
+      "Oyun içi kare eşitleme. Eşitlemeyi zaten sürücü yönetir (değişken yenilemeli paneli de penceresinde tutar); oyundaki ikinci V-Sync yalnızca bekleme ekler.",
+  },
+  "game_config:fortnite:fps_cap": {
+    name: "Fortnite kare sınırı",
+    description: "",
+  },
+  "game_config:apex:vsync": {
+    name: "Apex dikey eşitleme",
+    description:
+      "Oyun içi kare eşitleme. Eşitlemeyi zaten sürücü yönetir (değişken yenilemeli paneli de penceresinde tutar); oyundaki ikinci V-Sync yalnızca bekleme ekler.",
+  },
+  "game_config:apex:volumetric_lighting": {
+    name: "Apex hacimsel aydınlatma",
+    description:
+      "Toz ve pustan geçen ışık huzmeleri. Kare kaybettirir ve oyuncunun okuması gereken alanı soldurur; nişancı oyununda süstür.",
+  },
+  "game_config:overwatch:vsync": {
+    name: "Overwatch 2 dikey eşitleme",
+    description:
+      "Oyun içi kare eşitleme. Eşitlemeyi zaten sürücü yönetir (değişken yenilemeli paneli de penceresinde tutar); oyundaki ikinci V-Sync yalnızca bekleme ekler.",
+  },
+  "game_config:r6siege:vsync": {
+    name: "Rainbow Six Siege dikey eşitleme",
+    description:
+      "Oyun içi kare eşitleme. Eşitlemeyi zaten sürücü yönetir (değişken yenilemeli paneli de penceresinde tutar); oyundaki ikinci V-Sync yalnızca bekleme ekler.",
+  },
+  "game_config:r6siege:fps_cap": {
+    name: "Rainbow Six Siege kare sınırı",
     description: "",
   },
   "game_config:mw3:fps_cap_ingame": {

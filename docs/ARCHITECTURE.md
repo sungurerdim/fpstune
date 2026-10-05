@@ -166,9 +166,12 @@ stays on the API path so every write is verified.
   - `HomeTab`, `SettingsTab`, `HardwareTab`, `GameTweaksTab`,
     `DiskCleanupTab`, `BenchmarksTab` — one per tab
   - `TweakSetting`, `TweakRows`, `TweakListRow` — the settings list
-  - `HardwarePanel` plus the `hardware/` package it composes (`MonitorCard`,
-    `NetworkAdapterCard`, `StorageDriveCard`, `AudioSection`,
-    `DeviceTweakList`)
+  - `ScopeActions` (Apply / Undo / Windows default for any scope) and
+    `TweakBands` (the one needs/ideal drawing), shared by every page
+  - `HardwarePanel` plus the `hardware/` package it composes (`DeviceCard`,
+    `devices.ts` — one card per device instance, read by Hardware and Home —
+    `MonitorCard`, `NetworkAdapterCard`, `StorageDriveCard`, `AudioSection`)
+  - `home/` — Home's sections (advisories, optimized fold, domain group, stats)
   - `CleanupPanel`, `MaintenancePanel`, `SuitePanel`, `VerifyPanel`,
     `HeadroomPanel`
   - `ActionConsole`, `ActivityLog` — operation feedback
@@ -179,8 +182,9 @@ stays on the API path so every write is verified.
   - `detection-manager.ts` — Coordinates detection requests, dedupes
     in-flight queries
   - `hardware-manager.ts` — Mirrors backend `HardwareManager`
-  - `tweakDomain.ts` — the one place a tweak's domain is decided: predicates
-    over the setting, never over `module`
+  - `tweakDomain.ts` — predicates over the backend's `domain` / `component`
+    fields (`SettingExecutor.component`: the physical component a tweak acts
+    on, never how it is set); never over `module` or the id
   - `impact.ts` — per-row benefit text from `impact_scores`; claims only, and
     claims never add up to a headline
   - `logger.ts` — Structured logging

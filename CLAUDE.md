@@ -473,11 +473,13 @@ Module contracts — what the tree does not tell you:
   `tests/test_executors/test_mw4_config.py::test_neither_setting_is_lost`.
 - **The hardware / software / game split is a predicate, never `module`.** `module` is the id's
   first segment, so every game collapses to `game_config` and every system tweak to `system` —
-  it cannot express a domain. `frontend/src/lib/tweakDomain.ts` holds the predicates
-  (`isHardwareTweak`, `isGameTweak`, one per domain) and every surface asks it; Software is the
-  leftover, so the three partition the registry and nothing lands twice. A new domain is a new
-  predicate there, never an id-scheme change. Each list surface excludes the domains it does
-  not own: Software Tweaks (flat list + filter bar), Game Tweaks (one section per game), Home's
+  it cannot express a domain. The backend decides: `SettingExecutor.component` is the physical
+  component a tweak acts on (module default, explicit per definition — a powercfg PCIe key is a
+  `pcie` tweak), and `domain` (hardware | software | game) derives from it; both ride
+  `SettingDefinitionResponse`. `frontend/src/lib/tweakDomain.ts` holds the predicates over those
+  fields and every surface asks it, so the three partition the registry and nothing lands twice.
+  Gate: `tests/test_settings/test_domain.py`. Each list surface excludes the domains it does
+  not own: Software Tweaks (category headings + chip bar), Game Tweaks (one section per game), Home's
   three groups and the tab badges all filter by predicate. Proven by `SettingsTab.test.tsx`
   ("leaves a game's config line to the Game Tweaks tab") and `GameTweaksTab.test.tsx`.
 - **A heading is the backend's word, never the frontend's.** `settings/groups.py` resolves each

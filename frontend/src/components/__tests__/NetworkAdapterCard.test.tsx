@@ -16,19 +16,6 @@ vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: { refreshNetworkAdapters: vi.fn().mockResolvedValue([]) },
 }));
 
-// The per-adapter tweak list reads the store; these tests are about the
-// adapter switch, so it stays out of the tree.
-const tweakList = vi.hoisted(() => ({
-  match: undefined as undefined | ((setting: { id: string }) => boolean),
-}));
-vi.mock("../hardware/DeviceTweakList", () => ({
-  DeviceTweakList: ({ match }: { match: (setting: { id: string }) => boolean }) => {
-    tweakList.match = match;
-    return null;
-  },
-}));
-// Read through a call so an assignment in the test does not narrow the type.
-const renderedMatch = () => tweakList.match;
 
 function adapter(
   overrides: Partial<NetworkAdapterInfo> = {},
@@ -208,23 +195,14 @@ describe("the reason travels with the switch, not merely beside it", () => {
   });
 });
 
-describe("the adapter's own tweaks", () => {
-  it("are matched on the backend's adapter key, not the interface index", () => {
-    // The interface index is reassigned on a driver reinstall or a USB replug,
-    // so a setting named by it could be attributed to another adapter (C5).
-    tweakList.match = undefined;
+describe("the adapter's tweak note", () => {
+  it("says a change reconnects the adapter, when the adapter has tweaks", () => {
     render(<NetworkAdapterCard adapter={adapter({ setting_key: "nic0a1b2c3d4e" })} />);
-
-    expect(renderedMatch()?.({ id: "network:nic0a1b2c3d4e:eee" })).toBe(true);
-    expect(renderedMatch()?.({ id: "network:12:eee" })).toBe(false);
-    expect(renderedMatch()?.({ id: "network:nic99999999ff:eee" })).toBe(false);
     expect(screen.getByText(/reconnects the adapter once/)).toBeInTheDocument();
   });
 
-  it("are not listed for an adapter the backend gave no key", () => {
-    tweakList.match = undefined;
+  it("says nothing of tweaks for an adapter the backend gave no key", () => {
     render(<NetworkAdapterCard adapter={adapter({ setting_key: null })} />);
-
-    expect(tweakList.match).toBeUndefined();
+    expect(screen.queryByText(/reconnects the adapter once/)).not.toBeInTheDocument();
   });
 });

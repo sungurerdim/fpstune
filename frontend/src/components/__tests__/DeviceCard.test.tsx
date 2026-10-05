@@ -22,7 +22,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent } from "@testing-library/react";
 import { render, screen, within } from "../../test/utils";
-import { DeviceTweakList } from "../hardware/DeviceTweakList";
+import { DeviceCard, DeviceCardCompact } from "../hardware/DeviceCard";
+import { Monitor } from "lucide-react";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
@@ -115,7 +116,7 @@ function setStore(settings: Setting[], detecting = false) {
 
 const matchAll = () => true;
 
-describe("DeviceTweakList", () => {
+describe("DeviceCard", () => {
   beforeEach(() => {
     applySingle.mockClear();
     bulkRun.mockClear();
@@ -125,21 +126,21 @@ describe("DeviceTweakList", () => {
   describe("advisories, which the page used to omit entirely", () => {
     it("lists a finding fpstune cannot write", () => {
       setStore([ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.getByText("Resizable BAR")).toBeInTheDocument();
     });
 
     it("tells the user where to change it", () => {
       setStore([ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.getByText(/In BIOS, set Resizable BAR/i)).toBeInTheDocument();
     });
 
     it("offers no Fix button for something no button can fix", () => {
       setStore([ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.queryByRole("button", { name: /^Fix/i })).not.toBeInTheDocument();
     });
@@ -148,15 +149,15 @@ describe("DeviceTweakList", () => {
       // A single count spanning both would make "Fix all" a claim about settings it
       // will not touch.
       setStore([FIXABLE, ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      expect(screen.getByText("1 to fix")).toBeInTheDocument();
+      expect(screen.getByText("1 to apply")).toBeInTheDocument();
       expect(screen.getByText("1 need you")).toBeInTheDocument();
     });
 
     it("leaves advisories out of the device's Apply", () => {
       setStore([FIXABLE, ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Apply 1 tweaks: GPU" }));
       fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Apply" }));
@@ -167,7 +168,7 @@ describe("DeviceTweakList", () => {
 
     it("asks before a device-wide Windows default, and names the count", () => {
       setStore([FIXABLE, ADVISORY]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       fireEvent.click(
         screen.getByRole("button", { name: "Return 1 settings to the Windows default: GPU" }),
@@ -181,12 +182,14 @@ describe("DeviceTweakList", () => {
 
     it("offers Undo only when the device has a recorded original", () => {
       setStore([FIXABLE]);
-      const { unmount } = render(<DeviceTweakList name="GPU" match={matchAll} />);
+      const { unmount } = render(
+        <DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />,
+      );
       expect(screen.queryByRole("button", { name: /^Undo/ })).not.toBeInTheDocument();
       unmount();
 
       setStore([setting({ ...FIXABLE, originalValue: "enabled" })]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
       expect(screen.getByRole("button", { name: "Undo 1 tweaks: GPU" })).toBeInTheDocument();
     });
 
@@ -199,7 +202,7 @@ describe("DeviceTweakList", () => {
         isOptimized: true,
       });
       setStore([FIXABLE, passed]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.queryByText(/need you/i)).not.toBeInTheDocument();
     });
@@ -208,23 +211,23 @@ describe("DeviceTweakList", () => {
   describe("status has to read at a glance", () => {
     it("states how many need fixing", () => {
       setStore([FIXABLE, IDEAL]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      expect(screen.getByText("1 to fix")).toBeInTheDocument();
+      expect(screen.getByText("1 to apply")).toBeInTheDocument();
     });
 
     it("says so plainly when nothing needs doing", () => {
       setStore([IDEAL]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      expect(screen.getByText("All 1 ideal")).toBeInTheDocument();
+      expect(screen.getByText("Ideal")).toBeInTheDocument();
     });
 
     it("shows the problem without anything being expanded first", () => {
       // "Everything is collapsed" was half the complaint. A suboptimal row is
       // visible on first render; only the already-ideal ones are behind the toggle.
       setStore([FIXABLE, IDEAL]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.getByText("MSI Mode")).toBeInTheDocument();
       expect(screen.queryByText("Already Fine")).not.toBeInTheDocument();
@@ -232,7 +235,7 @@ describe("DeviceTweakList", () => {
 
     it("reveals the settled ones on request", () => {
       setStore([FIXABLE, IDEAL]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       fireEvent.click(screen.getByRole("button", { name: /show 1 already ideal/i }));
 
@@ -241,7 +244,7 @@ describe("DeviceTweakList", () => {
 
     it("does not imply a device is clean before anything has been read", () => {
       setStore([], true);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.getByText(/Reading tweaks/i)).toBeInTheDocument();
       expect(screen.queryByText(/ideal/i)).not.toBeInTheDocument();
@@ -258,7 +261,9 @@ describe("DeviceTweakList", () => {
       ["a settled device", [IDEAL]],
     ])("keeps %s above the readable floor", (_label, settings) => {
       setStore(settings as Setting[]);
-      const { container } = render(<DeviceTweakList name="GPU" match={matchAll} />);
+      const { container } = render(
+        <DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />,
+      );
 
       const tiny = Array.from(container.querySelectorAll<HTMLElement>("[class]")).filter(
         (el) => /text-\[(?:[0-9]|10|11)px\]/.test(el.className),
@@ -271,7 +276,7 @@ describe("DeviceTweakList", () => {
   describe("the fix still works", () => {
     it("applies one tweak with its recommended value", () => {
       setStore([FIXABLE]);
-      render(<DeviceTweakList name="GPU" match={matchAll} />);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       // The shared row, the same one Software and Games use — not a private copy.
       fireEvent.click(screen.getByRole("switch", { name: "MSI Mode" }));
@@ -280,6 +285,65 @@ describe("DeviceTweakList", () => {
         expect.objectContaining({ id: "gpu-hardware:msi_mode" }),
         "enabled",
       );
+    });
+  });
+
+  describe("the card itself", () => {
+    it("is a labelled region named after the device, edge tone said in words too", () => {
+      setStore([FIXABLE]);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
+
+      const card = screen.getByRole("region", { name: "GPU" });
+      expect(card).toHaveAttribute("data-tone", "attention");
+      // Colour is never the only signal.
+      expect(within(card).getByText("1 to apply")).toBeInTheDocument();
+    });
+
+    it("draws a device with nothing to tune grey, and says so", () => {
+      setStore([]);
+      render(<DeviceCard deviceKey="drive-C" icon={Monitor} title="C: Example SSD" />);
+
+      expect(screen.getByRole("region", { name: "C: Example SSD" })).toHaveAttribute(
+        "data-tone",
+        "none",
+      );
+      expect(screen.getByText("Nothing to tune on this device")).toBeInTheDocument();
+    });
+
+    it("draws no card for a component's machine-wide tweaks when it has none", () => {
+      setStore([]);
+      render(
+        <DeviceCard deviceKey="buses" icon={Monitor} title="USB & PCIe" match={matchAll} sharedOnly />,
+      );
+
+      expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("Home's compact card", () => {
+    it("is absent when the device has nothing to apply", () => {
+      setStore([IDEAL]);
+      render(<DeviceCardCompact deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
+
+      expect(screen.queryByRole("region")).not.toBeInTheDocument();
+    });
+
+    it("offers one Apply for the device and nothing else", () => {
+      setStore([setting({ ...FIXABLE, originalValue: "enabled" })]);
+      render(<DeviceCardCompact deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
+
+      expect(screen.getByRole("button", { name: "Apply 1 tweaks: GPU" })).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Undo/ })).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Open GPU on the Hardware page" })).toBeInTheDocument();
+    });
+
+    it("opens the Hardware page", async () => {
+      setStore([FIXABLE]);
+      useStore.setState({ activeTab: "home" } as never);
+      render(<DeviceCardCompact deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
+
+      fireEvent.click(screen.getByRole("button", { name: "Open GPU on the Hardware page" }));
+      expect(useStore.getState().activeTab).toBe("hardware");
     });
   });
 });

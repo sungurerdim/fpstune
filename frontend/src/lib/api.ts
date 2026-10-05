@@ -99,7 +99,7 @@ export interface OsBuildChange {
   changed: boolean;
 }
 
-interface GpuDeviceInfo {
+export interface GpuDeviceInfo {
   vendor: string;
   name?: string;
   driver?: string;
@@ -147,6 +147,8 @@ export interface MonitorInfo {
   is_active?: boolean;
   // Hardware ID for matching (e.g., "DEL4265", "SAM0F75")
   hardware_id?: string;
+  // Id segment of this monitor's own settings: display:<setting_key>:<name>
+  setting_key?: string | null;
 }
 
 export interface HardwareInfo {

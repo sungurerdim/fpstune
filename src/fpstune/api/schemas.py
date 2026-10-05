@@ -60,17 +60,26 @@ class MonitorInfo(BaseModel):
     is_active: bool = True
     # Hardware ID from EDID (e.g., "DEL4265") — the C5 stable identifier
     hardware_id: str | None = None
+    # Id segment of this monitor's own settings: display:<setting_key>:<name>.
+    # The backend derives it (C5), so a card finds its tweaks without the
+    # frontend re-deriving a key from a model name.
+    setting_key: str | None = None
 
     @classmethod
-    def from_detected(cls, mon: DetectedMonitorInfo) -> MonitorInfo:
+    def from_detected(
+        cls, mon: DetectedMonitorInfo, monitors: list[DetectedMonitorInfo]
+    ) -> MonitorInfo:
         """Build the API payload from a detected monitor.
 
         The one serializer for every endpoint that returns monitors: /api/hardware
         and /display/* each had their own mapping and they disagreed on which
         fields exist. Unknown numeric values become None (0 means "not detected"
         in the dataclass); the known/optimal flags come from the dataclass
-        properties so the logic is never restated here.
+        properties so the logic is never restated here. `monitors` is every
+        connected monitor, which the key needs to tell two identical units apart.
         """
+        from fpstune.settings.display_mode import monitor_key
+
         return cls(
             name=mon.name,
             width=mon.width,
@@ -89,6 +98,7 @@ class MonitorInfo(BaseModel):
             supports_vrr=mon.supports_vrr,
             is_active=mon.is_active,
             hardware_id=mon.hardware_id or None,
+            setting_key=monitor_key(mon, monitors),
         )
 
 

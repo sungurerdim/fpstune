@@ -11,7 +11,6 @@ import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CopyableText } from "./shared";
-import { DeviceTweakList } from "./DeviceTweakList";
 import { errorMessage } from "../../lib/api";
 import { notifyError } from "../../lib/notify";
 
@@ -319,23 +318,10 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         </div>
       )}
 
-      {/* This adapter's own tweaks, next to the adapter they belong to. The
-          registry names per-adapter settings `network:<setting_key>:<name>`, and the
-          backend derives that key from the adapter's PnP device id (C5), so the
-          match survives a renamed adapter or a reassigned interface index. A
-          disabled adapter is never enumerated and has no per-adapter settings. */}
+      {/* The adapter's own tweaks are in its device card (`network:<setting_key>:`,
+          derived from the PnP device id, C5); changing one restarts the link. */}
       {adapter.interface_index != null && adapter.setting_key && (
-        <>
-          <DeviceTweakList
-            name={adapter.name}
-            match={(setting) =>
-              setting.id.startsWith(`network:${adapter.setting_key}:`)
-            }
-          />
-          <p className="text-xs text-muted-foreground">
-            {t("hw.adapterRestartNote")}
-          </p>
-        </>
+        <p className="text-xs text-muted-foreground">{t("hw.adapterRestartNote")}</p>
       )}
     </div>
   );

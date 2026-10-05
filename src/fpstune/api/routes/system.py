@@ -149,7 +149,7 @@ async def get_hardware_info() -> HardwareInfo:
     if isinstance(_mon_res, BaseException):
         logger.debug("Failed to get monitors: %s", _mon_res)
     else:
-        monitors_list = [MonitorInfo.from_detected(mon) for mon in _mon_res]
+        monitors_list = [MonitorInfo.from_detected(mon, _mon_res) for mon in _mon_res]
     if isinstance(_net_res, BaseException):
         logger.warning("Failed to get network adapters: %s", _net_res)
     else:

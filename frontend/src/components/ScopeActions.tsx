@@ -21,9 +21,12 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 export function ScopeActions({
   settings,
   name,
+  only,
   className,
 }: {
   settings: readonly Setting[];
+  /** Limit the group to these actions (Home's compact device card shows Apply only). */
+  only?: readonly BulkAction[];
   /** The scope in words ("Wi-Fi", "Network", "Software Tweaks"), read by screen readers. */
   name: string;
   className?: string;
@@ -48,10 +51,11 @@ export function ScopeActions({
     );
   }
 
+  const shown = (action: BulkAction) => !only || only.includes(action);
   const counts = {
-    apply: targets.apply.length,
-    undo: targets.undo.length,
-    reset: targets.reset.length,
+    apply: shown("apply") ? targets.apply.length : 0,
+    undo: shown("undo") ? targets.undo.length : 0,
+    reset: shown("reset") ? targets.reset.length : 0,
   };
   if (counts.apply + counts.undo + counts.reset === 0) return null;
 

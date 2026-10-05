@@ -16,6 +16,11 @@ import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
 vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
+// The machine's inventory: empty unless a test puts a GPU in it.
+const inventory = vi.hoisted(() => ({ hardware: null as unknown }));
+vi.mock("../hardware/useHardware", () => ({
+  useHardware: () => ({ hardware: inventory.hardware, isLoading: false }),
+}));
 vi.mock("../MaintenancePanel", () => ({ MaintenancePanel: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -135,6 +140,27 @@ describe("Home tells the three domains apart", () => {
     expect(hardware).toHaveTextContent("gpu-nvidia:shader_cache");
     expect(game).toHaveTextContent("game_config:mw4:dof_weapon");
     expect(hardware).not.toHaveTextContent("game_config:mw4:dof_weapon");
+  });
+
+  it("lists a present device as one compact card that opens the Hardware page", () => {
+    inventory.hardware = {
+      gpus: [{ name: "Example GPU", vendor: "NVIDIA" }],
+      monitors: [],
+      network_adapters: [],
+      storage_drives: [],
+      audio_devices: [],
+      detecting: false,
+    };
+    try {
+      render(<HomeTab />);
+      expect(
+        screen.getByRole("button", { name: "Open Example GPU on the Hardware page" }),
+      ).toBeInTheDocument();
+      // Claimed by the card, so not repeated as a loose row.
+      expect(screen.queryByText("gpu-nvidia:shader_cache")).not.toBeInTheDocument();
+    } finally {
+      inventory.hardware = null;
+    }
   });
 });
 

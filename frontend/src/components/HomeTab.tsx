@@ -22,6 +22,10 @@ import { cn } from "../lib/utils";
 import { useStore } from "../store";
 import { useImpactSummary } from "../hooks/useImpactSummary";
 import { useBulkApply } from "../hooks/useBulkApply";
+import { useHardware } from "./hardware/useHardware";
+import { describeDevices } from "./hardware/devices";
+import { DeviceCardCompact } from "./hardware/DeviceCard";
+import { ScopeActions } from "./ScopeActions";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
@@ -101,6 +105,8 @@ export function HomeTab() {
   );
 
   const { apply, isApplying } = useBulkApply();
+  const { hardware } = useHardware();
+  const devices = useMemo(() => describeDevices(hardware, t), [hardware, t]);
   // Maintenance is in scope because Home's to-do card lists upkeep that is
   // overdue beside the cleanups — a runner that did not name the module would
   // still run the id it was handed, and would be lying about what it covers.
@@ -272,6 +278,12 @@ export function HomeTab() {
   const gameSuboptimal = useMemo(
     () => suboptimal.filter(isGameTweak),
     [suboptimal],
+  );
+  // A hardware tweak whose device is not in the inventory yet (still being read,
+  // or never enumerated) keeps a plain row, so no tweak drops off Home.
+  const unclaimedHardware = useMemo(
+    () => hardwareSuboptimal.filter((s) => !devices.some((d) => d.match?.(s))),
+    [hardwareSuboptimal, devices],
   );
   const softwareSuboptimal = useMemo(
     () => suboptimal.filter((s) => !isHardwareTweak(s) && !isGameTweak(s)),
@@ -652,10 +664,24 @@ export function HomeTab() {
             }
             settings={hardwareSuboptimal}
             detecting={detecting}
-            isApplying={isApplying}
-            onApplyAll={() => applyGroup(hardwareSuboptimal)}
             categoryLabel={categoryLabel}
-          />
+          >
+            {/* One compact card per device with something to apply; each opens
+                its full card on the Hardware page. */}
+            {devices.map((d) => (
+              <DeviceCardCompact
+                key={d.deviceKey}
+                deviceKey={d.deviceKey}
+                icon={d.icon}
+                title={d.title}
+                kind={d.kind}
+                match={d.match}
+              />
+            ))}
+            {unclaimedHardware.map((s) => (
+              <TweakListRow key={s.id} setting={s} categoryLabel={categoryLabel(s.category)} />
+            ))}
+          </TweakGroup>
           <TweakGroup
             accent="software"
             title={t("home.softwareTweaks")}
@@ -668,8 +694,6 @@ export function HomeTab() {
             }
             settings={softwareSuboptimal}
             detecting={detecting}
-            isApplying={isApplying}
-            onApplyAll={() => applyGroup(softwareSuboptimal)}
             categoryLabel={categoryLabel}
           />
           <TweakGroup
@@ -684,8 +708,6 @@ export function HomeTab() {
             }
             settings={gameSuboptimal}
             detecting={detecting}
-            isApplying={isApplying}
-            onApplyAll={() => applyGroup(gameSuboptimal)}
             categoryLabel={categoryLabel}
           />
         </div>
@@ -1005,9 +1027,8 @@ function TweakGroup({
   icon,
   settings,
   detecting,
-  isApplying,
-  onApplyAll,
   categoryLabel,
+  children,
 }: {
   accent: DomainAccent;
   title: string;
@@ -1015,9 +1036,9 @@ function TweakGroup({
   icon: React.ReactNode;
   settings: Setting[];
   detecting: boolean;
-  isApplying: boolean;
-  onApplyAll: () => void;
   categoryLabel: (id: string) => string;
+  /** Replaces the row list — the hardware group lists its devices instead. */
+  children?: React.ReactNode;
 }) {
   const { t } = useT();
   const style = DOMAIN_STYLE[accent];
@@ -1047,16 +1068,8 @@ function TweakGroup({
             {subtitle}
           </span>
         </div>
-        {settings.length > 0 && (
-          <Button
-            className="shrink-0"
-            busy={isApplying}
-            icon={<Zap className="w-3.5 h-3.5" />}
-            onClick={onApplyAll}
-          >
-            {t("home.applyAll", { count: settings.length })}
-          </Button>
-        )}
+        {/* The same Apply every scope has, counted and confirmed the same way. */}
+        <ScopeActions settings={settings} name={title} only={["apply"]} className="shrink-0" />
       </div>
       {settings.length === 0 ? (
         // An empty group means two different things, and saying the wrong one is a
@@ -1065,6 +1078,8 @@ function TweakGroup({
         <p className="text-xs text-muted-foreground px-3 py-2">
           {detecting ? t("home.readingSettings") : t("home.allOptimized")}
         </p>
+      ) : children ? (
+        <div className="p-3 grid grid-cols-1 gap-2 items-start 2xl:grid-cols-2">{children}</div>
       ) : (
         <div
           data-testid="tweak-group-rows"

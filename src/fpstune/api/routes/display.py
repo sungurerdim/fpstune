@@ -194,7 +194,7 @@ async def refresh_displays() -> RefreshDisplaysResponse:
 
     return RefreshDisplaysResponse(
         success=True,
-        monitors=[MonitorInfo.from_detected(m) for m in monitors],
+        monitors=[MonitorInfo.from_detected(m, monitors) for m in monitors],
     )
 
 

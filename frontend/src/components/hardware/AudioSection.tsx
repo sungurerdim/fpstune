@@ -1,5 +1,4 @@
 import { useT } from "../../i18n";
-import { isComponentTweak } from "../../lib/tweakDomain";
 import { useMutation } from "@tanstack/react-query";
 import {
   Volume2, Mic, } from "lucide-react";
@@ -11,7 +10,6 @@ import { createLogger } from "../../lib/logger";
 import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { HardwareSection, NotDetected } from "./shared";
-import { DeviceTweakList } from "./DeviceTweakList";
 import { errorMessage } from "../../lib/api";
 import { notifyError, notifyInfo } from "../../lib/notify";
 
@@ -60,13 +58,6 @@ export function AudioSection({
             {outputDevices.map((device, i) => (
               <AudioDeviceCard key={`out-${device.id}-${i}`} device={device} />
             ))}
-            {/* The audio settings act on every output at once (effects, sample
-                rate, exclusive access) or on Windows as a whole (ducking), so
-                they belong to the section instead of a device card. */}
-            <DeviceTweakList
-              name={t("hw.audioOutput")}
-              match={(setting) => isComponentTweak(setting, "audio")}
-            />
           </div>
         ) : !loading ? (
           <NotDetected />

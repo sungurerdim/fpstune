@@ -19,11 +19,6 @@ vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: { refreshAudioDevices: vi.fn().mockResolvedValue([]) },
 }));
 
-// The section-level tweak list reads the store; these tests are about the
-// device switches, so it stays out of the tree.
-vi.mock("../hardware/DeviceTweakList", () => ({
-  DeviceTweakList: () => null,
-}));
 
 function device(overrides: Partial<AudioDeviceInfo> = {}): AudioDeviceInfo {
   return {

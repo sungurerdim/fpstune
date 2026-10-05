@@ -79,7 +79,6 @@ vi.mock("../hardware/NetworkAdapterCard", () => ({
 vi.mock("../hardware/StorageDriveCard", () => ({ StorageDriveCard: () => null }));
 vi.mock("../hardware/PowerProfileCard", () => ({ PowerProfileCard: () => null }));
 vi.mock("../hardware/AudioSection", () => ({ AudioSection: () => null }));
-vi.mock("../hardware/DeviceTweakList", () => ({ DeviceTweakList: () => null }));
 vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: {
     hasData: () => true,
@@ -312,14 +311,10 @@ describe("every page lays its content out across the width it is given", () => {
     expectRespondsToWidth(screen.getByTestId("maintenance-rows"), "lg:grid-cols-2");
   });
 
-  it("Hardware: the sections form a third column instead of one long one", () => {
+  it("Hardware: device cards sit two abreast on a wide window, one on a narrow one", () => {
     render(<HardwarePanel />);
 
-    const columns = screen.getByTestId("hardware-columns");
-    expectRespondsToWidth(columns, "lg:grid-cols-2");
-    // The step the split exists for: Connectivity stops being a stub beside a
-    // column six sections deep and becomes a column of its own.
-    expect(columns).toHaveClass("2xl:grid-cols-3");
+    expectRespondsToWidth(screen.getByTestId("hardware-columns"), "xl:grid-cols-2");
   });
 
   it("Benchmarks: the result sits beside the instrument on a wide window", () => {

@@ -307,3 +307,51 @@ class TestRegistryExecutorDeleteValue:
             success, error = executor._delete_value("HKLM", _HAGS_PATH, _HAGS_NAME)
         assert success is True
         assert error is None
+
+
+# ---------------------------------------------------------------------------
+# apply — a None target deletes, whatever the declared type
+# ---------------------------------------------------------------------------
+
+
+class TestApplyNoneDeletesBeforeCoercing:
+    """`apply_value_map` maps a value to None when Windows' stock is "absent".
+
+    The DWORD coercion ran first and turned None into "Cannot convert None to DWORD
+    integer", so every such write failed — the DNS priority guards, max_user_port,
+    default_ttl, qos_bandwidth and every privacy reset among them.
+    """
+
+    def test_a_dword_mapped_to_none_is_deleted(self) -> None:
+        setting = _make_reg_setting(apply_value_map={"standard": None, "optimized": 4})
+        with (
+            patch("sys.platform", "win32"),
+            patch.object(RegistryExecutor, "_delete_value", return_value=(True, None)) as delete,
+        ):
+            ok, error = RegistryExecutor().apply(setting, "standard")
+        assert (ok, error) == (True, None)
+        delete.assert_called_once_with("HKLM", _HAGS_PATH, _HAGS_NAME)
+
+    def test_every_registered_delete_target_reaches_the_delete(self) -> None:
+        from fpstune.settings.registry import SettingsRegistry
+
+        targets = [
+            (s, value)
+            for s in SettingsRegistry(discover_dynamic=False).get_all()
+            if s.apply_type == DetectType.REGISTRY
+            for value, raw in s.apply_value_map.items()
+            if raw is None
+        ]
+        assert targets, "no registry setting deletes its value; the scan found nothing"
+        failed = []
+        for setting, value in targets:
+            with (
+                patch("sys.platform", "win32"),
+                patch.object(
+                    RegistryExecutor, "_delete_value", return_value=(True, None)
+                ) as delete,
+            ):
+                ok, error = RegistryExecutor().apply(setting, value)
+            if not ok or not delete.called:
+                failed.append(f"{setting.id}={value}: {error}")
+        assert failed == []

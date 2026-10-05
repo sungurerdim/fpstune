@@ -113,6 +113,13 @@ class RegistryExecutor(BaseExecutor):
         if raw_value in ("not_available", "not_installed"):
             return True, None
 
+        # A value whose stock state is "absent" is written by deleting it. This must
+        # run before the type coercion below, which turned None into "Cannot convert
+        # None to DWORD integer" and made every such reset fail.
+        if raw_value is None:
+            debug_log("registry", f"APPLY {setting.id}: Deleting value")
+            return self._delete_value(hive, path, name)
+
         # Coerce value to match registry type
         if reg_type_str == "REG_DWORD" and not isinstance(raw_value, int):
             try:
@@ -127,11 +134,6 @@ class RegistryExecutor(BaseExecutor):
             "registry",
             f"APPLY {setting.id}: display={repr(value)} -> raw={repr(raw_value)}, type={reg_type_str}",
         )
-
-        # Handle delete case (raw_value is None)
-        if raw_value is None:
-            debug_log("registry", f"APPLY {setting.id}: Deleting value")
-            return self._delete_value(hive, path, name)
 
         try:
             import winreg

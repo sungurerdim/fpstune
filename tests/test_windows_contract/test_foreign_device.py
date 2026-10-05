@@ -47,6 +47,11 @@ function Get-ItemProperty {
     [CmdletBinding()] param([Parameter(Position = 0)][string]$Path, [string]$Name)
     $script:Touched.Add("read:$Path")
     if ($Path -like '*VEN_10DE*' -or $Path -like '*VEN_1002*') {
+        # fpstune wrote MSISupported=1 over an absent value (-1) when the host says
+        # so; otherwise the driver's own INF shipped it and nothing was recorded.
+        if ($FpsFake.fpstune_applied) {
+            return [pscustomobject]@{ MSISupported = 1; fpstuneOriginalMSISupported = -1 }
+        }
         return [pscustomobject]@{ MSISupported = 1 }
     }
     return $null
@@ -87,11 +92,19 @@ class TestMsiModeFindsTheDiscreteGpu:
         A `Select-Object -First 1` over an unfiltered list would read the Intel
         device's key here — which never carries MSISupported — and answer 'default'
         on every hybrid laptop."""
-        host = {"display": [INTEL_IGPU, NVIDIA_DGPU]}
+        host = {"display": [INTEL_IGPU, NVIDIA_DGPU], "fpstune_applied": True}
         assert run_shipped_command(_GPU_PRELUDE + msi_mode.detect_command, host) == "enabled"
         touched = _touched(msi_mode.detect_command, host)
         assert touched and all("VEN_10DE" in entry for entry in touched), touched
         assert not any("VEN_8086" in entry for entry in touched)
+
+    def test_a_driver_that_ships_msi_on_is_not_applicable_not_enabled(self, msi_mode) -> None:
+        """The dGPU key carries MSISupported=1 and fpstune never wrote it: that is the
+        driver's own stock state, so reset (which restores it) could never read back
+        as 'default'. Reporting 'enabled' here would make 'reset all' fail verify."""
+        host = {"display": [INTEL_IGPU, NVIDIA_DGPU]}
+        answer = run_shipped_command(_GPU_PRELUDE + msi_mode.detect_command, host)
+        assert answer == "already_at_hardware_default"
 
     def test_apply_writes_only_under_the_dgpu(self, msi_mode) -> None:
         command = substitute_placeholders(msi_mode.apply_command, value="enabled")

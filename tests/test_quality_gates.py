@@ -874,6 +874,10 @@ class TestNoLocalizedTextParsing:
             "not the sentence the event renders into, so no Windows language changes it"
         ),
         ("src/fpstune/api/routes/system_network.py", "'*802.11*'"): _ENUM_802,
+        ("src/fpstune/settings/definitions/network.py", "([string]$t.Type).ToLower()"): (
+            "MSFT_NetTeredoConfiguration Type enum name, not MUI text — the replacement "
+            "for netsh's localized `Type :` label"
+        ),
         ("src/fpstune/settings/definitions/audio.py", "-like '*{fragment}*'"): (
             "device-path fragments fpstune lists itself"
         ),

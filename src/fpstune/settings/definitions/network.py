@@ -1559,11 +1559,19 @@ TEREDO = SettingExecutor(
     category_order=22,
     effect="Restores Windows' default Teredo state",
     impact_scores={"latency_ms": 0.0, "stability": "high"},
-    detect_type=DetectType.NETSH,
-    detect_command="interface teredo show state",
-    detect_args={"parse_key": "type"},
-    # netsh reports the configured type: default, client, enterpriseclient,
-    # relay, server, natawareclient, disabled.
+    # Read through the cmdlet, never `netsh interface teredo show state`: netsh
+    # prints its row labels in the system language, so on a Turkish Windows the
+    # `Type` row the parser looked for does not exist and detection failed. The
+    # cmdlet's `Type` is a property, the same on every locale. Apply stays on
+    # netsh, whose command keywords (`type=default`) are not translated.
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$t = Get-NetTeredoConfiguration -ErrorAction SilentlyContinue; "
+        "if ($t) { ([string]$t.Type).ToLower() } else { 'not_supported' }"
+    ),
+    detect_args={},
+    # The configured type: default, client, enterpriseclient, relay, server,
+    # natawareclient, disabled.
     value_map={
         "default": "enabled",
         "client": "enabled",

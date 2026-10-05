@@ -4,17 +4,12 @@ import { useState, useMemo } from "react";
 import {
   Loader2,
   Search,
-  ChevronDown,
-  ChevronRight,
-  AlertCircle,
-  CheckCircle2,
-  Zap,
   type LucideIcon,
 } from "lucide-react";
 import { SelectionToolbar } from "./SelectionToolbar";
-import { ResetAllAction } from "./ResetAllAction";
-import { TweakRows, type TweakRow } from "./TweakRows";
-import { useBulkApply } from "../hooks/useBulkApply";
+import { type TweakRow } from "./TweakRows";
+import { TweakBands } from "./TweakBands";
+import { ScopeActions } from "./ScopeActions";
 import { isSoftwareTweak } from "../lib/tweakDomain";
 import { DetectionNotice } from "./DetectionNotice";
 import { cn } from "../lib/utils";
@@ -71,11 +66,9 @@ export function SettingsTab({
   const [impactFilter, setImpactFilter] = useState<ImpactCategory | "all">(
     "all",
   );
-  const [showOptimized, setShowOptimized] = useState(false);
 
-  const { needs, optimized, categoryOptions, impactCounts } = useMemo(() => {
-    const needsRows: TweakRow[] = [];
-    const optimizedRows: TweakRow[] = [];
+  const { rows, categoryOptions, impactCounts } = useMemo(() => {
+    const listed: TweakRow[] = [];
     const options: CategoryMetadata[] = [];
     const q = searchQuery.trim().toLowerCase();
     // Counted over everything the other filters admit, so a chip never offers a
@@ -141,13 +134,12 @@ export function SettingsTab({
             <CategoryIcon className="w-3 h-3 text-primary/70 shrink-0" />
           ),
         };
-        (s.isOptimized ? optimizedRows : needsRows).push(row);
+        listed.push(row);
       }
     }
 
     return {
-      needs: needsRows,
-      optimized: optimizedRows,
+      rows: listed,
       categoryOptions: options,
       impactCounts: counts,
     };
@@ -161,6 +153,7 @@ export function SettingsTab({
     gpuCategoryStatus,
     hasGpuSettings,
   ]);
+  const visibleSettings = useMemo(() => rows.map((r) => r.setting), [rows]);
 
   return (
     <div className="space-y-4 pb-16">
@@ -194,9 +187,12 @@ export function SettingsTab({
         {definitionsLoading && (
           <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />
         )}
-        <div className="ml-auto">
-          <ResetAllAction />
-        </div>
+        {/* Page scope: exactly the rows the filters leave on screen. */}
+        <ScopeActions
+          settings={visibleSettings}
+          name={t("tab.software")}
+          className="ml-auto"
+        />
       </div>
 
       {impactCounts.size > 0 && (
@@ -250,110 +246,10 @@ export function SettingsTab({
           ))}
         </div>
       ) : (
-        <>
-          <NeedsBand rows={needs} />
-          <section className="rounded-lg border border-success/30 bg-success/4 p-4 space-y-3">
-            <button
-              type="button"
-              onClick={() => setShowOptimized(!showOptimized)}
-              className="flex items-center gap-2 w-full text-left"
-            >
-              <CheckCircle2 className="w-4 h-4 text-success" />
-              <h2 className="text-sm font-bold uppercase tracking-wider text-success">
-                Optimized
-              </h2>
-              <span className="text-xs text-muted-foreground/60">
-                ({optimized.length})
-              </span>
-              <span className="ml-auto text-muted-foreground">
-                {showOptimized ? (
-                  <ChevronDown className="w-4 h-4" />
-                ) : (
-                  <ChevronRight className="w-4 h-4" />
-                )}
-              </span>
-            </button>
-            {showOptimized &&
-              (optimized.length === 0 ? (
-                <p className="text-sm text-muted-foreground">
-                  {t("settings.noOptimizedYet")}
-                </p>
-              ) : (
-                <TweakRows rows={optimized} />
-              ))}
-          </section>
-        </>
+        <TweakBands rows={rows} />
       )}
 
       <SelectionToolbar />
     </div>
-  );
-}
-
-/**
- * The tweaks that are not at their ideal value, with one bulk action scoped to
- * exactly what is on screen — so narrowing by search or category narrows the
- * button too, and its count is never a number the user cannot see.
- */
-function NeedsBand({ rows }: { rows: TweakRow[] }) {
-  const { t } = useT();
-  const { apply, isApplying, lastResult } = useBulkApply();
-
-  // Advisory rows are reported, never applied: fpstune can read the state and
-  // cannot write it, so counting them into "Fix all" would promise a write.
-  const fixable = rows.filter((r) => !r.setting.isReadonly);
-
-  const fixAll = () => {
-    const payload: Record<string, unknown> = {};
-    for (const { setting } of fixable)
-      payload[setting.id] = setting.recommendedValue;
-    if (Object.keys(payload).length > 0) apply(payload);
-  };
-
-  return (
-    <section className="rounded-lg border border-warning/30 bg-warning/4 p-4 space-y-3">
-      <div className="flex items-center gap-2">
-        <AlertCircle className="w-4 h-4 text-warning" />
-        <h2 className="text-sm font-bold uppercase tracking-wider text-warning">
-          {t("settings.needsOptimization")}
-        </h2>
-        <span className="text-xs text-muted-foreground/60">
-          ({rows.length})
-        </span>
-        {lastResult && (
-          <span className="text-xs text-muted-foreground">
-            {t("settings.appliedCount", { count: lastResult.success })}
-            {lastResult.error > 0 && (
-              <span className="text-destructive">
-                {t("settings.failedCount", { count: lastResult.error })}
-              </span>
-            )}
-          </span>
-        )}
-        {fixable.length > 0 && (
-          <button
-            type="button"
-            onClick={fixAll}
-            disabled={isApplying}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium bg-warning/15 text-warning hover:bg-warning/25 disabled:opacity-50 transition-colors"
-          >
-            {isApplying ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Zap className="w-3.5 h-3.5" />
-            )}
-            {t("settings.fixAll", { count: fixable.length })}
-          </button>
-        )}
-      </div>
-
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">
-          {t("settings.nothingNeeds")}
-        </p>
-      ) : (
-        <TweakRows rows={rows} />
-      )}
-    </section>
   );
 }

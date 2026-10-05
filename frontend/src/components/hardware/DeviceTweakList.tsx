@@ -1,239 +1,88 @@
 import { useT } from "../../i18n";
-import { localizedDescription, localizedName } from "../../i18n/settings";
-import { useMemo, useState } from "react";
-import { ChevronDown, ChevronRight, Loader2, Zap, CircleCheck, Wrench } from "lucide-react";
+import { useMemo } from "react";
+import { CircleCheck, Wrench } from "lucide-react";
 import { useStore } from "../../store";
-import { cn } from "../../lib/utils";
 import { isTweakAdvisory, isTweakListable, isTweakSuboptimal } from "../../lib/tweakStatus";
-import { useApplySingle } from "../../hooks/useApplySingle";
-import { useBulkApply } from "../../hooks/useBulkApply";
 import { StatusChip } from "../ui/StatusChip";
+import { ScopeActions } from "../ScopeActions";
+import { TweakBands } from "../TweakBands";
+import type { TweakRow } from "../TweakRows";
 import type { Setting } from "../../types/setting";
 
 /**
- * The tweaks belonging to one device, in the shape the Hardware page already reads
- * well: `current -> ideal` on one line, amber when they differ.
+ * The tweaks belonging to one device: a status line with the device's own
+ * Apply / Undo / Windows default, then its rows in the shared bands.
  *
- * This is the answer to the Software Tweaks hierarchy, which buried a setting under
- * group -> category -> module card -> expand and showed six cards and zero actual
- * tweaks on a 1600px screen. Here a tweak sits next to the device it belongs to and
- * states what is wrong without anything being expanded.
+ * The rows are the same `TweakRows` the Software and Game pages use, so a
+ * hardware tweak gets Reset, Undo, Verify and selection like any other — it used
+ * to get a private row with Apply only. Three things this list still owes the
+ * reader, each guarded by a test:
  *
- * Rewritten after the page was described as unreadable — "status and urgency do not
- * read, the fonts are tiny, everything is collapsed, all of it is hard to see". Three
- * things changed, and each maps to one of those:
- *
- *  - nothing on this page renders below `text-xs` any more. It was a mix of 9, 10 and
- *    11px, which is below what the rest of the app uses and below what most people
- *    read comfortably at arm's length.
- *  - the summary is a chip with a background rather than grey text, so "6 to fix" and
- *    "all ideal" are different at a glance instead of on inspection.
- *  - advisories are listed. `isTweakListable` excludes `isReadonly`, and nothing else
- *    picked them up, so Resizable BAR, GPU assignment, the fan curve and a link
- *    running under its own capability — the findings most likely to cost real frames —
- *    were never shown on the page about hardware. They are listed separately from the
- *    fixable ones, because a single count spanning both would make Fix all a claim
- *    about settings it will not touch.
+ *  - nothing renders below `text-xs`; the page once mixed 9, 10 and 11px.
+ *  - the summary is a chip with a background, so "6 to fix" and "all ideal" differ
+ *    at a glance instead of on inspection.
+ *  - advisories are listed. `isTweakListable` excludes `isReadonly`, so Resizable
+ *    BAR, GPU assignment and a link under its own capability — the findings most
+ *    likely to cost real frames — were once never shown on the page about
+ *    hardware. They are counted apart from the fixable ones, because a single
+ *    count spanning both would make Apply a claim about settings it will not touch.
  */
 export function DeviceTweakList({
   match,
-  emptyLabel,
+  name,
 }: {
   /** Which settings belong to this device. Kept as a predicate so a card can key
-   *  off whatever identifies its hardware — an interface index, a vendor, a module. */
+   *  off whatever identifies its hardware — an adapter key, a vendor, a component. */
   match: (setting: Setting) => boolean;
-  /** Shown when the device has tweaks and all of them are already ideal. */
-  emptyLabel?: string;
+  /** The device in words, carried into every action's accessible name. */
+  name: string;
 }) {
   const { t } = useT();
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
   const detecting = useStore((s) => s.isAnyCategoryLoading());
-  const { applySingle, isPending } = useApplySingle();
-  const { apply, isApplying } = useBulkApply();
-  const [showAll, setShowAll] = useState(false);
 
-  const { listable, suboptimal, advisories } = useMemo(() => {
-    const all: Setting[] = [];
-    const advice: Setting[] = [];
+  const { rows, members, toFix, advisories } = useMemo(() => {
+    const listed: Setting[] = [];
     for (const s of settings.values()) {
-      if (!match(s)) continue;
-      if (isTweakListable(s)) all.push(s);
-      else if (isTweakAdvisory(s)) advice.push(s);
+      if (match(s) && (isTweakListable(s) || isTweakAdvisory(s))) listed.push(s);
     }
-    all.sort((a, b) => a.categoryOrder - b.categoryOrder);
-    advice.sort((a, b) => a.categoryOrder - b.categoryOrder);
-    return { listable: all, suboptimal: all.filter(isTweakSuboptimal), advisories: advice };
+    listed.sort((a, b) => a.categoryOrder - b.categoryOrder);
+    return {
+      rows: listed.map((setting): TweakRow => ({ setting })),
+      members: listed,
+      toFix: listed.filter(isTweakSuboptimal).length,
+      advisories: listed.filter(isTweakAdvisory).length,
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settings, settingsVersion, match]);
 
   // Nothing detected for this device yet: say so rather than implying it is clean.
-  if (listable.length === 0 && advisories.length === 0) {
+  if (rows.length === 0) {
     if (!detecting) return null;
     return <p className="pl-4 pt-1 text-xs text-muted-foreground">{t("devices.reading")}</p>;
   }
 
-  const rows = showAll ? listable : suboptimal;
-
-  const applyAll = () => {
-    const payload: Record<string, unknown> = {};
-    for (const s of suboptimal) payload[s.id] = s.recommendedValue;
-    if (Object.keys(payload).length > 0) apply(payload);
-  };
-
   return (
-    <div className="pl-4 pt-1.5 space-y-1.5">
+    <div className="space-y-1.5 pl-4 pt-1.5">
       <div className="flex flex-wrap items-center gap-2">
-        <button
-          onClick={() => setShowAll(!showAll)}
-          aria-expanded={showAll}
-          aria-label={
-            showAll ? t("devices.hideIdeal") : t("devices.showIdeal")
-          }
-          className="flex items-center gap-1 rounded text-muted-foreground transition-colors hover:text-foreground"
-          disabled={listable.length === 0}
-        >
-          {showAll ? (
-            <ChevronDown className="h-4 w-4" />
-          ) : (
-            <ChevronRight className="h-4 w-4" />
-          )}
-          {suboptimal.length > 0 ? (
-            <StatusChip tone="attention" icon={<Wrench className="h-3.5 w-3.5" />}>
-              {suboptimal.length} to fix
-            </StatusChip>
-          ) : listable.length > 0 ? (
-            <StatusChip tone="ok" icon={<CircleCheck className="h-3.5 w-3.5" />}>
-              {emptyLabel ?? `All ${listable.length} ideal`}
-            </StatusChip>
-          ) : null}
-        </button>
-
-        {advisories.length > 0 && (
-          <StatusChip
-            tone="advisory"
-            title={t("devices.advisoryHint")}
-          >
-            {advisories.length} need you
+        {toFix > 0 ? (
+          <StatusChip tone="attention" icon={<Wrench className="h-3.5 w-3.5" />}>
+            {t("devices.toFix", { count: toFix })}
+          </StatusChip>
+        ) : advisories === 0 ? (
+          <StatusChip tone="ok" icon={<CircleCheck className="h-3.5 w-3.5" />}>
+            {t("devices.allIdeal", { count: rows.length })}
+          </StatusChip>
+        ) : null}
+        {advisories > 0 && (
+          <StatusChip tone="advisory" title={t("devices.advisoryHint")}>
+            {t("devices.needYou", { count: advisories })}
           </StatusChip>
         )}
-
-        {suboptimal.length > 0 && (
-          <button
-            onClick={applyAll}
-            disabled={isApplying}
-            className={cn(
-              "ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
-              isApplying
-                ? "cursor-wait bg-muted text-muted-foreground"
-                : "bg-warning/20 text-warning hover:bg-warning/30",
-            )}
-          >
-            {isApplying ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              <Zap className="h-3.5 w-3.5" />
-            )}
-            Fix all
-          </button>
-        )}
+        <ScopeActions settings={members} name={name} className="ml-auto" />
       </div>
-
-      {rows.map((setting) => (
-        <TweakRow
-          key={setting.id}
-          setting={setting}
-          pending={isPending(setting.id)}
-          onApply={() => applySingle(setting, setting.recommendedValue)}
-        />
-      ))}
-
-      {advisories.map((setting) => (
-        <AdvisoryRow key={setting.id} setting={setting} />
-      ))}
-    </div>
-  );
-}
-
-/** One tweak as `name  current -> ideal`, with the fix attached to the row. */
-function TweakRow({
-  setting,
-  pending,
-  onApply,
-}: {
-  setting: Setting;
-  pending: boolean;
-  onApply: () => void;
-}) {
-  const { t } = useT();
-  const off = isTweakSuboptimal(setting);
-
-  return (
-    <div
-      className="flex items-center gap-2 text-xs"
-      title={localizedDescription(setting)}
-    >
-      <span className="truncate text-muted-foreground">
-        {localizedName(setting)}
-      </span>
-      <span className={cn("font-medium", off ? "text-warning" : "text-success")}>
-        {String(setting.currentValue)}
-      </span>
-      {off && (
-        <>
-          <span aria-hidden className="text-muted-foreground">
-            →
-          </span>
-          <span className="font-medium text-success">
-            {String(setting.recommendedValue)}
-          </span>
-          {setting.riskLevel === "advanced" && (
-            <span
-              title={setting.riskWarning}
-              className="cursor-default rounded border border-warning/30 bg-warning/20 px-1 text-xs font-medium text-warning"
-            >
-              {t("devices.advancedBadge")}
-            </span>
-          )}
-          <button
-            onClick={onApply}
-            disabled={pending}
-            aria-label={t("row.applyNamed", { name: localizedName(setting) })}
-            className="ml-auto shrink-0 rounded-md bg-primary/15 px-2 py-1 text-xs font-medium text-primary transition-colors hover:bg-primary/25 disabled:opacity-50"
-          >
-            {pending ? (
-              <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            ) : (
-              t("devices.fix")
-            )}
-          </button>
-        </>
-      )}
-    </div>
-  );
-}
-
-/**
- * A finding fpstune cannot write.
- *
- * Deliberately shaped unlike a TweakRow: no arrow to an ideal value it cannot reach,
- * no Fix button that would do nothing. What it carries instead is the one thing the
- * user needs, which is where to go — `effect` on an advisory setting is written as
- * the instruction ("In BIOS, go to Advanced > PCI and set...").
- */
-function AdvisoryRow({ setting }: { setting: Setting }) {
-  return (
-    <div className="flex items-start gap-2 text-xs">
-      <span className="truncate text-muted-foreground">
-        {localizedName(setting)}
-      </span>
-      <span className="font-medium text-amber-400">{String(setting.currentValue)}</span>
-      <span
-        className="ml-auto max-w-[60%] shrink text-right leading-snug text-muted-foreground"
-        title={setting.riskWarning ?? setting.effect}
-      >
-        {setting.effect}
-      </span>
+      <TweakBands rows={rows} />
     </div>
   );
 }

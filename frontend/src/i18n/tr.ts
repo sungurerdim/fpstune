@@ -59,10 +59,6 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.loudnessFailed": "Ses normalleştirme değiştirilemedi: {reason}",
   "hw.powerPlanActivateFailed": "Güç planı etkinleştirilemedi: {reason}",
   "hw.powerPlanRevertFailed": "Güç planı geri alınamadı: {reason}",
-  "resetAll.title": "{count} ayar Windows varsayılanına döndürülsün mü?",
-  "resetAll.body": "Windows'un varsayılanından farklı olan her ayar ona geri döndürülür. Önce bir Sistem Geri Yükleme noktası oluşturulur ve her satır kendi sonucunu gösterir.",
-  "resetAll.confirm": "Hepsini sıfırla",
-  "resetAll.detecting": "Algılanıyor…",
   // Version and update (header)
   "update.version": "v{version}",
   "update.check": "Güncellemeleri denetle",
@@ -352,11 +348,7 @@ export const tr: Record<keyof typeof en, string> = {
     "Seçiminizde Gelişmiş olarak işaretli ayarlar var. Bunlar deneyseldir ve donanımınıza göre farklı davranabilir. Devam edilsin mi?",
   "toolbar.selected": "{count} seçili",
   "toolbar.clear": "Temizle",
-  "toolbar.processing": "İşleniyor…",
   "toolbar.stop": "Durdur",
-  "toolbar.resetSelected": "Seçilenleri Sıfırla",
-  "toolbar.applySelected": "Seçilenleri Uygula",
-  "toolbar.resetToDefaults": "Varsayılanlara Sıfırla ({count})",
   // Hardware surfaces
   "hw.title": "Donanım",
   "hw.admin": "Yönetici",
@@ -377,13 +369,12 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.audioDefault": "Varsayılan",
   "hw.notDetected": "Algılanamadı",
   "hw.copy": "Panoya kopyala",
+  "devices.toFix": "Düzeltilecek {count}",
+  "devices.allIdeal": "{count} ayarın hepsi ideal",
+  "devices.needYou": "{count} senden işlem bekliyor",
   "devices.reading": "İnce ayarlar okunuyor…",
-  "devices.showIdeal": "Zaten ideal olan ayarları göster",
-  "devices.hideIdeal": "Zaten ideal olan ayarları gizle",
   "devices.advisoryHint":
     "fpstune bunları değiştiremez — her satır nereden değişeceğini söyler.",
-  "devices.fix": "Düzelt",
-  "devices.advancedBadge": "İLERİ",
 
   // Monitor card
   "monitor.applying": "Uygulanıyor…",
@@ -562,12 +553,6 @@ export const tr: Record<keyof typeof en, string> = {
   "activity.close": "Etkinlik günlüğünü kapat",
 
   // Software Tweaks tab
-  "settings.noOptimizedYet": "Henüz en iyi duruma getirilen ayar yok.",
-  "settings.needsOptimization": "İyileştirme bekleyenler",
-  "settings.nothingNeeds": "İyileştirme bekleyen bir şey yok.",
-  "settings.fixAll": "Tümünü düzelt ({count})",
-  "settings.appliedCount": "{count} uygulandı",
-  "settings.failedCount": " · {count} başarısız",
 
   // Game Tweaks tab
   "games.searchPlaceholder": "Oyun ayarlarında ara...",
@@ -642,4 +627,26 @@ export const tr: Record<keyof typeof en, string> = {
   "toast.warning": "Uyarı",
   "toast.success": "Başarılı",
   "toast.info": "Bilgi",
+  // Scope actions
+  "actions.apply": "Uygula ({count})",
+  "actions.undo": "Geri al ({count})",
+  "actions.reset": "Windows varsayılanı ({count})",
+  "actions.applyShort": "Uygula",
+  "actions.undoShort": "Geri al",
+  "actions.resetShort": "Windows varsayılanı",
+  "actions.aria.apply": "{count} ayarı uygula: {name}",
+  "actions.aria.undo": "{count} ayarı geri al: {name}",
+  "actions.aria.reset": "{count} ayarı Windows varsayılanına döndür: {name}",
+  "actions.confirm.apply": "{name} için {count} ayar uygulansın mı?",
+  "actions.confirm.undo": "{count} ayar, fpstune'dan önce bu makinede olan değere dönecek.",
+  "actions.confirm.reset": "{count} ayar Windows varsayılanına dönecek.",
+  "actions.confirmBody.apply": "Her satır kendi sonucunu gösterir; her değişiklik aynı satırdan geri alınabilir.",
+  "actions.confirmBody.undo": "Her ayar, fpstune'un bu makineyi ilk okuduğunda kaydettiği değeri geri alır.",
+  "actions.confirmBody.reset": "Windows'un sunduğundan farklı olan her ayar ona geri döner. Her satır kendi sonucunu gösterir.",
+  // Gerekenler / ideal bantları
+  "bands.needs": "İşlem gerekiyor",
+  "bands.ideal": "İdeal",
+  "bands.nothingToDo": "Burada yapılacak bir şey yok.",
+  "bands.showIdeal": "Zaten ideal olan {count} ayarı göster",
+  "bands.hideIdeal": "Zaten ideal olan {count} ayarı gizle",
 };

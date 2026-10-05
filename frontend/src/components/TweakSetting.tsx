@@ -12,7 +12,7 @@
  */
 
 import { useT } from "../i18n";
-import { localizedName } from "../i18n/settings";
+import { localizedEffect, localizedName } from "../i18n/settings";
 import {
   Loader2,
   RotateCcw,
@@ -405,6 +405,14 @@ export function TweakSetting({
             </span>
           </span>
         </div>
+      )}
+
+      {/* An unresolved advisory: no control can fix it, so the row says where
+          to go instead — its `effect` is written as that instruction. */}
+      {setting.isReadonly && !isOptimal && setting.effect && (
+        <p className="mt-1 ml-7 text-xs text-muted-foreground leading-snug">
+          {localizedEffect(setting)}
+        </p>
       )}
 
       {/* Row 3: Last error banner */}

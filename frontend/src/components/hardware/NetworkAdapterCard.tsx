@@ -327,6 +327,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
       {adapter.interface_index != null && adapter.setting_key && (
         <>
           <DeviceTweakList
+            name={adapter.name}
             match={(setting) =>
               setting.id.startsWith(`network:${adapter.setting_key}:`)
             }

@@ -1,121 +1,59 @@
 /**
- * SelectionToolbar — sticky bottom toolbar for bulk apply/reset via SSE streaming.
- * Appears when ≥1 setting is selected; tracks per-setting operation status in store.
+ * SelectionToolbar — sticky bottom bar for the selection scope.
+ * Appears when ≥1 setting is selected; its actions are the same `ScopeActions`
+ * every other scope uses, so Apply, Undo and Windows default read and confirm
+ * the same way here as on a device card or a page header.
  */
 
 import { useT } from "../i18n";
-import { Button } from "./ui/Button";
-import { useState } from "react";
-import { X, Zap, RotateCcw, Loader2, AlertTriangle } from "lucide-react";
+import { useMemo } from "react";
+import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
 import { useBulkStream } from "../hooks/useBulkStream";
-import { ConfirmDialog } from "./ui/ConfirmDialog";
+import type { Setting, SettingId } from "../types/setting";
+import { ScopeActions } from "./ScopeActions";
 
 export function SelectionToolbar() {
   const { t } = useT();
   const selectedSettingIds = useStore((s) => s.selectedSettingIds);
   const clearSelection = useStore((s) => s.clearSelection);
   const settings = useStore((s) => s.settings);
-  const { run, stop, isRunning } = useBulkStream();
+  const settingsVersion = useStore((s) => s._settingsVersion);
+  const { isRunning } = useBulkStream();
 
-  const [pendingAction, setPendingAction] = useState<"apply" | "reset" | null>(
-    null,
+  const selected = useMemo(
+    () =>
+      [...selectedSettingIds]
+        .map((id) => settings.get(id as SettingId))
+        .filter((s): s is Setting => s !== undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+    [selectedSettingIds, settings, settingsVersion],
   );
 
   if (selectedSettingIds.size === 0) return null;
-
-  const selectedSettings = [...selectedSettingIds]
-    .map((id) => settings.get(id as `${string}:${string}`))
-    .filter(Boolean);
-
-  const hasAdvanced = selectedSettings.some((s) => s?.riskLevel === "advanced");
-
-  const runBulk = (action: "apply" | "reset") => run(action, [...selectedSettingIds]);
-
-  const handleAction = (action: "apply" | "reset") => {
-    if (hasAdvanced && action === "apply") {
-      setPendingAction(action);
-    } else {
-      runBulk(action);
-    }
-  };
-
-  const handleCancel = stop;
+  const label = t("toolbar.selected", { count: selectedSettingIds.size });
 
   return (
-    <>
-      {/* Advanced warning confirmation */}
-      <ConfirmDialog
-        open={pendingAction !== null}
-        title={t("toolbar.advancedTitle")}
-        confirmLabel={t("toolbar.applyAnyway")}
-        onConfirm={() => {
-          if (pendingAction) runBulk(pendingAction);
-          setPendingAction(null);
-        }}
-        onCancel={() => setPendingAction(null)}
+    <div
+      className={cn(
+        "fixed bottom-0 left-0 right-0 z-50",
+        "bg-card/95 backdrop-blur-xs border-t border-border",
+        "px-6 py-3 flex flex-wrap items-center gap-3 shadow-lg",
+      )}
+    >
+      <span className="text-sm font-medium text-foreground">{label}</span>
+
+      <button
+        onClick={clearSelection}
+        disabled={isRunning}
+        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
       >
-        {t("toolbar.advancedBody")}
-      </ConfirmDialog>
+        <X className="w-3.5 h-3.5" />
+        {t("toolbar.clear")}
+      </button>
 
-      {/* Sticky toolbar */}
-      <div
-        className={cn(
-          "fixed bottom-0 left-0 right-0 z-50",
-          "bg-card/95 backdrop-blur-xs border-t border-border",
-          "px-6 py-3 flex items-center gap-3 shadow-lg",
-        )}
-      >
-        <span className="text-sm font-medium text-foreground">
-          {t("toolbar.selected", { count: selectedSettingIds.size })}
-        </span>
-
-        <button
-          onClick={clearSelection}
-          disabled={isRunning}
-          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-        >
-          <X className="w-3.5 h-3.5" />
-          {t("toolbar.clear")}
-        </button>
-
-        {isRunning && (
-          <span className="flex items-center gap-1 text-xs text-muted-foreground">
-            <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            {t("toolbar.processing")}
-          </span>
-        )}
-
-        <div className="ml-auto flex items-center gap-2">
-          {isRunning ? (
-            <button
-              onClick={handleCancel}
-              className="px-3 py-1.5 text-xs rounded border border-border hover:bg-muted transition-colors"
-            >
-              {t("toolbar.stop")}
-            </button>
-          ) : (
-            <>
-              <button
-                onClick={() => handleAction("reset")}
-                className="flex items-center gap-1.5 px-3 py-1.5 text-xs rounded border border-border hover:bg-muted text-foreground transition-colors"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                {t("toolbar.resetSelected")}
-              </button>
-              <Button
-                variant={hasAdvanced ? "confirm" : "primary"}
-                icon={<Zap className="w-3.5 h-3.5" />}
-                onClick={() => handleAction("apply")}
-              >
-                {t("toolbar.applySelected")}
-                {hasAdvanced && <AlertTriangle className="w-3 h-3 ml-0.5" />}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
-    </>
+      <ScopeActions settings={selected} name={label} className="ml-auto" />
+    </div>
   );
 }

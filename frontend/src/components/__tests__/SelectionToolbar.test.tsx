@@ -83,7 +83,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Apply Selected/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
 
     expect(
       screen.getByRole("dialog", { name: "Advanced tweaks selected" }),
@@ -95,7 +95,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Apply Selected/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -106,21 +106,30 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Apply Selected/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
 
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
     expect(bulkStreamApply.mock.calls[0][0]).toEqual(["system:experimental"]);
   });
 
-  it("asks nothing when no selected tweak is Advanced", () => {
+  it("asks with the count when no selected tweak is Advanced, like every scope", () => {
     select(makeSetting("system:ordinary", "low"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /Apply Selected/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
+    expect(screen.getByRole("dialog", { name: "Apply 1 tweaks on 1 selected?" })).toBeTruthy();
+    expect(bulkStreamApply).not.toHaveBeenCalled();
 
-    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers Undo for a selection only when a row has a recorded original", () => {
+    select({ ...makeSetting("system:ordinary", "low"), originalValue: "disabled" } as Setting);
+    render(<SelectionToolbar />);
+
+    expect(screen.getByRole("button", { name: /^Undo 1 tweaks/ })).toBeTruthy();
   });
 });
 
@@ -135,7 +144,7 @@ describe("SelectionToolbar's run", () => {
     useStore.setState({ bulkRun: { action: "apply", cancel: () => {} } } as never);
     render(<SelectionToolbar />);
 
-    expect(screen.queryByRole("button", { name: /Apply Selected/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Apply 1 tweaks/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Stop/ })).toBeTruthy();
   });
 });

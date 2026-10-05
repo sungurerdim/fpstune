@@ -63,10 +63,6 @@ export const en = {
   "hw.loudnessFailed": "Could not change loudness equalization: {reason}",
   "hw.powerPlanActivateFailed": "Could not activate the power plan: {reason}",
   "hw.powerPlanRevertFailed": "Could not revert the power plan: {reason}",
-  "resetAll.title": "Reset {count} settings to the Windows default?",
-  "resetAll.body": "Every setting that differs from what Windows ships is put back to it. A System Restore point is created first, and each row shows its own result.",
-  "resetAll.confirm": "Reset all",
-  "resetAll.detecting": "Detecting…",
   // Version and update (header)
   "update.version": "v{version}",
   "update.check": "Check for updates",
@@ -370,11 +366,7 @@ export const en = {
     "Your selection includes settings marked Advanced. These are experimental and may behave differently depending on your hardware. Proceed?",
   "toolbar.selected": "{count} selected",
   "toolbar.clear": "Clear",
-  "toolbar.processing": "Processing…",
   "toolbar.stop": "Stop",
-  "toolbar.resetSelected": "Reset Selected",
-  "toolbar.applySelected": "Apply Selected",
-  "toolbar.resetToDefaults": "Reset to Defaults ({count})",
 
   // Hardware surfaces
   "hw.title": "Hardware",
@@ -396,13 +388,12 @@ export const en = {
   "hw.audioDefault": "Default",
   "hw.notDetected": "Not detected",
   "hw.copy": "Copy to clipboard",
+  "devices.toFix": "{count} to fix",
+  "devices.allIdeal": "All {count} ideal",
+  "devices.needYou": "{count} need you",
   "devices.reading": "Reading tweaks…",
-  "devices.showIdeal": "Show tweaks already ideal",
-  "devices.hideIdeal": "Hide tweaks already ideal",
   "devices.advisoryHint":
     "fpstune cannot change these — each row says where to.",
-  "devices.fix": "Fix",
-  "devices.advancedBadge": "ADV",
 
   // Monitor card
   "monitor.applying": "Applying…",
@@ -583,12 +574,6 @@ export const en = {
   "activity.close": "Close activity log",
 
   // Software Tweaks tab
-  "settings.noOptimizedYet": "No optimized tweaks yet.",
-  "settings.needsOptimization": "Needs optimization",
-  "settings.nothingNeeds": "Nothing needs optimization.",
-  "settings.fixAll": "Fix all {count}",
-  "settings.appliedCount": "{count} applied",
-  "settings.failedCount": " · {count} failed",
 
   // Game Tweaks tab
   "games.searchPlaceholder": "Search game settings...",
@@ -663,6 +648,28 @@ export const en = {
   "toast.warning": "Warning",
   "toast.success": "Success",
   "toast.info": "Information",
+  // Scope actions: one button group for a row's group, a device, a page or a selection
+  "actions.apply": "Apply ({count})",
+  "actions.undo": "Undo ({count})",
+  "actions.reset": "Windows default ({count})",
+  "actions.applyShort": "Apply",
+  "actions.undoShort": "Undo",
+  "actions.resetShort": "Windows default",
+  "actions.aria.apply": "Apply {count} tweaks: {name}",
+  "actions.aria.undo": "Undo {count} tweaks: {name}",
+  "actions.aria.reset": "Return {count} settings to the Windows default: {name}",
+  "actions.confirm.apply": "Apply {count} tweaks on {name}?",
+  "actions.confirm.undo": "{count} settings will return to what this machine held before fpstune.",
+  "actions.confirm.reset": "{count} settings will return to Windows defaults.",
+  "actions.confirmBody.apply": "Each row shows its own result, and every change can be undone from the same row.",
+  "actions.confirmBody.undo": "Each setting gets back the value fpstune recorded the first time it read this machine.",
+  "actions.confirmBody.reset": "Every setting that differs from what Windows ships is put back to it. Each row shows its own result.",
+  // Needs / ideal bands
+  "bands.needs": "Needs action",
+  "bands.ideal": "Ideal",
+  "bands.nothingToDo": "Nothing to do here.",
+  "bands.showIdeal": "Show {count} already ideal",
+  "bands.hideIdeal": "Hide {count} already ideal",
 } as const;
 
 export type MessageKey = keyof typeof en;

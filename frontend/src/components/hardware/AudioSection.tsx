@@ -63,7 +63,10 @@ export function AudioSection({
             {/* The audio settings act on every output at once (effects, sample
                 rate, exclusive access) or on Windows as a whole (ducking), so
                 they belong to the section instead of a device card. */}
-            <DeviceTweakList match={(setting) => isComponentTweak(setting, "audio")} />
+            <DeviceTweakList
+              name={t("hw.audioOutput")}
+              match={(setting) => isComponentTweak(setting, "audio")}
+            />
           </div>
         ) : !loading ? (
           <NotDetected />

@@ -23,6 +23,7 @@ import { HardwareSection, NotDetected } from "./hardware/shared";
 import { isCategoryLoading, safeArray } from "./hardware/helpers";
 import { useRefreshOnFocus } from "./hardware/useRefreshOnFocus";
 import { DeviceTweakList } from "./hardware/DeviceTweakList";
+import { SelectionToolbar } from "./SelectionToolbar";
 import { NetworkAdapterCard } from "./hardware/NetworkAdapterCard";
 import { AudioSection } from "./hardware/AudioSection";
 import { PowerProfileCard } from "./hardware/PowerProfileCard";
@@ -168,6 +169,7 @@ export function HardwarePanel() {
                 {/* Thermal condition is a finding about this chip, not a system
                     setting. It had no home on this page at all. */}
                 <DeviceTweakList
+                  name={hardware.cpu.name || t("hw.cpu")}
                   match={(setting) => isComponentTweak(setting, "cpu")}
                 />
               </div>
@@ -197,6 +199,7 @@ export function HardwarePanel() {
                       was filed as a software tweak, so it never appeared beside the
                       memory it is about. */}
                   <DeviceTweakList
+                    name={t("hw.memory")}
                     match={(setting) => isComponentTweak(setting, "memory")}
                   />
                 </div>
@@ -232,6 +235,7 @@ export function HardwarePanel() {
                         the first card, since they are properties of the
                         machine's primary GPU rather than of every card present. */}
                     <DeviceTweakList
+                      name={gpu?.name || t("hw.gpu")}
                       match={(setting) =>
                         isComponentTweak(setting, "gpu") &&
                         (VENDOR_GPU_MODULES.includes(setting.module)
@@ -268,6 +272,7 @@ export function HardwarePanel() {
                 {/* Windowed flip model and MPO are properties of the display stack,
                     not of one panel, so they sit with the section. */}
                 <DeviceTweakList
+                  name={t("hw.displays")}
                   match={(setting) => isComponentTweak(setting, "display")}
                 />
               </div>
@@ -293,6 +298,7 @@ export function HardwarePanel() {
                 {/* TRIM, 8.3 names and last-access are filesystem-wide, not
                     properties of one drive, so they belong to the section. */}
                 <DeviceTweakList
+                  name={t("hw.storage")}
                   match={(setting) => isComponentTweak(setting, "storage")}
                 />
               </div>
@@ -322,6 +328,7 @@ export function HardwarePanel() {
                     key, not one adapter's property, so it sits with the section.
                     Per-adapter rows carry their adapter as `subject`. */}
                 <DeviceTweakList
+                  name={t("hw.network")}
                   match={(setting) =>
                     isComponentTweak(setting, "network_adapter") && !setting.subject
                   }
@@ -349,6 +356,7 @@ export function HardwarePanel() {
               every device behind them, so they have a section of their own. */}
           <HardwareSection icon={<Cable className="w-4 h-4" />} title={t("hw.buses")}>
             <DeviceTweakList
+              name={t("hw.buses")}
               match={(setting) =>
                 isComponentTweak(setting, "usb") || isComponentTweak(setting, "pcie")
               }
@@ -356,6 +364,8 @@ export function HardwarePanel() {
           </HardwareSection>
         </div>
       </div>
+      {/* Hardware rows are selectable like any other; the selection scope. */}
+      <SelectionToolbar />
     </Card>
   );
 }

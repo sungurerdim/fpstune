@@ -47,7 +47,6 @@ const _FROZEN = new Map<string, number>([
   ["components/SuitePanel.tsx", 1],
   ["components/TweakSetting.tsx", 2],
   ["components/VerifyPanel.tsx", 5],
-  ["components/hardware/DeviceTweakList.tsx", 1],
   ["types/setting.ts", 25],
 ]);
 

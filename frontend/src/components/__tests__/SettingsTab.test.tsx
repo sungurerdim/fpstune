@@ -23,14 +23,23 @@ import { useStore } from "../../store";
 import type { CategoryMetadata, ModuleMetadata, Setting } from "../../types/setting";
 import { Wifi } from "lucide-react";
 
-const applyMock = vi.fn();
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({
-    apply: (payload: Record<string, unknown>) => applyMock(payload),
-    isApplying: false,
-    lastResult: null,
+const runMock = vi.fn();
+vi.mock("../../hooks/useBulkStream", () => ({
+  useBulkStream: () => ({
+    run: (action: string, ids: string[]) => runMock(action, ids),
+    stop: vi.fn(),
+    isRunning: false,
   }),
 }));
+
+/** The page-scope Apply, which counts exactly the rows the filters leave on screen. */
+const pageApply = () => screen.getByRole("button", { name: /^Apply \d+ tweaks: Software Tweaks$/ });
+
+/** Press a page action and answer its confirmation. */
+async function confirmPageApply() {
+  await userEvent.click(pageApply());
+  await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+}
 
 function makeSetting(over: Partial<Setting> & Pick<Setting, "id">): Setting {
   return {
@@ -107,7 +116,7 @@ function renderTab(
 
 describe("SettingsTab flat list", () => {
   beforeEach(() => {
-    applyMock.mockClear();
+    runMock.mockClear();
     useStore.setState({
       settings: new Map(),
       selectedSettingIds: new Set(),
@@ -146,11 +155,11 @@ describe("SettingsTab flat list", () => {
     expect(screen.getByText("Nagle's Algorithm")).toBeInTheDocument();
     expect(screen.queryByText("Receive Side Scaling")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Optimized"));
+    await userEvent.click(screen.getByRole("button", { name: /show 1 already ideal/i }));
     expect(screen.getByText("Receive Side Scaling")).toBeInTheDocument();
   });
 
-  it("shows an advisory but never counts it into Fix all", async () => {
+  it("shows an advisory but never counts it into the page's Apply", async () => {
     // The link-speed case: fpstune can read it and cannot write it. Counting it
     // would make the button promise a write it cannot perform.
     const fixable = makeSetting({
@@ -175,11 +184,10 @@ describe("SettingsTab flat list", () => {
     expect(screen.getByText("Startup apps")).toBeInTheDocument();
     expect(screen.getByText("Advisory")).toBeInTheDocument();
 
-    const fixAll = screen.getByRole("button", { name: /fix all/i });
-    expect(fixAll).toHaveTextContent("Fix all 1");
+    expect(pageApply()).toHaveTextContent("Apply (1)");
 
-    await userEvent.click(fixAll);
-    expect(applyMock).toHaveBeenCalledWith({ "network:nagle": "disabled" });
+    await confirmPageApply();
+    expect(runMock).toHaveBeenCalledWith("apply", ["network:nagle"]);
   });
 
   it("filters by the kind of gain, not just the subsystem", async () => {
@@ -246,7 +254,7 @@ describe("SettingsTab flat list", () => {
     expect(screen.queryByRole("button", { name: /^Storage/ })).not.toBeInTheDocument();
   });
 
-  it("scopes Fix all to the rows the category filter leaves on screen", async () => {
+  it("scopes the page's Apply to the rows the category filter leaves on screen", async () => {
     const net = makeSetting({
       id: "network:nagle" as `${string}:${string}`,
       displayName: "Nagle's Algorithm",
@@ -261,9 +269,7 @@ describe("SettingsTab flat list", () => {
       { category: SYSTEM, settings: [sys] },
     ]);
 
-    expect(screen.getByRole("button", { name: /fix all/i })).toHaveTextContent(
-      "Fix all 2",
-    );
+    expect(pageApply()).toHaveTextContent("Apply (2)");
 
     await userEvent.selectOptions(
       screen.getByLabelText("Filter by category"),
@@ -271,11 +277,11 @@ describe("SettingsTab flat list", () => {
     );
 
     expect(screen.queryByText("Nagle's Algorithm")).not.toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: /fix all/i }));
-    expect(applyMock).toHaveBeenCalledWith({ "system:gamedvr": "disabled" });
+    await confirmPageApply();
+    expect(runMock).toHaveBeenCalledWith("apply", ["system:gamedvr"]);
   });
 
-  it("offers no Fix all when every visible row is an advisory", () => {
+  it("offers no page action when every visible row is an advisory", () => {
     const advisory = makeSetting({
       // A software advisory: XMP used to stand in here, but it is a memory
       // finding and belongs to the Hardware tab.
@@ -289,8 +295,9 @@ describe("SettingsTab flat list", () => {
     renderTab([{ category: SYSTEM, settings: [advisory] }]);
 
     // A button that can act on nothing is a control that lies about its scope.
+    expect(screen.getByText("Startup apps")).toBeInTheDocument();
     expect(
-      screen.queryByRole("button", { name: /fix all/i }),
+      screen.queryByRole("button", { name: /Software Tweaks$/ }),
     ).not.toBeInTheDocument();
   });
 
@@ -326,9 +333,7 @@ describe("SettingsTab flat list", () => {
     expect(screen.getByText("Game DVR")).toBeInTheDocument();
     expect(screen.queryByText("MW4 Shadow Quality")).not.toBeInTheDocument();
     // And the bulk button counts what is on screen, not what was filtered out.
-    expect(screen.getByRole("button", { name: /fix all/i })).toHaveTextContent(
-      "Fix all 1",
-    );
+    expect(pageApply()).toHaveTextContent("Apply (1)");
   });
 
   it("leaves a power-plan key that acts on hardware to the Hardware tab", () => {
@@ -363,6 +368,6 @@ describe("SettingsTab flat list", () => {
     renderTab([{ category: NETWORK, settings: [s] }]);
 
     expect(screen.queryByText("Nagle's Algorithm")).not.toBeInTheDocument();
-    expect(screen.getByText(/Nothing needs optimization/i)).toBeInTheDocument();
+    expect(screen.getByText(/Nothing to do here/i)).toBeInTheDocument();
   });
 });

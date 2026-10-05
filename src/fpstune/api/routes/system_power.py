@@ -7,7 +7,7 @@ from typing import Any
 
 from fastapi import APIRouter, HTTPException
 
-from fpstune.utils.logger import activity_log
+from fpstune.utils.logger import log_activity
 
 router = APIRouter()
 
@@ -52,7 +52,7 @@ async def activate_power_profile() -> dict[str, Any]:
     result = manager.activate()
 
     if result.success:
-        activity_log.log("Activated FPS Balanced power profile", level="info")
+        log_activity("Activated FPS Balanced power profile", level="info")
         return {
             "success": True,
             "message": result.message,
@@ -78,7 +78,7 @@ async def revert_power_profile() -> dict[str, Any]:
     result = manager.revert()
 
     if result.success:
-        activity_log.log("Reverted to Balanced power profile", level="info")
+        log_activity("Reverted to Balanced power profile", level="info")
         return {
             "success": True,
             "message": result.message,

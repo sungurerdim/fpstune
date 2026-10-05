@@ -369,9 +369,21 @@ class ActivityLog:
             # there is no separate trim to race with.
             self._entries.append(entry)
 
-    def log(self, message: str, level: str = "info") -> None:
-        """Alias for add() method."""
-        self.add(message, level)
+        # Every activity reaches the terminal and the log file too. This used to
+        # live only in log_activity(), so the callers that wrote here directly —
+        # a drive's retrim, an adapter switched on or off, the power profile —
+        # showed in the app and nowhere else. Plain ASCII prefix: the console
+        # formatter colours it along with every other outcome word, so no escape
+        # is written into the message and the file handler has nothing to strip.
+        logger = get_logger()
+        if level == "success":
+            logger.info(f"[OK] {message}")
+        elif level == "error":
+            logger.error(f"[FAIL] {message}")
+        elif level == "warning":
+            logger.warning(f"[WARN] {message}")
+        else:
+            logger.info(message)
 
     def get_entries(self, limit: int = 50) -> list[dict[str, str]]:
         """Get recent log entries.
@@ -404,17 +416,3 @@ def log_activity(message: str, level: str = "info") -> None:
         level: Level (info, success, warning, error).
     """
     activity_log.add(message, level)
-
-    # Also log to the standard logger with a plain prefix (ASCII for Windows
-    # compatibility). The console formatter colours the prefix along with every
-    # other outcome word, so no escape is written into the message here — which
-    # is also why the file handler has nothing to strip from these lines.
-    logger = get_logger()
-    if level == "success":
-        logger.info(f"[OK] {message}")
-    elif level == "error":
-        logger.error(f"[FAIL] {message}")
-    elif level == "warning":
-        logger.warning(f"[WARN] {message}")
-    else:
-        logger.info(message)

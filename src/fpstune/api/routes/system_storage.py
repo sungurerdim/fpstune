@@ -19,7 +19,7 @@ from fastapi import APIRouter, HTTPException
 
 from fpstune.api.hardware import get_detailed_storage_drives
 from fpstune.utils.admin import is_admin
-from fpstune.utils.logger import activity_log
+from fpstune.utils.logger import log_activity
 from fpstune.utils.powershell import run_powershell
 
 router = APIRouter()
@@ -73,15 +73,19 @@ async def optimize_drive(drive_letter: str) -> dict[str, Any]:
             ),
         )
 
+    # A defrag can run for minutes; without a start line the terminal shows
+    # nothing until it ends, which reads as a hang.
+    log_activity(f"Running {verb} on drive {letter}: ({drive.media_type})")
     success, output = await asyncio.to_thread(
         run_powershell,
         f"Optimize-Volume -DriveLetter {letter} {flag}",
         _OPTIMIZE_TIMEOUT_S,
     )
     if not success:
+        log_activity(f"{verb.capitalize()} on drive {letter}: failed: {output}", level="error")
         raise HTTPException(status_code=500, detail=f"Optimize-Volume failed: {output}")
 
-    activity_log.log(f"Ran {verb} on drive {letter}:", level="info")
+    log_activity(f"Ran {verb} on drive {letter}:", level="success")
     return {
         "success": True,
         "drive_letter": letter,

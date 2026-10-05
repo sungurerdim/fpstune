@@ -20,7 +20,7 @@ from fpstune.settings.definitions.audio import (
 )
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
-from fpstune.utils.logger import activity_log
+from fpstune.utils.logger import log_activity
 
 router = APIRouter()
 
@@ -146,7 +146,7 @@ Invoke-FpsLoudness
 
     state = "enabled" if enabled else "disabled"
     logger.info("Loudness EQ %s for %s", state, device_id)
-    activity_log.log(f"Volume normalization {state} for audio device", level="info")
+    log_activity(f"Volume normalization {state} for audio device", level="info")
     return {
         "success": True,
         "device_id": device_id,
@@ -184,7 +184,7 @@ async def toggle_audio_device(device_id: str, enabled: bool) -> dict[str, bool |
         raise HTTPException(status_code=500, detail=f"Unexpected result: {result}")
 
     logger.info("Audio device %sd: %s", action.lower(), device_id)
-    activity_log.log(f"Audio device {action.lower()}d", level="info")
+    log_activity(f"Audio device {action.lower()}d", level="info")
     return {
         "success": True,
         "device_id": device_id,

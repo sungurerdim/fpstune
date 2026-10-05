@@ -117,6 +117,39 @@ class TestThroughTheFormatter:
         assert "[FAIL] broke" in seen
         assert all("\x1b" not in m for m in seen)
 
+    def test_the_activity_store_itself_reaches_the_terminal(self, monkeypatch) -> None:
+        """A caller writing to `activity_log` directly must not stay app-only.
+
+        Only `log_activity` used to forward to the logger, so a drive's retrim, an
+        adapter toggle and the power profile — all written straight to the store —
+        showed in the app and never in the terminal or the log file.
+        """
+        seen: list[str] = []
+
+        class Collect(logging.Handler):
+            def emit(self, record: logging.LogRecord) -> None:
+                seen.append(record.getMessage())
+
+        private = logging.getLogger("fpstune.test.activity")
+        private.handlers = [Collect(level=logging.DEBUG)]
+        private.propagate = False
+        private.setLevel(logging.DEBUG)
+        private.disabled = False
+        monkeypatch.setattr(logger_module, "get_logger", lambda: private)
+        previous_disable = logging.root.manager.disable
+        logging.disable(logging.NOTSET)
+        try:
+            store = logger_module.ActivityLog()
+            store.add("Ran retrim on drive C:", "success")
+            store.add("Running defrag on drive D: (HDD)")
+        finally:
+            logging.disable(previous_disable)
+        assert seen == ["[OK] Ran retrim on drive C:", "Running defrag on drive D: (HDD)"]
+        assert [e["message"] for e in store.get_entries()] == [
+            "Running defrag on drive D: (HDD)",
+            "Ran retrim on drive C:",
+        ]
+
 
 class TestTheRelay:
     def test_a_childs_coloured_line_arrives_tagged_and_readable(self) -> None:

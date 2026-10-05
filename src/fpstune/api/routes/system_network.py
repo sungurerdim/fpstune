@@ -18,7 +18,7 @@ from fpstune.api.schemas import NetworkAdapterInfo
 from fpstune.utils.admin import is_admin
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
-from fpstune.utils.logger import activity_log
+from fpstune.utils.logger import log_activity
 from fpstune.utils.winapi import wlan
 
 router = APIRouter()
@@ -270,7 +270,7 @@ async def toggle_network_adapter(
     debug_log("network", f"toggle_adapter result line: '{result}'")
 
     if result == "OK":
-        activity_log.log(f"Network adapter {action}d", level="info")
+        log_activity(f"Network adapter {action}d", level="info")
         return {
             "success": True,
             "enabled": action == "enable",
@@ -400,7 +400,7 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
             else "Disconnected"
         )
 
-        activity_log.log(f"Network adapter '{adapter_name}' {msg.lower()}", level="info")
+        log_activity(f"Network adapter '{adapter_name}' {msg.lower()}", level="info")
         return {
             "success": True,
             "adapter_name": adapter_name,

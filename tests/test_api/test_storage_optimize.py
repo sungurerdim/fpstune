@@ -91,3 +91,24 @@ class TestOptimizeDrive:
         response, _ = _post(client, "C", drives=[_drive("C", "SSD")], ps=(False, "access denied"))
         assert response.status_code == 500
         assert "access denied" in response.json()["detail"]
+
+
+class TestTheTerminalSeesTheWholePass:
+    """A pass that can run for minutes says when it starts, and why it failed."""
+
+    def _logged(self, client, ps):
+        with patch("fpstune.api.routes.system_storage.log_activity") as log:
+            response, _ = _post(client, "C", drives=[_drive("C", "SSD")], ps=ps)
+        return response, [c.args[0] for c in log.call_args_list], log
+
+    def test_start_and_success_are_both_logged(self, client) -> None:
+        response, lines, log = self._logged(client, (True, ""))
+        assert response.status_code == 200
+        assert lines == ["Running retrim on drive C: (SSD)", "Ran retrim on drive C:"]
+        assert log.call_args_list[-1].kwargs.get("level") == "success"
+
+    def test_a_failure_logs_its_reason(self, client) -> None:
+        response, lines, log = self._logged(client, (False, "Access is denied."))
+        assert response.status_code == 500
+        assert lines[-1] == "Retrim on drive C: failed: Access is denied."
+        assert log.call_args_list[-1].kwargs.get("level") == "error"

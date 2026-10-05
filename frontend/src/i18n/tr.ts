@@ -362,6 +362,7 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.storage": "Depolama",
   "hw.network": "Ağ",
   "hw.powerPlan": "Güç planı",
+  "hw.audio": "Ses",
   "hw.audioOutput": "Ses Çıkışı",
   "hw.audioInput": "Ses Girişi",
   "hw.loudnessEq": "Ses Dengeleme",

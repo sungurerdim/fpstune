@@ -1,6 +1,6 @@
 import { useT } from "../../i18n";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ScreenShare, CheckCircle2, RefreshCw, Zap, Gauge } from "lucide-react";
+import { CheckCircle2, RefreshCw, Zap, Gauge } from "lucide-react";
 import { useState } from "react";
 import { api, type MonitorInfo } from "../../lib/api";
 import { hardwareManager } from "../../lib/hardware-manager";
@@ -358,24 +358,9 @@ export function MonitorCard({
         !isActive && "opacity-60",
       )}
     >
-      {/* Header: icon + name + badges */}
+      {/* Header: state badges */}
       <div className="flex items-center gap-1.5">
-        <ScreenShare
-          className={cn(
-            "w-3 h-3 shrink-0",
-            isActive ? "text-muted-foreground" : "text-muted-foreground/50",
-          )}
-        />
-        <span
-          className={cn(
-            "text-xs font-medium truncate",
-            !isActive && "text-muted-foreground",
-          )}
-        >
-          {monitor.friendly_name ||
-            formatMonitorDeviceName(monitor.name) ||
-            `Display ${displayIndex + 1}`}
-        </span>
+        {/* The name is the device card's heading; only the state badges live here. */}
         {!isActive && (
           <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium shrink-0">
             {t("monitor.disconnected")}
@@ -396,7 +381,8 @@ export function MonitorCard({
       {/* Device name and hardware ID (secondary) */}
       {(monitor.friendly_name || monitor.hardware_id) && (
         <div className="text-xs text-muted-foreground truncate pl-4">
-          {formatMonitorDeviceName(monitor.name)}
+          {/* Without a friendly name the card heading already is the device name. */}
+          {monitor.friendly_name && formatMonitorDeviceName(monitor.name)}
           {monitor.hardware_id && (
             <span className="ml-1 text-muted-foreground/60">
               ({monitor.hardware_id})

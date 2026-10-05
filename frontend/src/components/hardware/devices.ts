@@ -193,7 +193,7 @@ export function describeDevices(hardware: HardwareInfo | null, t: T): DeviceDesc
   out.push({
     deviceKey: "audio",
     icon: Speaker,
-    title: t("hw.audioOutput"),
+    title: t("hw.audio"),
     // The audio settings act on every output at once (effects, sample rate,
     // exclusive access) or on Windows as a whole (ducking).
     match: (s) => isComponentTweak(s, "audio"),

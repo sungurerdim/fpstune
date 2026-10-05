@@ -381,6 +381,7 @@ export const en = {
   "hw.storage": "Storage",
   "hw.network": "Network",
   "hw.powerPlan": "Power plan",
+  "hw.audio": "Audio",
   "hw.audioOutput": "Audio Output",
   "hw.audioInput": "Audio Input",
   "hw.loudnessEq": "Loudness EQ",

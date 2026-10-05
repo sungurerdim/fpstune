@@ -1,7 +1,7 @@
 import { useT } from "../../i18n";
 import { useMutation } from "@tanstack/react-query";
 import {
-  Wifi, Signal, Network, RefreshCw, Unplug, Plug,
+  Wifi, Signal, RefreshCw, Unplug, Plug,
 } from "lucide-react";
 import { useId } from "react";
 import {
@@ -130,7 +130,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
         (!adapter.is_enabled || !canToggle) && "opacity-60",
       )}
     >
-      {/* Header row: toggle (left) + icon + name + status badges */}
+      {/* Header row: toggle (left) + connection button + status badges */}
       <div className="flex items-center gap-1.5">
         {/* Enable/Disable toggle - LEFT SIDE (disabled for phantom/no-id devices).
             Named after the adapter, not the action or the reason it is inert:
@@ -146,15 +146,9 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
           describedBy={reasonIds || undefined}
         />
 
-        {isWiFi ? (
-          <Wifi className="w-3 h-3 text-primary shrink-0" />
-        ) : (
-          <Network className="w-3 h-3 text-muted-foreground shrink-0" />
-        )}
-        <CopyableText
-          value={adapter.name}
-          className="text-xs font-medium flex-1 truncate"
-        />
+        {/* The name is the device card's heading; repeating it here showed it twice.
+            The spacer keeps the connect button and badges at the right edge. */}
+        <span className="flex-1" />
 
         {/* Connect/Disconnect button - only when adapter is enabled and controllable */}
         {adapter.is_enabled && canToggle && (

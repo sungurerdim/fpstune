@@ -157,6 +157,7 @@ export const en = {
   "row.undoTooltip":
     "Undo fpstune's change — back to {value}, what this machine had before",
   "row.resetDefault": "Restore the Windows default",
+  "row.more": "More actions",
   "row.target": "Target",
   "row.applyNamed": "Apply {name}",
   "row.selectNamed": "Select {name}",
@@ -682,6 +683,7 @@ export const en = {
   "actions.aria.reset": "Return {count} settings to the Windows default: {name}",
   "actions.none.apply": "Apply: nothing to apply in {name}",
   "actions.none.reset": "Windows default: already at the Windows default in {name}",
+  "actions.more": "More actions: {name}",
   // Header metrics: a count set apart in bold, then what it counts
   "metric.toApply": "to apply",
   "metric.needYou": "need you",

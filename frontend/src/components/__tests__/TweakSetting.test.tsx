@@ -94,16 +94,22 @@ describe("TweakSetting", () => {
     expect(screen.getByText("N/A")).toBeInTheDocument();
   });
 
-  it("shows the Windows-default button when setting is suboptimal", () => {
+  it("keeps the Windows default in the row's overflow menu when setting is suboptimal", async () => {
+    const user = userEvent.setup();
     const setting = makeSetting({
       isOptimized: false,
       currentValue: "enabled",
     });
     render(<TweakSetting setting={setting} {...defaultProps} />);
-    const resetBtn = screen.getByRole("button", {
-      name: /restore the windows default/i,
-    });
-    expect(resetBtn).toBeInTheDocument();
+
+    // Not a button of its own on the row: one step back, behind "More actions".
+    expect(
+      screen.queryByRole("button", { name: /restore the windows default/i }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    expect(
+      screen.getByRole("menuitem", { name: /restore the windows default/i }),
+    ).toBeInTheDocument();
   });
 
   it("does not show the Windows-default button when setting is already optimal", () => {
@@ -116,9 +122,10 @@ describe("TweakSetting", () => {
     expect(
       screen.queryByRole("button", { name: /restore the windows default/i }),
     ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
   });
 
-  it("calls onReset when the Windows-default button is clicked", async () => {
+  it("calls onReset when the Windows-default menu item is chosen", async () => {
     const user = userEvent.setup();
     const onReset = vi.fn();
     const setting = makeSetting({
@@ -129,10 +136,10 @@ describe("TweakSetting", () => {
       <TweakSetting setting={setting} {...defaultProps} onReset={onReset} />,
     );
 
-    const resetBtn = screen.getByRole("button", {
-      name: /restore the windows default/i,
-    });
-    await user.click(resetBtn);
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(
+      screen.getByRole("menuitem", { name: /restore the windows default/i }),
+    );
     expect(onReset).toHaveBeenCalledTimes(1);
   });
 
@@ -474,7 +481,7 @@ describe("TweakSetting undo", () => {
     expect(onUndo).toHaveBeenCalledTimes(1);
   });
 
-  it("undo and the Windows default are separate actions on the same row", () => {
+  it("undo and the Windows default are separate actions on the same row", async () => {
     // The distinction is the whole point: they disagree exactly when the user
     // had configured something themselves.
     const setting = makeSetting({
@@ -487,11 +494,13 @@ describe("TweakSetting undo", () => {
       <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
     );
 
+    // Undo is the one visible way back; the Windows default is behind the menu.
     expect(
       screen.getByRole("button", { name: /undo fpstune's change/i }),
     ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
     expect(
-      screen.getByRole("button", { name: /restore the windows default/i }),
+      screen.getByRole("menuitem", { name: /restore the windows default/i }),
     ).toBeInTheDocument();
   });
 });

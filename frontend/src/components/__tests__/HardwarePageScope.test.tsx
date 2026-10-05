@@ -137,10 +137,12 @@ describe("the Hardware page's own scope", () => {
     expect(
       pageActions().getByRole("button", { name: "Apply: nothing to apply in Hardware Tweaks" }),
     ).toBeDisabled();
+    // Windows default is one step back, in the overflow menu, and says why it is idle.
+    fireEvent.click(pageActions().getByRole("button", { name: "More actions: Hardware Tweaks" }));
     expect(
-      pageActions().getByRole("button", {
+      screen.getByRole("menuitem", {
         name: "Windows default: already at the Windows default in Hardware Tweaks",
       }),
-    ).toBeDisabled();
+    ).toHaveAttribute("aria-disabled", "true");
   });
 });

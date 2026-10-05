@@ -33,6 +33,7 @@ import {
 } from "./SettingStateDisplay";
 import { ToggleSwitch } from "./ui/ToggleSwitch";
 import { PillSelector } from "./ui/PillSelector";
+import { OverflowMenu } from "./ui/OverflowMenu";
 import {
   Tooltip,
   TooltipContent,
@@ -339,27 +340,26 @@ export function TweakSetting({
                   </Tooltip>
                 </TooltipProvider>
               )}
+              {/* Windows default writes the curated stock value — not what Undo
+                  writes — and is the rarer action, so it sits in the overflow
+                  menu beside the one visible Undo. */}
               {!isOptimal && (
-                <TooltipProvider>
-                  <Tooltip delayDuration={300}>
-                    <TooltipTrigger asChild>
-                      <button
-                        type="button"
-                        onClick={onReset}
-                        disabled={isPending || isModuleLoading}
-                        className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label={t("row.resetDefault")}
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                      </button>
-                    </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {t("row.resetDefault")}
-                      {setting.defaultValue !== undefined &&
-                        ` (${String(setting.defaultValue)})`}
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
+                <OverflowMenu
+                  label={t("row.more")}
+                  items={[
+                    {
+                      id: "reset",
+                      label: t("row.resetDefault"),
+                      ariaLabel:
+                        setting.defaultValue !== undefined
+                          ? `${t("row.resetDefault")} (${String(setting.defaultValue)})`
+                          : t("row.resetDefault"),
+                      icon: <RotateCcw className="h-3.5 w-3.5" aria-hidden />,
+                      disabled: isPending || isModuleLoading,
+                      onSelect: onReset,
+                    },
+                  ]}
+                />
               )}
             </>
           )}

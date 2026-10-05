@@ -53,7 +53,7 @@ export function SelectionToolbar() {
         {t("toolbar.clear")}
       </button>
 
-      <ScopeActions settings={selected} name={label} className="ml-auto" />
+      <ScopeActions settings={selected} name={label} className="ml-auto" menuSide="top" />
     </div>
   );
 }

@@ -170,8 +170,9 @@ describe("DeviceCard", () => {
       setStore([FIXABLE, ADVISORY]);
       render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
+      fireEvent.click(screen.getByRole("button", { name: "More actions: GPU" }));
       fireEvent.click(
-        screen.getByRole("button", { name: "Return 1 settings to the Windows default: GPU" }),
+        screen.getByRole("menuitem", { name: "Return 1 settings to the Windows default: GPU" }),
       );
 
       expect(bulkRun).not.toHaveBeenCalled();

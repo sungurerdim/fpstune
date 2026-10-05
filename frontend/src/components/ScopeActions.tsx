@@ -6,6 +6,7 @@ import { useScopedActions } from "../hooks/useScopedActions";
 import type { BulkAction } from "../store";
 import type { Setting } from "../types/setting";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { OverflowMenu } from "./ui/OverflowMenu";
 
 /**
  * Apply, Undo and Windows default for one scope — a device, a category, a game,
@@ -18,17 +19,22 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
  * one would either do nothing or quietly become a reset, which is the wrong
  * promise kept (C6).
  *
- * Apply and Windows default are always drawn, so the group sits in the same spot
- * on every page and a scope with nothing to do does not shift the layout. A
- * button with nothing to act on is disabled and says why in its accessible name
- * and tooltip, rather than vanishing and leaving the reader to wonder whether it
- * exists.
+ * Three tiers, by how often and how far each reaches. Apply is the primary
+ * action and is always drawn, so the group sits in the same spot on every page
+ * and a scope with nothing to do does not shift the layout: with nothing to act
+ * on it is disabled and says why in its accessible name and tooltip. Undo — put
+ * back what this machine held before fpstune — is the one visible way back, and
+ * is drawn only when there is something recorded to put back. Windows default
+ * writes the curated stock value, a different promise from Undo (C6) and the
+ * rarer one, so it lives in the "⋯" menu: always there, behind the same
+ * confirmation, never merged with Undo.
  */
 export function ScopeActions({
   settings,
   name,
   only,
   className,
+  menuSide,
 }: {
   settings: readonly Setting[];
   /** Limit the group to these actions (Home's compact device card shows Apply only). */
@@ -36,6 +42,8 @@ export function ScopeActions({
   /** The scope in words ("Wi-Fi", "Network", "Software Tweaks"), read by screen readers. */
   name: string;
   className?: string;
+  /** Which way the overflow menu opens; a bar fixed to the window's bottom opens upward. */
+  menuSide?: "bottom" | "top";
 }) {
   const { t } = useT();
   const { targets, start, stop, isRunning } = useScopedActions(settings);
@@ -119,15 +127,25 @@ export function ScopeActions({
           onPress={() => setPending("undo")}
         />
       )}
+      {/* Windows default is the rarer, wider promise, so it sits one step back in
+          the overflow menu — still on every scope, behind the same confirmation. */}
       {shown("reset") && (
-        <ActionButton
-          action="reset"
-          count={counts.reset}
-          name={name}
-          idleLabel={t("actions.none.reset", { name })}
-          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
-          className="border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
-          onPress={() => setPending("reset")}
+        <OverflowMenu
+          label={t("actions.more", { name })}
+          side={menuSide}
+          items={[
+            {
+              id: "reset",
+              label: t("actions.reset", { count: counts.reset }),
+              icon: <RotateCcw className="h-3.5 w-3.5" aria-hidden />,
+              disabled: counts.reset === 0,
+              ariaLabel:
+                counts.reset === 0
+                  ? t("actions.none.reset", { name })
+                  : t("actions.aria.reset", { count: counts.reset, name }),
+              onSelect: () => setPending("reset"),
+            },
+          ]}
         />
       )}
     </div>

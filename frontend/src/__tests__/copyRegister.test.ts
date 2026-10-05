@@ -42,6 +42,7 @@ const _UNTRANSLATED_BASELINE = new Set([
   "components/ui/PillSelector.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/StatusChip.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/ScopeHeader.tsx", // string-free or prop-fed — nothing to migrate
+  "components/ui/OverflowMenu.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/ToggleSwitch.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/tooltip.tsx", // string-free or prop-fed — nothing to migrate
   "main.tsx", // string-free or prop-fed — nothing to migrate

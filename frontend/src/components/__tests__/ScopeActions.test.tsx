@@ -7,7 +7,8 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import { render, screen } from "../../test/utils";
+import userEvent from "@testing-library/user-event";
+import { fireEvent, render, screen, within } from "../../test/utils";
 import { ScopeActions } from "../ScopeActions";
 import type { Setting } from "../../types/setting";
 
@@ -48,7 +49,7 @@ function setting(over: Partial<Setting> & { id: string }): Setting {
 }
 
 describe("ScopeActions with nothing to act on", () => {
-  it("still draws Apply and Windows default, disabled, each saying why", () => {
+  it("still draws Apply, and keeps Windows default in the menu, each saying why it is idle", () => {
     const atIdeal = setting({
       id: "system:fine",
       currentValue: "on",
@@ -59,11 +60,12 @@ describe("ScopeActions with nothing to act on", () => {
     render(<ScopeActions settings={[atIdeal]} name="Network" />);
 
     const apply = screen.getByRole("button", { name: "Apply: nothing to apply in Network" });
-    const reset = screen.getByRole("button", {
+    expect(apply).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "More actions: Network" }));
+    const reset = screen.getByRole("menuitem", {
       name: "Windows default: already at the Windows default in Network",
     });
-    expect(apply).toBeDisabled();
-    expect(reset).toBeDisabled();
+    expect(reset).toHaveAttribute("aria-disabled", "true");
     // The reason is also the tooltip, for a pointer user.
     expect(apply).toHaveAttribute("title", "Apply: nothing to apply in Network");
   });
@@ -71,6 +73,7 @@ describe("ScopeActions with nothing to act on", () => {
   it("is drawn for an empty scope too, so the page header never shifts", () => {
     render(<ScopeActions settings={[]} name="Network" />);
 
+    // Apply and the "more" trigger: the same two controls as for a busy scope.
     expect(screen.getAllByRole("button")).toHaveLength(2);
   });
 
@@ -91,5 +94,59 @@ describe("ScopeActions with nothing to act on", () => {
 
     expect(screen.getAllByRole("button")).toHaveLength(1);
     expect(screen.getByRole("button", { name: /^Apply:/ })).toBeDisabled();
+  });
+});
+
+describe("ScopeActions: Undo is the visible way back, Windows default is in the menu", () => {
+  const away = setting({ id: "system:a", originalValue: "on", defaultValue: "on", currentValue: "off" });
+
+  it("draws Undo beside Apply only when a recorded original exists", () => {
+    const { unmount } = render(<ScopeActions settings={[setting({ id: "system:a" })]} name="Network" />);
+    expect(screen.queryByRole("button", { name: /^Undo/ })).not.toBeInTheDocument();
+    unmount();
+
+    render(<ScopeActions settings={[away]} name="Network" />);
+    expect(screen.getByRole("button", { name: "Undo 1 tweaks: Network" })).toBeEnabled();
+  });
+
+  it("never offers Windows default as a button of its own", () => {
+    render(<ScopeActions settings={[away]} name="Network" />);
+
+    expect(screen.queryByRole("button", { name: /Windows default/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("menuitem")).not.toBeInTheDocument();
+  });
+
+  it("reaches Windows default by keyboard alone, with the same confirmation", async () => {
+    const user = userEvent.setup();
+    render(<ScopeActions settings={[away]} name="Network" />);
+
+    const trigger = screen.getByRole("button", { name: "More actions: Network" });
+    trigger.focus();
+    expect(trigger).toHaveAttribute("aria-haspopup", "menu");
+    expect(trigger).toHaveAttribute("aria-expanded", "false");
+
+    await user.keyboard("{ArrowDown}");
+    expect(trigger).toHaveAttribute("aria-expanded", "true");
+    const item = screen.getByRole("menuitem", {
+      name: "Return 1 settings to the Windows default: Network",
+    });
+    expect(item).toHaveFocus();
+
+    await user.keyboard("{Enter}");
+    const dialog = screen.getByRole("dialog");
+    expect(dialog).toHaveTextContent("1 settings will return to Windows defaults.");
+    // The question is the same one every Windows default asks, and answered the same way.
+    expect(within(dialog).getByRole("button", { name: "Windows default" })).toBeInTheDocument();
+  });
+
+  it("does not merge the two promises: the menu item asks for the reset, never the undo", async () => {
+    const user = userEvent.setup();
+    render(<ScopeActions settings={[away]} name="Network" />);
+
+    await user.click(screen.getByRole("button", { name: "More actions: Network" }));
+    await user.click(screen.getByRole("menuitem", { name: /Windows default/ }));
+
+    expect(screen.getByRole("dialog")).toHaveTextContent("Windows defaults");
+    expect(screen.getByRole("dialog")).not.toHaveTextContent("before fpstune");
   });
 });

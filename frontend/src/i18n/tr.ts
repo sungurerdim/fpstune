@@ -152,6 +152,7 @@ export const tr: Record<keyof typeof en, string> = {
   "row.undoTooltip":
     "fpstune'un değişikliğini geri al — bu makinenin önceki değeri olan {value} geri gelir",
   "row.resetDefault": "Windows varsayılanına döndür",
+  "row.more": "Diğer eylemler",
   "row.target": "Hedef",
   "row.applyNamed": "Uygula: {name}",
   "row.selectNamed": "Seç: {name}",
@@ -661,6 +662,7 @@ export const tr: Record<keyof typeof en, string> = {
   "actions.aria.reset": "{count} ayarı Windows varsayılanına döndür: {name}",
   "actions.none.apply": "Uygula: {name} içinde uygulanacak bir şey yok",
   "actions.none.reset": "Windows varsayılanı: {name} zaten Windows varsayılanında",
+  "actions.more": "Diğer eylemler: {name}",
   // Header metrics: a count set apart in bold, then what it counts
   "metric.toApply": "uygulanacak",
   "metric.needYou": "senden işlem bekliyor",

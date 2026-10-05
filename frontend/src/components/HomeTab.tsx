@@ -12,11 +12,6 @@ import {
   Cpu,
   Gamepad2,
   Flame,
-  ChevronDown,
-  ChevronRight,
-  Info,
-  AlertTriangle,
-  HelpCircle,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
@@ -25,21 +20,19 @@ import { useBulkApply } from "../hooks/useBulkApply";
 import { useHardware } from "./hardware/useHardware";
 import { describeDevices } from "./hardware/devices";
 import { DeviceCardCompact } from "./hardware/DeviceCard";
-import { ScopeActions } from "./ScopeActions";
 import { useCleanupRunner } from "../hooks/useCleanupRunner";
 import { cleanupReclaimableMB } from "../lib/impact";
 import { api, headroomApi } from "../lib/api";
 import { useT } from "../i18n";
-import {
-  localizedDescription,
-  localizedEffect,
-  localizedName,
-} from "../i18n/settings";
+import { localizedName } from "../i18n/settings";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
-import { describeFinding } from "../lib/finding";
 import { parseSizeToMB, fmtMB } from "../lib/cleanupSize";
 import { parseActionReading } from "../lib/actionReading";
 import { TweakListRow } from "./TweakListRow";
+import { TweakGroup } from "./home/HomeTweakGroup";
+import { Group, Stat } from "./home/HomeStats";
+import { ActionableAdvisories, ClearAdvisories, UnreadAdvisories } from "./home/HomeAdvisories";
+import { OptimizedFold } from "./home/HomeOptimizedFold";
 import { ActionRow } from "./ActionRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
@@ -49,8 +42,6 @@ import { OsUpdateNotice } from "./OsUpdateNotice";
 import { HomeMeasuredCard } from "./MeasuredLedger";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
-import { SettingInfoTooltip } from "./SettingInfoTooltip";
-import { SettingValueState } from "./SettingStateDisplay";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { Progress } from "./ui/Feedback";
@@ -244,7 +235,6 @@ export function HomeTab() {
 
   // The settings already at their ideal value, behind a fold: Home's headline
   // counts them, and a count whose members cannot be seen is a claim.
-  const [showOptimized, setShowOptimized] = useState(false);
   const optimized = useMemo(() => {
     const rows: Setting[] = [];
     for (const s of settings.values()) {
@@ -570,64 +560,7 @@ export function HomeTab() {
           Ethernet link at 100 Mbps on a 2500 Mbps adapter is a bigger ceiling
           loss than every registry tweak above it combined, and it was the sixth
           section down. */}
-      {actionableAdvisories.length > 0 && (
-        <Card className="border-warning/40" data-testid="home-advisories">
-          <div className="flex items-center gap-2 p-3 border-b border-warning/30 bg-warning/10">
-            <AlertTriangle
-              className="w-4 h-4 text-warning"
-              aria-hidden="true"
-            />
-            <h2 className="font-semibold text-sm text-warning">
-              {t("home.advisories")}
-            </h2>
-            <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-warning/15 text-warning">
-              {actionableAdvisories.length}
-            </span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {t("home.advisoriesHint")}
-            </span>
-          </div>
-          <div
-            data-testid="home-advisory-grid"
-            className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3"
-          >
-            {actionableAdvisories.map((s) => (
-              <div
-                key={s.id}
-                className="p-3 rounded-md border border-warning/30 border-l-4 border-l-warning bg-warning/6"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">
-                    {localizedName(s)}
-                  </span>
-                  <SettingInfoTooltip setting={s} />
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {localizedDescription(s)}
-                </p>
-                {/* The current state — the measured numbers when the detector
-                    produced them: "Link running at 100 Mbps; the adapter
-                    supports 2.5 Gbps." */}
-                <div className="mt-1" data-testid="advisory-finding">
-                  <SettingValueState setting={s} />
-                </div>
-                {/* The finding names a problem; this names the move. A cable to
-                    change, a band to switch to — the one line the user came for.
-                    A measured finding carries its own, sized to the numbers
-                    (the cable class the ceiling needs); otherwise the static one. */}
-                {(describeFinding(s)?.advice || localizedEffect(s)) && (
-                  <p className="text-xs mt-1.5" data-testid="advisory-advice">
-                    <span className="font-semibold text-warning">
-                      {t("home.whatToDo")}
-                    </span>{" "}
-                    {describeFinding(s)?.advice || localizedEffect(s)}
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <ActionableAdvisories settings={actionableAdvisories} />
 
       {/* What the claims above are worth, on this machine, measured.
           The block above counts what fpstune *claims*; this one is the only
@@ -809,117 +742,13 @@ export function HomeTab() {
           detector that could not answer and a detector that was never wired
           look identical once you stop showing the first. The row says what it
           could not read, and asserts nothing about the machine. */}
-      {unreadAdvisories.length > 0 && (
-        <Card data-testid="home-unread-advisories">
-          <div className="flex items-center gap-2 p-3 border-b border-border">
-            <HelpCircle className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-semibold text-sm">
-              {t("home.advisoriesUnread")}
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {unreadAdvisories.length}
-            </span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {t("home.advisoriesUnreadHint")}
-            </span>
-          </div>
-          <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
-            {unreadAdvisories.map((s) => (
-              <div
-                key={s.id}
-                className="p-3 rounded-md border border-border border-l-2 border-l-muted-foreground/40"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">
-                    {localizedName(s)}
-                  </span>
-                  <SettingInfoTooltip setting={s} />
-                </div>
-                <p className="text-xs text-muted-foreground mt-0.5">
-                  {s.detectionError
-                    ? t("home.advisoryUnreadReason", {
-                        reason: s.detectionError,
-                      })
-                    : isAdmin === false
-                      ? t("home.advisoryUnreadNeedsAdmin")
-                      : t("home.advisoryUnreadNoReason")}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <UnreadAdvisories settings={unreadAdvisories} isAdmin={isAdmin} />
 
-      {clearAdvisories.length > 0 && (
-        <Card>
-          <div className="flex items-center gap-2 p-3 border-b border-border">
-            <Info className="w-4 h-4 text-muted-foreground" />
-            <h2 className="font-semibold text-sm">
-              {t("home.advisoriesClear")}
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {clearAdvisories.length}
-            </span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
-              {t("home.advisoriesClearHint")}
-            </span>
-          </div>
-          <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
-            {clearAdvisories.map((s) => (
-              <div
-                key={s.id}
-                className="p-3 rounded-md border border-border border-l-2 border-l-success/60"
-              >
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-medium text-sm">
-                    {localizedName(s)}
-                  </span>
-                  <SettingInfoTooltip setting={s} />
-                </div>
-                <div className="mt-1">
-                  <SettingValueState setting={s} />
-                </div>
-              </div>
-            ))}
-          </div>
-        </Card>
-      )}
+      <ClearAdvisories settings={clearAdvisories} />
 
       {/* The already-optimal settings, behind a fold Home owns: the headline
           counts them, and a count whose members cannot be listed is a claim. */}
-      {optimized.length > 0 && (
-        <Card>
-          <button
-            onClick={() => setShowOptimized((open) => !open)}
-            aria-expanded={showOptimized}
-            className="w-full flex items-center gap-2 p-3 text-left hover:bg-muted/30 transition-colors"
-          >
-            {showOptimized ? (
-              <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            ) : (
-              <ChevronRight className="w-4 h-4 text-muted-foreground" />
-            )}
-            <CheckCircle2 className="w-4 h-4 text-success" />
-            <h2 className="font-semibold text-sm">
-              {t("home.alreadyOptimized")}
-            </h2>
-            <span className="text-xs text-muted-foreground">
-              {optimized.length}
-            </span>
-          </button>
-          {showOptimized && (
-            <div className="p-3 pt-0 grid grid-cols-1 gap-2 items-start xl:grid-cols-2 3xl:grid-cols-3">
-              {optimized.map((s) => (
-                <TweakListRow
-                  key={s.id}
-                  setting={s}
-                  categoryLabel={categoryLabel(s.category)}
-                />
-              ))}
-            </div>
-          )}
-        </Card>
-      )}
+      <OptimizedFold settings={optimized} categoryLabel={categoryLabel} />
 
       {/* Repair actions (SFC, DISM) — the panel renders nothing when the
           registry holds no maintenance action. What the to-do card above has
@@ -983,187 +812,3 @@ export function HomeTab() {
 
 /** The three places a tweak can live. Each has a colour, and the colour is the
  *  first thing that separates the groups — before the heading is read. */
-type DomainAccent = "hardware" | "software" | "game";
-
-const DOMAIN_STYLE: Record<
-  DomainAccent,
-  { card: string; header: string; title: string; count: string }
-> = {
-  hardware: {
-    card: "border-l-4 border-l-domain-hardware",
-    header: "bg-domain-hardware/10 border-domain-hardware/20",
-    title: "text-domain-hardware",
-    count: "bg-domain-hardware/15 text-domain-hardware",
-  },
-  software: {
-    card: "border-l-4 border-l-domain-software",
-    header: "bg-domain-software/10 border-domain-software/20",
-    title: "text-domain-software",
-    count: "bg-domain-software/15 text-domain-software",
-  },
-  game: {
-    card: "border-l-4 border-l-domain-game",
-    header: "bg-domain-game/10 border-domain-game/20",
-    title: "text-domain-game",
-    count: "bg-domain-game/15 text-domain-game",
-  },
-};
-
-/**
- * One domain's outstanding tweaks: a count, a bulk apply scoped to that domain, and
- * the rows themselves.
- *
- * A group with nothing outstanding collapses to a single line instead of an empty
- * card, so a fully optimized machine does not show two large boxes saying nothing.
- *
- * The three groups used to differ by heading text alone, in the same grey as
- * everything else; the owner read them as one list. The accent — a coloured left
- * edge, a tinted header, a coloured count — is what makes them three.
- */
-function TweakGroup({
-  accent,
-  title,
-  subtitle,
-  icon,
-  settings,
-  detecting,
-  categoryLabel,
-  children,
-}: {
-  accent: DomainAccent;
-  title: string;
-  subtitle: string;
-  icon: React.ReactNode;
-  settings: Setting[];
-  detecting: boolean;
-  categoryLabel: (id: string) => string;
-  /** Replaces the row list — the hardware group lists its devices instead. */
-  children?: React.ReactNode;
-}) {
-  const { t } = useT();
-  const style = DOMAIN_STYLE[accent];
-  return (
-    <Card className={cn("flex flex-col", style.card)} data-domain={accent}>
-      <div
-        className={cn(
-          "flex items-center justify-between p-3 border-b border-border",
-          style.header,
-        )}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <h2 className={cn("font-semibold text-sm", style.title)}>{title}</h2>
-          <span
-            className={cn(
-              "text-xs font-semibold px-1.5 py-0.5 rounded",
-              style.count,
-            )}
-          >
-            {settings.length}
-          </span>
-          {detecting && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-          )}
-          <span className="text-xs text-foreground/80 truncate hidden sm:inline">
-            {subtitle}
-          </span>
-        </div>
-        {/* The same Apply every scope has, counted and confirmed the same way. */}
-        <ScopeActions settings={settings} name={title} only={["apply"]} className="shrink-0" />
-      </div>
-      {settings.length === 0 ? (
-        // An empty group means two different things, and saying the wrong one is a
-        // false claim: while detection runs nothing has been read yet, so "already
-        // optimized" would assert a result the app does not have.
-        <p className="text-xs text-muted-foreground px-3 py-2">
-          {detecting ? t("home.readingSettings") : t("home.allOptimized")}
-        </p>
-      ) : children ? (
-        <div className="p-3 grid grid-cols-1 gap-2 items-start 2xl:grid-cols-2">{children}</div>
-      ) : (
-        <div
-          data-testid="tweak-group-rows"
-          className="p-3 grid grid-cols-1 gap-2 items-start 2xl:grid-cols-2"
-        >
-          {settings.map((s) => (
-            <TweakListRow
-              key={s.id}
-              setting={s}
-              categoryLabel={categoryLabel(s.category)}
-            />
-          ))}
-        </div>
-      )}
-    </Card>
-  );
-}
-
-/** A labelled, tinted container that visually groups related Stat chips. */
-function Group({
-  label,
-  tone,
-  children,
-}: {
-  label: string;
-  /** `muted` is for a group that has nothing to report and says so. */
-  tone: "warning" | "success" | "muted";
-  children: React.ReactNode;
-}) {
-  const border =
-    tone === "warning"
-      ? "border-warning/30 bg-warning/5"
-      : tone === "success"
-        ? "border-success/30 bg-success/5"
-        : "border-border bg-muted/30";
-  const text =
-    tone === "warning"
-      ? "text-warning/80"
-      : tone === "success"
-        ? "text-success/80"
-        : "text-muted-foreground";
-
-  return (
-    <div
-      className={cn(
-        "flex items-center gap-2 rounded-lg border pl-2 pr-2.5 py-1.5",
-        border,
-      )}
-    >
-      <span className={cn("text-xs font-bold uppercase tracking-wider", text)}>
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function Stat({
-  icon,
-  value,
-  label,
-  hint,
-}: {
-  icon: React.ReactNode;
-  value: string;
-  label: string;
-  /** What the number is *of*, in plain words. A figure whose referent the reader
-   *  has to reconstruct is one they will read as wrong. */
-  hint?: string;
-}) {
-  return (
-    <div className="bg-card rounded-md border border-border px-2.5 py-1.5 inline-flex items-center gap-2">
-      {icon}
-      <div className="min-w-0">
-        <p className="text-sm font-semibold leading-tight truncate">{value}</p>
-        <p className="text-xs text-muted-foreground uppercase tracking-wider leading-tight">
-          {label}
-        </p>
-        {hint && (
-          <p className="text-xs text-muted-foreground/70 leading-tight">
-            {hint}
-          </p>
-        )}
-      </div>
-    </div>
-  );
-}

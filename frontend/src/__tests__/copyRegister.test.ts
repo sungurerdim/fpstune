@@ -33,6 +33,7 @@ const _UNTRANSLATED_BASELINE = new Set([
   // string-free (renders HardwarePanel only) — nothing to migrate:
   "components/HardwareTab.tsx",
   "components/TweakRows.tsx", // string-free or prop-fed — nothing to migrate
+  "components/home/HomeStats.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Badge.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Button.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Card.tsx", // string-free or prop-fed — nothing to migrate

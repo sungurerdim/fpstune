@@ -3244,6 +3244,9 @@ NETWORK_WIFI_RADIO_WHEN_WIRED = SettingExecutor(
     ),
     apply_args={},
     apply_value_map={},
+    # What the command above refuses, so an undo of a recorded "radio_off" is
+    # declined up front instead of by the script after the restore point is made.
+    unwritable_values=("radio_off", "not_applicable"),
 )
 
 

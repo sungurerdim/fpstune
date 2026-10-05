@@ -594,6 +594,14 @@ class SettingExecutor:
     # If empty, hints are auto-derived from apply_value_map when raw != display label
     value_hints: dict[str, str] = field(default_factory=dict)
 
+    # === States detect can read but apply never writes ===
+    # A guard's "changed" or "mismatched" is something another tool did; its
+    # command only ever puts the harmless state back. Where the apply map does
+    # not say so by omission (a command that ignores the value, or one that
+    # refuses it), the setting names those states here, so no path - an undo of a
+    # recorded original above all - asks it to write one.
+    unwritable_values: tuple[str, ...] = ()
+
     def __post_init__(self) -> None:
         """Validate setting definition."""
         if not self.id:
@@ -632,6 +640,36 @@ class SettingExecutor:
     def is_service(self) -> bool:
         """True for Windows-service settings, whose IDs are prefixed 'services:'."""
         return self.id.startswith("services:")
+
+    def is_known_state(self, value: Any) -> bool:
+        """Whether ``value`` is a state this setting declares today.
+
+        An enumerated setting only ever reads one of its ``choices``. A recorded
+        label outside them belongs to an earlier release's vocabulary, and no
+        map in this release says what it meant.
+        """
+        return self.value_type != SettingValueType.CHOICE or value in self.choices
+
+    def can_write(self, value: Any) -> bool:
+        """Whether apply is able to put ``value`` on the machine.
+
+        For an enumerated setting with an apply map, the map is the whole list of
+        writable states: a label outside it has no stored value, and the writer
+        would either fail to convert it or store the label's own text. Without a
+        map the label is the value and any choice goes through, less the states
+        the setting declares in ``unwritable_values``. Free-form settings take
+        their own validation (`_validate_apply_value`).
+        """
+        if value in self.unwritable_values:
+            return False
+        if self.value_type != SettingValueType.CHOICE:
+            return True
+        try:
+            if self.apply_value_map:
+                return value in self.apply_value_map
+            return value in self.choices
+        except TypeError:  # an unhashable value is not a label
+            return False
 
     def _derive_value_hints(self) -> dict[str, str]:
         """Derive UI value hints from apply_value_map.

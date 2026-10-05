@@ -3788,6 +3788,9 @@ SHUTDOWN_APP_TIMEOUT = SettingExecutor(
     ),
     apply_args={},
     apply_value_map={},
+    # The script removes both values whatever it is asked for, so "changed" is
+    # something to detect, never something to restore.
+    unwritable_values=("changed",),
 )
 
 SHUTDOWN_AUTO_END_TASKS = SettingExecutor(

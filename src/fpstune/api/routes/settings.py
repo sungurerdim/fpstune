@@ -24,6 +24,7 @@ import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
 from fpstune.api.routes.settings_apply import (
     apply_and_finalize,
+    offered_original,
     undo_refusal,
     undo_single_setting,
 )
@@ -222,7 +223,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     response_results: dict[str, DetectionResultResponse] = {}
     success_count = error_count = 0
 
-    originals = get_original_values()
     for setting_id, result in results.items():
         setting_obj = settings_map.get(setting_id)
         response_results[setting_id] = DetectionResultResponse(
@@ -235,7 +235,7 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
             is_applicable=result.is_applicable,
             applicable_reason=result.applicable_reason,
             recommended_value=setting_obj.recommended_value if setting_obj else None,
-            original_value=originals.get(setting_id),
+            original_value=offered_original(setting_obj) if setting_obj else None,
             finding=result.finding,
         )
         if result.success:
@@ -519,6 +519,11 @@ def _validate_apply_value(setting: SettingExecutor, value: Any) -> str | None:
     """
     if setting.choices and value not in setting.choices and not _in_apply_value_map(setting, value):
         return f"Value {value!r} is not valid for {setting.id}. Allowed: {list(setting.choices)}"
+    if setting.value_type == SettingValueType.CHOICE and not setting.can_write(value):
+        return (
+            f"Value {value!r} is a state {setting.id} detects but cannot set. "
+            f"Settable: {[c for c in setting.choices if setting.can_write(c)]}"
+        )
 
     if setting.value_type in (SettingValueType.INT, SettingValueType.FLOAT):
         try:

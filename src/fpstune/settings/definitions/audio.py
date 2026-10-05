@@ -553,6 +553,9 @@ AUDIO_DEVICE_FORMAT = SettingExecutor(
     ),
     apply_args={},
     apply_value_map={},
+    # The script sets every endpoint to 48 kHz whatever it is asked for, so
+    # "mismatched" is something to detect, never something to restore.
+    unwritable_values=("mismatched",),
 )
 
 AUDIO_SETTINGS: list[SettingExecutor] = [

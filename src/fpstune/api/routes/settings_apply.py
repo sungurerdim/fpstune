@@ -147,6 +147,46 @@ def apply_and_finalize(
     )
 
 
+def _unwritable_original(setting: SettingExecutor) -> str | None:
+    """Why the recorded original cannot be written back, or None when it can.
+
+    Two shapes, both seen on a real machine. A label outside the setting's choices
+    came from an earlier release's vocabulary; no map says what it meant, and the
+    registry writer either failed to convert it or stored the label's own text. A
+    state the setting declares unwritable (a guard's "changed", a Wi-Fi radio that
+    is off) has no write at all. A recorded stored state is written back verbatim
+    and so needs no label to be writable, but its label still has to be one this
+    release can verify against.
+    """
+    originals = get_original_values()
+    original = originals.get(setting.id)
+    if original is None:
+        return None
+    reset_note = "Reset to the Windows default still works."
+    if not setting.is_known_state(original):
+        return (
+            f"The state recorded for {setting.id}, {original!r}, comes from an earlier fpstune "
+            f"release and is not one this release can restore. {reset_note}"
+        )
+    if originals.get_raw(setting.id) is None and not setting.can_write(original):
+        return (
+            f"fpstune cannot write back {original!r} for {setting.id}: that is a state it "
+            f"detects but never sets. {reset_note}"
+        )
+    return None
+
+
+def offered_original(setting: SettingExecutor) -> Any | None:
+    """The recorded original the UI may offer to put back, or None.
+
+    None both when nothing was recorded and when what was recorded cannot be
+    written; the UI offers an undo exactly when this is not None.
+    """
+    if _unwritable_original(setting) is not None:
+        return None
+    return get_original_values().get(setting.id)
+
+
 def undo_refusal(setting: SettingExecutor) -> str | None:
     """Why `setting` cannot be undone, or None when it can."""
     if setting.is_action or setting.is_readonly:
@@ -166,7 +206,7 @@ def undo_refusal(setting: SettingExecutor) -> str | None:
             "Originals are recorded by the first scan that reads a setting, so a "
             "setting applied before that scan has none."
         )
-    return None
+    return _unwritable_original(setting)
 
 
 def undo_single_setting(

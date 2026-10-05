@@ -1358,11 +1358,20 @@ GPU_MSI_MODE = SettingExecutor(
         '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($gpu.InstanceId)\\Device Parameters'
         '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
         "if ('%value%' -eq 'enabled') { "
-        "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force | Out-Null }; "
+        # -ErrorAction Stop: a refused registry write is a non-terminating
+        # error, so without it the catch never ran and the script said 'ok'.
+        "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force -ErrorAction Stop | Out-Null }; "
         "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force "
+        "-ErrorAction Stop "
         "} else { "
-        "Remove-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction SilentlyContinue "
+        "if ((Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue).PSObject.Properties"
+        "['MSISupported']) { "
+        "Remove-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction Stop } "
         "}; 'ok' } "
+        # Named by exception type, never by message text: the message is in the
+        # system language.
+        "} catch [System.UnauthorizedAccessException], [System.Security.SecurityException] { "
+        "'error:Windows refused the write: this device key accepts changes from SYSTEM only' "
         "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},

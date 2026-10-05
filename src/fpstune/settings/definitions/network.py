@@ -35,17 +35,21 @@ def adapter_key(instance_id: str) -> str:
     return f"nic{digest[:10]}"
 
 
-def keyed_to_adapter(setting: SettingExecutor, interface_index: int, key: str) -> SettingExecutor:
+def keyed_to_adapter(
+    setting: SettingExecutor, interface_index: int, key: str, adapter_name: str
+) -> SettingExecutor:
     """``setting`` with its id moved from the interface index to the adapter key.
 
     The factories address commands by interface index, which is right for this
     session; the id is what is stored (undo records, selections), so it must not
-    depend on that index.
+    depend on that index. The adapter's name rides along as ``subject``: two
+    adapters register the same setting, and a translated name must still say
+    which one a row is.
     """
     prefix = f"network:{interface_index}:"
     if not setting.id.startswith(prefix):
         raise ValueError(f"{setting.id} is not a setting of interface {interface_index}")
-    return replace(setting, id=f"network:{key}:{setting.id[len(prefix) :]}")
+    return replace(setting, id=f"network:{key}:{setting.id[len(prefix) :]}", subject=adapter_name)
 
 
 # === DNS IP Address Constants ===

@@ -220,6 +220,7 @@ export interface Setting {
 
   // === Display (static) ===
   shortName?: string; // Optional abbreviated name for compact UI
+  subject?: string; // Device instance ("Wi-Fi", "Ethernet"); absent when machine-wide
   icon?: string; // Lucide icon name (from backend)
   color?: string; // Tailwind color class (from backend)
   categoryOrder: number; // Sort order within category
@@ -305,6 +306,7 @@ export interface SettingDefinition {
   recommended_impact: string;
   scope: string;
   short_name?: string;
+  subject?: string;
   icon?: string;
   color?: string;
   category_order?: number;
@@ -471,6 +473,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
       (c): c is ImpactCategory => c in IMPACT_CATEGORY_META,
     ),
     shortName: def.short_name,
+    subject: def.subject || undefined,
     icon: def.icon,
     color: def.color,
     categoryOrder: def.category_order ?? 0,

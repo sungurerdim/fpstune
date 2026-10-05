@@ -26,11 +26,20 @@ function entryFor(
   return undefined;
 }
 
-/** The plain name the row leads with, in the active locale. */
+/**
+ * The plain name the row leads with, in the active locale.
+ *
+ * The English name already ends in the adapter ("Adapter power saving
+ * (Wi-Fi)"); the Turkish table is keyed per setting, not per adapter, so the
+ * adapter is put back from `subject` — without it a Wi-Fi and an Ethernet row
+ * read as one finding listed twice.
+ */
 export function localizedName(setting: Setting): string {
   const english = setting.shortName || setting.displayName;
   if (getLocale() !== "tr") return english;
-  return entryFor(setting.id)?.name || english;
+  const name = entryFor(setting.id)?.name;
+  if (!name) return english;
+  return setting.subject ? `${name} (${setting.subject})` : name;
 }
 
 /**

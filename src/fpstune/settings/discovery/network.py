@@ -208,7 +208,7 @@ def register_adapter_settings(
     key = adapter_key(instance_id)
     for setting in settings_to_register:
         setting = with_driver_default(setting, property_defaults or {})
-        registry.register(keyed_to_adapter(setting, interface_index, key))
+        registry.register(keyed_to_adapter(setting, interface_index, key, display_name))
 
     return len(settings_to_register)
 
@@ -261,7 +261,9 @@ def register_path_mtu_setting(
         return 0
 
     setting = create_mtu_setting(interface_index, adapter.name, path_mtu)
-    registry.register(keyed_to_adapter(setting, interface_index, adapter_key(adapter.instance_id)))
+    registry.register(
+        keyed_to_adapter(setting, interface_index, adapter_key(adapter.instance_id), adapter.name)
+    )
     return 1
 
 
@@ -341,6 +343,6 @@ def discover_wifi_advisories(registry: Registrar, probes: HardwareProbes) -> int
             create_wifi_link_quality_setting(index, guid, name),
             create_wifi_security_setting(index, guid, name),
         ):
-            registry.register(keyed_to_adapter(setting, index, key))
+            registry.register(keyed_to_adapter(setting, index, key, name))
         count += 2
     return count

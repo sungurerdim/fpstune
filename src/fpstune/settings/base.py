@@ -541,6 +541,10 @@ class SettingExecutor:
 
     # === Display ===
     short_name: str = ""  # Optional abbreviated name for compact UI
+    # The device instance this setting belongs to ("Wi-Fi", "Ethernet"), empty for
+    # a machine-wide setting. Carried apart from short_name so a translated name
+    # can still say which of two same-named rows it is.
+    subject: str = ""
     icon: str = ""  # Lucide icon name for UI (e.g., "Clock", "Zap")
     color: str = ""  # Tailwind color class (e.g., "text-yellow-500")
     category_order: int = 0  # Sort order within category (0 = use definition order)

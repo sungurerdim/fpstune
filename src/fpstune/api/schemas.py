@@ -265,6 +265,9 @@ class SettingDefinitionResponse(BaseModel):
     recommended_impact: str
     scope: str = "recommended"
     short_name: str = ""
+    # Which device instance the setting belongs to ("Wi-Fi", "Ethernet"); empty
+    # when machine-wide. Lets a translated name keep the adapter qualifier.
+    subject: str = ""
     icon: str = ""
     color: str = ""
     category_order: int = 0

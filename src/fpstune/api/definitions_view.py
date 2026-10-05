@@ -37,6 +37,7 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         recommended_impact=s.recommended_impact,
         scope=s.scope.value,
         short_name=s.short_name,
+        subject=s.subject,
         icon=s.icon,
         color=s.color,
         category_order=s.category_order,

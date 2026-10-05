@@ -6,6 +6,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.utils.admin import registry_denied
 from fpstune.utils.winapi.session import registry_root
 
 if TYPE_CHECKING:
@@ -86,7 +87,7 @@ class RegistryExecutor(BaseExecutor):
             return None, None  # Not an error, just not set
         except PermissionError:
             debug_log("registry", f"DETECT {setting.id}: Permission denied")
-            return None, f"Permission denied reading {hive}\\{path}\\{name} - run as administrator"
+            return None, registry_denied("reading", f"{hive}\\{path}\\{name}")
         except Exception as e:
             debug_log("registry", f"DETECT {setting.id}: Error: {e}")
             return None, f"Registry read error: {e}"
@@ -159,7 +160,7 @@ class RegistryExecutor(BaseExecutor):
 
         except PermissionError:
             debug_log("registry", f"APPLY {setting.id}: Permission denied")
-            return False, f"Permission denied writing {hive}\\{path}\\{name} - run as administrator"
+            return False, registry_denied("writing", f"{hive}\\{path}\\{name}")
         except Exception as e:
             debug_log("registry", f"APPLY {setting.id}: Error: {e}")
             return False, f"Registry write error: {e}"
@@ -180,6 +181,6 @@ class RegistryExecutor(BaseExecutor):
             # Value doesn't exist - that's OK
             return True, None
         except PermissionError:
-            return False, "Permission denied - run as administrator"
+            return False, registry_denied("deleting", f"{hive}\\{path}\\{name}")
         except Exception as e:
             return False, str(e)

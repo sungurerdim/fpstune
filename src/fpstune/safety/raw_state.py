@@ -26,6 +26,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from fpstune.utils import process_watch
+from fpstune.utils.admin import registry_denied
 from fpstune.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -146,7 +147,7 @@ def _restore_registry(setting: SettingExecutor, raw: dict[str, Any]) -> tuple[bo
             winreg.SetValueEx(key, name, 0, reg_type, value)
         return True, None
     except PermissionError:
-        return False, f"Permission denied writing {hive}\\{path}\\{name} - run as administrator"
+        return False, registry_denied("writing", f"{hive}\\{path}\\{name}")
     except OSError as exc:
         return False, f"Registry write error: {exc}"
 

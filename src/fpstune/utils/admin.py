@@ -42,6 +42,22 @@ def is_admin() -> bool:
         return False
 
 
+def registry_denied(action: str, target: str) -> str:
+    """What to tell the user when Windows refused ``action`` (writing, deleting) on ``target``.
+
+    "Run as administrator" is only advice to someone who is not one. Once the
+    process is elevated, a refusal is the system protecting that key itself (a
+    policy key it owns, a filter in front of it), and repeating the advice sends
+    the user nowhere while other HKLM writes in the same run land.
+    """
+    if is_admin():
+        return (
+            f"Windows refused {action} {target} even though fpstune runs as "
+            "administrator: the system protects this key, so it cannot be changed from here."
+        )
+    return f"Permission denied {action} {target} - run as administrator"
+
+
 def require_admin[R](func: Callable[..., R]) -> Callable[..., R]:
     """Decorator that ensures the function runs with admin privileges.
 

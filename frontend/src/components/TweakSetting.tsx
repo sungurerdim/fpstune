@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
-import { canUndoSetting } from "../types/setting";
+import { canUndoSetting, IMPACT_CATEGORY_META } from "../types/setting";
 import { valueLabel } from "../lib/finding";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import {
@@ -375,6 +375,20 @@ export function TweakSetting({
               <span className="truncate">{contextLabel}</span>
             </span>
           )}
+          {/* What the row improves — a label, not a filter: one way to narrow
+              the page is enough, and the row still says latency, fps or heat. */}
+          {(setting.impactCategories ?? []).map((c) => (
+            <span
+              key={c}
+              data-category={c}
+              className={cn(
+                "rounded-full border px-1.5 text-xs leading-tight",
+                IMPACT_CATEGORY_META[c].className,
+              )}
+            >
+              {t(IMPACT_CATEGORY_META[c].labelKey)}
+            </span>
+          ))}
           <span className="flex items-center gap-1 min-w-0">
             <span className="text-muted-foreground/50 text-xs shrink-0">
               {t("row.default")}

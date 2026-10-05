@@ -190,68 +190,81 @@ describe("SettingsTab flat list", () => {
     expect(runMock).toHaveBeenCalledWith("apply", ["network:nagle"]);
   });
 
-  it("filters by the kind of gain, not just the subsystem", async () => {
-    // The dashboard header counted "latency tweaks" while this screen offered
-    // no way to see which rows those were.
+  it("labels each row with what it improves instead of a second filter", () => {
     const lat = makeSetting({
       id: "network:nagle" as `${string}:${string}`,
       displayName: "Nagle's Algorithm",
       impactCategories: ["latency"],
     });
-    const fps = makeSetting({
-      id: "system:gamedvr" as `${string}:${string}`,
-      displayName: "Game DVR",
-      category: "system",
-      impactCategories: ["fps"],
-    });
-    renderTab([
-      { category: NETWORK, settings: [lat] },
-      { category: SYSTEM, settings: [fps] },
-    ]);
+    const { container } = renderTab([{ category: NETWORK, settings: [lat] }]);
 
-    expect(screen.getByText("Nagle's Algorithm")).toBeInTheDocument();
-    expect(screen.getByText("Game DVR")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /^Latency/ }));
-
-    expect(screen.getByText("Nagle's Algorithm")).toBeInTheDocument();
-    expect(screen.queryByText("Game DVR")).not.toBeInTheDocument();
+    // The label is on the row; the only filter bar is the category chips.
+    expect(container.querySelector('[data-category="latency"]')).toHaveTextContent("Latency");
+    expect(screen.queryByRole("group", { name: /impact/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Filter by category" })).toBeInTheDocument();
   });
 
-  it("clears the impact filter when the active chip is clicked again", async () => {
-    const lat = makeSetting({
+  it("puts rows under their category heading, each with its own count", () => {
+    const net = makeSetting({
       id: "network:nagle" as `${string}:${string}`,
       displayName: "Nagle's Algorithm",
-      impactCategories: ["latency"],
     });
-    const fps = makeSetting({
+    const ok = makeSetting({
+      id: "network:rss" as `${string}:${string}`,
+      displayName: "Receive Side Scaling",
+      isOptimized: true,
+      status: "optimal",
+    });
+    renderTab([{ category: NETWORK, settings: [net, ok] }]);
+
+    const section = screen.getByRole("region", { name: "Network" });
+    expect(section).toHaveTextContent("1 to fix / 2 total");
+  });
+
+  it("scopes a heading's actions to its own category", async () => {
+    // Both rows differ from the Windows default; only the heading's own may move.
+    const net = makeSetting({
+      id: "network:nagle" as `${string}:${string}`,
+      displayName: "Nagle's Algorithm",
+      defaultValue: "auto",
+    });
+    const sys = makeSetting({
       id: "system:gamedvr" as `${string}:${string}`,
       displayName: "Game DVR",
       category: "system",
-      impactCategories: ["fps"],
+      defaultValue: "auto",
     });
     renderTab([
-      { category: NETWORK, settings: [lat] },
-      { category: SYSTEM, settings: [fps] },
+      { category: NETWORK, settings: [net] },
+      { category: SYSTEM, settings: [sys] },
     ]);
 
-    const chip = screen.getByRole("button", { name: /^Latency/ });
-    await userEvent.click(chip);
-    expect(screen.queryByText("Game DVR")).not.toBeInTheDocument();
-    await userEvent.click(chip);
-    expect(screen.getByText("Game DVR")).toBeInTheDocument();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Return 1 settings to the Windows default: System Tuning" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Windows default" }));
+    expect(runMock).toHaveBeenCalledWith("reset", ["system:gamedvr"]);
   });
 
-  it("offers no chip for an impact no visible setting has", () => {
-    const lat = makeSetting({
+  it("offers no chip for a category the search has emptied", async () => {
+    const net = makeSetting({
       id: "network:nagle" as `${string}:${string}`,
-      impactCategories: ["latency"],
+      displayName: "Nagle's Algorithm",
     });
-    renderTab([{ category: NETWORK, settings: [lat] }]);
+    const sys = makeSetting({
+      id: "system:gamedvr" as `${string}:${string}`,
+      displayName: "Game DVR",
+      category: "system",
+    });
+    renderTab([
+      { category: NETWORK, settings: [net] },
+      { category: SYSTEM, settings: [sys] },
+    ]);
 
+    await userEvent.type(screen.getByRole("searchbox"), "nagle");
     // A chip that empties the list is worse than no chip.
-    expect(screen.getByRole("button", { name: /^Latency/ })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /^Storage/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Network/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^System Tuning/ })).not.toBeInTheDocument();
   });
 
   it("scopes the page's Apply to the rows the category filter leaves on screen", async () => {
@@ -271,10 +284,7 @@ describe("SettingsTab flat list", () => {
 
     expect(pageApply()).toHaveTextContent("Apply (2)");
 
-    await userEvent.selectOptions(
-      screen.getByLabelText("Filter by category"),
-      "system",
-    );
+    await userEvent.click(screen.getByRole("button", { name: /^System Tuning/ }));
 
     expect(screen.queryByText("Nagle's Algorithm")).not.toBeInTheDocument();
     await confirmPageApply();
@@ -301,7 +311,7 @@ describe("SettingsTab flat list", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("says where a row came from, since no card is left to say it", () => {
+  it("names the module on a row only where the heading does not already say it", () => {
     const s = makeSetting({
       id: "system:gamedvr" as `${string}:${string}`,
       displayName: "Game DVR",
@@ -309,7 +319,8 @@ describe("SettingsTab flat list", () => {
     });
     renderTab([{ category: SYSTEM, settings: [s] }]);
 
-    expect(screen.getByText("System Tuning · Windows")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "System Tuning" })).toBeInTheDocument();
+    expect(screen.getByText("Windows")).toBeInTheDocument();
   });
 
   it("leaves a game's config line to the Game Tweaks tab", () => {

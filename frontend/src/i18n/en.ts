@@ -664,6 +664,11 @@ export const en = {
   "actions.confirmBody.apply": "Each row shows its own result, and every change can be undone from the same row.",
   "actions.confirmBody.undo": "Each setting gets back the value fpstune recorded the first time it read this machine.",
   "actions.confirmBody.reset": "Every setting that differs from what Windows ships is put back to it. Each row shows its own result.",
+  "settings.search": "Search settings",
+  "settings.searchPlaceholder": "Search settings...",
+  "settings.filterByCategory": "Filter by category",
+  "settings.allCategories": "All",
+  "settings.groupCount": "{toFix} to fix / {total} total",
   // Needs / ideal bands
   "bands.needs": "Needs action",
   "bands.ideal": "Ideal",

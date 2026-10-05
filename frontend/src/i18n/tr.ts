@@ -643,6 +643,11 @@ export const tr: Record<keyof typeof en, string> = {
   "actions.confirmBody.apply": "Her satır kendi sonucunu gösterir; her değişiklik aynı satırdan geri alınabilir.",
   "actions.confirmBody.undo": "Her ayar, fpstune'un bu makineyi ilk okuduğunda kaydettiği değeri geri alır.",
   "actions.confirmBody.reset": "Windows'un sunduğundan farklı olan her ayar ona geri döner. Her satır kendi sonucunu gösterir.",
+  "settings.search": "Ayarlarda ara",
+  "settings.searchPlaceholder": "Ayarlarda ara...",
+  "settings.filterByCategory": "Kategoriye göre süz",
+  "settings.allCategories": "Tümü",
+  "settings.groupCount": "{toFix} düzeltilecek / {total} toplam",
   // Gerekenler / ideal bantları
   "bands.needs": "İşlem gerekiyor",
   "bands.ideal": "İdeal",

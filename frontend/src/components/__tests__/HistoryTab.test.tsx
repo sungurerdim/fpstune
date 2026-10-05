@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, render, screen, waitFor } from "../../test/utils";
+import { fireEvent, metricChip, render, screen, waitFor } from "../../test/utils";
 import { HistoryTab } from "../HistoryTab";
 import type { HistoryResponse } from "../../lib/api";
 
@@ -57,8 +57,11 @@ beforeEach(() => run.mockReset());
 describe("HistoryTab", () => {
   it("splits what is still changed from what was already put back", async () => {
     render(<HistoryTab />);
-    expect(await screen.findByText(/Still changed by fpstune \(2\)/)).toBeInTheDocument();
-    expect(screen.getByText(/Already put back \(1\)/)).toBeInTheDocument();
+    const active = await screen.findByRole("heading", { name: "Still changed by fpstune" });
+    const reverted = screen.getByRole("heading", { name: "Already put back" });
+    // The count is its own chip beside the title, not text run into it.
+    expect(metricChip("2 settings", active.closest("section")!)).toBeInTheDocument();
+    expect(metricChip("1 settings", reverted.closest("section")!)).toBeInTheDocument();
     expect(screen.getByText(/was enabled before/)).toBeInTheDocument();
   });
 

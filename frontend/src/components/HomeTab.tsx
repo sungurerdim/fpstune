@@ -42,6 +42,7 @@ import { OsUpdateNotice } from "./OsUpdateNotice";
 import { HomeMeasuredCard } from "./MeasuredLedger";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
+import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
 import { Progress } from "./ui/Feedback";
@@ -647,35 +648,40 @@ export function HomeTab() {
 
         {/* RIGHT: cleanup opportunities */}
         <Card className="flex flex-col">
-          <div className="flex items-center justify-between p-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <HardDrive className="w-4 h-4 text-primary" />
-              <h2 className="font-semibold text-sm">
-                {/* A TRIM run reclaims nothing, so the cleanup-only heading
-                    would misname its own rows the moment one is in the card. */}
-                {overdueUpkeep.length > 0
-                  ? t("home.cleanupUpkeepTitle")
-                  : t("home.cleanupTitle")}
-              </h2>
-              <span
-                data-testid="home-cleanup-count"
-                className="text-xs text-muted-foreground"
+          <ScopeHeader
+            level={2}
+            className="border-b border-border p-3"
+            icon={<HardDrive className="h-4 w-4 text-primary" aria-hidden="true" />}
+            /* A TRIM run reclaims nothing, so the cleanup-only heading
+                would misname its own rows the moment one is in the card. */
+            title={overdueUpkeep.length > 0 ? t("home.cleanupUpkeepTitle") : t("home.cleanupTitle")}
+            metrics={
+              <MetricList>
+                <Metric
+                  testId="home-cleanup-count"
+                  tone={todoCount > 0 ? "attention" : "neutral"}
+                  value={todoCount}
+                  label={t("metric.toRun")}
+                />
+                {sizesCalculating && (
+                  <Metric
+                    label={t("metric.measuring")}
+                    icon={<Loader2 className="h-3 w-3 animate-spin" aria-hidden="true" />}
+                  />
+                )}
+              </MetricList>
+            }
+            actions={
+              <Button
+                onClick={runAllCleanups}
+                disabled={todoCount === 0}
+                busy={cleanupRunner.isRunning}
+                icon={<Trash2 className="w-3.5 h-3.5" />}
               >
-                {todoCount}
-              </span>
-              {sizesCalculating && (
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-              )}
-            </div>
-            <Button
-              onClick={runAllCleanups}
-              disabled={todoCount === 0}
-              busy={cleanupRunner.isRunning}
-              icon={<Trash2 className="w-3.5 h-3.5" />}
-            >
-              {t("action.runAll")}
-            </Button>
-          </div>
+                {t("action.runAll")}
+              </Button>
+            }
+          />
           {/* No inner scroll: a scrollable region inside a scrollable page means
               the wheel does something different depending on where the pointer is. */}
           <div

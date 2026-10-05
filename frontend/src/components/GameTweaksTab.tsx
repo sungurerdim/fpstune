@@ -6,6 +6,7 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { type TweakRow } from "./TweakRows";
 import { TweakBands } from "./TweakBands";
 import { ScopeActions } from "./ScopeActions";
+import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { useStore } from "../store";
 import { DetectionNotice } from "./DetectionNotice";
 import { isGameTweak } from "../lib/tweakDomain";
@@ -209,16 +210,23 @@ function GameSectionCard({ section }: { section: GameSection }) {
         toApply > 0 ? "border-l-warning" : "border-l-success",
       )}
     >
-      <div className="flex items-center gap-2 flex-wrap">
-        <Gamepad2 className="w-4 h-4 text-primary" aria-hidden />
-        <h2 id={headingId} className="text-sm font-bold">
-          {section.label}
-        </h2>
-        <span className={cn("text-xs", toApply > 0 ? "text-warning" : "text-success")}>
-          {t("settings.groupCount", { toFix: toApply, total: members.length })}
-        </span>
-        <ScopeActions settings={members} name={section.label} className="ml-auto" />
-      </div>
+      <ScopeHeader
+        level={2}
+        headingId={headingId}
+        icon={<Gamepad2 className="h-4 w-4 text-primary" aria-hidden />}
+        title={section.label}
+        metrics={
+          <MetricList>
+            <Metric
+              tone={toApply > 0 ? "attention" : "ok"}
+              value={toApply}
+              label={t("metric.toFix")}
+            />
+            <Metric value={members.length} label={t("metric.total")} />
+          </MetricList>
+        }
+        actions={<ScopeActions settings={members} name={section.label} />}
+      />
       <TweakBands rows={section.rows} />
     </section>
   );

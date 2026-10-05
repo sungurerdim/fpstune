@@ -8,6 +8,7 @@ import { useBulkStream } from "../hooks/useBulkStream";
 import { useStore } from "../store";
 import type { Setting, SettingId } from "../types/setting";
 import { ScopeActions } from "./ScopeActions";
+import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { cn } from "../lib/utils";
 import { Card } from "./ui/Card";
 
@@ -88,17 +89,19 @@ export function HistoryTab() {
   return (
     <div className="space-y-4">
       <Card className="p-4 space-y-2">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-base font-semibold">{t("history.title")}</h2>
-          {/* Page scope: every setting fpstune still has applied, with the
-              same Undo and Windows default every other page offers. */}
-          <ScopeActions
-            settings={activeSettings}
-            name={t("tab.history")}
-            only={["undo", "reset"]}
-            className="ml-auto"
-          />
-        </div>
+        <ScopeHeader
+          level={2}
+          title={t("history.title")}
+          /* Page scope: every setting fpstune still has applied, with the
+              same Undo and Windows default every other page offers. */
+          actions={
+            <ScopeActions
+              settings={activeSettings}
+              name={t("tab.history")}
+              only={["undo", "reset"]}
+            />
+          }
+        />
         <p className="text-sm text-muted-foreground">{t("history.intro")}</p>
       </Card>
 
@@ -107,45 +110,51 @@ export function HistoryTab() {
       ) : (
         <>
           <section aria-labelledby="history-active" className="space-y-2">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <h3 id="history-active" className="text-sm font-semibold">
-                {t("history.active", { count: active.length })}
-              </h3>
-              <div className="flex items-center gap-2 flex-wrap">
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded-md bg-muted hover:bg-muted/80"
-                  onClick={() =>
-                    setSelected(
-                      selectedIds.length === active.length
-                        ? new Set()
-                        : new Set(active.map((r) => r.setting_id)),
-                    )
-                  }
-                  disabled={active.length === 0}
-                >
-                  {t("history.selectAll")}
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded-md bg-primary text-primary-foreground disabled:opacity-50 flex items-center gap-1.5"
-                  disabled={isRunning || undoable.length === 0}
-                  onClick={() => start("undo", undoable)}
-                >
-                  <Undo2 className="w-3 h-3" />
-                  {t("history.undoSelected", { count: undoable.length })}
-                </button>
-                <button
-                  type="button"
-                  className="px-3 py-1.5 text-xs rounded-md bg-muted hover:bg-muted/80 disabled:opacity-50 flex items-center gap-1.5"
-                  disabled={isRunning || selectedIds.length === 0}
-                  onClick={() => start("reset", selectedIds)}
-                >
-                  <RotateCcw className="w-3 h-3" />
-                  {t("history.resetSelected", { count: selectedIds.length })}
-                </button>
-              </div>
-            </div>
+            <ScopeHeader
+              headingId="history-active"
+              title={t("history.active")}
+              metrics={
+                <MetricList>
+                  <Metric value={active.length} label={t("metric.settings")} />
+                </MetricList>
+              }
+              actions={
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="rounded-md bg-muted px-3 py-1.5 text-xs hover:bg-muted/80"
+                    onClick={() =>
+                      setSelected(
+                        selectedIds.length === active.length
+                          ? new Set()
+                          : new Set(active.map((r) => r.setting_id)),
+                      )
+                    }
+                    disabled={active.length === 0}
+                  >
+                    {t("history.selectAll")}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
+                    disabled={isRunning || undoable.length === 0}
+                    onClick={() => start("undo", undoable)}
+                  >
+                    <Undo2 className="h-3 w-3" />
+                    {t("history.undoSelected", { count: undoable.length })}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs hover:bg-muted/80 disabled:opacity-50"
+                    disabled={isRunning || selectedIds.length === 0}
+                    onClick={() => start("reset", selectedIds)}
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    {t("history.resetSelected", { count: selectedIds.length })}
+                  </button>
+                </div>
+              }
+            />
             <ul className="space-y-1">
               {active.map((row) => (
                 <HistoryRow
@@ -167,9 +176,15 @@ export function HistoryTab() {
 
           {reverted.length > 0 && (
             <section aria-labelledby="history-reverted" className="space-y-2">
-              <h3 id="history-reverted" className="text-sm font-semibold">
-                {t("history.reverted", { count: reverted.length })}
-              </h3>
+              <ScopeHeader
+                headingId="history-reverted"
+                title={t("history.reverted")}
+                metrics={
+                  <MetricList>
+                    <Metric value={reverted.length} label={t("metric.settings")} />
+                  </MetricList>
+                }
+              />
               <ul className="space-y-1">
                 {reverted.map((row) => (
                   <HistoryRow

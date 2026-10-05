@@ -8,6 +8,7 @@ div [flex-wrap]
 div [flex-wrap]
   h2 "Modern Warfare IV"
   div [flex-wrap]
+  ul [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
     div [flex-wrap]
@@ -27,6 +28,7 @@ div [flex-wrap]
 div [flex-wrap]
   h2 "Modern Warfare IV"
   div [flex-wrap]
+  ul [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row
     div [flex-wrap]
@@ -40,40 +42,68 @@ div#tweak-rows [grid-cols-3]
 
 exports[`'Hardware' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
-h3 "Hardware"
+div [flex-wrap]
+  h2 "Hardware"
+  div [flex-wrap]
 div#hardware-columns [grid-cols-1]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
+    div [flex-wrap]
+    ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
 `;
 
 exports[`'Hardware' page layout > at a wide window (2560px) 1`] = `
 "viewport 2560px
-h3 "Hardware"
+div [flex-wrap]
+  h2 "Hardware"
+  div [flex-wrap]
 div#hardware-columns [grid-cols-2]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
+    div [flex-wrap]
+    ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
 `;
@@ -82,11 +112,15 @@ exports[`'History' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
 div [flex-wrap]
   h2 "What fpstune changed"
-div [flex-wrap]
-  h3 "Still changed by fpstune (1)"
   div [flex-wrap]
+div [flex-wrap]
+  h3 "Still changed by fpstune"
+  div [flex-wrap]
+  ul [flex-wrap]
 li [flex-wrap]
-h3 "Already put back (1)"
+div [flex-wrap]
+  h3 "Already put back"
+  ul [flex-wrap]
 li [flex-wrap]"
 `;
 
@@ -94,11 +128,15 @@ exports[`'History' page layout > at a wide window (2560px) 1`] = `
 "viewport 2560px
 div [flex-wrap]
   h2 "What fpstune changed"
-div [flex-wrap]
-  h3 "Still changed by fpstune (1)"
   div [flex-wrap]
+div [flex-wrap]
+  h3 "Still changed by fpstune"
+  div [flex-wrap]
+  ul [flex-wrap]
 li [flex-wrap]
-h3 "Already put back (1)"
+div [flex-wrap]
+  h3 "Already put back"
+  ul [flex-wrap]
 li [flex-wrap]"
 `;
 
@@ -107,8 +145,9 @@ exports[`'Home' page layout > at a narrow window (390px) 1`] = `
 section [flex-wrap]
 div [flex-wrap]
 section#home-advisories
-  h2 "Needs your attention"
-  span [hidden]
+  div [flex-wrap]
+    h2 "Needs your attention"
+    ul [flex-wrap]
   div#home-advisory-grid [grid-cols-1]
     div [flex-wrap]
     div#advisory-finding
@@ -119,15 +158,18 @@ section#home-advisories
       span#setting-value-state
     p#advisory-advice
 section#home-measured
-  h2 "What fpstune changed, measured"
-  span [hidden]
-section [flex-col]
-  h2 "Hardware tweaks"
-  span [hidden]
-section [flex-col]
-  h2 "Software tweaks"
-  span [hidden]
   div [flex-wrap]
+    h2 "What fpstune changed, measured"
+section [flex-col]
+  div [flex-wrap]
+    h2 "Hardware tweaks"
+    div [flex-wrap]
+    ul [flex-wrap]
+section [flex-col]
+  div [flex-wrap]
+    h2 "Software tweaks"
+    div [flex-wrap]
+    ul [flex-wrap]
   div#tweak-group-rows [grid-cols-1]
     div#tweak-list-row
       div [flex-wrap]
@@ -138,28 +180,46 @@ section [flex-col]
       div [flex-wrap]
         span#setting-value-state
 section [flex-col]
-  h2 "Game tweaks"
-  span [hidden]
+  div [flex-wrap]
+    h2 "Game tweaks"
+    div [flex-wrap]
+    ul [flex-wrap]
 section [flex-col]
-  h2 "Available disk cleanup actions"
-  span#home-cleanup-count
+  div [flex-wrap]
+    h2 "Available disk cleanup actions"
+    ul [flex-wrap]
+      li#home-cleanup-count
   div#home-cleanup-rows [grid-cols-1]
     div [flex-wrap]
     div [flex-wrap]
-h3 "Hardware"
+div [flex-wrap]
+  h2 "Hardware"
+  div [flex-wrap]
 div#hardware-columns [grid-cols-1]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
+    div [flex-wrap]
+    ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
 `;
@@ -169,7 +229,9 @@ exports[`'Home' page layout > at a wide window (2560px) 1`] = `
 section [flex-wrap]
 div [flex-wrap]
 section#home-advisories
-  h2 "Needs your attention"
+  div [flex-wrap]
+    h2 "Needs your attention"
+    ul [flex-wrap]
   div#home-advisory-grid [grid-cols-3]
     div [flex-wrap]
     div#advisory-finding
@@ -180,13 +242,19 @@ section#home-advisories
       span#setting-value-state
     p#advisory-advice
 section#home-measured
-  h2 "What fpstune changed, measured"
+  div [flex-wrap]
+    h2 "What fpstune changed, measured"
 div [grid-cols-[2fr_1fr]]
   section [flex-col]
-    h2 "Hardware tweaks"
-  section [flex-col]
-    h2 "Software tweaks"
     div [flex-wrap]
+      h2 "Hardware tweaks"
+      div [flex-wrap]
+      ul [flex-wrap]
+  section [flex-col]
+    div [flex-wrap]
+      h2 "Software tweaks"
+      div [flex-wrap]
+      ul [flex-wrap]
     div#tweak-group-rows [grid-cols-2]
       div#tweak-list-row
         div [flex-wrap]
@@ -197,27 +265,46 @@ div [grid-cols-[2fr_1fr]]
         div [flex-wrap]
           span#setting-value-state
   section [flex-col]
-    h2 "Game tweaks"
+    div [flex-wrap]
+      h2 "Game tweaks"
+      div [flex-wrap]
+      ul [flex-wrap]
   section [flex-col]
-    h2 "Available disk cleanup actions"
-    span#home-cleanup-count
+    div [flex-wrap]
+      h2 "Available disk cleanup actions"
+      ul [flex-wrap]
+        li#home-cleanup-count
     div#home-cleanup-rows [grid-cols-1]
       div [flex-wrap]
       div [flex-wrap]
-h3 "Hardware"
+div [flex-wrap]
+  h2 "Hardware"
+  div [flex-wrap]
 div#hardware-columns [grid-cols-2]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
+    div [flex-wrap]
+    ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
+    div [flex-wrap]
+    ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
 `;
@@ -231,6 +318,7 @@ div[group] [flex-wrap]
 div [flex-wrap]
   h2 "System"
   div [flex-wrap]
+  ul [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
     div [flex-wrap]
@@ -251,6 +339,7 @@ div[group] [flex-wrap]
 div [flex-wrap]
   h2 "System"
   div [flex-wrap]
+  ul [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row
     div [flex-wrap]

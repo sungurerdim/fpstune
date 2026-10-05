@@ -16,7 +16,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "../../test/utils";
+import { metricChip, render, screen } from "../../test/utils";
 import userEvent from "@testing-library/user-event";
 import { SettingsTab } from "../SettingsTab";
 import { useStore } from "../../store";
@@ -218,7 +218,8 @@ describe("SettingsTab flat list", () => {
     renderTab([{ category: NETWORK, settings: [net, ok] }]);
 
     const section = screen.getByRole("region", { name: "Network" });
-    expect(section).toHaveTextContent("1 to fix / 2 total");
+    expect(metricChip("1 to fix", section)).toBeInTheDocument();
+    expect(metricChip("2 total", section)).toBeInTheDocument();
   });
 
   it("scopes a heading's actions to its own category", async () => {
@@ -291,7 +292,7 @@ describe("SettingsTab flat list", () => {
     expect(runMock).toHaveBeenCalledWith("apply", ["system:gamedvr"]);
   });
 
-  it("offers no page action when every visible row is an advisory", () => {
+  it("disables the page action, naming why, when every visible row is an advisory", () => {
     const advisory = makeSetting({
       // A software advisory: XMP used to stand in here, but it is a memory
       // finding and belongs to the Hardware tab.
@@ -304,11 +305,14 @@ describe("SettingsTab flat list", () => {
     });
     renderTab([{ category: SYSTEM, settings: [advisory] }]);
 
-    // A button that can act on nothing is a control that lies about its scope.
+    // A button that can act on nothing is a control that lies about its scope:
+    // it stays where it always is, disabled, and its name says why.
     expect(screen.getByText("Startup apps")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /Software Tweaks$/ }),
-    ).not.toBeInTheDocument();
+    const apply = screen.getByRole("button", {
+      name: "Apply: nothing to apply in Software Tweaks",
+    });
+    expect(apply).toBeDisabled();
+    expect(screen.queryByRole("button", { name: /^Apply \d+ tweaks: Software Tweaks$/ })).not.toBeInTheDocument();
   });
 
   it("names the module on a row only where the heading does not already say it", () => {

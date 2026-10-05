@@ -4,7 +4,11 @@ import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Monitor, ShieldCheck, ShieldAlert, Loader2 } from "lucide-react";
 import { api, type HardwareInfo, type SystemInfo } from "../lib/api";
-import { cn } from "../lib/utils";
+import { useStore } from "../store";
+import { isHardwareTweak } from "../lib/tweakDomain";
+import { isTweakAdvisory, isTweakListable } from "../lib/tweakStatus";
+import { ScopeActions } from "./ScopeActions";
+import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { DisplaysAutoAllButton, MonitorCard } from "./hardware/MonitorCard";
 import { useRefreshOnFocus } from "./hardware/useRefreshOnFocus";
 import { useHardware } from "./hardware/useHardware";
@@ -42,32 +46,48 @@ export function HardwarePanel() {
 
   const devices = useMemo(() => describeDevices(hardware, t), [hardware, t]);
 
+  // The page's own scope: every hardware tweak some card on this page claims.
+  const storeSettings = useStore((s) => s.settings);
+  const settingsVersion = useStore((s) => s._settingsVersion);
+  const pageSettings = useMemo(
+    () =>
+      [...storeSettings.values()].filter(
+        (s) =>
+          isHardwareTweak(s) &&
+          (isTweakListable(s) || isTweakAdvisory(s)) &&
+          devices.some((d) => d.match?.(s)),
+      ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
+    [storeSettings, settingsVersion, devices],
+  );
+
   return (
     <Card className="p-4">
-      <h3 className="font-medium mb-3 flex items-center justify-between">
-        <span className="flex items-center gap-2">
-          <Monitor className="w-4 h-4" />
-          {t("hw.title")}
-        </span>
-        {systemInfo && (
-          <span
-            className={cn(
-              "flex items-center gap-1 text-xs px-2 py-0.5 rounded",
-              systemInfo.is_admin ? "bg-success/20 text-success" : "bg-warning/20 text-warning",
-            )}
-          >
-            {systemInfo.is_admin ? (
-              <>
-                <ShieldCheck className="w-3 h-3" /> {t("hw.admin")}
-              </>
-            ) : (
-              <>
-                <ShieldAlert className="w-3 h-3" /> {t("hw.notAdmin")}
-              </>
-            )}
-          </span>
-        )}
-      </h3>
+      <ScopeHeader
+        level={2}
+        className="mb-3"
+        icon={<Monitor className="h-4 w-4" aria-hidden />}
+        title={t("hw.title")}
+        metrics={
+          systemInfo && (
+            <MetricList>
+              <Metric
+                tone={systemInfo.is_admin ? "ok" : "attention"}
+                label={systemInfo.is_admin ? t("hw.admin") : t("hw.notAdmin")}
+                icon={
+                  systemInfo.is_admin ? (
+                    <ShieldCheck className="h-3 w-3" aria-hidden />
+                  ) : (
+                    <ShieldAlert className="h-3 w-3" aria-hidden />
+                  )
+                }
+              />
+            </MetricList>
+          )
+        }
+        /* Page scope: exactly the tweaks the cards below draw. */
+        actions={<ScopeActions settings={pageSettings} name={t("tab.hardware")} />}
+      />
 
       {/* Power plan — the FPS Balanced profile's status and switch. */}
       <PowerProfileCard />

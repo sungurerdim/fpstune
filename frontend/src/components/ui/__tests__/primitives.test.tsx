@@ -10,7 +10,6 @@
 import { describe, it, expect, vi } from "vitest";
 import { fireEvent, render, screen } from "@testing-library/react";
 import { Button } from "../Button";
-import { Card, CardHeader } from "../Card";
 import { Badge } from "../Badge";
 import { Alert, EmptyState, Meter, Progress, Skeleton } from "../Feedback";
 
@@ -32,20 +31,6 @@ describe("Button", () => {
   it("defaults to type=button so it cannot submit a form by accident", () => {
     render(<Button>Go</Button>);
     expect(screen.getByRole("button")).toHaveAttribute("type", "button");
-  });
-});
-
-describe("Card", () => {
-  it("the header title is a real heading, count beside it", () => {
-    render(
-      <Card>
-        <CardHeader title="Hardware tweaks" count={4} />
-      </Card>,
-    );
-    expect(
-      screen.getByRole("heading", { name: "Hardware tweaks" }),
-    ).toBeInTheDocument();
-    expect(screen.getByText("4")).toBeInTheDocument();
   });
 });
 

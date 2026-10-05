@@ -77,3 +77,15 @@ export * from "@testing-library/react";
 // Explicit re-exports for TypeScript
 export { screen, fireEvent, waitFor } from "@testing-library/react";
 export { customRender as render };
+
+/**
+ * The header metric chip whose words read exactly `text` ("9 to apply").
+ *
+ * A chip sets its number in its own bold element, so `getByText("9 to apply")`
+ * — which matches one element's own text — cannot find it; this reads the chip
+ * as a whole, the way a screen reader does.
+ */
+export function metricChip(text: string, within: HTMLElement | Document = document): HTMLElement | null {
+  const items = Array.from(within.querySelectorAll<HTMLElement>('[data-slot="scope-metrics"] > li'));
+  return items.find((li) => (li.textContent ?? "").replace(/\s+/g, " ").trim() === text) ?? null;
+}

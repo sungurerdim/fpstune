@@ -154,8 +154,7 @@ describe("Home separates advisories that found something", () => {
     setStore([SLOW_LINK, RAM_FINE]);
     render(<HomeTab />);
 
-    const heading = screen.getByText("Needs your attention");
-    const card = heading.closest("div")?.parentElement;
+    const card = screen.getByText("Needs your attention").closest("[data-testid='home-advisories']");
     expect(card).not.toBeNull();
     expect(card?.textContent).toContain(
       "Link Speed vs Adapter Capability (Ethernet)",

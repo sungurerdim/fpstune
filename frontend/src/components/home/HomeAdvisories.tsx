@@ -4,6 +4,7 @@ import { localizedDescription, localizedEffect, localizedName } from "../../i18n
 import { describeFinding } from "../../lib/finding";
 import type { Setting } from "../../types/setting";
 import { Card } from "../ui/Card";
+import { Metric, MetricList, ScopeHeader } from "../ui/ScopeHeader";
 import { SettingInfoTooltip } from "../SettingInfoTooltip";
 import { SettingValueState } from "../SettingStateDisplay";
 
@@ -18,21 +19,19 @@ export function ActionableAdvisories({ settings: actionableAdvisories }: { setti
   if (actionableAdvisories.length === 0) return null;
   return (
       <Card className="border-warning/40" data-testid="home-advisories">
-        <div className="flex items-center gap-2 p-3 border-b border-warning/30 bg-warning/10">
-          <AlertTriangle
-            className="w-4 h-4 text-warning"
-            aria-hidden="true"
-          />
-          <h2 className="font-semibold text-sm text-warning">
-            {t("home.advisories")}
-          </h2>
-          <span className="text-xs font-semibold px-1.5 py-0.5 rounded bg-warning/15 text-warning">
-            {actionableAdvisories.length}
-          </span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {t("home.advisoriesHint")}
-          </span>
-        </div>
+        <ScopeHeader
+          level={2}
+          className="border-b border-warning/30 bg-warning/10 p-3"
+          icon={<AlertTriangle className="h-4 w-4 text-warning" aria-hidden="true" />}
+          title={t("home.advisories")}
+          titleClassName="text-warning"
+          kind={t("home.advisoriesHint")}
+          metrics={
+            <MetricList>
+              <Metric tone="advisory" value={actionableAdvisories.length} label={t("metric.needYou")} />
+            </MetricList>
+          }
+        />
         <div
           data-testid="home-advisory-grid"
           className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3"
@@ -92,18 +91,18 @@ export function UnreadAdvisories({
   if (unreadAdvisories.length === 0) return null;
   return (
       <Card data-testid="home-unread-advisories">
-        <div className="flex items-center gap-2 p-3 border-b border-border">
-          <HelpCircle className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">
-            {t("home.advisoriesUnread")}
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {unreadAdvisories.length}
-          </span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {t("home.advisoriesUnreadHint")}
-          </span>
-        </div>
+        <ScopeHeader
+          level={2}
+          className="border-b border-border p-3"
+          icon={<HelpCircle className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          title={t("home.advisoriesUnread")}
+          kind={t("home.advisoriesUnreadHint")}
+          metrics={
+            <MetricList>
+              <Metric value={unreadAdvisories.length} label={t("metric.settings")} />
+            </MetricList>
+          }
+        />
         <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
           {unreadAdvisories.map((s) => (
             <div
@@ -141,18 +140,18 @@ export function ClearAdvisories({ settings: clearAdvisories }: { settings: Setti
   if (clearAdvisories.length === 0) return null;
   return (
       <Card>
-        <div className="flex items-center gap-2 p-3 border-b border-border">
-          <Info className="w-4 h-4 text-muted-foreground" />
-          <h2 className="font-semibold text-sm">
-            {t("home.advisoriesClear")}
-          </h2>
-          <span className="text-xs text-muted-foreground">
-            {clearAdvisories.length}
-          </span>
-          <span className="text-xs text-muted-foreground hidden sm:inline">
-            {t("home.advisoriesClearHint")}
-          </span>
-        </div>
+        <ScopeHeader
+          level={2}
+          className="border-b border-border p-3"
+          icon={<Info className="h-4 w-4 text-muted-foreground" aria-hidden="true" />}
+          title={t("home.advisoriesClear")}
+          kind={t("home.advisoriesClearHint")}
+          metrics={
+            <MetricList>
+              <Metric tone="ok" value={clearAdvisories.length} label={t("metric.settings")} />
+            </MetricList>
+          }
+        />
         <div className="p-3 grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3">
           {clearAdvisories.map((s) => (
             <div

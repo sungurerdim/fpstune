@@ -20,7 +20,8 @@ import {
 } from "../lib/ledger";
 import { LEDGER_QUERY_KEY, useBenchLedger } from "../hooks/useBenchLedger";
 import { Button } from "./ui/Button";
-import { Card, CardHeader } from "./ui/Card";
+import { Card } from "./ui/Card";
+import { ScopeHeader } from "./ui/ScopeHeader";
 
 /**
  * Did any of that help — answered per area, by one instrument each.
@@ -242,14 +243,13 @@ export function HomeMeasuredCard() {
 
   return (
     <Card data-testid="home-measured">
-      <CardHeader
-        icon={<Gauge className="w-4 h-4 text-primary" aria-hidden="true" />}
+      <ScopeHeader
+        level={2}
+        className="border-b border-border p-3"
+        icon={<Gauge className="h-4 w-4 text-primary" aria-hidden="true" />}
         title={t("ledger.homeTitle")}
-      >
-        <span className="text-xs text-muted-foreground hidden sm:inline">
-          {t("ledger.homeHint")}
-        </span>
-      </CardHeader>
+        kind={t("ledger.homeHint")}
+      />
 
       <div className="p-3 space-y-2">
         {isLoading && <LedgerNotice text={t("ledger.loading")} />}
@@ -319,31 +319,28 @@ export function LedgerPanel() {
 
   return (
     <Card className="p-4 space-y-3" data-testid="ledger-panel">
-      <div className="flex items-start gap-3 flex-wrap">
-        <div className="flex-1 min-w-[16rem]">
-          <h3 className="text-sm font-semibold flex items-center gap-2">
-            <Activity className="w-4 h-4" aria-hidden="true" />
-            {t("ledger.panelTitle")}
-          </h3>
-          <p className="text-xs text-muted-foreground mt-1">
-            {t("ledger.panelHint")}
-          </p>
-        </div>
-        <div className="space-y-1">
-          <Button
-            size="md"
-            busy={queue.isPending}
-            icon={<Play className="w-4 h-4" aria-hidden="true" />}
-            onClick={() => queue.mutate()}
-          >
-            {t("ledger.measureNow")}
-          </Button>
-          <p className="text-xs text-muted-foreground max-w-xs">
-            {t("ledger.measureNowHint")}
-          </p>
-          {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
-        </div>
-      </div>
+      <ScopeHeader
+        level={3}
+        icon={<Activity className="h-4 w-4" aria-hidden="true" />}
+        title={t("ledger.panelTitle")}
+        kind={t("ledger.panelHint")}
+        actions={
+          <div className="space-y-1">
+            <Button
+              size="md"
+              busy={queue.isPending}
+              icon={<Play className="w-4 h-4" aria-hidden="true" />}
+              onClick={() => queue.mutate()}
+            >
+              {t("ledger.measureNow")}
+            </Button>
+            <p className="max-w-xs text-xs text-muted-foreground">
+              {t("ledger.measureNowHint")}
+            </p>
+            {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
+          </div>
+        }
+      />
 
       {isLoading && <LedgerNotice text={t("ledger.loading")} />}
       {isError && <LedgerNotice text={t("ledger.unreachable")} />}

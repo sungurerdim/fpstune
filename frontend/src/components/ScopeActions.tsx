@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { History, Loader2, RotateCcw, Square, Zap } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
@@ -17,6 +17,12 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
  * only when something in the scope has a recorded original: offering it without
  * one would either do nothing or quietly become a reset, which is the wrong
  * promise kept (C6).
+ *
+ * Apply and Windows default are always drawn, so the group sits in the same spot
+ * on every page and a scope with nothing to do does not shift the layout. A
+ * button with nothing to act on is disabled and says why in its accessible name
+ * and tooltip, rather than vanishing and leaving the reader to wonder whether it
+ * exists.
  */
 export function ScopeActions({
   settings,
@@ -57,7 +63,6 @@ export function ScopeActions({
     undo: shown("undo") ? targets.undo.length : 0,
     reset: shown("reset") ? targets.reset.length : 0,
   };
-  if (counts.apply + counts.undo + counts.reset === 0) return null;
 
   const hasAdvanced = targets.apply.some((s) => s.riskLevel === "advanced");
   // Anything marked Advanced keeps its own question: the gate is named for
@@ -79,9 +84,6 @@ export function ScopeActions({
       ? t(`actions.${pending}Short`)
       : "";
 
-  const buttonBase =
-    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:opacity-50";
-
   return (
     <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
       <ConfirmDialog
@@ -96,39 +98,78 @@ export function ScopeActions({
       >
         {body}
       </ConfirmDialog>
-      {counts.apply > 0 && (
-        <button
-          type="button"
-          onClick={() => setPending("apply")}
-          aria-label={t("actions.aria.apply", { count: counts.apply, name })}
-          className={cn(buttonBase, "bg-warning/15 text-warning hover:bg-warning/25")}
-        >
-          <Zap className="h-3.5 w-3.5" aria-hidden />
-          {t("actions.apply", { count: counts.apply })}
-        </button>
+      {shown("apply") && (
+        <ActionButton
+          action="apply"
+          count={counts.apply}
+          name={name}
+          idleLabel={t("actions.none.apply", { name })}
+          icon={<Zap className="h-3.5 w-3.5" aria-hidden />}
+          className="bg-warning/15 text-warning hover:bg-warning/25"
+          onPress={() => setPending("apply")}
+        />
       )}
       {counts.undo > 0 && (
-        <button
-          type="button"
-          onClick={() => setPending("undo")}
-          aria-label={t("actions.aria.undo", { count: counts.undo, name })}
-          className={cn(buttonBase, "border border-border text-foreground hover:bg-muted")}
-        >
-          <History className="h-3.5 w-3.5" aria-hidden />
-          {t("actions.undo", { count: counts.undo })}
-        </button>
+        <ActionButton
+          action="undo"
+          count={counts.undo}
+          name={name}
+          icon={<History className="h-3.5 w-3.5" aria-hidden />}
+          className="border border-border text-foreground hover:bg-muted"
+          onPress={() => setPending("undo")}
+        />
       )}
-      {counts.reset > 0 && (
-        <button
-          type="button"
-          onClick={() => setPending("reset")}
-          aria-label={t("actions.aria.reset", { count: counts.reset, name })}
-          className={cn(buttonBase, "border border-border text-muted-foreground hover:bg-muted hover:text-foreground")}
-        >
-          <RotateCcw className="h-3.5 w-3.5" aria-hidden />
-          {t("actions.reset", { count: counts.reset })}
-        </button>
+      {shown("reset") && (
+        <ActionButton
+          action="reset"
+          count={counts.reset}
+          name={name}
+          idleLabel={t("actions.none.reset", { name })}
+          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+          className="border border-border text-muted-foreground hover:bg-muted hover:text-foreground"
+          onPress={() => setPending("reset")}
+        />
       )}
     </div>
+  );
+}
+
+const BUTTON_BASE =
+  "inline-flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50";
+
+/** One action of the group: live with a count, or disabled and naming why. */
+function ActionButton({
+  action,
+  count,
+  name,
+  idleLabel,
+  icon,
+  className,
+  onPress,
+}: {
+  action: BulkAction;
+  count: number;
+  name: string;
+  /** Why the button is disabled; absent for an action that is hidden when it has nothing to do. */
+  idleLabel?: string;
+  icon: ReactNode;
+  className: string;
+  onPress: () => void;
+}) {
+  const { t } = useT();
+  const idle = count === 0;
+  const label = idle && idleLabel ? idleLabel : t(`actions.aria.${action}`, { count, name });
+  return (
+    <button
+      type="button"
+      disabled={idle}
+      onClick={onPress}
+      aria-label={label}
+      title={idle ? label : undefined}
+      className={cn(BUTTON_BASE, className)}
+    >
+      {icon}
+      {t(`actions.${action}`, { count })}
+    </button>
   );
 }

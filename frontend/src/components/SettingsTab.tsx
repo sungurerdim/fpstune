@@ -6,6 +6,7 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { type TweakRow } from "./TweakRows";
 import { TweakBands } from "./TweakBands";
 import { ScopeActions } from "./ScopeActions";
+import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { isSoftwareTweak } from "../lib/tweakDomain";
 import { isTweakSuboptimal } from "../lib/tweakStatus";
 import { DetectionNotice } from "./DetectionNotice";
@@ -231,20 +232,23 @@ function CategorySection({ group, icon: Icon }: { group: CategoryGroup; icon: Lu
         group.toFix > 0 ? "border-warning/30 bg-warning/4" : "border-border",
       )}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <Icon className="h-4 w-4 text-primary/80" aria-hidden />
-        <h2 id={headingId} className="text-sm font-semibold text-foreground">
-          {group.category.displayName}
-        </h2>
-        <span className="text-xs text-muted-foreground">
-          {t("settings.groupCount", { toFix: group.toFix, total: group.rows.length })}
-        </span>
-        <ScopeActions
-          settings={group.settings}
-          name={group.category.displayName}
-          className="ml-auto"
-        />
-      </div>
+      <ScopeHeader
+        level={2}
+        headingId={headingId}
+        icon={<Icon className="h-4 w-4 text-primary/80" aria-hidden />}
+        title={group.category.displayName}
+        metrics={
+          <MetricList>
+            <Metric
+              tone={group.toFix > 0 ? "attention" : "ok"}
+              value={group.toFix}
+              label={t("metric.toFix")}
+            />
+            <Metric value={group.rows.length} label={t("metric.total")} />
+          </MetricList>
+        }
+        actions={<ScopeActions settings={group.settings} name={group.category.displayName} />}
+      />
       <TweakBands rows={group.rows} />
     </section>
   );

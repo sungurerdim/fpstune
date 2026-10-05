@@ -21,7 +21,7 @@
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent } from "@testing-library/react";
-import { render, screen, within } from "../../test/utils";
+import { metricChip, render, screen, within } from "../../test/utils";
 import { DeviceCard, DeviceCardCompact } from "../hardware/DeviceCard";
 import { Monitor } from "lucide-react";
 import { useStore } from "../../store";
@@ -151,8 +151,8 @@ describe("DeviceCard", () => {
       setStore([FIXABLE, ADVISORY]);
       render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      expect(screen.getByText("1 to apply")).toBeInTheDocument();
-      expect(screen.getByText("1 need you")).toBeInTheDocument();
+      expect(metricChip("1 to apply")).toBeInTheDocument();
+      expect(metricChip("1 need you")).toBeInTheDocument();
     });
 
     it("leaves advisories out of the device's Apply", () => {
@@ -213,7 +213,7 @@ describe("DeviceCard", () => {
       setStore([FIXABLE, IDEAL]);
       render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      expect(screen.getByText("1 to apply")).toBeInTheDocument();
+      expect(metricChip("1 to apply")).toBeInTheDocument();
     });
 
     it("says so plainly when nothing needs doing", () => {
@@ -296,7 +296,43 @@ describe("DeviceCard", () => {
       const card = screen.getByRole("region", { name: "GPU" });
       expect(card).toHaveAttribute("data-tone", "attention");
       // Colour is never the only signal.
-      expect(within(card).getByText("1 to apply")).toBeInTheDocument();
+      expect(metricChip("1 to apply", card)).toBeInTheDocument();
+    });
+
+    it("keeps the model, its kind and its counts apart instead of running them together", () => {
+      // The reported card read "NVIDIA GeForce RTX 3070 Laptop GPU / Ekran Kartı /
+      // Uygulanacak 9 / 1 senden işlem bekliyor" as one stream.
+      setStore([FIXABLE, ADVISORY]);
+      render(
+        <DeviceCard
+          deviceKey="gpu-0"
+          icon={Monitor}
+          title="NVIDIA GeForce RTX 3070 Laptop GPU"
+          kind="Graphics card"
+          match={matchAll}
+        />,
+      );
+
+      const card = screen.getByRole("region", { name: "NVIDIA GeForce RTX 3070 Laptop GPU" });
+      const heading = within(card).getByRole("heading", { level: 3 });
+      expect(heading).toHaveTextContent(/^NVIDIA GeForce RTX 3070 Laptop GPU$/);
+      // The kind sits right under the title, outside it.
+      expect(heading.nextElementSibling).toHaveTextContent(/^Graphics card$/);
+      // Each count is its own chip, number first.
+      const chips = within(card)
+        .getAllByRole("listitem")
+        .map((li) => li.textContent);
+      expect(chips).toEqual(["1 to apply", "1 need you"]);
+    });
+
+    it("always draws the device's Apply in its header, disabled when there is nothing to apply", () => {
+      setStore([IDEAL]);
+      render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
+
+      const card = screen.getByRole("region", { name: "GPU" });
+      expect(
+        within(card).getByRole("button", { name: "Apply: nothing to apply in GPU" }),
+      ).toBeDisabled();
     });
 
     it("draws a device with nothing to tune grey, and says so", () => {

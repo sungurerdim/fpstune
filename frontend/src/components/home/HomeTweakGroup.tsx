@@ -3,6 +3,7 @@ import { useT } from "../../i18n";
 import { cn } from "../../lib/utils";
 import type { Setting } from "../../types/setting";
 import { Card } from "../ui/Card";
+import { Metric, MetricList, ScopeHeader } from "../ui/ScopeHeader";
 import { ScopeActions } from "../ScopeActions";
 import { TweakListRow } from "../TweakListRow";
 
@@ -10,25 +11,22 @@ export type DomainAccent = "hardware" | "software" | "game";
 
 const DOMAIN_STYLE: Record<
   DomainAccent,
-  { card: string; header: string; title: string; count: string }
+  { card: string; header: string; title: string }
 > = {
   hardware: {
     card: "border-l-4 border-l-domain-hardware",
     header: "bg-domain-hardware/10 border-domain-hardware/20",
     title: "text-domain-hardware",
-    count: "bg-domain-hardware/15 text-domain-hardware",
   },
   software: {
     card: "border-l-4 border-l-domain-software",
     header: "bg-domain-software/10 border-domain-software/20",
     title: "text-domain-software",
-    count: "bg-domain-software/15 text-domain-software",
   },
   game: {
     card: "border-l-4 border-l-domain-game",
     header: "bg-domain-game/10 border-domain-game/20",
     title: "text-domain-game",
-    count: "bg-domain-game/15 text-domain-game",
   },
 };
 
@@ -67,33 +65,31 @@ export function TweakGroup({
   const style = DOMAIN_STYLE[accent];
   return (
     <Card className={cn("flex flex-col", style.card)} data-domain={accent}>
-      <div
-        className={cn(
-          "flex items-center justify-between p-3 border-b border-border",
-          style.header,
-        )}
-      >
-        <div className="flex items-center gap-2 min-w-0">
-          {icon}
-          <h2 className={cn("font-semibold text-sm", style.title)}>{title}</h2>
-          <span
-            className={cn(
-              "text-xs font-semibold px-1.5 py-0.5 rounded",
-              style.count,
+      <ScopeHeader
+        level={2}
+        icon={icon}
+        title={title}
+        titleClassName={style.title}
+        kind={subtitle}
+        className={cn("border-b border-border p-3", style.header)}
+        metrics={
+          <MetricList>
+            <Metric
+              tone={settings.length > 0 ? "attention" : "neutral"}
+              value={settings.length}
+              label={t("metric.toApply")}
+            />
+            {detecting && (
+              <Metric
+                label={t("devices.reading")}
+                icon={<Loader2 className="h-3 w-3 animate-spin" aria-hidden />}
+              />
             )}
-          >
-            {settings.length}
-          </span>
-          {detecting && (
-            <Loader2 className="w-3.5 h-3.5 animate-spin text-muted-foreground" />
-          )}
-          <span className="text-xs text-foreground/80 truncate hidden sm:inline">
-            {subtitle}
-          </span>
-        </div>
-        {/* The same Apply every scope has, counted and confirmed the same way. */}
-        <ScopeActions settings={settings} name={title} only={["apply"]} className="shrink-0" />
-      </div>
+          </MetricList>
+        }
+        /* The same Apply every scope has, counted and confirmed the same way. */
+        actions={<ScopeActions settings={settings} name={title} only={["apply"]} />}
+      />
       {settings.length === 0 ? (
         // An empty group means two different things, and saying the wrong one is a
         // false claim: while detection runs nothing has been read yet, so "already

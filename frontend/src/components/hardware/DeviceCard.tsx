@@ -7,6 +7,7 @@ import { useDeviceTweaks } from "../../hooks/useDeviceTweaks";
 import type { Setting } from "../../types/setting";
 import { ScopeActions } from "../ScopeActions";
 import { TweakBands } from "../TweakBands";
+import { Metric, MetricList, ScopeHeader } from "../ui/ScopeHeader";
 import type { TweakRow } from "../TweakRows";
 import { deviceCardId } from "./devices";
 
@@ -66,24 +67,21 @@ export function DeviceCard({
         EDGE[tone],
       )}
     >
-      <div className="flex flex-wrap items-start gap-2">
-        <Icon className="mt-0.5 h-4 w-4 shrink-0 text-primary/80" aria-hidden />
-        <div className="min-w-0 flex-1">
-          <h3 id={headingId} className="truncate text-sm font-medium" title={title}>
-            {title}
-          </h3>
-          <p className="text-xs text-muted-foreground">
-            {[kind, summary].filter(Boolean).join(" · ")}
-          </p>
+      <ScopeHeader
+        headingId={headingId}
+        icon={<Icon className="h-4 w-4 text-primary/80" aria-hidden />}
+        title={title}
+        kind={[kind, summary].filter(Boolean).join(" · ") || undefined}
+        metrics={
           <DeviceStatus
             tone={tone}
             toApply={tweaks.toApply}
             advisories={tweaks.advisories}
             reading={detecting && tweaks.settings.length === 0}
           />
-        </div>
-        <ScopeActions settings={tweaks.settings} name={title} />
-      </div>
+        }
+        actions={<ScopeActions settings={tweaks.settings} name={title} />}
+      />
       {children && <div className="space-y-1 text-sm">{children}</div>}
       {rows.length > 0 && <TweakBands rows={rows} />}
       {rows.length === 0 && !detecting && match && (
@@ -121,21 +119,29 @@ export function DeviceCardCompact({
     <section
       aria-label={title}
       data-tone="attention"
-      className={cn("flex flex-wrap items-center gap-2 rounded-lg border border-border border-l-4 bg-card px-3 py-2", EDGE.attention)}
+      className={cn("rounded-lg border border-border border-l-4 bg-card px-3 py-2", EDGE.attention)}
     >
-      <Icon className="h-4 w-4 shrink-0 text-primary/80" aria-hidden />
-      <button
-        type="button"
-        onClick={open}
-        aria-label={t("device.open", { name: title })}
-        className="flex min-w-0 flex-1 items-center gap-1 text-left text-sm hover:underline"
-      >
-        <span className="truncate font-medium">{title}</span>
-        {kind && <span className="shrink-0 text-xs text-muted-foreground">{kind}</span>}
-        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
-      </button>
-      <span className="text-xs text-warning">{t("device.toApply", { count: tweaks.toApply })}</span>
-      <ScopeActions settings={tweaks.settings} name={title} only={["apply"]} />
+      <ScopeHeader
+        icon={<Icon className="h-4 w-4 text-primary/80" aria-hidden />}
+        title={
+          <button
+            type="button"
+            onClick={open}
+            aria-label={t("device.open", { name: title })}
+            className="flex max-w-full items-center gap-1 text-left hover:underline"
+          >
+            <span className="truncate">{title}</span>
+            <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+          </button>
+        }
+        kind={kind}
+        metrics={
+          <MetricList>
+            <Metric tone="attention" value={tweaks.toApply} label={t("metric.toApply")} />
+          </MetricList>
+        }
+        actions={<ScopeActions settings={tweaks.settings} name={title} only={["apply"]} />}
+      />
     </section>
   );
 }
@@ -163,30 +169,52 @@ function DeviceStatus({
   reading: boolean;
 }) {
   const { t } = useT();
-  if (reading) return <p className="text-xs text-muted-foreground">{t("devices.reading")}</p>;
+  if (reading) {
+    return (
+      <MetricList>
+        <Metric label={t("devices.reading")} />
+      </MetricList>
+    );
+  }
   if (tone === "none") {
     return (
-      <p className="flex items-center gap-1 text-xs text-muted-foreground">
-        <CircleSlash className="h-3 w-3" aria-hidden />
-        {t("device.noTweaks")}
-      </p>
+      <MetricList>
+        <Metric
+          label={t("device.noTweaks")}
+          icon={<CircleSlash className="h-3 w-3" aria-hidden />}
+        />
+      </MetricList>
     );
   }
   if (tone === "ok") {
     return (
-      <p className="flex items-center gap-1 text-xs text-success">
-        <CircleCheck className="h-3 w-3" aria-hidden />
-        {t("device.ideal")}
-      </p>
+      <MetricList>
+        <Metric
+          tone="ok"
+          label={t("device.ideal")}
+          icon={<CircleCheck className="h-3 w-3" aria-hidden />}
+        />
+      </MetricList>
     );
   }
   return (
-    <p className="flex flex-wrap items-center gap-x-2 text-xs text-warning">
-      <Wrench className="h-3 w-3" aria-hidden />
-      {toApply > 0 && <span>{t("device.toApply", { count: toApply })}</span>}
-      {advisories > 0 && (
-        <span title={t("devices.advisoryHint")}>{t("devices.needYou", { count: advisories })}</span>
+    <MetricList>
+      {toApply > 0 && (
+        <Metric
+          tone="attention"
+          value={toApply}
+          label={t("metric.toApply")}
+          icon={<Wrench className="h-3 w-3" aria-hidden />}
+        />
       )}
-    </p>
+      {advisories > 0 && (
+        <Metric
+          tone="advisory"
+          value={advisories}
+          label={t("metric.needYou")}
+          title={t("devices.advisoryHint")}
+        />
+      )}
+    </MetricList>
   );
 }

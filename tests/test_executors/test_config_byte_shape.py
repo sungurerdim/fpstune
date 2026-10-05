@@ -76,8 +76,6 @@ class TestNoWriterBypassesTheHelper:
             "mw3_options_toggle",
             "mw3_pause_rendering_toggle",
             "mw3_texture_toggle",
-            "steam_config_vdf_toggle",
-            "steam_localconfig_vdf_toggle",
         }
         actual = {
             name

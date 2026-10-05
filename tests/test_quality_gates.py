@@ -753,7 +753,7 @@ class TestDuplicationCeiling:
     """
 
     _STEAM_PATTERN = r"Valve.{1,4}Steam"
-    _STEAM_CEILING = 24
+    _STEAM_CEILING = 20
     _DEVMODE_CEILING = 0
 
     def _counts(self) -> tuple[int, int]:
@@ -903,7 +903,6 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/definitions/game_configs.py", "-DisplayName 'fpstune-"): (
             "fpstune's own firewall rule name"
         ),
-        ("src/fpstune/settings/definitions/launchers.py", "$c -match"): _GAME_TEXT,
         ("src/fpstune/settings/definitions/launchers.py", "cef-disable-gpu"): (
             "Steam's own launch option"
         ),

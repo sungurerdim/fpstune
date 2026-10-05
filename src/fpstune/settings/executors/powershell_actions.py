@@ -1346,45 +1346,6 @@ ACTION_COMMANDS: dict[str, str] = {
             Write-Output 'Hibernation enabled'
         }
     """,
-    # Steam config.vdf toggle - modifies global Steam config
-    "steam_config_vdf_toggle": _CONFIG_IO_HELPERS
-    + r"""
-        $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
-        if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
-        if (-not $sp) { Write-Output 'not_installed'; exit 0 }
-        $vdfPath = Join-Path $sp 'config\config.vdf'
-        if (-not (Test-Path $vdfPath)) { Write-Output 'not_installed'; exit 0 }
-        $key = '%key%'; $newVal = '%value%'
-        $c = Read-ConfigText $vdfPath
-        $escaped = [regex]::Escape($key)
-        if ($c -match ('"' + $escaped + '"')) {
-            $c = [regex]::Replace($c, '("' + $escaped + '"\s+)"[^"]*"', "`$1`"$newVal`"")
-        } else {
-            $c = [regex]::Replace($c, '("Steam"\s*\n\s*\{)', "`$1`n`t`t`t`t`"$key`"`t`t`t`"$newVal`"")
-        }
-        Write-ConfigText $vdfPath $c
-        Write-Output 'ok'
-    """,
-    # Steam localconfig.vdf toggle - modifies per-user Steam config (most-recent user)
-    "steam_localconfig_vdf_toggle": _CONFIG_IO_HELPERS
-    + r"""
-        $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath
-        if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\SOFTWARE\WOW6432Node\Valve\Steam' -Name 'InstallPath' -EA SilentlyContinue).InstallPath }
-        if (-not $sp) { Write-Output 'not_installed'; exit 0 }
-        $lcfg = Get-ChildItem "$sp\userdata\*\config\localconfig.vdf" -EA SilentlyContinue |
-                Sort-Object LastWriteTime -Descending | Select-Object -First 1
-        if (-not $lcfg) { Write-Output 'not_installed'; exit 0 }
-        $key = '%key%'; $newVal = '%value%'
-        $c = Read-ConfigText $lcfg.FullName
-        $escaped = [regex]::Escape($key)
-        if ($c -match ('"' + $escaped + '"')) {
-            $c = [regex]::Replace($c, '("' + $escaped + '"\s+)"[^"]*"', "`$1`"$newVal`"")
-        } else {
-            $c = [regex]::Replace($c, '("system"\s*\n\s*\{)', "`$1`n`t`t`t`"$key`"`t`t`t`"$newVal`"")
-        }
-        Write-ConfigText $lcfg.FullName $c
-        Write-Output 'ok'
-    """,
     # Steam CEF (browser) GPU compositing toggle - disables GPU in Steam UI for lower overhead
     "steam_cef_toggle": r"""
         $action = '%value%'
@@ -1551,14 +1512,6 @@ _MUTEX_GROUPS: dict[str, list[str]] = {
     # may target this same file (e.g. FOV, Brightness), so serialize defensively.
     "Global\\fpstune-mw3-gamerprofile-cst": [
         "mw3_texture_toggle",
-    ],
-    # Steam config.vdf — generic toggle keyed by setting; serialize all writes.
-    "Global\\fpstune-steam-config-vdf": [
-        "steam_config_vdf_toggle",
-    ],
-    # Steam localconfig.vdf (per-app launch options).
-    "Global\\fpstune-steam-localconfig-vdf": [
-        "steam_localconfig_vdf_toggle",
     ],
 }
 

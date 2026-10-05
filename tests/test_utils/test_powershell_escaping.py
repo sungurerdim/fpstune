@@ -145,8 +145,6 @@ class TestRealActionCommands:
         [
             "mw3_options_toggle",
             "hots_variable_set",
-            "steam_config_vdf_toggle",
-            "steam_localconfig_vdf_toggle",
         ],
     )
     def test_breakout_value_stays_inside_the_literal(self, action_key):

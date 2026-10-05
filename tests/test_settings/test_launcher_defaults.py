@@ -16,7 +16,7 @@ from fpstune.settings.definitions.launchers import (
 def test_downloads_during_gameplay_stock_is_off() -> None:
     assert STEAM_DOWNLOADS_DURING_GAMEPLAY.default_value == "disabled"
     # An absent key is Steam's default, so it must read as off.
-    assert "} else { Write-Output 'disabled' }" in STEAM_DOWNLOADS_DURING_GAMEPLAY.detect_command
+    assert STEAM_DOWNLOADS_DURING_GAMEPLAY.detect_args["absent"] == "disabled"
 
 
 def test_download_throttle_stock_is_no_cap() -> None:

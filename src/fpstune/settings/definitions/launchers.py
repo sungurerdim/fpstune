@@ -27,12 +27,6 @@ _BNET_DOWNLOAD_LIMIT = "Client.Install.DownloadLimitNextPatchInBps"
 
 # === Steam Path Detection Helper ===
 # Reused in all Steam detect commands
-_STEAM_PATH_PS = (
-    "$sp = (Get-ItemProperty 'HKLM:\\SOFTWARE\\Valve\\Steam' "
-    "-Name 'InstallPath' -EA SilentlyContinue).InstallPath; "
-    "if (-not $sp) { $sp = (Get-ItemProperty 'HKLM:\\SOFTWARE\\WOW6432Node\\Valve\\Steam' "
-    "-Name 'InstallPath' -EA SilentlyContinue).InstallPath }; "
-)
 
 # === Steam Settings ===
 
@@ -59,20 +53,18 @@ STEAM_DOWNLOADS_DURING_GAMEPLAY = SettingExecutor(
     effect="Prevents Steam from downloading during active gaming sessions",
     impact_scores={"fps_1_percent_low": "+0-3%", "latency_ms": -3, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        "$vdf = Join-Path $sp 'config\\config.vdf'; "
-        "if (-not (Test-Path $vdf)) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($vdf, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"AllowDownloadsDuringGameplay"\\s+"([^"]+)"\') { '
-        "if ($Matches[1] -eq '0') { Write-Output 'disabled' } else { Write-Output 'enabled' } "
-        "} else { Write-Output 'disabled' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "config",
+        "key": "AllowDownloadsDuringGameplay",
+        "map": {"0": "disabled"},
+        "otherwise": "enabled",
+        "absent": "disabled",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_config_vdf_toggle",
-    apply_args={"key": "AllowDownloadsDuringGameplay"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "config", "key": "AllowDownloadsDuringGameplay"},
     apply_value_map={"disabled": "0", "enabled": "1"},
 )
 
@@ -96,21 +88,18 @@ STEAM_OVERLAY = SettingExecutor(
     effect="Disabling Steam overlay reduces process hook overhead",
     impact_scores={"fps_cpu_bound": "+0-2%", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        '$lcfg = Get-ChildItem "$sp\\userdata\\*\\config\\localconfig.vdf" -EA SilentlyContinue | '
-        "Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
-        "if (-not $lcfg) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($lcfg.FullName, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"EnableGameOverlay"\\s+"([^"]+)"\') { '
-        "if ($Matches[1] -eq '0') { Write-Output 'disabled' } else { Write-Output 'enabled' } "
-        "} else { Write-Output 'enabled' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "localconfig",
+        "key": "EnableGameOverlay",
+        "map": {"0": "disabled"},
+        "otherwise": "enabled",
+        "absent": "enabled",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_localconfig_vdf_toggle",
-    apply_args={"key": "EnableGameOverlay"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "localconfig", "key": "EnableGameOverlay"},
     apply_value_map={"disabled": "0", "enabled": "1"},
 )
 
@@ -178,21 +167,18 @@ STEAM_SHADER_PRECACHE = SettingExecutor(
     effect="Pre-cached shaders prevent in-game compilation micro-stutters",
     impact_scores={"fps_1_percent_low": "+0-2%", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        '$lcfg = Get-ChildItem "$sp\\userdata\\*\\config\\localconfig.vdf" -EA SilentlyContinue | '
-        "Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
-        "if (-not $lcfg) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($lcfg.FullName, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"DisableShaderCache"\\s+"([^"]+)"\') { '
-        "if ($Matches[1] -eq '1') { Write-Output 'disabled' } else { Write-Output 'enabled' } "
-        "} else { Write-Output 'enabled' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "localconfig",
+        "key": "DisableShaderCache",
+        "map": {"1": "disabled"},
+        "otherwise": "enabled",
+        "absent": "enabled",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_localconfig_vdf_toggle",
-    apply_args={"key": "DisableShaderCache"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "localconfig", "key": "DisableShaderCache"},
     # DisableShaderCache=1 means caching is DISABLED, so invert
     apply_value_map={"enabled": "0", "disabled": "1"},
 )
@@ -221,22 +207,18 @@ STEAM_BROADCAST = SettingExecutor(
     effect="Disabling Steam broadcasting removes background encode CPU overhead",
     impact_scores={"fps_cpu_bound": "+0-1%", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        '$lcfg = Get-ChildItem "$sp\\userdata\\*\\config\\localconfig.vdf" -EA SilentlyContinue | '
-        "Sort-Object LastWriteTime -Descending | Select-Object -First 1; "
-        "if (-not $lcfg) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($lcfg.FullName, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"BroadcastPermission"\\s+"([^"]+)"\') { '
-        "$v = $Matches[1]; "
-        "switch ($v) { '0' { 'disabled' } '2' { 'friends_only' } '4' { 'public' } default { 'friends_only' } } "
-        "} else { Write-Output 'friends_only' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "localconfig",
+        "key": "BroadcastPermission",
+        "map": {"0": "disabled", "2": "friends_only", "4": "public"},
+        "otherwise": "friends_only",
+        "absent": "friends_only",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_localconfig_vdf_toggle",
-    apply_args={"key": "BroadcastPermission"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "localconfig", "key": "BroadcastPermission"},
     apply_value_map={"disabled": "0", "friends_only": "2", "public": "4"},
 )
 
@@ -305,21 +287,18 @@ STEAM_DOWNLOAD_THROTTLE = SettingExecutor(
     effect="Removes Steam download speed throttle for maximum download speed",
     impact_scores={"throughput": "high", "latency_ms": 0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        "$vdf = Join-Path $sp 'config\\config.vdf'; "
-        "if (-not (Test-Path $vdf)) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($vdf, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"DownloadThrottleKbps"\\s+"([^"]+)"\') { '
-        "$v = $Matches[1]; "
-        "if ($v -eq '-1' -or $v -eq '0') { Write-Output 'unlimited' } else { Write-Output 'limited' } "
-        "} else { Write-Output 'unlimited' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "config",
+        "key": "DownloadThrottleKbps",
+        "map": {"-1": "unlimited", "0": "unlimited"},
+        "otherwise": "limited",
+        "absent": "unlimited",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_config_vdf_toggle",
-    apply_args={"key": "DownloadThrottleKbps"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "config", "key": "DownloadThrottleKbps"},
     apply_value_map={"unlimited": "-1", "limited": "10240"},
 )
 
@@ -347,20 +326,18 @@ STEAM_STREAMING_THROTTLE = SettingExecutor(
     effect="Removes Steam Remote Play bandwidth throttle",
     impact_scores={"throughput": "high", "latency_ms": 0, "stability": "improved"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        _STEAM_PATH_PS + "if (-not $sp) { Write-Output 'not_installed'; return }; "
-        "$vdf = Join-Path $sp 'config\\config.vdf'; "
-        "if (-not (Test-Path $vdf)) { Write-Output 'not_installed'; return }; "
-        "$c = [System.IO.File]::ReadAllText($vdf, [System.Text.Encoding]::UTF8); "
-        'if ($c -match \'"StreamingThrottleEnabled"\\s+"([^"]+)"\') { '
-        "if ($Matches[1] -eq '0') { Write-Output 'disabled' } else { Write-Output 'enabled' } "
-        "} else { Write-Output 'enabled' }"
-    ),
-    detect_args={},
+    detect_command="steam_vdf_read",
+    detect_args={
+        "scope": "config",
+        "key": "StreamingThrottleEnabled",
+        "map": {"0": "disabled"},
+        "otherwise": "enabled",
+        "absent": "enabled",
+    },
     value_map={},
     apply_type=DetectType.POWERSHELL,
-    apply_command="steam_config_vdf_toggle",
-    apply_args={"key": "StreamingThrottleEnabled"},
+    apply_command="steam_vdf_write",
+    apply_args={"scope": "config", "key": "StreamingThrottleEnabled"},
     apply_value_map={"disabled": "0", "enabled": "1"},
 )
 

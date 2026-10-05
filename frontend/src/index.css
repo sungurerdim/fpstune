@@ -85,6 +85,7 @@
  */
 @layer base {
   :root {
+    color-scheme: light;
     --background: 0 0% 100%;
     --foreground: 222.2 84% 4.9%;
     --card: 0 0% 100%;
@@ -92,40 +93,43 @@
     --card-foreground: 222.2 84% 4.9%;
     --popover: 0 0% 100%;
     --popover-foreground: 222.2 84% 4.9%;
-    --primary: 217.2 91.2% 52%;
+    --primary: 217.2 91.2% 43%;
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
     --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted-foreground: 215.4 16.3% 45%;
     --accent: 210 40% 96.1%;
     --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 72% 45%;
+    --destructive: 0 72% 41%;
     --destructive-foreground: 210 40% 98%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
     --ring: 221.2 83.2% 53.3%;
-    --success: 142 76% 30%;
-    /* 33% lightness, not 40: the axe run measured 40% orange at 3.6:1 on
-       white — under WCAG AA's 4.5. */
-    --warning: 35 92% 33%;
+    --success: 142 76% 24%;
+    /* 28% lightness: the axe run measured 40% orange at 3.6:1 on white, and
+       33% still fell under AA (4.5) once it sat on its own 20% tint, which is
+       where every status chip draws it. theme.test.ts pins the contrast of
+       every text token on every surface it is drawn on, in both themes. */
+    --warning: 35 92% 28%;
     --warning-foreground: 38 92% 96%;
-    --score-low: 0 62.8% 45%;
-    --score-mid: 35 92% 33%;
-    --score-high: 142 76% 30%;
+    --score-low: 0 62.8% 42%;
+    --score-mid: 35 92% 28%;
+    --score-high: 142 76% 24%;
     /* Where a tweak lives — Home's three groups. Teal, indigo and fuchsia sit
        apart from each other and from every outcome colour (success green,
        warning amber, destructive red, primary blue), so a group is told by hue
        before its heading is read. Same contrast floor as --warning. */
-    --domain-hardware: 175 70% 28%;
+    --domain-hardware: 175 70% 24%;
     --domain-software: 250 60% 48%;
-    --domain-game: 305 65% 40%;
+    --domain-game: 305 65% 38%;
     --scrollbar-track: 210 40% 94%;
     --scrollbar-thumb: 215 20% 75%;
     --scrollbar-thumb-hover: 215 20% 60%;
   }
 
   .dark {
+    color-scheme: dark;
     --background: 222.2 84% 4.9%;
     --foreground: 210 40% 98%;
     --card: 222.2 84% 6.5%;
@@ -133,7 +137,7 @@
     --card-foreground: 210 40% 98%;
     --popover: 222.2 84% 4.9%;
     --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
+    --primary: 217.2 91.2% 63%;
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -141,17 +145,17 @@
     --muted-foreground: 215 20.2% 65.1%;
     --accent: 217.2 32.6% 17.5%;
     --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive: 0 62.8% 64%;
+    --destructive-foreground: 222.2 84% 4.9%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
     --ring: 224.3 76.3% 48%;
-    --success: 142 76% 36%;
+    --success: 142 76% 38%;
     --warning: 38 92% 50%;
     --warning-foreground: 38 92% 10%;
-    --score-low: 0 62.8% 50%;
+    --score-low: 0 62.8% 64%;
     --score-mid: 38 92% 50%;
-    --score-high: 142 76% 36%;
+    --score-high: 142 76% 38%;
     --domain-hardware: 175 65% 52%;
     --domain-software: 250 85% 74%;
     --domain-game: 305 75% 70%;

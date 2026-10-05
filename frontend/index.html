@@ -1,22 +1,20 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <!-- Theme before first paint: an explicit choice (localStorage) wins,
-         otherwise the OS preference decides. The class="dark" above is only
-         the pre-script default, so a light-mode user never sees a dark
-         flash inverted — the script runs before any CSS applies to content. -->
+    <!-- Theme before first paint: light unless the user chose dark. Only the
+         explicit choice (localStorage) moves it; the OS preference is not read.
+         The script runs before any CSS applies to content, so a dark-theme user
+         never sees a light flash. lib/theme.ts applies the same rule afterwards,
+         and theme.test.ts runs this very script against it. -->
     <script>
       (function () {
         try {
-          var stored = localStorage.getItem("fpstune-theme");
-          var dark =
-            stored === "dark" ||
-            (stored !== "light" &&
-              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          var dark = localStorage.getItem("fpstune-theme") === "dark";
           document.documentElement.classList.toggle("dark", dark);
+          document.documentElement.style.colorScheme = dark ? "dark" : "light";
         } catch (e) {
-          /* storage blocked: keep the dark default */
+          /* storage blocked: keep the light default */
         }
       })();
     </script>

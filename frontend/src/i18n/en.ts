@@ -136,6 +136,8 @@ export const en = {
 
   // Locale switch — names the language it would switch TO, in that language.
   "locale.switch": "Switch to English",
+  "theme.toDark": "Switch to dark theme",
+  "theme.toLight": "Switch to light theme",
 
   // Common actions
   "action.apply": "Apply",

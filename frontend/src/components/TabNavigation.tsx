@@ -21,6 +21,7 @@ import { useStore, type TabId } from "../store";
 import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
 import { ActivityLog } from "./ActivityLog";
 import { UpdateControl } from "./UpdateControl";
+import { ThemeToggle } from "./ThemeToggle";
 import { tabButtonId, tabPanelId } from "./ui/tabIds";
 
 // Order follows what the user does, not what the app builds: tune the software,
@@ -213,6 +214,7 @@ export function TabNavigation() {
           >
             {locale === "en" ? "TR" : "EN"}
           </button>
+          <ThemeToggle />
         </div>
       </div>
     </div>

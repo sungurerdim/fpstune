@@ -131,6 +131,8 @@ export const tr: Record<keyof typeof en, string> = {
 
   // Locale switch
   "locale.switch": "Türkçeye geç",
+  "theme.toDark": "Koyu temaya geç",
+  "theme.toLight": "Açık temaya geç",
 
   // Common actions
   "action.apply": "Uygula",

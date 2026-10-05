@@ -32,6 +32,7 @@ from fpstune.benchmark.presentmon import (
     OPTIONAL_TRACKING_FLAGS,
     PresentMonBenchmark,
 )
+from fpstune.utils import process_watch
 
 _HELP_2_5_1 = """PresentMon 2.5.1
 
@@ -64,10 +65,19 @@ def _bench(tmp_path: Path) -> PresentMonBenchmark:
 
 
 def _with_help(text: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    def fake_run(_cmd, **_kwargs):
-        return subprocess.CompletedProcess(_cmd, 0, stdout=text.encode(), stderr=b"")
+    def fake_run(_cmd, *_args, **_kwargs):
+        return subprocess.CompletedProcess(_cmd, 0, stdout=text, stderr="")
 
-    monkeypatch.setattr(subprocess, "run", fake_run)
+    monkeypatch.setattr(process_watch, "run", fake_run)
+
+
+def _quick_tools(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Short helper tools answer at once, so only the capture reaches Popen."""
+
+    def fake_run(cmd, *_args, **_kwargs):
+        return subprocess.CompletedProcess(cmd, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(process_watch, "run", fake_run)
 
 
 def _capture(tmp_path: Path, header: str, rows: list[str]) -> Path:
@@ -110,10 +120,11 @@ class TestOnlyFlagsTheBuildAdmitsTo:
             return process
 
         monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        _quick_tools(monkeypatch)
         bench.start_capture(output_name="probe")
 
-        # The capture, not the `--help` probe that `subprocess.run` also
-        # starts through Popen on the way to it.
+        # The capture itself; the short tools on the way to it (`logman stop`)
+        # run through process_watch and are answered by `_quick_tools`.
         capture = next(cmd for cmd in started if "--output_file" in cmd)
         assert "--track_pc_latency" in capture
 
@@ -130,6 +141,7 @@ class TestOnlyFlagsTheBuildAdmitsTo:
             process.poll.return_value = None
             return process
 
+        # `_with_help` already answers every short tool at once.
         monkeypatch.setattr(subprocess, "Popen", fake_popen)
         bench.start_capture(process_name="game.exe", output_name="probe")
         return started[0]
@@ -181,7 +193,7 @@ class TestOnlyFlagsTheBuildAdmitsTo:
         def explode(*_args, **_kwargs):
             raise RuntimeError("the help probe fell over")
 
-        monkeypatch.setattr(subprocess, "run", explode)
+        monkeypatch.setattr(process_watch, "run", explode)
 
         assert bench.supported_tracking_flags() == []
 
@@ -191,11 +203,11 @@ class TestOnlyFlagsTheBuildAdmitsTo:
         bench = _bench(tmp_path)
         calls: list[int] = []
 
-        def fake_run(_cmd, **_kwargs):
+        def fake_run(_cmd, *_args, **_kwargs):
             calls.append(1)
-            return subprocess.CompletedProcess(_cmd, 0, stdout=_HELP_2_5_1.encode(), stderr=b"")
+            return subprocess.CompletedProcess(_cmd, 0, stdout=_HELP_2_5_1, stderr="")
 
-        monkeypatch.setattr(subprocess, "run", fake_run)
+        monkeypatch.setattr(process_watch, "run", fake_run)
         bench.supported_flags()
         bench.supported_flags()
 

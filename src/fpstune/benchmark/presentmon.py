@@ -27,6 +27,7 @@ from typing import Any
 
 from fpstune.benchmark.download import DownloadError, fetch_verified
 from fpstune.benchmark.result_store import ResultStore
+from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
 
@@ -82,8 +83,6 @@ OPTIONAL_TRACKING_FLAGS = ("--track_pc_latency", "--track_hw_measurements")
 #: the build's own `--help` lists it, like every optional flag.
 SESSION_TAKEOVER_FLAG = "--stop_existing_session"
 
-HELP_TIMEOUT_SECONDS = 15
-
 
 def file_sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -105,11 +104,8 @@ def stop_etw_session(name: str = SESSION_NAME) -> bool:
     from fpstune.utils.system_tools import system_tool
 
     try:
-        completed = subprocess.run(
-            [system_tool("logman.exe"), "stop", name, "-ets"],
-            capture_output=True,
-            timeout=15,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+        completed = process_watch.run(
+            [system_tool("logman.exe"), "stop", name, "-ets"], process_watch.QUERY
         )
     except (OSError, subprocess.SubprocessError):
         return False
@@ -613,14 +609,10 @@ class PresentMonBenchmark:
         flags: set[str] = set()
         if self.is_installed():
             try:
-                completed = subprocess.run(
-                    [str(self.presentmon_path), "--help"],
-                    capture_output=True,
-                    timeout=HELP_TIMEOUT_SECONDS,
-                    creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                completed = process_watch.run(
+                    [str(self.presentmon_path), "--help"], process_watch.QUERY
                 )
-                text = (completed.stdout or b"").decode("utf-8", errors="replace")
-                text += (completed.stderr or b"").decode("utf-8", errors="replace")
+                text = completed.stdout + completed.stderr
                 flags = set(re.findall(r"--[a-z0-9_]+", text))
             except Exception as exc:  # noqa: BLE001 - a help probe must never break a capture
                 # Deliberately every exception. This runs on the path to a

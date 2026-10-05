@@ -20,11 +20,10 @@ from __future__ import annotations
 import json
 import logging
 import os
-import subprocess
-import sys
 from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.system_tools import powershell_exe
 
@@ -244,14 +243,9 @@ Get-CimInstance -Namespace root\wmi -ClassName WmiMonitorID 2>$null | ForEach-Ob
     if ($parts.Count -ge 2) { "WMI=$($parts[1])" }
 }
 """
-    result = subprocess.run(  # noqa: S603 - fixed argv, constant script
+    result = process_watch.run(
         [powershell_exe(), "-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        encoding="utf-8",
-        errors="replace",
+        process_watch.QUERY,
     )
     wmi_ids: list[str] = []
     for line in result.stdout.splitlines():
@@ -266,14 +260,8 @@ def _registry_vram_mb() -> int | None:
     """The driver registry QWORD, independent of the nvidia-smi-first path."""
     from fpstune.utils.detect import _GPU_DETECT_PS
 
-    result = subprocess.run(  # noqa: S603 - fixed argv, constant script
-        [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
-        encoding="utf-8",
-        errors="replace",
+    result = process_watch.run(
+        [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS], process_watch.QUERY
     )
     for line in result.stdout.splitlines():
         if line.strip().startswith("VramBytes="):

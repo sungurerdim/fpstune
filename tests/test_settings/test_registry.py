@@ -137,14 +137,6 @@ class TestSettingsRegistryInitialization:
         assert len(categories) > 0
         assert len(categories) == len(set(categories)), "Categories should be unique"
 
-    def test_registry_custom_timeout(self) -> None:
-        """Registry should accept custom adapter discovery timeout."""
-        registry = SettingsRegistry(
-            discover_dynamic=False,
-            adapter_discovery_timeout=5.0,
-        )
-        assert registry._probes.adapter_discovery_timeout == 5.0
-
 
 class TestSettingsRegistryDynamic:
     """Tests for dynamic settings discovery."""

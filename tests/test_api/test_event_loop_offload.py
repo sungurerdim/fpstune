@@ -17,6 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
+from fpstune.safety.restore import RestoreOutcome
 
 
 @pytest.fixture
@@ -45,18 +46,17 @@ def _loop_recorder(record: dict[str, bool], result: Any) -> Any:
 
 
 class TestRestorePointOffload:
-    """PERF-15: Checkpoint-Computer (120 s timeout) blocked the loop."""
+    """PERF-15: Checkpoint-Computer, which can run for minutes, blocked the loop."""
 
     def test_create_restore_point_runs_off_the_event_loop(self, client: TestClient) -> None:
         record: dict[str, bool] = {}
         mock_rp = MagicMock()
         mock_rp.is_available = True
-        mock_rp.create_restore_point = MagicMock(side_effect=_loop_recorder(record, True))
+        mock_rp.create_restore_point = MagicMock(
+            side_effect=_loop_recorder(record, RestoreOutcome("created", "created"))
+        )
 
-        with (
-            patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp),
-            patch("fpstune.api.routes.safety.log_activity"),
-        ):
+        with patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp):
             response = client.post("/api/restore-point")
 
         assert response.status_code == 200

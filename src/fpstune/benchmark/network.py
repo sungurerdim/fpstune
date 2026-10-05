@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from fpstune.benchmark.result_store import ResultStore
+from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.system_tools import system_tool
 
@@ -265,12 +266,11 @@ class NetworkBenchmark:
 
         for i in range(count):
             try:
-                result = subprocess.run(
+                # `-w 1000` is the measurement's own loss threshold: ping exits
+                # by itself after it, so no outer deadline is needed.
+                result = process_watch.run(
                     [system_tool("PING.EXE"), "-n", "1", "-w", "1000", target],
-                    capture_output=True,
-                    text=True,
-                    timeout=2,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+                    process_watch.QUERY,
                 )
 
                 if result.returncode == 0:

@@ -15,7 +15,6 @@ from typing import Any
 from fastapi import APIRouter
 
 from fpstune.safety.restore import RestorePointManager
-from fpstune.utils.logger import log_activity
 
 router = APIRouter()
 
@@ -31,17 +30,7 @@ async def create_restore_point(description: str = "fpstune optimization") -> dic
             "message": "System Restore not available on this platform",
         }
 
-    # Checkpoint-Computer runs up to 120 s; inline it would block the event loop
-    # for every other request that long.
-    if await asyncio.to_thread(restore_mgr.create_restore_point, description):
-        log_activity("System restore point created", "success")
-        return {
-            "success": True,
-            "message": "System restore point created successfully",
-        }
-    else:
-        log_activity("Failed to create system restore point", "warning")
-        return {
-            "success": False,
-            "message": "Failed to create restore point. Check if System Restore is enabled.",
-        }
+    # Checkpoint-Computer can run for minutes; inline it would block the event
+    # loop for every other request that long. It logs its own outcome.
+    outcome = await asyncio.to_thread(restore_mgr.create_restore_point, description)
+    return {"success": outcome.kind == "created", "message": outcome.message}

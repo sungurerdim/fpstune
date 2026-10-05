@@ -23,13 +23,13 @@ from ctypes import wintypes
 from dataclasses import dataclass
 from pathlib import PureWindowsPath
 
+from fpstune.utils import process_watch
 from fpstune.utils.logger import get_logger
 from fpstune.utils.system_tools import system_tool
 
 logger = get_logger()
 
 _PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-_KILL_TIMEOUT_SECONDS = 15
 
 
 @dataclass(frozen=True)
@@ -123,11 +123,8 @@ def kill_pid_tree(pid: int) -> bool:
     if sys.platform != "win32":
         return False
     try:
-        completed = subprocess.run(
-            [system_tool("taskkill.exe"), "/PID", str(pid), "/T", "/F"],
-            capture_output=True,
-            timeout=_KILL_TIMEOUT_SECONDS,
-            creationflags=subprocess.CREATE_NO_WINDOW,
+        completed = process_watch.run(
+            [system_tool("taskkill.exe"), "/PID", str(pid), "/T", "/F"], process_watch.QUERY
         )
     except (OSError, subprocess.SubprocessError) as exc:
         logger.debug("Could not end process %s: %s", pid, exc)

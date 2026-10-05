@@ -25,6 +25,7 @@ import subprocess
 import sys
 from typing import TYPE_CHECKING, Any
 
+from fpstune.utils import process_watch
 from fpstune.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -168,12 +169,7 @@ def _restore_service(setting: SettingExecutor, raw: dict[str, Any]) -> tuple[boo
 
     sc = system_tool("sc.exe")
     try:
-        result = subprocess.run(
-            [sc, "config", service, "start=", mode],
-            capture_output=True,
-            timeout=30,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-        )
+        result = process_watch.run([sc, "config", service, "start=", mode], process_watch.CHANGE)
     except (OSError, subprocess.TimeoutExpired) as exc:
         return False, f"Could not run sc.exe for {service}: {exc}"
     if result.returncode != 0:

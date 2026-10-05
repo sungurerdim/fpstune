@@ -10,6 +10,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from fpstune.utils import process_watch
 from fpstune.utils.system_tools import system_tool
 
 
@@ -35,12 +36,15 @@ class Dism:
         """Check if DISM operations are available."""
         return self._available
 
-    def _run_dism(self, *args: str, timeout: int = 600) -> tuple[bool, str]:
-        """Run DISM command.
+    def _run_dism(self, *args: str) -> tuple[bool, str]:
+        """Run DISM command under the servicing stall rule.
+
+        Component servicing has long quiet phases, and stopping it mid-write can
+        damage the component store, so a stall is reported and DISM is left to
+        finish rather than killed at a fixed duration.
 
         Args:
             *args: DISM arguments.
-            timeout: Timeout in seconds (default: 10 minutes).
 
         Returns:
             Tuple of (success, output).
@@ -50,18 +54,12 @@ class Dism:
 
         try:
             # DISM requires elevation
-            result = subprocess.run(
-                [system_tool("Dism.exe"), "/Online", *args],
-                capture_output=True,
-                text=True,
-                timeout=timeout,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("Dism.exe"), "/Online", *args], process_watch.SERVICING
             )
             return result.returncode == 0, result.stdout + result.stderr
-        except subprocess.TimeoutExpired:
-            return False, "Operation timed out"
+        except subprocess.TimeoutExpired as e:
+            return False, str(e)
         except Exception as e:
             return False, str(e)
 
@@ -94,11 +92,7 @@ class Dism:
         winsxs_path = Path(system_root) / "WinSxS"
         initial_size = self._get_folder_size(winsxs_path)
 
-        success, output = self._run_dism(
-            "/Cleanup-Image",
-            "/StartComponentCleanup",
-            timeout=1800,  # 30 minutes max
-        )
+        success, output = self._run_dism("/Cleanup-Image", "/StartComponentCleanup")
 
         # Get final size
         final_size = self._get_folder_size(winsxs_path)

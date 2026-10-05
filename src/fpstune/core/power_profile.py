@@ -29,6 +29,7 @@ from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.definitions.power import POWER_SETTINGS
 from fpstune.settings.executors.powercfg import PowerCfgExecutor
 from fpstune.settings.hardware_context import build_hardware_context
+from fpstune.utils import process_watch
 from fpstune.utils.system_tools import system_tool
 
 logger = logging.getLogger(__name__)
@@ -99,15 +100,7 @@ class PowerProfileManager:
         plans: list[PowerPlan] = []
 
         try:
-            result = subprocess.run(
-                [system_tool("powercfg.exe"), "/list"],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
-            )
+            result = process_watch.run([system_tool("powercfg.exe"), "/list"], process_watch.QUERY)
 
             # Parse output - look for GUIDs and names
             # Format: Power Scheme GUID: xxxx-xxxx  (Name) *
@@ -203,14 +196,9 @@ class PowerProfileManager:
 
         try:
             # Step 1: Duplicate Balanced profile
-            result = subprocess.run(
+            result = process_watch.run(
                 [system_tool("powercfg.exe"), "/duplicatescheme", BALANCED_GUID],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+                process_watch.QUERY,
             )
 
             if result.returncode != 0:
@@ -236,7 +224,7 @@ class PowerProfileManager:
             # Step 2: Rename the profile. A plan left with its MUI name reads as
             # one of Windows' own and would never be recognised as fpstune's, so a
             # failed rename removes the plan rather than leaving a stray copy.
-            renamed = subprocess.run(
+            renamed = process_watch.run(
                 [
                     system_tool("powercfg.exe"),
                     "/changename",
@@ -244,18 +232,11 @@ class PowerProfileManager:
                     FPS_BALANCED_NAME,
                     FPS_BALANCED_DESCRIPTION,
                 ],
-                capture_output=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+                process_watch.QUERY,
             )
             if renamed.returncode != 0:
-                subprocess.run(
-                    [system_tool("powercfg.exe"), "/delete", new_guid],
-                    capture_output=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
+                process_watch.run(
+                    [system_tool("powercfg.exe"), "/delete", new_guid], process_watch.QUERY
                 )
                 return PowerProfileResult(
                     success=False,
@@ -324,14 +305,8 @@ class PowerProfileManager:
 
         # Activate the profile
         try:
-            result = subprocess.run(
-                [system_tool("powercfg.exe"), "/setactive", guid],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("powercfg.exe"), "/setactive", guid], process_watch.QUERY
             )
 
             if result.returncode == 0:
@@ -366,14 +341,8 @@ class PowerProfileManager:
             )
 
         try:
-            result = subprocess.run(
-                [system_tool("powercfg.exe"), "/setactive", BALANCED_GUID],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("powercfg.exe"), "/setactive", BALANCED_GUID], process_watch.QUERY
             )
 
             if result.returncode == 0:
@@ -421,14 +390,8 @@ class PowerProfileManager:
             self.revert()
 
         try:
-            result = subprocess.run(
-                [system_tool("powercfg.exe"), "/delete", guid],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("powercfg.exe"), "/delete", guid], process_watch.QUERY
             )
 
             if result.returncode == 0:

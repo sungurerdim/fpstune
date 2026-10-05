@@ -145,7 +145,9 @@ class TestListPlans:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_parses_three_standard_plans(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             plans = mgr.list_plans()
         assert len(plans) == 3
         names = {p.name for p in plans}
@@ -156,7 +158,9 @@ class TestListPlans:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_active_plan_marked_correctly(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             plans = mgr.list_plans()
         active = [p for p in plans if p.is_active]
         assert len(active) == 1
@@ -166,7 +170,9 @@ class TestListPlans:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_inactive_plans_not_marked_active(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             plans = mgr.list_plans()
         inactive = [p for p in plans if not p.is_active]
         assert len(inactive) == 2
@@ -174,7 +180,9 @@ class TestListPlans:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_guid_lowercased(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             plans = mgr.list_plans()
         for p in plans:
             assert p.guid == p.guid.lower()
@@ -183,7 +191,8 @@ class TestListPlans:
     def test_fps_balanced_detected(self) -> None:
         mgr = PowerProfileManager()
         with patch(
-            "subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED)
+            "fpstune.utils.process_watch.run",
+            return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED),
         ):
             plans = mgr.list_plans()
         names = {p.name for p in plans}
@@ -193,7 +202,8 @@ class TestListPlans:
     def test_fps_balanced_active(self) -> None:
         mgr = PowerProfileManager()
         with patch(
-            "subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED)
+            "fpstune.utils.process_watch.run",
+            return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED),
         ):
             plans = mgr.list_plans()
         fps = next(p for p in plans if p.name == "FPS Balanced")
@@ -202,7 +212,7 @@ class TestListPlans:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_empty_output_returns_empty_list(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout="")):
+        with patch("fpstune.utils.process_watch.run", return_value=_mock_run(stdout="")):
             plans = mgr.list_plans()
         assert plans == []
 
@@ -211,7 +221,9 @@ class TestListPlans:
         import subprocess
 
         mgr = PowerProfileManager()
-        with patch("subprocess.run", side_effect=subprocess.SubprocessError("fail")):
+        with patch(
+            "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("fail")
+        ):
             plans = mgr.list_plans()
         assert plans == []
 
@@ -231,7 +243,9 @@ class TestGetActivePlan:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_returns_active_plan(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             active = mgr.get_active_plan()
         assert active is not None
         assert active.name == "Balanced"
@@ -243,7 +257,7 @@ class TestGetActivePlan:
         output = """\
 Power Scheme GUID: 381b4222-f694-41f0-9685-ff5bb260df2e  (Balanced)
 """
-        with patch("subprocess.run", return_value=_mock_run(stdout=output)):
+        with patch("fpstune.utils.process_watch.run", return_value=_mock_run(stdout=output)):
             active = mgr.get_active_plan()
         assert active is None
 
@@ -263,7 +277,9 @@ class TestFindFpsBalanced:
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_returns_none_when_not_present(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             guid = mgr.find_fps_balanced()
         assert guid is None
 
@@ -271,7 +287,8 @@ class TestFindFpsBalanced:
     def test_returns_guid_when_present(self) -> None:
         mgr = PowerProfileManager()
         with patch(
-            "subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED)
+            "fpstune.utils.process_watch.run",
+            return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED),
         ):
             guid = mgr.find_fps_balanced()
         assert guid == "deadbeef-dead-beef-dead-beefdeadbeef"
@@ -280,7 +297,7 @@ class TestFindFpsBalanced:
     def test_cached_guid_is_returned_without_subprocess(self) -> None:
         mgr = PowerProfileManager()
         mgr._fps_balanced_guid = "cached-guid-value"
-        with patch("subprocess.run") as mock_run:
+        with patch("fpstune.utils.process_watch.run") as mock_run:
             guid = mgr.find_fps_balanced()
         assert guid == "cached-guid-value"
         mock_run.assert_not_called()
@@ -296,14 +313,17 @@ class TestIsFpsBalancedActive:
     def test_true_when_fps_balanced_active(self) -> None:
         mgr = PowerProfileManager()
         with patch(
-            "subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED)
+            "fpstune.utils.process_watch.run",
+            return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED),
         ):
             assert mgr.is_fps_balanced_active() is True
 
     @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
     def test_false_when_balanced_is_active(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
+        ):
             assert mgr.is_fps_balanced_active() is False
 
     def test_false_on_non_windows(self) -> None:
@@ -345,7 +365,7 @@ class TestCreate:
 
         call_count = {"n": 0}
 
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+        def run_side_effect(cmd: list[str], *_args: object, **_: object) -> MagicMock:
             call_count["n"] += 1
             if "/duplicatescheme" in cmd:
                 assert BALANCED_GUID in cmd
@@ -354,7 +374,7 @@ class TestCreate:
 
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
             patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
@@ -367,7 +387,7 @@ class TestCreate:
         mgr = PowerProfileManager()
         calls_seen: list[list[str]] = []
 
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+        def run_side_effect(cmd: list[str], *_args: object, **_: object) -> MagicMock:
             calls_seen.append(list(cmd))
             if "/duplicatescheme" in cmd:
                 return _mock_run(stdout=DUPLICATE_OUTPUT)
@@ -375,7 +395,7 @@ class TestCreate:
 
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
             patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             mgr.create()
@@ -391,7 +411,9 @@ class TestCreate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", return_value=_mock_run(returncode=1, stdout="")),
+            patch(
+                "fpstune.utils.process_watch.run", return_value=_mock_run(returncode=1, stdout="")
+            ),
         ):
             result = mgr.create()
         assert result.success is False
@@ -402,7 +424,10 @@ class TestCreate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", return_value=_mock_run(returncode=0, stdout="no guid here")),
+            patch(
+                "fpstune.utils.process_watch.run",
+                return_value=_mock_run(returncode=0, stdout="no guid here"),
+            ),
         ):
             result = mgr.create()
         assert result.success is False
@@ -412,14 +437,14 @@ class TestCreate:
     def test_create_details_list_populated(self) -> None:
         mgr = PowerProfileManager()
 
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+        def run_side_effect(cmd: list[str], *_args: object, **_: object) -> MagicMock:
             if "/duplicatescheme" in cmd:
                 return _mock_run(stdout=DUPLICATE_OUTPUT)
             return _mock_run()
 
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
             patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
@@ -434,7 +459,9 @@ class TestCreate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")),
+            patch(
+                "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("boom")
+            ),
         ):
             result = mgr.create()
         assert result.success is False
@@ -479,7 +506,7 @@ class TestCreateRoutesThroughTheRegistry:
         fixed_dc_index = 7
         raw_calls: list[list[str]] = []
 
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+        def run_side_effect(cmd: list[str], *_args: object, **_: object) -> MagicMock:
             raw_calls.append(list(cmd))
             if "/duplicatescheme" in cmd:
                 return _mock_run(stdout=DUPLICATE_OUTPUT)
@@ -487,7 +514,7 @@ class TestCreateRoutesThroughTheRegistry:
 
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
             patch.object(PowerCfgExecutor, "_target_schemes", return_value=[NEW_GUID]),
             patch(
                 "fpstune.settings.executors.powercfg.windows_default_index",
@@ -521,7 +548,7 @@ class TestCreateRoutesThroughTheRegistry:
         mgr = PowerProfileManager()
         raw_calls: list[list[str]] = []
 
-        def run_side_effect(cmd: list[str], **_: object) -> MagicMock:
+        def run_side_effect(cmd: list[str], *_args: object, **_: object) -> MagicMock:
             raw_calls.append(list(cmd))
             if "/duplicatescheme" in cmd:
                 return _mock_run(stdout=DUPLICATE_OUTPUT)
@@ -531,7 +558,7 @@ class TestCreateRoutesThroughTheRegistry:
         # applied to every one of them, so the loop must write nothing at all.
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
-            patch("subprocess.run", side_effect=run_side_effect),
+            patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
             patch.object(PowerCfgExecutor, "_target_schemes", return_value=[NEW_GUID]),
             patch(
                 "fpstune.settings.executors.powercfg.windows_default_index",
@@ -570,7 +597,7 @@ class TestActivate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch("subprocess.run", return_value=_mock_run()) as mock_run,
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()) as mock_run,
         ):
             result = mgr.activate()
         assert result.success is True
@@ -586,7 +613,7 @@ class TestActivate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch.object(mgr, "create", return_value=create_result),
-            patch("subprocess.run", return_value=_mock_run()),
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
         ):
             result = mgr.activate()
         assert result.success is True
@@ -607,7 +634,9 @@ class TestActivate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch("subprocess.run", return_value=_mock_run(returncode=1, stdout="")),
+            patch(
+                "fpstune.utils.process_watch.run", return_value=_mock_run(returncode=1, stdout="")
+            ),
         ):
             result = mgr.activate()
         assert result.success is False
@@ -620,7 +649,9 @@ class TestActivate:
         mgr = PowerProfileManager()
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")),
+            patch(
+                "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("boom")
+            ),
         ):
             result = mgr.activate()
         assert result.success is False
@@ -643,7 +674,7 @@ class TestRevert:
     @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
     def test_revert_calls_setactive_with_balanced_guid(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run()) as mock_run:
+        with patch("fpstune.utils.process_watch.run", return_value=_mock_run()) as mock_run:
             result = mgr.revert()
         assert result.success is True
         assert result.profile_guid == BALANCED_GUID
@@ -654,7 +685,9 @@ class TestRevert:
     @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
     def test_revert_returns_failure_on_error(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run(returncode=1, stdout="")):
+        with patch(
+            "fpstune.utils.process_watch.run", return_value=_mock_run(returncode=1, stdout="")
+        ):
             result = mgr.revert()
         assert result.success is False
         assert "Failed to revert" in result.message
@@ -664,14 +697,16 @@ class TestRevert:
         import subprocess
 
         mgr = PowerProfileManager()
-        with patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")):
+        with patch(
+            "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("boom")
+        ):
             result = mgr.revert()
         assert result.success is False
 
     @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
     def test_revert_message_contains_balanced(self) -> None:
         mgr = PowerProfileManager()
-        with patch("subprocess.run", return_value=_mock_run()):
+        with patch("fpstune.utils.process_watch.run", return_value=_mock_run()):
             result = mgr.revert()
         assert "Balanced" in result.message
 
@@ -703,7 +738,7 @@ class TestDelete:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("subprocess.run", return_value=_mock_run()) as mock_run,
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()) as mock_run,
         ):
             result = mgr.delete()
         assert result.success is True
@@ -718,7 +753,7 @@ class TestDelete:
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=True),
             patch.object(mgr, "revert") as mock_revert,
-            patch("subprocess.run", return_value=_mock_run()),
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
         ):
             mgr.delete()
         mock_revert.assert_called_once()
@@ -730,7 +765,7 @@ class TestDelete:
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=False),
             patch.object(mgr, "revert") as mock_revert,
-            patch("subprocess.run", return_value=_mock_run()),
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
         ):
             mgr.delete()
         mock_revert.assert_not_called()
@@ -742,7 +777,7 @@ class TestDelete:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("subprocess.run", return_value=_mock_run()),
+            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
         ):
             result = mgr.delete()
         assert result.success is True
@@ -754,7 +789,9 @@ class TestDelete:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("subprocess.run", return_value=_mock_run(returncode=1, stdout="")),
+            patch(
+                "fpstune.utils.process_watch.run", return_value=_mock_run(returncode=1, stdout="")
+            ),
         ):
             result = mgr.delete()
         assert result.success is False
@@ -768,7 +805,9 @@ class TestDelete:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
             patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("subprocess.run", side_effect=subprocess.SubprocessError("boom")),
+            patch(
+                "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("boom")
+            ),
         ):
             result = mgr.delete()
         assert result.success is False

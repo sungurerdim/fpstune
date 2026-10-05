@@ -125,7 +125,7 @@ def _registry_reading(payload: object) -> dict:
     completed = subprocess.CompletedProcess(
         args=["powershell"], returncode=0, stdout=json.dumps(payload), stderr=""
     )
-    with patch("fpstune.settings.discovery.probes.subprocess.run", return_value=completed):
+    with patch("fpstune.utils.process_watch.run", return_value=completed):
         return registry._probes.rss_queue_options()
 
 
@@ -157,7 +157,7 @@ class TestDiscoveryReadsTheMachine:
         failed = subprocess.CompletedProcess(
             args=["powershell"], returncode=1, stdout="", stderr="denied"
         )
-        with patch("fpstune.settings.discovery.probes.subprocess.run", return_value=failed):
+        with patch("fpstune.utils.process_watch.run", return_value=failed):
             assert registry._probes.rss_queue_options() == {}
 
     def test_unparseable_output_registers_nothing(self) -> None:
@@ -165,7 +165,7 @@ class TestDiscoveryReadsTheMachine:
         garbage = subprocess.CompletedProcess(
             args=["powershell"], returncode=0, stdout="not json at all", stderr=""
         )
-        with patch("fpstune.settings.discovery.probes.subprocess.run", return_value=garbage):
+        with patch("fpstune.utils.process_watch.run", return_value=garbage):
             assert registry._probes.rss_queue_options() == {}
 
 
@@ -233,7 +233,7 @@ class TestResetWritesTheDriversOwnDefault:
         completed = subprocess.CompletedProcess(
             args=["powershell"], returncode=0, stdout=json.dumps(payload), stderr=""
         )
-        with patch("fpstune.settings.discovery.probes.subprocess.run", return_value=completed):
+        with patch("fpstune.utils.process_watch.run", return_value=completed):
             assert registry._probes.adapter_property_defaults() == {
                 14: {"*flowcontrol": "1", "*eee": "0"}
             }

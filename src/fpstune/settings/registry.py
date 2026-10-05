@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING
 
 from fpstune.settings.base import SettingCategory
 from fpstune.settings.discovery.probes import (
-    DEFAULT_ADAPTER_DISCOVERY_TIMEOUT,
     HardwareProbes,
 )
 
@@ -32,24 +31,18 @@ class SettingsRegistry:
     (discovered at runtime, e.g., per-adapter network settings).
     """
 
-    def __init__(
-        self,
-        discover_dynamic: bool = True,
-        adapter_discovery_timeout: float = DEFAULT_ADAPTER_DISCOVERY_TIMEOUT,
-    ) -> None:
+    def __init__(self, discover_dynamic: bool = True) -> None:
         """Initialize the registry with static and optionally dynamic settings.
 
         Args:
             discover_dynamic: If True, discover dynamic per-adapter settings.
                 Set to False for faster initialization when only static settings needed.
-            adapter_discovery_timeout: Timeout in seconds for PowerShell adapter
-                discovery command.
         """
         self._settings: dict[str, SettingExecutor] = {}
         # One probe cache per registry. Discovery asks for several of these
         # twice — the adapter list is wanted by the network pass and the MTU
         # pass — and the warm-up only pays off because the second ask is free.
-        self._probes = HardwareProbes(adapter_discovery_timeout)
+        self._probes = HardwareProbes()
         self._load_static_settings()
         if discover_dynamic:
             self.discover_dynamic_settings()

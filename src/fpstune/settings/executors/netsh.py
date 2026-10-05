@@ -19,6 +19,7 @@ from typing import TYPE_CHECKING, Any
 from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
+from fpstune.utils import process_watch
 from fpstune.utils.powershell import run_powershell, substitute_placeholders
 from fpstune.utils.system_tools import system_tool
 
@@ -284,18 +285,12 @@ class NetshExecutor(BaseExecutor):
             return False, "Not available on this platform"
 
         try:
-            result = subprocess.run(
-                [system_tool("netsh.exe")] + args.split(),
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,  # Windows-only (platform checked above)
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("netsh.exe")] + args.split(), process_watch.QUERY
             )
             output = result.stdout + result.stderr
             return result.returncode == 0, output.strip()
-        except subprocess.TimeoutExpired:
-            return False, "Command timed out"
+        except subprocess.TimeoutExpired as e:
+            return False, str(e)
         except Exception as e:
             return False, str(e)

@@ -152,6 +152,7 @@ def run_watched(
     merge_stderr: bool = False,
     encoding: str = "utf-8",
     creationflags: int = 0,
+    cwd: str | None = None,
     probe_factory: Callable[[subprocess.Popen[bytes]], ActivityProbe] = _default_probe,
     clock: Callable[[], float] = time.monotonic,
 ) -> RunResult:
@@ -166,6 +167,7 @@ def run_watched(
         stdout=subprocess.PIPE,
         stderr=subprocess.STDOUT if merge_stderr else subprocess.PIPE,
         creationflags=creationflags,
+        cwd=cwd,
     )
     probe = probe_factory(process)
     last_progress = clock()
@@ -266,6 +268,37 @@ def _result(
         left_running=left_running,
         reason=reason,
     )
+
+
+class Stalled(subprocess.TimeoutExpired):
+    """A run that stopped making progress, raised by :func:`run`.
+
+    A ``TimeoutExpired`` so every existing ``except subprocess.TimeoutExpired`` /
+    ``SubprocessError`` keeps catching it; its message names the stall instead of
+    a duration nobody chose.
+    """
+
+    def __init__(self, cmd: list[str], policy: StallPolicy, output: str, stderr: str) -> None:
+        super().__init__(cmd, policy.stall_s, output, stderr)
+        self.reason = describe_stall(policy)
+
+    def __str__(self) -> str:
+        program = self.cmd[0] if isinstance(self.cmd, list) and self.cmd else self.cmd
+        return f"{program} stopped: {self.reason}"
+
+
+def run(
+    argv: list[str], policy: StallPolicy, *, encoding: str = "utf-8", cwd: str | None = None
+) -> subprocess.CompletedProcess[str]:
+    """``subprocess.run(capture_output=True, text=True)`` under the stall rule.
+
+    The drop-in for every direct process start: same ``CompletedProcess`` back,
+    no window on Windows, and :class:`Stalled` instead of a fixed timeout.
+    """
+    result = run_watched(argv, policy, encoding=encoding, creationflags=no_window_flags(), cwd=cwd)
+    if result.timed_out:
+        raise Stalled(argv, policy, result.stdout, result.stderr)
+    return subprocess.CompletedProcess(argv, result.returncode or 0, result.stdout, result.stderr)
 
 
 def no_window_flags() -> int:

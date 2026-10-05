@@ -58,7 +58,9 @@ class TestDispatch:
         def no_process(*_a: object, **_k: object) -> None:
             raise AssertionError("a Python action must not start PowerShell")
 
+        # Every child process starts through Popen (utils.process_watch).
         monkeypatch.setattr(subprocess, "run", no_process)
+        monkeypatch.setattr(subprocess, "Popen", no_process)
         monkeypatch.setattr(
             python_actions,
             "purge_standby_list",

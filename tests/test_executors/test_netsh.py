@@ -167,7 +167,7 @@ class TestNetshRun:
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
     def test_run_calls_netsh(self):
         executor = NetshExecutor()
-        with patch("subprocess.run") as mock_run:
+        with patch("fpstune.utils.process_watch.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
             success, output = executor._run("int tcp show global")
         assert success is True
@@ -176,19 +176,21 @@ class TestNetshRun:
         assert called_cmd[0].lower().endswith("netsh.exe")
 
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
-    def test_run_timeout_returns_false(self):
-        import subprocess
+    def test_a_stall_returns_false_and_says_so(self):
+        from fpstune.utils.process_watch import QUERY, Stalled
 
         executor = NetshExecutor()
-        with patch("subprocess.run", side_effect=subprocess.TimeoutExpired(["netsh"], 10)):
+        with patch(
+            "fpstune.utils.process_watch.run", side_effect=Stalled(["netsh"], QUERY, "", "")
+        ):
             success, output = executor._run("int tcp show global")
         assert success is False
-        assert "timed out" in output.lower()
+        assert "no progress for 1 min" in output
 
     @pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
     def test_run_exception_returns_false(self):
         executor = NetshExecutor()
-        with patch("subprocess.run", side_effect=OSError("No such file")):
+        with patch("fpstune.utils.process_watch.run", side_effect=OSError("No such file")):
             success, output = executor._run("int tcp show global")
         assert success is False
 
@@ -252,7 +254,7 @@ class TestNetshApplyValueIsOneToken:
     )
     def test_wide_value_is_refused_before_any_subprocess(self, executor, hostile):
         setting = _make_netsh_setting(apply_value_map={})
-        with patch("sys.platform", "win32"), patch("subprocess.run") as run:
+        with patch("sys.platform", "win32"), patch("fpstune.utils.process_watch.run") as run:
             success, error = executor.apply(setting, hostile)
 
         assert success is False
@@ -275,7 +277,7 @@ class TestNetshApplyValueIsOneToken:
             setting = _make_netsh_setting(apply_value_map={})
             with (
                 patch("sys.platform", "win32"),
-                patch("subprocess.run") as run,
+                patch("fpstune.utils.process_watch.run") as run,
             ):
                 run.return_value = MagicMock(returncode=0, stdout="Ok.", stderr="")
                 success, error = executor.apply(setting, value)
@@ -300,7 +302,7 @@ class TestNetshApplyValueIsOneToken:
             apply_args={"ifindex": "5 extra-token"},
             apply_value_map={},
         )
-        with patch("sys.platform", "win32"), patch("subprocess.run") as run:
+        with patch("sys.platform", "win32"), patch("fpstune.utils.process_watch.run") as run:
             success, error = executor.apply(setting, "1500")
 
         assert success is False
@@ -312,7 +314,7 @@ class TestNetshApplyValueIsOneToken:
             detect_command="int ipv4 show subinterface %ifindex%",
             detect_args={"ifindex": "5; whoami"},
         )
-        with patch("sys.platform", "win32"), patch("subprocess.run") as run:
+        with patch("sys.platform", "win32"), patch("fpstune.utils.process_watch.run") as run:
             value, error = executor.detect(setting)
 
         assert value is None

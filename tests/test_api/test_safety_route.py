@@ -12,6 +12,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
+from fpstune.safety.restore import RestoreOutcome
 
 
 @pytest.fixture
@@ -44,12 +45,11 @@ class TestCreateRestorePoint:
     def test_create_succeeds(self, client: TestClient) -> None:
         mock_rp = MagicMock()
         mock_rp.is_available = True
-        mock_rp.create_restore_point.return_value = True
+        mock_rp.create_restore_point.return_value = RestoreOutcome(
+            "created", "Restore point created (41s)"
+        )
 
-        with (
-            patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp),
-            patch("fpstune.api.routes.safety.log_activity"),
-        ):
+        with patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp):
             response = client.post("/api/restore-point")
 
         assert response.status_code == 200
@@ -57,15 +57,27 @@ class TestCreateRestorePoint:
         assert data["success"] is True
         assert "created" in data["message"].lower()
 
+    def test_windows_once_a_day_limit_is_not_reported_as_created(self, client: TestClient) -> None:
+        mock_rp = MagicMock()
+        mock_rp.is_available = True
+        mock_rp.create_restore_point.return_value = RestoreOutcome(
+            "recent", "No new restore point: Windows already holds one from 2026-10-05 08:12"
+        )
+
+        with patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp):
+            data = client.post("/api/restore-point").json()
+
+        assert data["success"] is False
+        assert "already holds one" in data["message"]
+
     def test_create_fails(self, client: TestClient) -> None:
         mock_rp = MagicMock()
         mock_rp.is_available = True
-        mock_rp.create_restore_point.return_value = False
+        mock_rp.create_restore_point.return_value = RestoreOutcome(
+            "error", "Restore point not created: Access is denied."
+        )
 
-        with (
-            patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp),
-            patch("fpstune.api.routes.safety.log_activity"),
-        ):
+        with patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp):
             response = client.post("/api/restore-point")
 
         assert response.status_code == 200
@@ -75,12 +87,9 @@ class TestCreateRestorePoint:
     def test_custom_description_passed_through(self, client: TestClient) -> None:
         mock_rp = MagicMock()
         mock_rp.is_available = True
-        mock_rp.create_restore_point.return_value = True
+        mock_rp.create_restore_point.return_value = RestoreOutcome("created", "created")
 
-        with (
-            patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp),
-            patch("fpstune.api.routes.safety.log_activity"),
-        ):
+        with patch("fpstune.api.routes.safety.RestorePointManager", return_value=mock_rp):
             response = client.post("/api/restore-point?description=before+major+changes")
 
         assert response.status_code == 200

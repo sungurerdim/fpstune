@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Literal
 from fpstune.settings.applicability import NOT_SUPPORTED, values_equal
 from fpstune.settings.base import Reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.utils import process_watch
 from fpstune.utils.system_tools import powershell_exe, system_tool
 
 if TYPE_CHECKING:
@@ -631,14 +632,8 @@ if (Test-Path -LiteralPath $path) {{
 }}
 """
         try:
-            result = subprocess.run(
-                [powershell_exe(), "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [powershell_exe(), "-NoProfile", "-Command", ps_script], process_watch.QUERY
             )
             output = result.stdout.strip()
             if output == "NOTFOUND":
@@ -714,19 +709,13 @@ if (Test-Path -LiteralPath $path) {{
             return False, "Not available on this platform"
 
         try:
-            result = subprocess.run(
-                [system_tool("powercfg.exe")] + args.split(),
-                capture_output=True,
-                text=True,
-                timeout=10,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [system_tool("powercfg.exe")] + args.split(), process_watch.QUERY
             )
             output = result.stdout + result.stderr
             return result.returncode == 0, output.strip()
-        except subprocess.TimeoutExpired:
-            return False, "Command timed out"
+        except subprocess.TimeoutExpired as e:
+            return False, str(e)
         except Exception as e:
             return False, str(e)
 

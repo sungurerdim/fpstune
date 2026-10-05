@@ -20,7 +20,7 @@ NEW_GUID = "0f9d8a6b-1c2d-4e5f-8a9b-0c1d2e3f4a5b"
 def _run(returncodes: dict[str, int]):
     calls: list[list[str]] = []
 
-    def run(args, **_kwargs):
+    def run(args, *_args, **_kwargs):
         calls.append(list(args))
         verb = args[1]
         out = f"Power Scheme GUID: {NEW_GUID}  (Balanced)" if verb == "/duplicatescheme" else ""
@@ -37,8 +37,7 @@ def test_settings_are_written_to_the_new_plan_only() -> None:
     with (
         patch.object(sys, "platform", "win32"),
         patch.object(PowerProfileManager, "find_fps_balanced", return_value=None),
-        patch.object(power_profile.subprocess, "run", side_effect=run),
-        patch.object(power_profile.subprocess, "CREATE_NO_WINDOW", 0, create=True),
+        patch.object(power_profile.process_watch, "run", side_effect=run),
         patch.object(power_profile, "_registry_powercfg_settings", return_value=[setting]),
         patch.object(
             power_profile.PowerCfgExecutor,
@@ -59,8 +58,7 @@ def test_a_plan_that_cannot_be_named_is_removed() -> None:
     with (
         patch.object(sys, "platform", "win32"),
         patch.object(PowerProfileManager, "find_fps_balanced", return_value=None),
-        patch.object(power_profile.subprocess, "run", side_effect=run),
-        patch.object(power_profile.subprocess, "CREATE_NO_WINDOW", 0, create=True),
+        patch.object(power_profile.process_watch, "run", side_effect=run),
     ):
         result = PowerProfileManager().create()
 

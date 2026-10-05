@@ -44,7 +44,9 @@ def _proc(stdout: str) -> MagicMock:
 
 class TestGetCpuInfoCache:
     def test_second_call_spawns_no_new_subprocess(self) -> None:
-        with patch.object(detect.subprocess, "run", return_value=_proc("AMD Ryzen 7 5800X")) as run:
+        with patch.object(
+            detect.process_watch, "run", return_value=_proc("AMD Ryzen 7 5800X")
+        ) as run:
             first = detect.get_cpu_info()
             calls_after_first = run.call_count
             second = detect.get_cpu_info()
@@ -58,7 +60,7 @@ class TestGetCpuInfoCache:
 
 class TestGetCpuDetailedInfoCache:
     def test_second_call_spawns_no_new_subprocess(self) -> None:
-        with patch.object(detect.subprocess, "run", return_value=_proc(DETAILED_STDOUT)) as run:
+        with patch.object(detect.process_watch, "run", return_value=_proc(DETAILED_STDOUT)) as run:
             first = detect.get_cpu_detailed_info()
             calls_after_first = run.call_count
             second = detect.get_cpu_detailed_info()
@@ -72,7 +74,7 @@ class TestGetCpuDetailedInfoCache:
     def test_failed_detection_is_not_cached(self) -> None:
         """A transient failure must not pin the session to None forever."""
         with patch.object(
-            detect.subprocess,
+            detect.process_watch,
             "run",
             side_effect=[OSError("powershell unavailable"), _proc(DETAILED_STDOUT)],
         ) as run:
@@ -99,7 +101,7 @@ class TestCacheLocksSpanTheSubprocess:
             held.append(lock.locked())
             return _proc(stdout)
 
-        with patch.object(detect.subprocess, "run", _run):
+        with patch.object(detect.process_watch, "run", _run):
             call()
         return held
 
@@ -139,7 +141,7 @@ class TestCacheLocksSpanTheSubprocess:
             start.wait(timeout=10)
             detect.get_cpu_detailed_info()
 
-        with patch.object(detect.subprocess, "run", _run):
+        with patch.object(detect.process_watch, "run", _run):
             threads = [threading.Thread(target=_worker) for _ in range(8)]
             for t in threads:
                 t.start()

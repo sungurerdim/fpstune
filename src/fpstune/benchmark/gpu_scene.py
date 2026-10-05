@@ -123,6 +123,7 @@ from fpstune.settings.executors.game_processes import (
     game_is_running,
 )
 from fpstune.settings.panel import primary_monitor
+from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
 
@@ -276,10 +277,6 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _no_window() -> int:
-    return subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0
-
-
 def _spawn_engine(args: list[str], cwd: Path) -> subprocess.Popen[bytes]:
     """Start the engine, with its output discarded and its window its own.
 
@@ -329,13 +326,8 @@ def _download(url: str, destination: Path) -> None:
 
 
 def _run_installer(args: list[str]) -> int:
-    completed = subprocess.run(
-        args,
-        capture_output=True,
-        timeout=900,
-        creationflags=_no_window(),
-    )
-    return completed.returncode
+    # An installer writes files the whole time; only one that stops is stuck.
+    return process_watch.run(args, process_watch.CHANGE).returncode
 
 
 def window_boundaries(

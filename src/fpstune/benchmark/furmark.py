@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from fpstune.benchmark.result_store import ResultStore
+from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
 
@@ -321,14 +322,11 @@ class FurMarkBenchmark:
             raw_duration = settings["duration"]
             # Cast to int safely - preset values are always int but dict returns object
             duration: int = int(str(raw_duration)) if raw_duration is not None else 120
-            result = subprocess.run(
+            # Silent for its configured run by design; only beyond that counts.
+            result = process_watch.run(
                 cmd,
+                process_watch.quiet_for(duration),
                 cwd=str(self._furmark_dir),
-                capture_output=True,
-                text=True,
-                timeout=duration + 60,  # Extra time for startup/shutdown
-                encoding="utf-8",
-                errors="replace",
             )
 
             if result.returncode != 0:
@@ -344,8 +342,8 @@ class FurMarkBenchmark:
                 api=api,
             )
 
-        except subprocess.TimeoutExpired:
-            self._logger.error("FurMark benchmark timed out")
+        except subprocess.TimeoutExpired as e:
+            self._logger.error("FurMark benchmark %s", e)
             return None
         except Exception as e:
             self._logger.error(f"FurMark benchmark failed: {e}")

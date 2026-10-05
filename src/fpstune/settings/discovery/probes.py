@@ -23,13 +23,12 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, NamedTuple, TypeVar, cast
 
+from fpstune.utils import process_watch
 from fpstune.utils.system_tools import powershell_exe
 
 logger = logging.getLogger(__name__)
 
 _T = TypeVar("_T")
-
-DEFAULT_ADAPTER_DISCOVERY_TIMEOUT = 10.0
 
 
 class NetworkAdapter(NamedTuple):
@@ -100,10 +99,7 @@ class HardwareProbes:
     single build.
     """
 
-    def __init__(
-        self, adapter_discovery_timeout: float = DEFAULT_ADAPTER_DISCOVERY_TIMEOUT
-    ) -> None:
-        self.adapter_discovery_timeout = adapter_discovery_timeout
+    def __init__(self) -> None:
         self._cache: dict[str, Any] = {}
         self._key_locks: dict[str, threading.Lock] = {}
         self._locks_lock = threading.Lock()  # guards _key_locks only
@@ -171,7 +167,7 @@ class HardwareProbes:
         if sys.platform != "win32":
             return {}
         try:
-            result = subprocess.run(
+            result = process_watch.run(
                 [
                     powershell_exe(),
                     "-NoProfile",
@@ -179,11 +175,7 @@ class HardwareProbes:
                     "Get-NetAdapter -IncludeHidden | ForEach-Object { "
                     '"$($_.InterfaceIndex)|$([string]$_.InterfaceGuid)" }',
                 ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.adapter_discovery_timeout,
+                process_watch.QUERY,
             )
         except (subprocess.SubprocessError, OSError) as exc:
             logger.debug("adapter GUID probe failed: %s", exc)
@@ -236,7 +228,7 @@ class HardwareProbes:
         try:
             # Return InterfaceIndex,Name pairs separated by |
             # InterfaceIndex is numeric, always safe for commands
-            result = subprocess.run(
+            result = process_watch.run(
                 [
                     powershell_exe(),
                     "-NoProfile",
@@ -253,11 +245,7 @@ class HardwareProbes:
                     "} | ForEach-Object { "
                     '"$($_.InterfaceIndex)|$($_.PnPDeviceID)|$($_.MediaType)|$($_.Name)" }',
                 ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.adapter_discovery_timeout,
+                process_watch.QUERY,
             )
 
             if result.returncode != 0:
@@ -283,11 +271,8 @@ class HardwareProbes:
                 adapters.append(NetworkAdapter(int(index_text), name, media_type, instance_id))
             return adapters
 
-        except subprocess.TimeoutExpired:
-            logger.warning(
-                "Adapter discovery timed out after %.1f seconds",
-                self.adapter_discovery_timeout,
-            )
+        except subprocess.TimeoutExpired as e:
+            logger.warning("Adapter discovery %s", e)
             return []
         except Exception as e:
             logger.warning(
@@ -304,7 +289,7 @@ class HardwareProbes:
         ``*NumRssQueues``. An empty dict when the query fails.
         """
         try:
-            result = subprocess.run(
+            result = process_watch.run(
                 [
                     powershell_exe(),
                     "-NoProfile",
@@ -330,11 +315,7 @@ class HardwareProbes:
                     "max = $_.NumericParameterMaxValue } } } }; "
                     "$out | ConvertTo-Json -Compress -Depth 5",
                 ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.adapter_discovery_timeout,
+                process_watch.QUERY,
             )
             if result.returncode != 0 or not result.stdout.strip():
                 logger.debug("Adapter advanced-property discovery returned nothing")
@@ -406,7 +387,7 @@ class HardwareProbes:
     def _query_default_route_interface_index(self) -> int | None:
         """Return the InterfaceIndex carrying the default IPv4 route, if there is one."""
         try:
-            result = subprocess.run(
+            result = process_watch.run(
                 [
                     powershell_exe(),
                     "-NoProfile",
@@ -415,11 +396,7 @@ class HardwareProbes:
                     "-ErrorAction SilentlyContinue | Sort-Object RouteMetric | "
                     "Select-Object -First 1; if ($r) { $r.InterfaceIndex }",
                 ],
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=self.adapter_discovery_timeout,
+                process_watch.QUERY,
             )
             if result.returncode != 0:
                 return None

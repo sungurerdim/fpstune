@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
 from unittest.mock import MagicMock, patch
 
 from fpstune.core.dism import CleanupResult, Dism
@@ -31,7 +30,7 @@ class TestRunDism:
         """_run_dism must return (False, error) without spawning a process."""
         with patch("sys.platform", "linux"):
             dism = Dism()
-            with patch("subprocess.run") as mock_run:
+            with patch("fpstune.utils.process_watch.run") as mock_run:
                 success, output = dism._run_dism("/Cleanup-Image", "/StartComponentCleanup")  # noqa: SLF001
                 assert success is False
                 assert "Not available" in output
@@ -41,7 +40,7 @@ class TestRunDism:
         """_run_dism on success must return concatenated stdout+stderr."""
         with patch("sys.platform", "win32"):
             dism = Dism()
-            with patch("subprocess.run") as mock_run:
+            with patch("fpstune.utils.process_watch.run") as mock_run:
                 mock_run.return_value = MagicMock(
                     returncode=0,
                     stdout="component cleanup succeeded\n",
@@ -55,7 +54,7 @@ class TestRunDism:
         """_run_dism must report failure when DISM exits non-zero."""
         with patch("sys.platform", "win32"):
             dism = Dism()
-            with patch("subprocess.run") as mock_run:
+            with patch("fpstune.utils.process_watch.run") as mock_run:
                 mock_run.return_value = MagicMock(
                     returncode=1,
                     stdout="",
@@ -65,21 +64,24 @@ class TestRunDism:
                 assert success is False
                 assert "0x800f0954" in output
 
-    def test_timeout_returns_friendly_message(self):
-        """TimeoutExpired must be converted to (False, 'Operation timed out')."""
+    def test_a_stall_is_reported_and_dism_left_to_finish(self):
+        """Servicing is never killed at a duration; a stall says so and leaves it."""
+        from fpstune.utils.process_watch import SERVICING, Stalled
+
         with patch("sys.platform", "win32"):
             dism = Dism()
-            with patch("subprocess.run") as mock_run:
-                mock_run.side_effect = subprocess.TimeoutExpired(cmd="dism", timeout=600)
+            with patch("fpstune.utils.process_watch.run") as mock_run:
+                mock_run.side_effect = Stalled(["Dism.exe"], SERVICING, "", "")
                 success, output = dism._run_dism("/Cleanup-Image")  # noqa: SLF001
                 assert success is False
-                assert "timed out" in output.lower()
+                assert "no progress for 15 min (left running)" in output
+                assert mock_run.call_args.args[1] is SERVICING
 
     def test_unexpected_exception_returns_string_form(self):
         """Generic exceptions must be caught and surfaced as string."""
         with patch("sys.platform", "win32"):
             dism = Dism()
-            with patch("subprocess.run") as mock_run:
+            with patch("fpstune.utils.process_watch.run") as mock_run:
                 mock_run.side_effect = RuntimeError("dism.exe missing")
                 success, output = dism._run_dism("/Cleanup-Image")  # noqa: SLF001
                 assert success is False

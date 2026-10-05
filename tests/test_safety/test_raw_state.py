@@ -44,13 +44,13 @@ class TestServiceRestore:
     def test_the_recorded_start_type_is_set_exactly(self, raw: dict, mode: str) -> None:
         calls: list[list[str]] = []
 
-        def run(args, **_kwargs):
+        def run(args, *_args, **_kwargs):
             calls.append(args)
             return SimpleNamespace(returncode=0)
 
         with (
             patch.object(sys, "platform", "win32"),
-            patch("fpstune.safety.raw_state.subprocess.run", side_effect=run),
+            patch("fpstune.utils.process_watch.run", side_effect=run),
             patch("fpstune.safety.raw_state.subprocess.CREATE_NO_WINDOW", 0, create=True),
         ):
             ok, error = raw_state.restore(
@@ -65,7 +65,7 @@ class TestServiceRestore:
         with (
             patch.object(sys, "platform", "win32"),
             patch(
-                "fpstune.safety.raw_state.subprocess.run",
+                "fpstune.utils.process_watch.run",
                 return_value=SimpleNamespace(returncode=5),
             ),
             patch("fpstune.safety.raw_state.subprocess.CREATE_NO_WINDOW", 0, create=True),

@@ -13,6 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import StrEnum
 
+from fpstune.utils import process_watch
 from fpstune.utils.edid import parse_edid
 from fpstune.utils.monitor_topology import (
     MonitorRow,
@@ -276,16 +277,8 @@ $reg = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Microsoft\\Windows NT\\CurrentVe
 "Edition=$($os.Caption)"
 "DisplayVersion=$($reg.DisplayVersion)"
 """
-            result = subprocess.run(
-                [powershell_exe(), "-NoProfile", "-Command", ps_script],
-                capture_output=True,
-                text=True,
-                timeout=8,
-                creationflags=subprocess.CREATE_NO_WINDOW  # Windows-only
-                if sys.platform == "win32"
-                else 0,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [powershell_exe(), "-NoProfile", "-Command", ps_script], process_watch.QUERY
             )
 
             if result.returncode == 0:
@@ -487,18 +480,13 @@ def _detect_gpu_sync() -> GpuInfo | None:
         if smi is None:
             raise FileNotFoundError("nvidia-smi.exe is not installed")
         logger.info("GPU detection: Trying nvidia-smi...")
-        result = subprocess.run(
+        result = process_watch.run(
             [
                 smi,
                 "--query-gpu=name,driver_version,memory.total",
                 "--format=csv,noheader,nounits",
             ],
-            capture_output=True,
-            text=True,
-            timeout=10,
-            creationflags=subprocess.CREATE_NO_WINDOW,
-            encoding="utf-8",
-            errors="replace",
+            process_watch.QUERY,
         )
 
         if result.returncode == 0 and result.stdout.strip():
@@ -525,14 +513,8 @@ def _detect_gpu_sync() -> GpuInfo | None:
     if not name:
         try:
             logger.info("GPU detection: Using PowerShell Get-CimInstance...")
-            result = subprocess.run(
-                [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS],
-                capture_output=True,
-                text=True,
-                timeout=15,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [powershell_exe(), "-NoProfile", "-Command", _GPU_DETECT_PS], process_watch.QUERY
             )
 
             for line in result.stdout.splitlines():
@@ -611,7 +593,7 @@ def get_cpu_info() -> dict[str, str]:
         if sys.platform == "win32":
             # Try PowerShell first (Windows 11 compatible)
             try:
-                result = subprocess.run(
+                result = process_watch.run(
                     [
                         powershell_exe(),
                         "-NoProfile",
@@ -619,12 +601,7 @@ def get_cpu_info() -> dict[str, str]:
                         "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
                         "(Get-CimInstance -ClassName Win32_Processor).Name",
                     ],
-                    capture_output=True,
-                    text=True,
-                    timeout=10,
-                    creationflags=subprocess.CREATE_NO_WINDOW,
-                    encoding="utf-8",
-                    errors="replace",
+                    process_watch.QUERY,
                 )
                 if result.returncode == 0 and result.stdout.strip():
                     cpu_name = result.stdout.strip()
@@ -742,14 +719,8 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
 
         try:
             # Get ALL CPU info in single PowerShell call (optimized)
-            result = subprocess.run(
-                [powershell_exe(), "-NoProfile", "-Command", _CPU_DETECT_PS],
-                capture_output=True,
-                text=True,
-                timeout=8,
-                creationflags=subprocess.CREATE_NO_WINDOW,
-                encoding="utf-8",
-                errors="replace",
+            result = process_watch.run(
+                [powershell_exe(), "-NoProfile", "-Command", _CPU_DETECT_PS], process_watch.QUERY
             )
 
             for line in result.stdout.splitlines():
@@ -911,7 +882,7 @@ def get_monitors() -> list[MonitorInfo]:
     monitors: list[MonitorInfo] = []
     try:
         with debug_context("get_monitors", "hardware") as dbg:
-            result = subprocess.run(
+            result = process_watch.run(
                 [
                     powershell_exe(),
                     "-NoProfile",
@@ -920,12 +891,7 @@ def get_monitors() -> list[MonitorInfo]:
                     "-Command",
                     _MONITOR_WMI_PS,
                 ],
-                capture_output=True,
-                text=True,
-                timeout=60,
-                creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,  # type: ignore[unused-ignore]
-                encoding="utf-8",
-                errors="replace",
+                process_watch.QUERY,
             )
             dbg.set_detail("exit_code", result.returncode)
             dbg.set_detail("stdout_preview", result.stdout[:1000] if result.stdout else "(empty)")

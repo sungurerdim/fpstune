@@ -200,17 +200,9 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     else:
         settings = registry.get_all()
 
-    # Run parallel detection (offloaded to thread to avoid blocking event loop).
-    # Hard cap at 120 s: individual settings already have 5 s timeouts, so this
-    # only fires if the ThreadPoolExecutor itself blocks (e.g. zombie processes).
-    try:
-        results = await asyncio.wait_for(
-            asyncio.to_thread(functools.partial(engine.detect_all, settings)),
-            timeout=120.0,
-        )
-    except TimeoutError:
-        logger.error("detect_settings: timed out after 120 s (%d settings)", len(settings))
-        raise HTTPException(status_code=504, detail="Detection timed out after 120 s") from None
+    # Run parallel detection off the event loop. No outer deadline: every
+    # process a detection starts runs under the stall rule (utils.process_watch).
+    results = await asyncio.to_thread(functools.partial(engine.detect_all, settings))
 
     total_time_ms = int((time.perf_counter() - start) * 1000)
     settings_map = {s.id: s for s in settings}

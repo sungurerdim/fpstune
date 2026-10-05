@@ -622,7 +622,6 @@ class TestFunctionLengthCeiling:
         ("src/fpstune/settings/executors/powershell.py", "detect"): 145,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/main.py", "create_app"): 190,
-        ("src/fpstune/settings/detection.py", "detect_all"): 165,
     }
 
     def _long_functions(self) -> dict[tuple[str, str], int]:

@@ -41,16 +41,14 @@ class TestDetectionEngineInit:
         """Engine should have sensible defaults."""
         engine = DetectionEngine()
         assert engine.max_workers == 16
-        assert engine.timeout == 5.0
         assert engine.context is None
         assert engine.checker is None
 
     def test_custom_parameters(self) -> None:
         """Engine should accept custom parameters."""
         ctx = HardwareContext(gpu_vendor="nvidia")
-        engine = DetectionEngine(max_workers=4, timeout_per_setting=10.0, hardware_context=ctx)
+        engine = DetectionEngine(max_workers=4, hardware_context=ctx)
         assert engine.max_workers == 4
-        assert engine.timeout == 10.0
         assert engine.context is ctx
         assert engine.checker is not None
 
@@ -242,59 +240,42 @@ class TestDetectAll:
         assert results["test:unknown_val"].is_optimized is False
 
 
-class TestWholeRunTimeout:
-    """The scan-wide deadline must produce results, not an exception (#22).
+class TestTheScanHasNoDeadline:
+    """Every setting gets its own reading; none is cut off by a scan-wide clock.
 
-    ``as_completed(futures, timeout=total_timeout)`` raises ``TimeoutError`` and
-    nothing caught it. It escaped ``detect_all``, so the settings that had not
-    finished got no entry at all — a caller reading ``results[id]`` hit a
-    KeyError instead of a timed-out reading — and the enclosing
-    ``with ThreadPoolExecutor`` then blocked in ``shutdown(wait=True)`` on the
-    very work the deadline had just given up on.
+    A deadline over the scan (max(5 s x N, 120 s)) reported settings as timed out
+    that were only queued behind slow ones. Each detection's processes now carry
+    their own stall rule, so the scan collects everything it started.
     """
 
     @patch("fpstune.settings.detection.CommandExecutor.detect")
-    def test_unfinished_settings_get_a_timeout_result(self, mock_detect: MagicMock) -> None:
+    def test_every_setting_gets_a_result_without_a_deadline(self, mock_detect: MagicMock) -> None:
         mock_detect.return_value = ("enabled", None)
-        settings = [_make_setting(setting_id=f"test:slow_{i}") for i in range(3)]
+        settings = [_make_setting(setting_id=f"test:queued_{i}") for i in range(5)]
+        real_as_completed = detection_module.as_completed
+        seen: list[dict] = []
 
-        def _deadline_expired(_futures, timeout=None):  # noqa: ARG001
-            raise TimeoutError("scan deadline")
+        def spy(futures, **kwargs):
+            seen.append(kwargs)
+            return real_as_completed(futures, **kwargs)
 
         engine = DetectionEngine(max_workers=2)
-        with patch("fpstune.settings.detection.as_completed", _deadline_expired):
+        with patch("fpstune.settings.detection.as_completed", spy):
             results = engine.detect_all(settings)
 
         assert set(results) == {s.id for s in settings}
-        for setting in settings:
-            result = results[setting.id]
-            assert result.value is None
-            assert result.error is not None
-            assert "timed out" in result.error
-            assert result.is_optimized is False
-            assert result.is_applicable is True
+        assert all(r.value == "enabled" for r in results.values())
+        assert seen and all(kwargs.get("timeout") is None for kwargs in seen)
 
     @patch("fpstune.settings.detection.CommandExecutor.detect")
-    def test_results_already_collected_survive_the_deadline(self, mock_detect: MagicMock) -> None:
-        """A deadline must not overwrite readings that did arrive."""
-        mock_detect.return_value = ("enabled", None)
-        settings = [_make_setting(setting_id=f"test:mixed_{i}") for i in range(3)]
-        real_as_completed = detection_module.as_completed
+    def test_a_detector_that_raises_gets_an_error_result(self, mock_detect: MagicMock) -> None:
+        mock_detect.side_effect = RuntimeError("WMI refused the query")
+        setting = _make_setting(setting_id="test:raises")
 
-        def _one_then_deadline(futures, timeout=None):  # noqa: ARG001
-            iterator = real_as_completed(futures)
-            yield next(iterator)
-            raise TimeoutError("scan deadline")
+        results = DetectionEngine(max_workers=1).detect_all([setting])
 
-        engine = DetectionEngine(max_workers=2)
-        with patch("fpstune.settings.detection.as_completed", _one_then_deadline):
-            results = engine.detect_all(settings)
-
-        assert set(results) == {s.id for s in settings}
-        completed = [r for r in results.values() if r.value == "enabled"]
-        timed_out = [r for r in results.values() if r.error and "timed out" in r.error]
-        assert len(completed) == 1
-        assert len(timed_out) == 2
+        assert results[setting.id].error is not None
+        assert results[setting.id].value is None
 
 
 class TestDetectOne:

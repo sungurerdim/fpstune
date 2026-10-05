@@ -83,18 +83,15 @@ class DetectionEngine:
     def __init__(
         self,
         max_workers: int = 16,
-        timeout_per_setting: float = 5.0,
         hardware_context: HardwareContext | None = None,
     ):
         """Initialize detection engine.
 
         Args:
             max_workers: Maximum concurrent detection threads.
-            timeout_per_setting: Timeout in seconds per setting detection.
             hardware_context: Hardware context for applicability checks.
         """
         self.max_workers = max_workers
-        self.timeout = timeout_per_setting
         self.context = hardware_context
         self.checker = ApplicabilityChecker(hardware_context) if hardware_context else None
 
@@ -209,56 +206,25 @@ class DetectionEngine:
                     for setting in applicable_settings
                 }
 
-                # Collect results as they complete
-                # Action settings (cleanup/maintenance) get longer timeout for size scanning
-                total_timeout = max(self.timeout * len(applicable_settings), 120)
-                try:
-                    for future in as_completed(futures, timeout=total_timeout):
-                        setting = futures[future]
-                        per_timeout = 60.0 if setting.is_action else self.timeout
-                        try:
-                            result = future.result(timeout=per_timeout)
-                            results[setting.id] = result
-                        except TimeoutError:
-                            results[setting.id] = DetectionResult(
-                                setting_id=setting.id,
-                                value=None,
-                                error="Detection timed out",
-                                time_ms=int(self.timeout * 1000),
-                                is_optimized=False,
-                                is_applicable=True,
-                            )
-                        except Exception as e:
-                            results[setting.id] = DetectionResult(
-                                setting_id=setting.id,
-                                value=None,
-                                error=str(e),
-                                time_ms=0,
-                                is_optimized=False,
-                                is_applicable=True,
-                            )
-                except TimeoutError:
-                    # The whole-run deadline, not a per-setting one. Letting it
-                    # escape left every unfinished setting with no result at all
-                    # — a caller reading `results[id]` got a KeyError instead of
-                    # a timed-out reading — and then the `with` block's
-                    # shutdown(wait=True) blocked on the very work that had just
-                    # been declared too slow.
-                    for future, setting in futures.items():
-                        if setting.id in results:
-                            continue
-                        future.cancel()
+                # Collect every result. No deadline over the scan: the processes
+                # a detection starts run under the stall rule
+                # (utils.process_watch), so a reading that is working is waited
+                # for and a stuck one ends itself with a reason. The deadlines
+                # this replaced reported settings as timed out that were simply
+                # queued behind slow ones.
+                for future in as_completed(futures):
+                    setting = futures[future]
+                    try:
+                        results[setting.id] = future.result()
+                    except Exception as e:
                         results[setting.id] = DetectionResult(
                             setting_id=setting.id,
                             value=None,
-                            error=f"Detection timed out ({total_timeout:.0f}s)",
-                            time_ms=int(total_timeout * 1000),
+                            error=str(e),
+                            time_ms=0,
                             is_optimized=False,
                             is_applicable=True,
                         )
-                    # Drops the queued tasks so the exit below only waits for
-                    # the ones already running.
-                    executor.shutdown(wait=False, cancel_futures=True)
         finally:
             reset_scan_cache(token)
 

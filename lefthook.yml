@@ -18,6 +18,9 @@
 # because they contend for different tools, and within each group the steps run
 # one after another. The wall clock is set by the Python group, which ends in
 # the full pytest run either way.
+# pre-commit keeps only what answers in seconds (lint and format). Types and
+# tests ran here too and made every commit wait ~45 s for checks pre-push runs
+# anyway; one place for the slow half is enough.
 pre-commit:
   parallel: true
   jobs:
@@ -30,10 +33,6 @@ pre-commit:
             run: uv run ruff check src tests
           - name: py-format
             run: uv run ruff format --check src tests
-          - name: py-types
-            run: uv run mypy src
-          - name: py-test
-            run: uv run pytest --no-cov -x -q --tb=short
 
     - name: frontend
       glob: "frontend/*"
@@ -43,10 +42,6 @@ pre-commit:
         jobs:
           - name: fe-lint
             run: npm run lint
-          - name: fe-types
-            run: npx tsc --noEmit
-          - name: fe-test
-            run: npm run test:run
 
 commit-msg:
   commands:

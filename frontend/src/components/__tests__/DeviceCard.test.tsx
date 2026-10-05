@@ -300,8 +300,8 @@ describe("DeviceCard", () => {
     });
 
     it("keeps the model, its kind and its counts apart instead of running them together", () => {
-      // The reported card read "NVIDIA GeForce RTX 3070 Laptop GPU / Ekran Kartı /
-      // Uygulanacak 9 / 1 senden işlem bekliyor" as one stream.
+      // The reported card read its model, kind and counts as one run-on stream
+      // ("NVIDIA GeForce RTX 3070 Laptop GPU / kind / to apply 9 / 1 needs you").
       setStore([FIXABLE, ADVISORY]);
       render(
         <DeviceCard

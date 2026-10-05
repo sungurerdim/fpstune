@@ -8,8 +8,8 @@ import { StatusChip, type ChipTone } from "./StatusChip";
  *
  * Before this existed each of those drew its own title row, and the device
  * card ran its model name, its kind and its counts together into one
- * unpunctuated stream ("NVIDIA GeForce RTX 3070 Laptop GPU / Ekran Kartı /
- * Uygulanacak 9 / 1 senden işlem bekliyor"). Three levels now, and each is a
+ * unpunctuated stream ("NVIDIA GeForce RTX 3070 Laptop GPU", the kind, "to apply
+ * 9", "1 needs you", all on one line). Three levels now, and each is a
  * different thing to look at:
  *
  *   1. the title — a real heading, the largest text in the block;

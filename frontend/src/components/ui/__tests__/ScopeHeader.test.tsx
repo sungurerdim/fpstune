@@ -2,8 +2,8 @@
  * The shared scope header keeps its three levels apart.
  *
  * Each test names the run-together it forbids: a model name, its kind and its
- * counts read as one sentence ("NVIDIA GeForce RTX 3070 Laptop GPU Ekran Kartı
- * Uygulanacak 9 1 senden işlem bekliyor"), a count with no label, actions drawn
+ * counts read as one sentence ("NVIDIA GeForce RTX 3070 Laptop GPU Graphics
+ * card to apply 9 1 needs you"), a count with no label, actions drawn
  * somewhere other than the title row's right edge.
  */
 

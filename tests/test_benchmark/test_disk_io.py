@@ -241,11 +241,13 @@ class TestTheWritePatterns:
 
         assert _FILE_FLAG_WRITE_THROUGH != _FILE_FLAG_NO_BUFFERING
 
+    @windows_only
     def test_the_write_tail_is_never_better_than_its_median(self, tmp_path: Path) -> None:
         readings = _tiny(tmp_path).run(2).readings
 
         assert readings["random_write_p99_ms"].median >= readings["random_write_ms"].median
 
+    @windows_only
     def test_every_write_metric_knows_which_way_is_better(self, tmp_path: Path) -> None:
         readings = _tiny(tmp_path).run(2).readings
 
@@ -254,6 +256,7 @@ class TestTheWritePatterns:
         assert readings["random_write_p99_ms"].improves_upward is False
         assert readings["random_write_qd_p99_ms"].improves_upward is False
 
+    @windows_only
     def test_the_file_is_not_left_longer_or_shorter_by_the_writes(self, tmp_path: Path) -> None:
         """Every write is 4K at a 4K-aligned offset inside the file that was
         already written, so the pattern overwrites and never extends. A write
@@ -270,6 +273,7 @@ class TestTheDeepQueue:
     answers many outstanding requests at once, and a setting that serialises the
     path shows up here and nowhere else."""
 
+    @windows_only
     def test_one_handle_and_one_lane_per_outstanding_request(self, tmp_path: Path) -> None:
         """A Windows file handle carries its own file pointer, so two lanes
         sharing one would seek each other's requests out from under them —
@@ -300,6 +304,7 @@ class TestTheDeepQueue:
 
         assert bench._queued_count(10) >= 8 * 100
 
+    @windows_only
     def test_the_queued_rate_is_reported_as_unmeasured_rather_than_as_a_number(
         self, tmp_path: Path
     ) -> None:
@@ -313,6 +318,7 @@ class TestTheDeepQueue:
         assert "random_write_qd_iops" not in result.readings
         assert "lanes starting" in result.detail["queued_rate_unmeasured"]
 
+    @windows_only
     def test_the_switch_interval_is_left_the_way_it_was_found(self, tmp_path: Path) -> None:
         """It is lowered around the queued pass, and a bench that left it
         lowered has changed the process it was only supposed to measure."""

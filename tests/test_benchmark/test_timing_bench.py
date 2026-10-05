@@ -9,7 +9,10 @@ second implementation: every value has to come out of `DpcBenchmark`, and
 
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
+
+import pytest
 
 from fpstune.benchmark.sources import source_for
 from fpstune.benchmark.suite import Bench, run_suite
@@ -124,6 +127,10 @@ class TestTheShape:
             assert reading.improves_upward is False
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason="the real DPC benchmark reads ntdll NtQueryTimerResolution, Windows-only",
+)
 class TestAgainstTheRealThing:
     def test_it_produces_readings_on_this_machine(self) -> None:
         """The adapter is only worth anything if the real benchmark still has

@@ -16,6 +16,7 @@ rather than a property invented for a test:
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 
 import pytest
@@ -51,12 +52,26 @@ class TestOnePathListForBothHalves:
         """
         real = tmp_path / "Temp"
         _write(real / "installer.log", 4096)
-        # The second spelling of the same folder: a trailing separator, a `.`
-        # segment and a different case all name it, exactly as the three
-        # environment variables do on a machine where TEMP is not redirected.
-        aliases = [real, Path(str(real) + os.sep), real / ".", Path(str(real).upper())]
+        # The second spelling of the same folder: a trailing separator and a `.`
+        # segment both name it, exactly as the three environment variables do
+        # on a machine where TEMP is not redirected.
+        aliases = [real, Path(str(real) + os.sep), real / "."]
 
         target = _target(aliases, absent_is_not_installed=False)
+
+        assert len(resolved_paths(target)) == 1
+        assert size_target(target) == ("ready", 4096)
+
+    @pytest.mark.skipif(
+        sys.platform != "win32",
+        reason="case-insensitive path identity is Windows semantics; normcase folds case only there",
+    )
+    def test_the_same_folder_in_another_case_is_counted_once(self, tmp_path: Path) -> None:
+        """`%LOCALAPPDATA%\\Temp` and its upper-case spelling are one folder on Windows."""
+        real = tmp_path / "Temp"
+        _write(real / "installer.log", 4096)
+
+        target = _target([real, Path(str(real).upper())], absent_is_not_installed=False)
 
         assert len(resolved_paths(target)) == 1
         assert size_target(target) == ("ready", 4096)

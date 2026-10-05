@@ -59,6 +59,7 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         adopt_mw4_ranges,
         discover_mw4_display_settings,
     )
+    from fpstune.settings.discovery.games_titles import discover_title_frame_caps
     from fpstune.settings.discovery.headroom import apply_headroom_bands
     from fpstune.settings.discovery.network import (
         discover_network_adapter_settings,
@@ -80,6 +81,7 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         apply_headroom_bands,
         discover_hots_display_settings,
         discover_hots_audio_settings,
+        discover_title_frame_caps,
         discover_vrr_dependent_settings,
     )
 

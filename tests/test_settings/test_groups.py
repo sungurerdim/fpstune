@@ -58,8 +58,8 @@ def test_game_settings_group_by_the_game_in_their_id(all_settings):
         assert group.label == GAME_LABELS[game]
         seen.add(game)
 
-    # The registry ships four games today; if one is ever dropped this notices.
-    assert seen == {"mw4", "mw3", "cs2", "hots"}
+    # The registry ships eight games today; if one is ever dropped this notices.
+    assert seen == {"mw4", "mw3", "cs2", "hots", "fortnite", "apex", "overwatch", "r6siege"}
 
 
 def test_the_label_is_not_a_second_copy_of_the_name():

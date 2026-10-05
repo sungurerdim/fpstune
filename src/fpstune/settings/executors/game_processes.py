@@ -59,6 +59,14 @@ GAME_PROCESSES: dict[str, tuple[str, ...]] = {
     "cs2": ("cs2",),
     # unverified
     "hots": ("HeroesOfTheStorm_x64", "Heroes of the Storm"),
+    # unverified (the shipping client's executable names on record)
+    "fortnite": ("FortniteClient-Win64-Shipping",),
+    # unverified; r5apex is the name guides point an RTSS cap at
+    "apex": ("r5apex", "r5apex_dx12"),
+    # unverified
+    "overwatch": ("Overwatch",),
+    # unverified; one executable per renderer
+    "r6siege": ("RainbowSix", "RainbowSix_Vulkan"),
 }
 
 # Human-readable name for the message the user actually sees.
@@ -67,6 +75,10 @@ GAME_LABELS: dict[str, str] = {
     "mw3": "Modern Warfare III",
     "cs2": "Counter-Strike 2",
     "hots": "Heroes of the Storm",
+    "fortnite": "Fortnite",
+    "apex": "Apex Legends",
+    "overwatch": "Overwatch 2",
+    "r6siege": "Rainbow Six Siege",
 }
 
 # Launchers rewrite their own config files from memory the same way: Steam saves

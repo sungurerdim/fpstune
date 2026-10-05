@@ -29,6 +29,7 @@ def get_all_static_settings() -> list[SettingExecutor]:
         MW4_CLEANUP_SETTINGS,
         MW4_SETTINGS,
     )
+    from fpstune.settings.definitions.game_configs_titles import TITLE_SETTINGS
     from fpstune.settings.definitions.gpu import GPU_SETTINGS
     from fpstune.settings.definitions.launchers import LAUNCHER_SETTINGS
     from fpstune.settings.definitions.network import NETWORK_SETTINGS
@@ -56,4 +57,5 @@ def get_all_static_settings() -> list[SettingExecutor]:
         *MW3_PROFILE_SETTINGS,
         *MW4_SETTINGS,
         *MW4_CLEANUP_SETTINGS,
+        *TITLE_SETTINGS,
     ]

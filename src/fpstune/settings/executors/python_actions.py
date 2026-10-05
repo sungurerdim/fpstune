@@ -20,6 +20,7 @@ from typing import Any
 from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.base import Reading
 from fpstune.settings.executors.bnet_config import bnet_config_read, bnet_config_write
+from fpstune.settings.executors.game_ini import game_ini_read, game_ini_write
 from fpstune.utils.winapi.memory import purge_standby_list
 
 PythonAction = Callable[[dict[str, Any]], tuple[bool, str | None]]
@@ -147,6 +148,7 @@ PYTHON_ACTIONS: dict[str, PythonAction] = {
     "accessibility_popups_toggle": accessibility_popups,
     "animations_toggle": animations,
     "bnet_config_write": bnet_config_write,
+    "game_ini_write": game_ini_write,
 }
 
 
@@ -282,6 +284,7 @@ def animations_status(_args: dict[str, Any]) -> str:
 PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "animations_status": animations_status,
     "bnet_config_read": bnet_config_read,
+    "game_ini_read": game_ini_read,
     "wifi_link_quality": wifi_link_quality,
     "wifi_security": wifi_security,
 }

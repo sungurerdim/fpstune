@@ -274,7 +274,7 @@ export function SuitePanel() {
 
               <div className="flex items-center gap-3 flex-wrap">
                 <label className="text-xs text-muted-foreground flex items-center gap-2">
-                  Repeats
+                  {t("suite.repeats")}
                   <input
                     type="number"
                     min={catalogue.min_repeats}

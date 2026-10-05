@@ -101,7 +101,7 @@ export function ActivityLog() {
                 </div>
               ) : !data || data.entries.length === 0 ? (
                 <p className="text-xs text-muted-foreground py-3">
-                  No recent activity
+                  {t("activity.empty")}
                 </p>
               ) : (
                 <div className="space-y-1 py-1">

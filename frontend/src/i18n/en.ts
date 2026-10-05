@@ -51,6 +51,7 @@ export const en = {
   "apply.unknownError": "the reason was not reported",
   "bulk.summary": "{applied} applied, {failed} failed.",
   "bulk.requestFailed": "Nothing was applied: {reason}",
+  "hw.notControllable": "Not controllable",
   "hw.displaysFailed": "Could not change every display: {reason}",
   "hw.gsyncApplyFailed": "Could not apply the G-Sync settings: {reason}",
   "hw.gsyncResetFailed": "Could not reset the G-Sync settings: {reason}",
@@ -513,6 +514,7 @@ export const en = {
   "bench.verifyClaims": "Verify claims",
 
   // Measure (suite) panel
+  "suite.repeats": "Repeats",
   "suite.loading": "Loading the instrument list…",
   "suite.title": "Measure what changed",
   "suite.baselineTaken":
@@ -584,6 +586,7 @@ export const en = {
   "verify.statusUnattributable": "Not attributable",
 
   // Activity log
+  "activity.empty": "No recent activity",
   "activity.button": "Activity",
   "activity.title": "Activity Log",
   "activity.open": "Open activity log",

@@ -47,6 +47,7 @@ export const tr: Record<keyof typeof en, string> = {
   "apply.unknownError": "neden bildirilmedi",
   "bulk.summary": "{applied} uygulandı, {failed} başarısız.",
   "bulk.requestFailed": "Hiçbir şey uygulanmadı: {reason}",
+  "hw.notControllable": "Denetlenemiyor",
   "hw.displaysFailed": "Ekranların hepsi değiştirilemedi: {reason}",
   "hw.gsyncApplyFailed": "G-Sync ayarları uygulanamadı: {reason}",
   "hw.gsyncResetFailed": "G-Sync ayarları sıfırlanamadı: {reason}",
@@ -492,6 +493,7 @@ export const tr: Record<keyof typeof en, string> = {
   "bench.measure": "Ölç",
   "bench.verifyClaims": "İddiaları doğrula",
   // Measure (suite) panel
+  "suite.repeats": "Tekrar",
   "suite.loading": "Araç listesi yükleniyor…",
   "suite.title": "Neyin değiştiğini ölç",
   "suite.baselineTaken":
@@ -563,6 +565,7 @@ export const tr: Record<keyof typeof en, string> = {
   "verify.statusUnmeasured": "Ölçülmedi",
   "verify.statusUnattributable": "Atfedilemez",
   // Activity log
+  "activity.empty": "Yakın zamanda etkinlik yok",
   "activity.button": "Etkinlik",
   "activity.title": "Etkinlik Günlüğü",
   "activity.open": "Etkinlik günlüğünü aç",

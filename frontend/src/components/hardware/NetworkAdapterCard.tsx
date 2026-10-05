@@ -224,7 +224,7 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
             id={identifierReasonId}
             className="text-xs px-1 py-0.5 rounded shrink-0 bg-warning/20 text-warning"
           >
-            Not controllable
+            {t("hw.notControllable")}
           </span>
         )}
       </div>

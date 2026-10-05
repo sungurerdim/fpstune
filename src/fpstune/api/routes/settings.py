@@ -64,15 +64,13 @@ from fpstune.utils.logger import log_activity, tweak_label
 logger = logging.getLogger(__name__)
 
 
-def _create_restore_point_async() -> None:
-    """Fire-and-forget restore point before a write (safety.restore owns it).
+def _ensure_restore_point() -> None:
+    """Block until this session's restore point exists (safety.restore owns it).
 
-    A one-line delegate rather than a from-import: the mechanics — the enabled
-    probe, the checkpoint subprocess, the daemon thread — moved to
-    `fpstune.safety.restore`, next to RestorePointManager. The name stays here
-    because it is the seam the API tests patch.
+    A one-line delegate rather than a from-import because it is the seam the API
+    tests patch. Blocking, so call it off the event loop.
     """
-    restore.create_restore_point_async()
+    restore.ensure_session_restore_point()
 
 
 def _get_hardware_context() -> HardwareContext:
@@ -653,9 +651,10 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
     # around it — never a flat cap, which was shorter than one DISM cleanup.
     bulk_timeout = bulk_apply_timeout([setting for setting, _ in valid_settings])
 
-    # Create a system restore point before applying tweaks (best-effort)
+    # A restore point before the first change of the session (best-effort; this
+    # already runs on a worker thread).
     if valid_settings and sys.platform == "win32":
-        _create_restore_point_async()
+        _ensure_restore_point()
 
     # Apply all settings in parallel
     if valid_settings:
@@ -951,7 +950,7 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
     await asyncio.to_thread(ensure_checked_before_first_apply)
 
     if sys.platform == "win32":
-        _create_restore_point_async()
+        await asyncio.to_thread(_ensure_restore_point)
 
     engine = DetectionEngine(hardware_context=hardware_context)
 
@@ -983,7 +982,7 @@ async def reset_setting(setting_id: str) -> ApplyResponse:
     # Reset mutates system state exactly like apply does, so it gets the same
     # rollback safety net — previously only the apply paths created one.
     if sys.platform == "win32":
-        _create_restore_point_async()
+        await asyncio.to_thread(_ensure_restore_point)
 
     engine = DetectionEngine(hardware_context=hardware_context)
 
@@ -1047,7 +1046,7 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
     # Undo mutates system state exactly like apply and reset, so it gets the
     # same rollback safety net.
     if sys.platform == "win32":
-        _create_restore_point_async()
+        await asyncio.to_thread(_ensure_restore_point)
 
     engine = DetectionEngine(hardware_context=hardware_context)
 

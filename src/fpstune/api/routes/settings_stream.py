@@ -22,7 +22,7 @@ from fastapi.responses import StreamingResponse
 
 from fpstune.api.routes.settings import (
     _apply_single_setting,
-    _create_restore_point_async,
+    _ensure_restore_point,
     _get_hardware_context,
     _get_registry,
     _reset_single_setting,
@@ -320,7 +320,7 @@ async def bulk_stream_apply(request: BulkStreamRequest) -> StreamingResponse:
     hardware_context = await asyncio.to_thread(_get_hardware_context)
 
     if request.ids and sys.platform == "win32":
-        _create_restore_point_async()
+        await asyncio.to_thread(_ensure_restore_point)
 
     return StreamingResponse(
         _stream_grouped(request.ids, "apply", registry, hardware_context),
@@ -342,7 +342,7 @@ async def bulk_stream_reset(request: BulkStreamRequest) -> StreamingResponse:
 
     # Bulk reset mutates state just like bulk apply — same rollback safety net.
     if request.ids and sys.platform == "win32":
-        _create_restore_point_async()
+        await asyncio.to_thread(_ensure_restore_point)
 
     return StreamingResponse(
         _stream_grouped(request.ids, "reset", registry, hardware_context),

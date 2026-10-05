@@ -61,7 +61,7 @@ class TestResetCreatesRestorePoint:
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
-            patch("fpstune.api.routes.settings._create_restore_point_async") as mock_rp,
+            patch("fpstune.api.routes.settings._ensure_restore_point") as mock_rp,
         ):
             result = client.post(f"/api/settings/{setting.id}/reset")
 
@@ -76,7 +76,7 @@ class TestResetCreatesRestorePoint:
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
             patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
-            patch("fpstune.api.routes.settings_stream._create_restore_point_async") as mock_rp,
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):
             result = client.post("/api/settings/bulk/stream-reset", json={"ids": ["core:whatever"]})
 
@@ -94,7 +94,7 @@ class TestResetCreatesRestorePoint:
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
             patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
-            patch("fpstune.api.routes.settings_stream._create_restore_point_async") as mock_rp,
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):
             result = client.post("/api/settings/bulk/stream-reset", json={"ids": []})
 

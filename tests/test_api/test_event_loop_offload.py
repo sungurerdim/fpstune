@@ -234,7 +234,7 @@ class TestSettingHardwareContextOffload:
                 "fpstune.api.routes.settings.ApplicabilityChecker",
                 return_value=MagicMock(is_applicable=MagicMock(return_value=(False, "not here"))),
             ),
-            patch("fpstune.api.routes.settings._create_restore_point_async"),
+            patch("fpstune.api.routes.settings._ensure_restore_point"),
         )
 
     def test_apply_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
@@ -310,7 +310,7 @@ class TestBulkStreamSetupOffload:
                 side_effect=_loop_recorder(record, registry),
             ),
             patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings_stream._create_restore_point_async"),
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):
             response = client.post("/api/settings/bulk/stream-apply", json={"ids": ["x:y"]})
 
@@ -327,7 +327,7 @@ class TestBulkStreamSetupOffload:
                 "fpstune.api.routes.settings_stream._get_hardware_context",
                 side_effect=_loop_recorder(record, None),
             ),
-            patch("fpstune.api.routes.settings_stream._create_restore_point_async"),
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):
             response = client.post("/api/settings/bulk/stream-reset", json={"ids": ["x:y"]})
 

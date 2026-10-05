@@ -107,7 +107,7 @@ def _route_mocks(setting: SettingExecutor) -> Iterator[None]:
     with (
         patch("fpstune.api.routes.settings._get_registry", return_value=registry),
         patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-        patch("fpstune.api.routes.settings._create_restore_point_async"),
+        patch("fpstune.api.routes.settings._ensure_restore_point"),
     ):
         yield
 

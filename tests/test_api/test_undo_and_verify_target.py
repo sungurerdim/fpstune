@@ -193,7 +193,7 @@ class TestUndoWritesWhatTheMachineHeld:
                 return_value=response_obj,
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
-            patch("fpstune.api.routes.settings._create_restore_point_async"),
+            patch("fpstune.api.routes.settings._ensure_restore_point"),
         ):
             result = client.post("/api/settings/core:fake/undo")
         return result, applied_values
@@ -268,7 +268,7 @@ class TestUndoWritesWhatTheMachineHeld:
                 ),
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
-            patch("fpstune.api.routes.settings._create_restore_point_async") as restore_point,
+            patch("fpstune.api.routes.settings._ensure_restore_point") as restore_point,
         ):
             client.post("/api/settings/core:fake/undo")
 

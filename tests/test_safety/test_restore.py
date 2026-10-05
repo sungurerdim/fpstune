@@ -140,3 +140,80 @@ class TestDescriptionInjection:
                 mgr.create_restore_point("\r\n\t")
             script = self._captured_ps_script(mock_run)
         assert "-Description 'fpstune backup'" in script
+
+
+class TestSessionRestorePoint:
+    """One point per session, finished before the first change, and honest about it.
+
+    It was fire-and-forget under a 30 s ceiling: the apply ran beside the snapshot,
+    a VSS copy past 30 s was killed and logged "skipped", and Windows' once-a-day
+    refusal (a warning, exit code 0) was logged as a point created.
+    """
+
+    @staticmethod
+    def _run(stdout: str = "", *, side_effect=None):
+        from fpstune.safety import restore
+
+        restore._session_outcome = None
+        result = MagicMock(returncode=0, stdout=stdout, stderr="")
+        with (
+            patch("fpstune.safety.restore.sys.platform", "win32"),
+            patch("fpstune.safety.restore.system_restore_enabled", return_value=True),
+            patch("fpstune.safety.restore.powershell_exe", return_value="powershell.exe"),
+            patch.object(subprocess, "CREATE_NO_WINDOW", 0x08000000, create=True),
+            patch(
+                "fpstune.safety.restore.subprocess.run",
+                return_value=result,
+                side_effect=side_effect,
+            ) as run,
+            patch("fpstune.utils.logger.log_activity") as log,
+        ):
+            first = restore.ensure_session_restore_point()
+            second = restore.ensure_session_restore_point()
+        restore._session_outcome = None
+        return first, second, run, [c.args for c in log.call_args_list]
+
+    def test_a_new_point_is_reported_created(self) -> None:
+        outcome, _, _, logged = self._run("created|412\n")
+        assert outcome == "created"
+        assert logged[-1][1] == "success"
+
+    def test_windows_once_a_day_refusal_is_not_a_created_point(self) -> None:
+        outcome, _, _, logged = self._run("recent|2026-10-05 08:12\n")
+        assert outcome == "recent"
+        assert "already holds one from 2026-10-05 08:12" in logged[-1][0]
+
+    def test_a_slow_snapshot_gets_minutes_not_seconds(self) -> None:
+        _, _, run, _ = self._run("created|1\n")
+        assert run.call_args.kwargs["timeout"] >= 300
+
+    def test_a_timeout_is_named_as_one(self) -> None:
+        expired = subprocess.TimeoutExpired(cmd="powershell", timeout=600)
+        outcome, _, _, logged = self._run(side_effect=expired)
+        assert outcome == "timeout"
+        assert "did not finish within 10 minutes" in logged[-1][0]
+
+    def test_the_session_makes_one_point_not_one_per_change(self) -> None:
+        first, second, run, _ = self._run("created|7\n")
+        assert first == second == "created"
+        run.assert_called_once()
+
+    def test_the_checkpoint_is_bracketed_by_the_point_list(self) -> None:
+        _, _, run, _ = self._run("created|7\n")
+        script = run.call_args.args[0][-1]
+        assert script.index("Get-ComputerRestorePoint") < script.index("Checkpoint-Computer")
+        assert "SequenceNumber -gt $before" in script
+
+    def test_system_protection_off_skips_without_running_powershell(self) -> None:
+        from fpstune.safety import restore
+
+        restore._session_outcome = None
+        with (
+            patch("fpstune.safety.restore.sys.platform", "win32"),
+            patch("fpstune.safety.restore.system_restore_enabled", return_value=False),
+            patch("fpstune.safety.restore.subprocess.run") as run,
+            patch("fpstune.utils.logger.log_activity"),
+        ):
+            assert restore.ensure_session_restore_point() == "off"
+        restore._session_outcome = None
+        run.assert_not_called()

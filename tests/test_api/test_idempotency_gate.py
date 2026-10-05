@@ -109,7 +109,7 @@ def _double_apply(client: TestClient, machine: _FakeMachine) -> tuple[Any, Any]:
             "fpstune.utils.self_check.ensure_checked_before_first_apply",
             return_value=None,
         ),
-        patch("fpstune.api.routes.settings._create_restore_point_async"),
+        patch("fpstune.api.routes.settings._ensure_restore_point"),
         patch(
             "fpstune.settings.executors.CommandExecutor.apply",
             side_effect=machine.apply,

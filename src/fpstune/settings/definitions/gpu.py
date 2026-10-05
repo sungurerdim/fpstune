@@ -1342,13 +1342,24 @@ GPU_MSI_MODE = SettingExecutor(
         "if (-not $gpu) { 'not_supported' } else { "
         '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($gpu.InstanceId)\\Device Parameters'
         '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
-        "$v = (Get-ItemProperty -Path $rp -Name 'MSISupported' "
-        "-ErrorAction SilentlyContinue).MSISupported; "
-        "if ($v -eq 1) { 'enabled' } else { 'default' } }"
+        "$p = Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue; "
+        # The driver's stock value: what fpstune recorded before its first write
+        # (-1 = absent), else what is there now. Modern GPU INF files set
+        # MSISupported=1 themselves; on those "default" is "enabled", so there is
+        # nothing to tune and reset can never read back as 'default'.
+        "$stock = if ($null -ne $p.fpstuneOriginalMSISupported) "
+        "{ [int]$p.fpstuneOriginalMSISupported } elseif ($null -ne $p.MSISupported) "
+        "{ [int]$p.MSISupported } else { -1 }; "
+        "if ($stock -eq 1) { 'already_at_hardware_default' } "
+        "elseif ($p.MSISupported -eq 1) { 'enabled' } else { 'default' } }"
     ),
     detect_args={},
     value_map={},
     apply_type=DetectType.POWERSHELL,
+    # "default" is not "no value": a modern INF sets MSISupported=1, and deleting
+    # it forced line-based interrupts on hardware that shipped with MSI on. The
+    # first enabling write records what was there; default puts exactly that back
+    # and does nothing on a device fpstune never wrote.
     apply_command=(
         "try { "
         "$gpu = Get-PnpDevice -Class Display -ErrorAction SilentlyContinue "
@@ -1357,16 +1368,26 @@ GPU_MSI_MODE = SettingExecutor(
         "if (-not $gpu) { 'not_supported' } else { "
         '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($gpu.InstanceId)\\Device Parameters'
         '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
+        "$cur = Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue; "
         "if ('%value%' -eq 'enabled') { "
         # -ErrorAction Stop: a refused registry write is a non-terminating
         # error, so without it the catch never ran and the script said 'ok'.
         "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force -ErrorAction Stop | Out-Null }; "
+        "if ($null -eq $cur.fpstuneOriginalMSISupported) { "
+        "$was = if ($null -eq $cur.MSISupported) { -1 } else { [int]$cur.MSISupported }; "
+        "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' -Value $was "
+        "-Type DWord -Force -ErrorAction Stop }; "
         "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force "
         "-ErrorAction Stop "
-        "} else { "
-        "if ((Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue).PSObject.Properties"
-        "['MSISupported']) { "
-        "Remove-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction Stop } "
+        "} elseif ($null -ne $cur.fpstuneOriginalMSISupported) { "
+        "$was = [int]$cur.fpstuneOriginalMSISupported; "
+        "if ($was -eq -1) { "
+        "if ($null -ne $cur.MSISupported) { "
+        "Remove-ItemProperty -Path $rp -Name 'MSISupported' -ErrorAction Stop } } "
+        "else { Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was "
+        "-Type DWord -Force -ErrorAction Stop }; "
+        "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' "
+        "-ErrorAction Stop "
         "}; 'ok' } "
         # Named by exception type, never by message text: the message is in the
         # system language.

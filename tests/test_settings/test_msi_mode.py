@@ -27,3 +27,30 @@ def test_a_permission_refusal_is_named_by_exception_type_not_message() -> None:
         "catch [System.UnauthorizedAccessException], [System.Security.SecurityException]" in script
     )
     assert "'error:Windows refused the registry write (access denied)'" in script
+
+
+def test_detect_reads_the_drivers_stock_value_not_just_the_current_one() -> None:
+    from fpstune.settings.applicability import ALREADY_AT_HARDWARE_DEFAULT
+
+    script = MSI.detect_command
+    # Modern GPU INFs set MSISupported=1 themselves: "default" is "enabled" there,
+    # so reset can never read back as 'default' and the row is not applicable.
+    assert "fpstuneOriginalMSISupported" in script
+    assert f"if ($stock -eq 1) {{ '{ALREADY_AT_HARDWARE_DEFAULT}' }}" in script
+
+
+def test_apply_records_the_original_and_default_restores_it_instead_of_deleting() -> None:
+    script = MSI.apply_command
+    enable, _, default = script.partition("} elseif ($null -ne $cur.fpstuneOriginalMSISupported)")
+    # Enabling records what was there (-1 = absent) before its first write.
+    assert "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported'" in enable
+    # Default puts the recorded value back; with nothing recorded it writes nothing,
+    # so a driver-shipped MSISupported=1 is never forced to line-based interrupts.
+    assert "$was = [int]$cur.fpstuneOriginalMSISupported" in default
+    assert "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was" in default
+    assert "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported'" in default
+    # The unconditional delete is gone: removal only happens when the recorded
+    # original was "absent".
+    assert default.index("$was -eq -1") < default.index(
+        "Remove-ItemProperty -Path $rp -Name 'MSISupported'"
+    )

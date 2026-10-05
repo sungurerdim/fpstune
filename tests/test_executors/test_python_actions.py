@@ -49,6 +49,16 @@ class TestTheTableAndTheScriptsDoNotOverlap:
 
 
 class TestDispatch:
+    @pytest.fixture(autouse=True)
+    def _on_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The executor answers "Not available" off Windows before dispatching.
+
+        The action is a Python function and the kernel call is stubbed,
+        so the dispatch these tests pin runs the same on every host once the
+        executor believes it is on Windows.
+        """
+        monkeypatch.setattr("fpstune.settings.executors.powershell.sys.platform", "win32")
+
     def test_apply_runs_the_function_and_starts_no_process(
         self, registry: SettingsRegistry, monkeypatch: pytest.MonkeyPatch
     ) -> None:

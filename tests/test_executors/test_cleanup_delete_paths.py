@@ -73,6 +73,16 @@ def _registered_pairs() -> list[tuple[str, str]]:
 
 
 class TestTheDeleteConsumesTheSizersList:
+    @pytest.fixture(autouse=True)
+    def _on_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The executor answers "Not available" off Windows before dispatching.
+
+        PowerShell itself is stubbed and the folders are real temporary ones,
+        so the dispatch these tests pin runs the same on every host once the
+        executor believes it is on Windows.
+        """
+        monkeypatch.setattr("fpstune.settings.executors.powershell.sys.platform", "win32")
+
     @pytest.mark.parametrize(("cleanup_type", "command"), _registered_pairs())
     def test_every_path_cleanup_asks_for_the_list(self, cleanup_type: str, command: str) -> None:
         """A script that builds its own list is a second list, and it drifts."""

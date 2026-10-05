@@ -33,6 +33,10 @@ def _fresh_cpu_caches(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(detect.sys, "platform", "win32")
     # Attribute only exists on Windows; the subprocess itself is mocked anyway.
     monkeypatch.setattr(detect.subprocess, "CREATE_NO_WINDOW", 0, raising=False)
+    # The P/E split is a kernel32 query, not a subprocess, and is not what these
+    # tests count. With the platform faked it would reach for kernel32, which
+    # only a real Windows host has; "the kernel would not say" is its own answer.
+    monkeypatch.setattr(detect, "core_split", lambda: None)
 
 
 def _proc(stdout: str) -> MagicMock:

@@ -86,6 +86,16 @@ class TestTheAnswerIsDerivedNotHandKept:
 
 
 class TestNoProcessIsStarted:
+    @pytest.fixture(autouse=True)
+    def _on_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The executor answers "Not available" off Windows before dispatching.
+
+        The reading is a constant held in Python and no process may start,
+        so the dispatch these tests pin runs the same on every host once the
+        executor believes it is on Windows.
+        """
+        monkeypatch.setattr("fpstune.settings.executors.powershell.sys.platform", "win32")
+
     @pytest.mark.parametrize("setting_id", CONSTANT_SETTINGS)
     def test_detect_spawns_nothing(self, registry: SettingsRegistry, setting_id: str) -> None:
         setting = registry.get(setting_id)

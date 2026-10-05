@@ -5,105 +5,25 @@ from __future__ import annotations
 import asyncio
 import logging
 import sys
-import threading
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel
 
 from fpstune.api.schemas import MonitorInfo
+from fpstune.settings import display_mode
 from fpstune.settings.panel import primary_monitor, refresh_ceiling_hz
 from fpstune.utils.hardware_manager import hardware_manager
-from fpstune.utils.winapi import display as winapi_display
-from fpstune.utils.winapi.display import DISP_CHANGE_SUCCESSFUL
 
 router = APIRouter(prefix="/display", tags=["display"])
 logger = logging.getLogger(__name__)
 
-# A display mode write is guarded twice, because a wrong mode on a machine the
-# developer is not sitting at is a black screen nobody can debug:
-#   1. CDS_TEST first — the driver validates the mode without touching anything,
-#      and a mode that fails the test is never written.
-#   2. A revert timer — the write goes through, and unless the user confirms
-#      within _REVERT_TIMEOUT_S the prior mode is written back: Windows' own
-#      "keep these display settings?" pattern. A change whose prior mode could
-#      not be read is refused outright — a write that cannot be undone is a
-#      one-way door (the Wi-Fi radio lesson).
-_REVERT_TIMEOUT_S = 15.0
-_pending_lock = threading.Lock()
-_pending_reverts: dict[str, dict[str, Any]] = {}
-
-
-def _run_mode_change(
-    device_name: str, width: int, height: int, refresh: int, fields: int
-) -> tuple[str, tuple[int, int, int] | None]:
-    """Test, then write, one display mode; return (status line, prior mode or None).
-
-    The status words are the ones the PowerShell script used to print — NOPRIOR,
-    TESTFAIL:<code>, SUCCESS, ERROR:<code> — so the route and the revert timer
-    read exactly what they always did. user32 is reached through ctypes
-    (``winapi.display``) rather than a C# class compiled at run time.
-    """
-    prior_mode = winapi_display.current_mode(device_name)
-    if (
-        prior_mode is None
-        or prior_mode.width <= 0
-        or prior_mode.height <= 0
-        or prior_mode.refresh_hz <= 0
-    ):
-        return "NOPRIOR", None
-    prior = (prior_mode.width, prior_mode.height, prior_mode.refresh_hz)
-
-    # CDS_TEST: the driver validates without touching anything. A mode that
-    # fails here is never written.
-    test = winapi_display.change_mode(device_name, width, height, refresh, fields, test_only=True)
-    if test != DISP_CHANGE_SUCCESSFUL:
-        return f"TESTFAIL:{test}", prior
-    result = winapi_display.change_mode(
-        device_name, width, height, refresh, fields, test_only=False
-    )
-    return ("SUCCESS" if result == DISP_CHANGE_SUCCESSFUL else f"ERROR:{result}"), prior
-
-
-def _schedule_revert(device_name: str, prior: tuple[int, int, int], fields: int) -> None:
-    """Write the prior mode back after the timeout unless the change is kept."""
-
-    def _revert() -> None:
-        with _pending_lock:
-            _pending_reverts.pop(device_name, None)
-        width, height, refresh = prior
-        try:
-            revert_status, _ = _run_mode_change(device_name, width, height, refresh, fields)
-            logger.info(
-                "Display %s not confirmed — reverted to %dx%d@%d: %s",
-                device_name,
-                width,
-                height,
-                refresh,
-                revert_status,
-            )
-            hardware_manager.invalidate_cache("monitors")
-        except Exception as exc:  # pragma: no cover - defensive logging
-            logger.warning("Display revert failed for %s: %s", device_name, exc)
-
-    with _pending_lock:
-        stale = _pending_reverts.pop(device_name, None)
-        if stale is not None:
-            stale["timer"].cancel()
-        timer = threading.Timer(_REVERT_TIMEOUT_S, _revert)
-        timer.daemon = True
-        _pending_reverts[device_name] = {"timer": timer, "prior": prior}
-        timer.start()
-
-
-def _cancel_revert(device_name: str) -> bool:
-    """Keep the applied mode: cancel its pending revert. False when none exists."""
-    with _pending_lock:
-        pending = _pending_reverts.pop(device_name, None)
-    if pending is None:
-        return False
-    pending["timer"].cancel()
-    return True
+# The guarded mode write (CDS_TEST, then a revert unless kept) is shared with the
+# per-monitor display-mode setting and lives in `settings.display_mode`.
+_REVERT_TIMEOUT_S = display_mode.REVERT_TIMEOUT_S
+_run_mode_change = display_mode.run_mode_change
+_schedule_revert = display_mode.schedule_revert
+_cancel_revert = display_mode.cancel_revert
 
 
 class DisplayAutoResponse(BaseModel):
@@ -299,6 +219,25 @@ async def confirm_display_change(display_index: int = Path(ge=0, le=10)) -> Disp
             detail="No display change is awaiting confirmation — it may already have reverted.",
         )
     return DisplayConfirmResponse(success=True, message="Display mode kept.")
+
+
+@router.get("/pending")
+async def pending_display_changes() -> dict[str, Any]:
+    """Displays whose new mode reverts unless kept, and how long the window is."""
+    return {"devices": display_mode.pending_devices(), "revert_timeout_s": _REVERT_TIMEOUT_S}
+
+
+@router.post("/keep-all", response_model=DisplayConfirmResponse)
+async def keep_all_display_changes() -> DisplayConfirmResponse:
+    """Keep every display mode waiting for confirmation (the per-monitor settings
+    and a bulk apply write several at once; one answer keeps them all)."""
+    kept = display_mode.keep_all()
+    if not kept:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No display change is awaiting confirmation — it may already have reverted.",
+        )
+    return DisplayConfirmResponse(success=True, message=f"Kept {len(kept)} display mode(s).")
 
 
 @router.post("/refresh", response_model=RefreshDisplaysResponse)

@@ -45,11 +45,21 @@ async def change_history(limit: int = 500) -> dict[str, Any]:
     possible (an original is on record). ``entries`` is the raw journal, newest
     first, for the full timeline.
     """
+    from fpstune.api.routes.settings_apply import undo_refusal
     from fpstune.safety.history import get_change_journal
     from fpstune.safety.originals import get_original_values
+    from fpstune.settings.registry_cache import get_registry
 
     journal = get_change_journal()
     originals = get_original_values()
+    registry = await asyncio.to_thread(get_registry)
+
+    def can_undo(setting_id: str) -> bool:
+        setting = registry.get(setting_id)
+        # A setting no longer registered (an adapter or monitor since removed)
+        # has nothing to write to; one that is follows the one undo rule.
+        return setting is not None and undo_refusal(setting) is None
+
     latest = sorted(journal.latest().values(), key=lambda c: c.at, reverse=True)
     return {
         "settings": [
@@ -58,7 +68,7 @@ async def change_history(limit: int = 500) -> dict[str, Any]:
                 "last_action": change.action,
                 "value": change.value,
                 "at": change.at,
-                "can_undo": originals.get(change.setting_id) is not None,
+                "can_undo": can_undo(change.setting_id),
                 "original_value": originals.get(change.setting_id),
             }
             for change in latest

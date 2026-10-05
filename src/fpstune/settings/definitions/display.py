@@ -1,13 +1,13 @@
-"""Display setting definitions: how Windows presents, not what the panel runs at.
+"""Display setting definitions: how Windows presents, and what each panel runs at.
 
-Per-monitor resolution and refresh rate are *not* here. Those two settings used
-to be built by factories in this file, and the discovery pass that called them
-was commented out long before the registry refactor removed the method
-entirely — so `display:{id}:resolution` and `display:{id}:refresh_rate` had
-stopped reaching the registry while the factories still looked live. The
-capability itself did not disappear with them: setting a panel back to its
-native mode is `POST /display/{index}/auto`, which `MonitorCard` calls from the
-Hardware panel. The factories were the dead half of a working feature.
+Per-monitor mode is one setting per connected monitor, built by
+`create_monitor_mode_setting` and registered by `discovery.display`. It replaces
+an older pair (`display:{id}:resolution`, `display:{id}:refresh_rate`) whose
+discovery pass had been commented out long before the registry refactor removed
+it, leaving the fix reachable only as a Hardware-panel button that Home, the bulk
+apply and the change history never saw. Detect and apply are Python
+(`settings.display_mode`), and every write keeps the button's two guards: the
+driver's CDS_TEST first, and a revert unless the user keeps the new mode.
 """
 
 from __future__ import annotations
@@ -215,3 +215,57 @@ DISPLAY_SETTINGS: list[SettingExecutor] = [
     WINDOWED_FLIP_MODEL,
     MPO_DISABLE,
 ]
+
+
+def create_monitor_mode_setting(
+    key: str, subject: str, *, primary: bool, refresh_hz: int, max_refresh_hz: int
+) -> SettingExecutor:
+    """One monitor's mode: its own native resolution at its own maximum refresh.
+
+    The primary monitor's is RECOMMENDED — it is where the game runs. Every other
+    monitor's is COMPLETE: optional, offered with what it fixes, never assumed.
+    The numbers in the copy are this panel's own (C9); the row explains the
+    current state from the detect's finding, in the user's language.
+    """
+    from fpstune.settings.display_mode import NATIVE, NOT_AVAILABLE, NOT_NATIVE
+
+    # What a frame costs on screen at each rate: the claim is the panel's own
+    # refresh interval, not a benchmark (C11 rule 4 class for the visual part).
+    saved_ms = 0.0
+    if 0 < refresh_hz < max_refresh_hz:
+        saved_ms = round(1000 / refresh_hz - 1000 / max_refresh_hz, 1)
+    where = "the main monitor, where games run" if primary else "a secondary monitor"
+    return SettingExecutor(
+        id=f"display:{key}:mode",
+        category=SettingCategory.GPU,
+        display_name=f"Display Mode ({subject})",
+        short_name=f"Native resolution and refresh ({subject})",
+        subject=subject,
+        description=(
+            f"Whether {where} runs at its own native resolution and its own maximum "
+            "refresh rate. Below either, the image is scaled or every frame waits longer "
+            "on screen than the panel needs."
+        ),
+        value_type=SettingValueType.CHOICE,
+        choices=(NATIVE, NOT_NATIVE),
+        # Windows labels a panel's native resolution as its recommended one, so
+        # "Windows default" is the same native mode apply writes.
+        default_value=NATIVE,
+        recommended_value=NATIVE,
+        requires_reboot=False,
+        current_impact="Below native: a scaled image or a lower refresh than the panel can show",
+        recommended_impact="Native: every pixel the panel has, at the fastest refresh it supports",
+        scope=SettingScope.RECOMMENDED if primary else SettingScope.COMPLETE,
+        category_order=50,
+        effect="Sets the monitor to its native resolution and maximum refresh rate",
+        impact_scores={"latency_ms": -saved_ms, "target_visibility": "native pixels"},
+        detect_type=DetectType.POWERSHELL,
+        detect_command="display_mode_status",
+        detect_args={"monitor": key},
+        value_map={},
+        apply_type=DetectType.POWERSHELL,
+        apply_command="display_mode_native",
+        apply_args={"monitor": key, "setting_id": f"display:{key}:mode"},
+        apply_value_map={},
+        value_hints={NATIVE: "native", NOT_NATIVE: "below native", NOT_AVAILABLE: ""},
+    )

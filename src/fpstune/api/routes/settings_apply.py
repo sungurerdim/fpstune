@@ -151,6 +151,11 @@ def undo_refusal(setting: SettingExecutor) -> str | None:
     """Why `setting` cannot be undone, or None when it can."""
     if setting.is_action or setting.is_readonly:
         return f"{setting.id} is an action or an advisory; there is no earlier state to put back."
+    if setting.apply_command == "display_mode_native":
+        return (
+            "A display mode is undone by not keeping it: the new mode reverts on its own "
+            "unless it is kept within 15 seconds. Pick another mode in Windows Settings."
+        )
     originals = get_original_values()
     damaged = originals.damaged()
     if damaged:

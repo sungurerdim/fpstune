@@ -47,6 +47,7 @@ def all_discoverers() -> tuple[Discoverer, ...]:
     imports its definitions inside a function.
     """
     from fpstune.settings.discovery.display import (
+        discover_monitor_modes,
         discover_mpo_setting,
         discover_vrr_dependent_settings,
     )
@@ -71,6 +72,7 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         # Reads the adapter list the pass above memoised; two advisories per radio.
         discover_wifi_advisories,
         discover_mpo_setting,
+        discover_monitor_modes,
         discover_mw3_display_settings,
         discover_mw4_display_settings,
         # After the derived settings are registered, so their ranges come from

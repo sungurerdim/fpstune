@@ -28,12 +28,12 @@ def _no_stray_reverts():
     machine running the suite.
     """
     yield
-    from fpstune.api.routes import display as display_module
+    from fpstune.settings import display_mode
 
-    with display_module._pending_lock:
-        for pending in display_module._pending_reverts.values():
+    with display_mode._pending_lock:
+        for pending in display_mode._pending_reverts.values():
             pending["timer"].cancel()
-        display_module._pending_reverts.clear()
+        display_mode._pending_reverts.clear()
 
 
 @contextmanager
@@ -44,7 +44,7 @@ def _fake_user32(prior, *, test_code: int = 0, write_code: int = 0):
     now calls ``winapi.display`` directly, so the fakes sit on those two
     functions. ``calls`` records ("test" | "write", device, width, height, hz).
     """
-    from fpstune.api.routes import display as display_module
+    from fpstune.utils.winapi import display as winapi_display
 
     calls: list[tuple[str, str, int, int, int]] = []
 
@@ -56,8 +56,8 @@ def _fake_user32(prior, *, test_code: int = 0, write_code: int = 0):
         return test_code if test_only else write_code
 
     with (
-        patch.object(display_module.winapi_display, "current_mode", current_mode),
-        patch.object(display_module.winapi_display, "change_mode", change_mode),
+        patch.object(winapi_display, "current_mode", current_mode),
+        patch.object(winapi_display, "change_mode", change_mode),
     ):
         yield calls
 
@@ -602,12 +602,12 @@ class TestModeWriteGuards:
         """The gate: the timer fires and writes back exactly what was read."""
         import time
 
-        from fpstune.api.routes import display as display_module
+        from fpstune.settings import display_mode
 
         with (
             patch("fpstune.api.routes.display.sys.platform", "win32"),
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
-            patch.object(display_module, "_REVERT_TIMEOUT_S", 0.05),
+            patch.object(display_mode, "REVERT_TIMEOUT_S", 0.05),
             _fake_user32((1920, 1080, 60)) as calls,
         ):
             mock_hw.detect_monitors.return_value = [self._suboptimal()]
@@ -624,12 +624,12 @@ class TestModeWriteGuards:
     def test_confirmation_keeps_the_mode_and_cancels_the_revert(self, client: TestClient) -> None:
         import time
 
-        from fpstune.api.routes import display as display_module
+        from fpstune.settings import display_mode
 
         with (
             patch("fpstune.api.routes.display.sys.platform", "win32"),
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
-            patch.object(display_module, "_REVERT_TIMEOUT_S", 0.2),
+            patch.object(display_mode, "REVERT_TIMEOUT_S", 0.2),
             _fake_user32((1920, 1080, 60)) as calls,
         ):
             mock_hw.detect_monitors.return_value = [self._suboptimal()]

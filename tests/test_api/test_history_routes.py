@@ -21,15 +21,15 @@ def client() -> TestClient:
 def test_one_row_per_setting_newest_first_with_its_undo_state(client: TestClient) -> None:
     journal = get_change_journal()
     journal.record("network:nagle_algorithm", "apply", "disabled")
-    journal.record("system:game_mode", "apply", "enabled")
+    journal.record("network:tcp_auto_tuning", "apply", "enabled")
     journal.record("network:nagle_algorithm", "reset", "enabled")
-    get_original_values().record_first_seen({"system:game_mode": "disabled"})
+    get_original_values().record_first_seen({"network:tcp_auto_tuning": "disabled"})
 
     body = client.get("/api/history").json()
 
     assert [r["setting_id"] for r in body["settings"]] == [
         "network:nagle_algorithm",
-        "system:game_mode",
+        "network:tcp_auto_tuning",
     ]
     nagle, game_mode = body["settings"]
     assert (nagle["last_action"], nagle["can_undo"]) == ("reset", False)

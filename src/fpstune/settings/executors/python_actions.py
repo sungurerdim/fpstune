@@ -142,8 +142,21 @@ def animations(args: dict[str, Any]) -> tuple[bool, str | None]:
     return ok, message
 
 
+def _display_mode_native(args: dict[str, Any]) -> tuple[bool, str | None]:
+    from fpstune.settings.display_mode import display_mode_native
+
+    return display_mode_native(args)
+
+
+def _display_mode_status(args: dict[str, Any]) -> str | Reading:
+    from fpstune.settings.display_mode import display_mode_status
+
+    return display_mode_status(args)
+
+
 PYTHON_ACTIONS: dict[str, PythonAction] = {
     "purge_standby": purge_standby,
+    "display_mode_native": _display_mode_native,
     "mouse_acceleration_toggle": mouse_acceleration,
     "accessibility_popups_toggle": accessibility_popups,
     "animations_toggle": animations,
@@ -283,6 +296,7 @@ def animations_status(_args: dict[str, Any]) -> str:
 
 PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "animations_status": animations_status,
+    "display_mode_status": _display_mode_status,
     "bnet_config_read": bnet_config_read,
     "game_ini_read": game_ini_read,
     "wifi_link_quality": wifi_link_quality,

@@ -20,6 +20,44 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
+def discover_monitor_modes(registry: Registrar, probes: HardwareProbes) -> int:  # noqa: ARG001
+    """One display-mode setting per connected monitor whose native mode is known.
+
+    Every monitor, not only the primary: a secondary left at 60 Hz on a 144 Hz
+    panel is a real loss even when no game runs there (cursor, video, the second
+    screen a player watches). The primary's is recommended, the rest optional.
+
+    Returns:
+        How many monitors got a setting.
+    """
+    from fpstune.settings.definitions.display import create_monitor_mode_setting
+    from fpstune.settings.display_mode import is_readable, monitor_key, target_refresh
+    from fpstune.utils.hardware_manager import hardware_manager
+
+    try:
+        monitors = hardware_manager.detect_monitors()
+    except Exception as e:  # pragma: no cover - environment dependent
+        logger.debug("No per-monitor display settings: %s", e)
+        return 0
+
+    primary = primary_monitor(monitors)
+    count = 0
+    for monitor in monitors:
+        if not is_readable(monitor):
+            continue
+        registry.register(
+            create_monitor_mode_setting(
+                monitor_key(monitor, monitors),
+                monitor.friendly_name or monitor.name.removeprefix("\\\\.\\"),
+                primary=monitor is primary,
+                refresh_hz=monitor.refresh_rate_hz,
+                max_refresh_hz=target_refresh(monitor),
+            )
+        )
+        count += 1
+    return count
+
+
 def discover_mpo_setting(registry: Registrar, probes: HardwareProbes) -> int:  # noqa: ARG001
     """Register MPO against the value this Windows build actually honours.
 

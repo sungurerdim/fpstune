@@ -1,10 +1,9 @@
 """Identifiers must not outlive the flag that lets anyone read them (issue #20).
 
-``debug_powershell`` and ``debug_log`` appended full command text, command
-output and hardware identifiers into a 500-entry ring buffer unconditionally.
-The ``DEBUG_ENABLED`` gate covered file writes only, and the only route that can
-read the buffer is itself behind ``FPSTUNE_DEBUG`` — so with the flag off those
-entries sat resident in a long-lived elevated process with no reader at all.
+``debug_powershell`` and ``debug_log`` once appended full command text, command
+output and hardware identifiers into a 500-entry ring buffer unconditionally,
+for a debug API that has since been removed. With no reader left the buffer is
+gone too, and nothing the helpers are handed may stay resident in the module.
 
 The other two failures covered here: the component log files had no size cap,
 and the log directory fell back to ``Path.cwd()`` for a frozen build, which for
@@ -19,62 +18,55 @@ import pytest
 
 from fpstune.utils import debug as debug_module
 
+_MAC = "00-11-22-33-44-55"
+_INSTANCE = "PCI\\VEN_10EC&DEV_8168"
+
 
 @pytest.fixture(autouse=True)
 def clean_debug_state(monkeypatch):
-    """Each test starts with an empty buffer and an unresolved log directory."""
-    debug_module.clear_debug_entries()
+    """Each test starts with an unresolved log directory and no writers."""
     monkeypatch.setattr(debug_module, "_LOG_DIR", None)
     monkeypatch.setattr(debug_module, "_log_writers", {})
-    yield
-    debug_module.clear_debug_entries()
 
 
-class TestRingBufferFollowsTheFlag:
-    def test_nothing_is_retained_while_debug_is_off(self, monkeypatch) -> None:
-        monkeypatch.setattr(debug_module, "DEBUG_ENABLED", False)
+def _module_state_text() -> str:
+    """Everything the module holds at module level, as text."""
+    return repr({k: v for k, v in vars(debug_module).items() if not k.startswith("__")})
+
+
+class TestNothingIsKeptInMemory:
+    """The debug API that read a 500-entry buffer is gone, so no buffer may exist:
+    an identifier handed to the debug helpers must never be held by the module."""
+
+    @pytest.mark.parametrize("enabled", [False, True])
+    def test_identifiers_are_not_retained_by_the_module(
+        self, monkeypatch, tmp_path, enabled: bool
+    ) -> None:
+        monkeypatch.setattr(debug_module, "DEBUG_ENABLED", enabled)
+        monkeypatch.setattr(debug_module, "_LOG_DIR", tmp_path)
 
         debug_module.debug_powershell(
-            "Get-NetAdapter | Select-Object MacAddress",
-            "MacAddress : 00-11-22-33-44-55",
-            True,
+            "Get-NetAdapter | Select-Object MacAddress", f"MacAddress : {_MAC}", True
         )
-        debug_module.debug_log("hardware", "adapter", {"instance_id": "PCI\\VEN_10EC&DEV_8168"})
+        debug_module.debug_log("hardware", "adapter", {"instance_id": _INSTANCE})
+        with debug_module.debug_context("detect_monitors", "hardware") as ctx:
+            ctx.set_detail("hardware_id", _MAC)
 
-        assert debug_module.get_debug_entries() == []
-        assert debug_module.get_debug_status()["entry_count"] == 0
+        for writer in debug_module._log_writers.values():
+            for handler in writer.handlers:
+                handler.close()
+        state = _module_state_text()
+        assert _MAC not in state
+        assert "VEN_10EC" not in state
 
-    def test_a_context_block_is_retained_only_while_debug_is_on(self, monkeypatch) -> None:
+    def test_nothing_reaches_disk_while_debug_is_off(self, monkeypatch, tmp_path) -> None:
         monkeypatch.setattr(debug_module, "DEBUG_ENABLED", False)
-        with debug_module.debug_context("detect_monitors", "hardware") as ctx:
-            ctx.set_detail("hardware_id", "ABC1234")
-        assert debug_module.get_debug_entries() == []
-
-        monkeypatch.setattr(debug_module, "DEBUG_ENABLED", True)
-        with debug_module.debug_context("detect_monitors", "hardware") as ctx:
-            ctx.set_detail("hardware_id", "ABC1234")
-        assert len(debug_module.get_debug_entries()) == 1
-
-    def test_entries_are_kept_when_debug_is_on(self, monkeypatch, tmp_path) -> None:
-        monkeypatch.setattr(debug_module, "DEBUG_ENABLED", True)
         monkeypatch.setattr(debug_module, "_LOG_DIR", tmp_path)
 
-        debug_module.debug_powershell("Get-Date", "Tuesday", True)
+        debug_module.debug_powershell("Get-NetAdapter", f"MacAddress : {_MAC}", True)
+        debug_module.debug_log("hardware", "adapter", {"instance_id": _INSTANCE})
 
-        entries = debug_module.get_debug_entries()
-        assert len(entries) == 1
-        assert entries[0]["details"]["command"] == "Get-Date"
-
-    def test_the_buffer_never_exceeds_its_bound(self, monkeypatch, tmp_path) -> None:
-        monkeypatch.setattr(debug_module, "DEBUG_ENABLED", True)
-        monkeypatch.setattr(debug_module, "_LOG_DIR", tmp_path)
-
-        for index in range(debug_module.MAX_DEBUG_ENTRIES + 25):
-            debug_module.debug_log("settings", f"entry {index}")
-
-        assert len(debug_module._debug_entries) == debug_module.MAX_DEBUG_ENTRIES
-        newest = debug_module.get_debug_entries(limit=1)[0]
-        assert newest["details"]["message"].endswith(str(debug_module.MAX_DEBUG_ENTRIES + 24))
+        assert list(tmp_path.iterdir()) == []
 
 
 class TestComponentLogsRotate:

@@ -3,8 +3,7 @@
 Enable debug mode by setting FPSTUNE_DEBUG=1 environment variable.
 This provides detailed logging for troubleshooting issues.
 
-With the flag set, and only then, entries are kept in memory for the debug API
-and written to four rotating files:
+With the flag set, and only then, entries are written to four rotating files:
 - debug.log - All debug entries (JSON format)
 - hardware.log - Hardware detection logs
 - settings.log - Settings detection/apply logs
@@ -24,34 +23,16 @@ import os
 import sys
 import threading
 import time
-from collections import deque
-from collections.abc import Callable, Generator
+from collections.abc import Generator
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from datetime import datetime
-from functools import wraps
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, TypeVar
+from typing import Any
 
 # Check if debug mode is enabled (for console output)
 DEBUG_ENABLED = os.environ.get("FPSTUNE_DEBUG", "").lower() in ("1", "true", "yes", "on")
-
-MAX_DEBUG_ENTRIES = 500
-
-# Debug log storage for the (debug-gated) API.
-#
-# A deque with a maxlen rather than a list that is re-sliced: the old form
-# rebound a module global from whatever thread got there first, so two detection
-# workers appending at once could drop each other's entry — and every append
-# copied up to 500 dicts.
-#
-# Only populated when DEBUG_ENABLED, because only a debug-gated route can read
-# it. The entries carry full command text, command output and the hardware
-# identifiers that output contains; with the flag off nothing can ever fetch
-# them, so keeping 500 of them resident in an elevated process buys nothing and
-# leaves identifiers in memory for the life of the run.
-_debug_entries: deque[dict[str, Any]] = deque(maxlen=MAX_DEBUG_ENTRIES)
 
 # File logging configuration
 _LOG_DIR: Path | None = None
@@ -72,9 +53,6 @@ _LOG_FILES_TO_CLEAR = [
     "settings.log",
     "powershell.log",
 ]
-
-# Type variable for decorator
-F = TypeVar("F", bound=Callable[..., Any])
 
 
 @dataclass
@@ -285,35 +263,6 @@ def _safe_serialize(value: Any) -> Any:
     return str(value)[:500]  # Truncate long strings
 
 
-def _record_entry(entry: dict[str, Any]) -> None:
-    """Keep one entry for the debug API, and only when that API can be reached.
-
-    The single door into ``_debug_entries``: gating it here rather than at each
-    caller is what stops the next one from forgetting.
-    """
-    if not DEBUG_ENABLED:
-        return
-    _debug_entries.append(entry)
-
-
-def _add_debug_entry(ctx: DebugContext) -> None:
-    """Add a debug entry to the global storage."""
-    _record_entry(ctx.to_dict())
-
-
-def get_debug_entries(limit: int = 100, component: str | None = None) -> list[dict[str, Any]]:
-    """Get debug entries, optionally filtered by component."""
-    entries = list(_debug_entries)
-    if component:
-        entries = [e for e in entries if e.get("component") == component]
-    return list(reversed(entries[-limit:]))
-
-
-def clear_debug_entries() -> None:
-    """Clear all debug entries."""
-    _debug_entries.clear()
-
-
 def get_logger(name: str) -> logging.Logger:
     """Get a debug logger with the given name."""
     logger = logging.getLogger(f"fpstune.debug.{name}")
@@ -356,7 +305,6 @@ def debug_context(operation: str, component: str) -> Generator[DebugContext, Non
             logger.error(f"!!! {operation} failed: {e}")
         raise
     finally:
-        _add_debug_entry(ctx)
         if DEBUG_ENABLED:
             duration = int((time.time() - ctx.start_time) * 1000)
             logger.debug(f"<<< {operation} completed in {duration}ms")
@@ -371,30 +319,12 @@ def debug_powershell(
 ) -> None:
     """Log PowerShell command execution for debugging.
 
-    Entries are kept in memory for the debug API, on disk, and on the console
-    only when DEBUG_ENABLED=True — the command text and its output carry the
-    machine's identifiers, and with debug off there is no reader for any of
-    the three.
+    Written to disk and the console only when DEBUG_ENABLED=True — the command
+    text and its output carry the machine's identifiers, and with debug off
+    there is no reader for either.
     """
     if not DEBUG_ENABLED:
         return
-
-    _record_entry(
-        {
-            "operation": "powershell_execute",
-            "component": component,
-            "timestamp": datetime.now().isoformat(),
-            "details": {
-                "command": command[:2000],
-                "output": output[:2000],
-                "success": success,
-            },
-            "steps": [],
-            "errors": [] if success else [output[:500]],
-            "warnings": [],
-            "duration_ms": 0,
-        }
-    )
 
     # Write to the log file (itself gated on DEBUG_ENABLED)
     status_str = "OK" if success else "FAIL"
@@ -417,76 +347,18 @@ def debug_powershell(
         logger.debug(f"  Output: {out_display.replace(chr(10), ' | ')[:300]}")
 
 
-def debug_function(component: str) -> Callable[[F], F]:
-    """Decorator to add debug logging to a function.
-
-    Usage:
-        @debug_function("hardware")
-        def detect_monitors():
-            ...
-    """
-
-    def decorator(func: F) -> F:
-        @wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            if not DEBUG_ENABLED:
-                return func(*args, **kwargs)
-
-            logger = get_logger(component)
-            func_name = func.__name__
-
-            # Log function call
-            args_repr = ", ".join(
-                [repr(a)[:50] for a in args[:5]]
-                + [f"{k}={repr(v)[:50]}" for k, v in list(kwargs.items())[:5]]
-            )
-            logger.debug(f">>> {func_name}({args_repr})")
-
-            start = time.time()
-            try:
-                result = func(*args, **kwargs)
-                duration = int((time.time() - start) * 1000)
-                result_repr = repr(result)[:200] if result is not None else "None"
-                logger.debug(f"<<< {func_name} returned in {duration}ms: {result_repr}")
-                return result
-            except Exception as e:
-                duration = int((time.time() - start) * 1000)
-                logger.error(f"!!! {func_name} failed in {duration}ms: {e}")
-                raise
-
-        return wrapper  # type: ignore[return-value]
-
-    return decorator
-
-
 def debug_log(component: str, message: str, data: Any = None) -> None:
     """Log a debug message with optional data.
 
     Nothing is kept, written or printed unless DEBUG_ENABLED: the message and
     its data are detection output, which carries adapter GUIDs, MAC addresses
-    and paths, and no route can read them back with the flag off. Returning
+    and paths. Returning
     first also keeps ``_safe_serialize`` off the detection hot path.
     """
     if not DEBUG_ENABLED:
         return
 
     serialized_data = _safe_serialize(data) if data is not None else None
-    _record_entry(
-        {
-            "operation": "debug_log",
-            "component": component,
-            "timestamp": datetime.now().isoformat(),
-            "details": {
-                "message": message,
-                "data": serialized_data,
-            },
-            "steps": [],
-            "errors": [],
-            "warnings": [],
-            "duration_ms": 0,
-        }
-    )
-
     # Write to the log file (itself gated on DEBUG_ENABLED)
     _write_to_file(component, message, {"data": serialized_data} if serialized_data else None)
 
@@ -503,27 +375,3 @@ def debug_log(component: str, message: str, data: Any = None) -> None:
 def is_debug_enabled() -> bool:
     """Check if debug mode is enabled."""
     return DEBUG_ENABLED
-
-
-def get_debug_status() -> dict[str, Any]:
-    """Get current debug status and statistics."""
-    # One snapshot for the whole report: the deque is appended to from detection
-    # threads, so counting it twice can describe two different buffers.
-    entries = list(_debug_entries)
-    return {
-        "enabled": DEBUG_ENABLED,
-        "env_var": os.environ.get("FPSTUNE_DEBUG", "(not set)"),
-        "entry_count": len(entries),
-        "max_entries": MAX_DEBUG_ENTRIES,
-        "components": list({e.get("component", "") for e in entries}),
-        "recent_errors": [
-            {
-                "operation": e.get("operation"),
-                "component": e.get("component"),
-                "errors": e.get("errors"),
-                "timestamp": e.get("timestamp"),
-            }
-            for e in reversed(entries[-50:])
-            if e.get("errors")
-        ][:10],
-    }

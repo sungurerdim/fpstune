@@ -67,7 +67,7 @@ person running it already has it.
 | **Local web UI** | The backend binds `127.0.0.1` only. It is not intended to be exposed to a network, and doing so hands Administrator-level system control to anyone who can reach the port. |
 | **Command injection** | Every dynamic value reaching a shell is validated at the boundary. Network adapters are addressed by numeric `InterfaceIndex`, never by name, precisely so a crafted adapter name cannot reach a command line. |
 | **Registry writes** | Pinned to the 64-bit view (`KEY_WOW64_64KEY`), so a 32-bit build cannot be silently redirected into `Wow6432Node` and report success against a key it never touched. |
-| **Debug endpoints** | `/api/debug/*` and the interactive API docs are not mounted at all unless `FPSTUNE_DEBUG=1` is set, so they cannot be reached on a normal run. |
+| **API docs** | The interactive API docs are not mounted at all unless `FPSTUNE_DEBUG=1` is set, so they cannot be reached on a normal run. There are no debug endpoints. |
 | **Supply chain** | Dependencies are pinned in `uv.lock` and `package-lock.json`. Dependabot alerts are treated as release blockers. |
 | **Unsigned binaries** | Releases are not code-signed. SmartScreen will warn. Verify the published SHA256 and the build provenance attestation instead of trusting the warning's absence. |
 

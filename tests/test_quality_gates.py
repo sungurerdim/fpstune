@@ -621,7 +621,7 @@ class TestFunctionLengthCeiling:
         # PowerShell process to answer.
         ("src/fpstune/settings/executors/powershell.py", "detect"): 160,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
-        ("src/fpstune/api/main.py", "create_app"): 193,
+        ("src/fpstune/api/main.py", "create_app"): 190,
         ("src/fpstune/settings/detection.py", "detect_all"): 165,
     }
 
@@ -676,7 +676,6 @@ class TestRouteModuleCeiling:
     _CEILING = {
         "src/fpstune/api/routes/settings.py": 1147,
         "src/fpstune/api/routes/display.py": 613,
-        "src/fpstune/api/routes/debug.py": 501,
     }
 
     def test_no_route_module_grows_past_its_ceiling(self) -> None:
@@ -874,10 +873,6 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/benchmark/event_scan.py", "$_.ProviderName -match"): (
             "an event provider's registered id — the name the driver published to ETW, "
             "not the sentence the event renders into, so no Windows language changes it"
-        ),
-        ("src/fpstune/api/routes/debug.py", "'*NVIDIA*'"): "a vendor brand name (C5 allows it)",
-        ("src/fpstune/api/routes/debug.py", "'Render'"): (
-            "a registry key name under MMDevices\\Audio, not text"
         ),
         ("src/fpstune/api/routes/system_network.py", "'*802.11*'"): _ENUM_802,
         ("src/fpstune/settings/definitions/audio.py", "-like '*{fragment}*'"): (

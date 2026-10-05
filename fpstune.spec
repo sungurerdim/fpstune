@@ -73,7 +73,7 @@ if not frontend_dist.is_dir():
 datas = [(str(frontend_dist), "frontend/dist")]
 
 hiddenimports = [
-    # Settings definitions, executors, routes and diagnostics are reached through
+    # Settings definitions, executors and routes are reached through
     # registries and routers, so static analysis finds none of them.
     *collect_submodules("fpstune"),
     # Uvicorn picks its protocol implementations at runtime by name.

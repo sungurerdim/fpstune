@@ -319,7 +319,7 @@ src/fpstune/
             routes/  settings.py · settings_apply.py · settings_stream.py · benchmark.py ·
                      benchmark_suite.py · benchmark_ledger.py · system.py ·
                      system_{network,audio,power,storage}.py · system_common.py ·
-                     display.py · safety.py · updates.py · debug.py
+                     display.py · safety.py · updates.py
   settings/ definitions/ (16 category files) · executors/ · base.py · applicability.py ·
             hardware_context.py · impact_categories.py · groups.py · registry.py ·
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·

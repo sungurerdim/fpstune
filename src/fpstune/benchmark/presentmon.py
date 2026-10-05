@@ -55,7 +55,7 @@ SESSION_NAME_FLAG = "--session_name"
 # PresentMon's own spellings of the swapchain presentation path, across versions.
 # "Hardware: Independent Flip" is the path a borderless game should be on; a
 # "Composed" mode means the desktop compositor sat between the game and the
-# screen. Shared with the MPO diagnostic, which reads the same column.
+# screen.
 PRESENT_MODE_COLUMNS = ("PresentMode", "presentMode", "Present Mode")
 
 # A frame counts as a stutter above this multiple of the run's average frame time.

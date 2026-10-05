@@ -220,7 +220,7 @@ under `/api`, exist so the UI never has to shell out for anything:
 | Safety | `/restore-point` — create a System Restore point |
 | Updates | `/update/check` and `/update/install` — the published release, checksum-verified before it replaces the exe |
 
-Debug endpoints exist too, but only when the process runs with `FPSTUNE_DEBUG=1`.
+With `FPSTUNE_DEBUG=1` the interactive API docs are served at `/docs`; a normal run serves none.
 
 ---
 
@@ -353,7 +353,7 @@ Metrics: avg FPS, 1% low, 0.1% low, frame time std-dev, stutter count.
 src/fpstune/
   api/              FastAPI backend
     routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
-                    system*.py, display.py, gpu.py, benchmark*.py, safety.py, debug.py
+                    system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
     definitions/    16 category files producing the 411 settings in 13 categories —
                     the file count and category count differ because the game-config
@@ -367,7 +367,6 @@ src/fpstune/
   safety/           System Restore points + per-machine originals (what undo writes back)
   benchmark/        PresentMon, FurMark, DPC latency, the suite, claim verification
   commands/         the CLI surface (status, gpu, benchmark, fps, cleanup, ...)
-  diagnostics/      one-question probes (MPO effect, packet burst)
   utils/            Hardware detection, admin check, logging, PowerShell runner
 
 frontend/src/       React + Vite + TypeScript + Tailwind

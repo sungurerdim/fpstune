@@ -21,7 +21,6 @@ from __future__ import annotations
 import pytest
 
 from fpstune.benchmark.presentmon import (
-    PRESENT_MODE_COLUMNS,
     STUTTER_THRESHOLD_FACTOR,
     FrameTimeStats,
     PresentMonBenchmark,
@@ -220,11 +219,6 @@ class TestParsingACapture:
         assert stats is not None
         assert stats.present_mode == "Hardware: Independent Flip"
         assert stats.to_dict()["present_mode"] == "Hardware: Independent Flip"
-
-    def test_the_mpo_diagnostic_and_the_parser_read_the_same_column(self) -> None:
-        from fpstune.diagnostics import mpo_effect
-
-        assert mpo_effect.PRESENT_MODE_COLUMNS is PRESENT_MODE_COLUMNS
 
     def test_the_breakdown_reaches_the_serialised_form(self, tmp_path) -> None:
         """It has to survive to disk and to the API, or the UI cannot show it."""

@@ -50,7 +50,6 @@ JSON response -> React Query refetch -> UI refresh
   capture and GPU stress *commands* live in the CLI, `commands/benchmark.py` —
   there are no `fps.py` or `gpubench.py` route modules.)
 - `routes/updates.py` — update check, and the checksum-verified self-update
-- `routes/debug.py` — diagnostic endpoints, gated on `FPSTUNE_DEBUG=1`
 - `schemas.py` — Pydantic v2 request/response models
 - `hardware/` — `network_adapters.py`, `storage.py`, `audio.py`: the read-only
   probes behind the hardware panel. They sit under `api/` rather than `utils/`
@@ -69,7 +68,7 @@ JSON response -> React Query refetch -> UI refresh
   `netsh.py`, `powershell.py`, `powershell_actions.py`, `python_actions.py`,
   `ps_batch.py`, `nvprofile.py`, `nvidia_app.py`, `mw3_profile.py`,
   `mw3_paths.py`, `mw4_config.py`, `game_config_writer.py`, `game_config_cache.py`,
-  `game_processes.py`, `bnet_config.py`, `adapter_restart.py`, `config_sweep.py`.
+  `game_processes.py`, `bnet_config.py`, `adapter_restart.py`.
   No executor writes boot configuration
 - `detection.py` — `DetectionEngine` runs detection in parallel via
   `ThreadPoolExecutor`; honors per-setting `detect_timeout` overrides.
@@ -143,13 +142,6 @@ One module per command family, shared vocabulary in `presentation.py`:
 `cleanup.py`, and `utils.py`. The CLI reports and measures; applying settings
 stays on the API path so every write is verified.
 
-### `diagnostics/` — one-question probes
-
-Small measurements that exist to settle a specific argument rather than to run
-in the suite: `mpo_effect.py` (what Multiplane Overlay actually changes here)
-and `packet_burst.py`. They have their own test directory
-(`tests/test_diagnostics/`).
-
 ### `utils/` — Cross-cutting helpers
 
 - `detect.py` — GPU/CPU/monitor detection, in-process cache,
@@ -161,7 +153,7 @@ and `packet_burst.py`. They have their own test directory
 - `logger.py` — Structured logging + activity log
 - `console.py` — the one Rich Console the CLI and the logger both write through
 - `config.py` — Path resolution (config dir, backups dir)
-- `debug.py` — Debug-mode entry buffer
+- `debug.py` — `FPSTUNE_DEBUG` console and rotating-file logging
 - `audio_format.py` — audio format parsing/formatting helpers
 - `path_mtu.py` — path-MTU discovery for the network settings
 - `runtime.py` — frozen-vs-source packaging facts (`sys._MEIPASS`, bundled UI)
@@ -183,8 +175,7 @@ and `packet_burst.py`. They have their own test directory
 - `hooks/` — `useActionStream`, `useApplySingle`, `useBulkApply`,
   `useCleanupRunner`, `useImpactSummary`
 - `lib/`
-  - `api.ts` — typed client over the FastAPI surface (single file, split
-    still open — `docs/REFACTOR_PLAN.md`)
+  - `api.ts` — typed client over the FastAPI surface (single file)
   - `detection-manager.ts` — Coordinates detection requests, dedupes
     in-flight queries
   - `hardware-manager.ts` — Mirrors backend `HardwareManager`
@@ -242,8 +233,7 @@ and `packet_burst.py`. They have their own test directory
 
 ## Known refactor backlog
 
-See `docs/REFACTOR_PLAN.md` — it is in the repository, so a fresh clone has it.
-Already landed from it: the `api/routes/system.py` split into per-subsystem
+Already landed: the `api/routes/system.py` split into per-subsystem
 routers, the `executors/powershell.py` action-table extraction
 (`powershell_actions.py`), and the `HardwarePanel.tsx` split into the
 `components/hardware/` package; `core/nv_profile.py` was removed with nvidiaProfileInspector. Still open:

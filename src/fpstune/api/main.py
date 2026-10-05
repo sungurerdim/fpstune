@@ -36,7 +36,6 @@ from fpstune.api.routes import (
     system_storage_router,
     updates_router,
 )
-from fpstune.api.routes.debug import router as debug_router
 from fpstune.utils.debug import is_debug_enabled
 from fpstune.utils.detect import start_gpu_detection_async
 from fpstune.utils.logger import get_logger as _get_shared_logger
@@ -223,9 +222,8 @@ _NO_TELEMETRY: TelemetryConfig = {
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
-    # Interactive API docs (Swagger/ReDoc) and the debug router expose the full
-    # schema plus PII-bearing diagnostics; gate both behind FPSTUNE_DEBUG so the
-    # packaged production binary does not surface them.
+    # Interactive API docs (Swagger/ReDoc) expose the full schema; gate them
+    # behind FPSTUNE_DEBUG so the packaged production binary does not surface them.
     debug_mode = is_debug_enabled()
 
     app = FastAPI(
@@ -305,8 +303,6 @@ def create_app() -> FastAPI:
     app.include_router(benchmark_router, prefix="/api/benchmark", tags=["Benchmark"])
     app.include_router(benchmark_suite_router, prefix="/api/benchmark", tags=["Benchmark"])
     app.include_router(updates_router, prefix="/api", tags=["Update"])
-    if debug_mode:
-        app.include_router(debug_router, tags=["Debug"])
 
     @app.get("/")
     async def root() -> dict[str, str]:

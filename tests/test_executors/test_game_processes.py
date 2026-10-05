@@ -14,6 +14,10 @@ from __future__ import annotations
 
 import pytest
 
+# Imported at collection, against the real platform: the API package pulls in
+# modules that read platform-specific build data on first import, which a
+# test that fakes Windows must not be the one to trigger.
+from fpstune.api.routes.settings import _finalize_apply_response
 from fpstune.settings.executors import game_processes as gp
 
 
@@ -192,6 +196,9 @@ class TestCaching:
         assert calls["n"] == 2
 
 
+# The config file is plain text under a temporary %LOCALAPPDATA%; only the
+# executor's platform gate is Windows-specific.
+@pytest.mark.usefixtures("windows_host")
 class TestTheApplyPathHonoursIt:
     def test_apply_refuses_and_writes_nothing(self, monkeypatch, tmp_path) -> None:
         """The whole point: the write must not happen, not merely be reported."""
@@ -261,8 +268,8 @@ class TestTheMessageReachesTheUser:
     fpstune rather than as a game that is open.
     """
 
+    @pytest.mark.usefixtures("windows_host")
     def test_the_api_response_carries_the_reason(self, monkeypatch, tmp_path) -> None:
-        from fpstune.api.routes.settings import _finalize_apply_response
         from fpstune.settings.definitions.game_configs_mw4 import MW4_TEXTURE_QUALITY
         from fpstune.settings.executors.powershell import PowerShellExecutor
 

@@ -383,6 +383,9 @@ class TestPrefetchReachesTheScanCache:
         settings.append(self._batched_setting("services:spooler", {"batch_service": "spooler"}))
 
         with (
+            # The prefetch stands down off Windows; the group it would run is
+            # scripted, so the cache hand-off this guards runs on any host.
+            patch.object(ps_batch.sys, "platform", "win32"),
             patch.object(ps_batch, "_run_detect_group", fake_group),
             patch.object(ps_batch, "_fetch_services_snapshot", lambda: {}),
             patch("fpstune.settings.detection.CommandExecutor.detect", side_effect=worker),

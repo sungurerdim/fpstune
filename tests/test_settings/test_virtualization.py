@@ -154,6 +154,9 @@ class TestConsumerDetection:
         vm_dir = tmp_path / "Microsoft" / "Windows" / "Hyper-V" / "Virtual Machines"
         vm_dir.mkdir(parents=True)
         monkeypatch.setenv("PROGRAMDATA", str(tmp_path))
+        # The probe is a directory walk behind a Windows-only gate; the directory
+        # is a temporary one, so the walk runs the same on any host.
+        monkeypatch.setattr(virtualization.sys, "platform", "win32")
 
         assert virtualization._hyper_v_machines() is None
 

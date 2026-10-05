@@ -138,10 +138,15 @@ class TestTheReadingIsNotAConstant:
         self, setting: SettingExecutor
     ) -> None:
         """End to end: what actually reaches PowerShell is the trim reading."""
-        with patch(
-            "fpstune.settings.executors.powershell.PowerShellExecutor._run",
-            return_value=(True, "ok|3 days"),
-        ) as run:
+        with (
+            # The executor answers "Not available" off Windows; PowerShell itself
+            # is scripted here, so the dispatch runs the same on any host.
+            patch("fpstune.settings.executors.powershell.sys.platform", "win32"),
+            patch(
+                "fpstune.settings.executors.powershell.PowerShellExecutor._run",
+                return_value=(True, "ok|3 days"),
+            ) as run,
+        ):
             value, error = CommandExecutor.detect(setting)
 
         assert (value, error) == ("ok|3 days", None)
@@ -163,9 +168,12 @@ class TestTheReadingContract:
         self, setting: SettingExecutor, reading: str
     ) -> None:
         """Verbatim, because the badge shows the string the script produced."""
-        with patch(
-            "fpstune.settings.executors.powershell.PowerShellExecutor._run",
-            return_value=(True, reading),
+        with (
+            patch("fpstune.settings.executors.powershell.sys.platform", "win32"),
+            patch(
+                "fpstune.settings.executors.powershell.PowerShellExecutor._run",
+                return_value=(True, reading),
+            ),
         ):
             assert CommandExecutor.detect(setting) == (reading, None)
 

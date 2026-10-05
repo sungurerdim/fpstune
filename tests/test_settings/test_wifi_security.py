@@ -153,6 +153,9 @@ class TestThroughTheExecutor:
             raise AssertionError("a Python detector must never spawn PowerShell")
 
         monkeypatch.setattr("fpstune.settings.executors.powershell.run_powershell", no_powershell)
+        # The executor answers "Not available" off Windows; wlanapi is stubbed
+        # below, so the Python dispatch runs the same on any host.
+        monkeypatch.setattr("fpstune.settings.executors.powershell.sys.platform", "win32")
         monkeypatch.setattr(wlan, "query_connected", lambda: [_record(cipher=TKIP)])
 
         reading, error = PowerShellExecutor().detect(setting)

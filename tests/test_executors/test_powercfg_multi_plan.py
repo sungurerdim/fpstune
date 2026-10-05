@@ -46,6 +46,16 @@ SETTING = "0cc5b647-c1df-4637-891a-dec35c318583"
 _WINDOWS_DEFAULT = "fpstune.settings.executors.powercfg.windows_default_index"
 
 
+@pytest.fixture(autouse=True)
+def _on_windows(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every executor path returns early off Windows.
+
+    The registry is scripted through ``winreg`` patches in each test, so once the
+    executor believes it is on Windows the plan logic runs the same on any host.
+    """
+    monkeypatch.setattr("fpstune.settings.executors.powercfg.sys.platform", "win32")
+
+
 @pytest.fixture
 def executor() -> PowerCfgExecutor:
     return PowerCfgExecutor()
@@ -234,6 +244,17 @@ class TestDetectAcrossPlans:
 
 
 class TestApplyAcrossPlans:
+    @pytest.fixture(autouse=True)
+    def _battery_default_published(self):
+        """The machine publishes a Balanced DC default for the setting.
+
+        Scripted rather than read from the host's registry, so these cases do
+        not depend on what the runner's catalogue happens to carry; what an
+        absent default does is `TestTheBatteryRail`'s subject.
+        """
+        with patch(_WINDOWS_DEFAULT, return_value=0):
+            yield
+
     def test_it_writes_every_plan(self, executor) -> None:
         calls: list[str] = []
         with (

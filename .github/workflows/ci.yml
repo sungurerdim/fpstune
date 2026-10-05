@@ -22,6 +22,9 @@ jobs:
     # ships with: a second leg doubles the Windows minutes for a version no
     # user runs.
     name: Backend (lint + type + test)
+    # About twice a normal run: a hung test stops here instead of burning
+    # Actions minutes until GitHub's 6-hour default.
+    timeout-minutes: 25
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
@@ -52,6 +55,9 @@ jobs:
     # Nothing in the UI build or its tests depends on the host OS, and a Linux
     # minute costs half a Windows one.
     name: Frontend (type + build + lint + test + a11y)
+    # About twice a normal run: a hung test stops here instead of burning
+    # Actions minutes until GitHub's 6-hour default.
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -92,6 +98,9 @@ jobs:
     # `--version` check alone answers before the API is ever imported, which is
     # how a broken import graph could ship.
     name: Package (build + start + serve)
+    # About twice a normal run: a hung test stops here instead of burning
+    # Actions minutes until GitHub's 6-hour default.
+    timeout-minutes: 20
     needs: [backend, frontend]
     runs-on: windows-latest
     env:

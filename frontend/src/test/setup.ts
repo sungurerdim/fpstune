@@ -20,6 +20,15 @@ afterEach(() => {
 
 afterAll(() => {
   server.close();
+  // A log that lands after this file's last test belongs to no test: a query's
+  // retry or refetch finishing late on a loaded machine. Reaching the console
+  // then raced the worker's teardown and failed the whole run with
+  // "Closing rpc while onUserConsoleLog was pending" (1 run in 3, seen in
+  // HomeAdvisories.test.tsx). Every test has finished by now, so nothing a test
+  // could assert on is lost.
+  for (const method of ["log", "info", "warn", "error", "debug"] as const) {
+    vi.spyOn(console, method).mockImplementation(() => undefined);
+  }
 });
 
 // Mock window.matchMedia for components that use it

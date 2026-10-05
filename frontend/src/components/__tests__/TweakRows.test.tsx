@@ -30,6 +30,7 @@ vi.mock("../TweakSetting", () => ({
 function makeSetting(id: string, displayName: string): Setting {
   return {
     id: id as `${string}:${string}`,
+    domain: "software",
     module: id.split(":")[0],
     name: id.split(":").slice(1).join(":"),
     displayName,

@@ -21,6 +21,7 @@ import type { Setting } from "../../types/setting";
 function advisory(overrides: Partial<Setting>): Setting {
   return {
     id: "network:19:link_capability" as `${string}:${string}`,
+    domain: "software",
     module: "network",
     name: "19:link_capability",
     displayName: "Link Speed vs Adapter Capability (Ethernet)",

@@ -35,6 +35,7 @@ vi.mock("../../hooks/useBulkApply", () => ({
 function makeSetting(over: Partial<Setting> & Pick<Setting, "id">): Setting {
   return {
     module: over.id.split(":")[0],
+    domain: over.id.startsWith("game_config:") ? "game" : "software",
     name: over.id.split(":").slice(1).join(":"),
     displayName: "A Tweak",
     description: "Controls something. It matters for latency.",
@@ -328,6 +329,27 @@ describe("SettingsTab flat list", () => {
     expect(screen.getByRole("button", { name: /fix all/i })).toHaveTextContent(
       "Fix all 1",
     );
+  });
+
+  it("leaves a power-plan key that acts on hardware to the Hardware tab", () => {
+    // PCIe link power saving is written by powercfg, yet it slows the GPU and
+    // NVMe link — the category is the component it acts on, not how it is set.
+    const plan = makeSetting({
+      id: "power:hibernation" as `${string}:${string}`,
+      displayName: "Hibernation",
+      category: "system",
+    });
+    const pcie = makeSetting({
+      id: "power:pcie_link_state" as `${string}:${string}`,
+      displayName: "PCIe Link State Power Management",
+      category: "system",
+      domain: "hardware",
+      component: "pcie",
+    });
+    renderTab([{ category: SYSTEM, settings: [plan, pcie] }]);
+
+    expect(screen.getByText("Hibernation")).toBeInTheDocument();
+    expect(screen.queryByText("PCIe Link State Power Management")).not.toBeInTheDocument();
   });
 
   it("leaves out a setting nothing has been read for", () => {

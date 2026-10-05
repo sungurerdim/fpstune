@@ -33,6 +33,7 @@ vi.mock("../../hooks/useApplySingle", () => ({
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
     id: "power:cpu_min_state" as `${string}:${string}`,
+    domain: "software",
     module: "power",
     name: "cpu_min_state",
     displayName: "Minimum Processor State",

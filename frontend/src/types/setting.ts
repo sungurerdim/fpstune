@@ -182,6 +182,22 @@ export interface Finding {
   [key: string]: unknown;
 }
 
+/** Which page owns a tweak: a physical component, Windows, or a game's own file. */
+export type TweakDomain = "hardware" | "software" | "game";
+
+/** The physical component a hardware tweak acts on (backend `Component`). */
+export type HardwareComponent =
+  | "cpu"
+  | "memory"
+  | "gpu"
+  | "display"
+  | "storage"
+  | "network_adapter"
+  | "audio"
+  | "usb"
+  | "pcie"
+  | "power_supply";
+
 export interface Setting {
   // === Identity ===
   id: SettingId; // "timer:hpet"
@@ -221,6 +237,10 @@ export interface Setting {
   // === Display (static) ===
   shortName?: string; // Optional abbreviated name for compact UI
   subject?: string; // Device instance ("Wi-Fi", "Ethernet"); absent when machine-wide
+  /** Which page owns the tweak — decided on the backend, never from the id here. */
+  domain: TweakDomain;
+  /** The physical component a hardware tweak acts on; absent for software and games. */
+  component?: HardwareComponent;
   icon?: string; // Lucide icon name (from backend)
   color?: string; // Tailwind color class (from backend)
   categoryOrder: number; // Sort order within category
@@ -307,6 +327,8 @@ export interface SettingDefinition {
   scope: string;
   short_name?: string;
   subject?: string;
+  component?: HardwareComponent | null;
+  domain: TweakDomain;
   icon?: string;
   color?: string;
   category_order?: number;
@@ -474,6 +496,8 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     ),
     shortName: def.short_name,
     subject: def.subject || undefined,
+    domain: def.domain,
+    component: def.component ?? undefined,
     icon: def.icon,
     color: def.color,
     categoryOrder: def.category_order ?? 0,

@@ -21,6 +21,7 @@ import type { Setting } from "../../types/setting";
 function cleanupSetting(overrides: Partial<Setting> = {}): Setting {
   return {
     id: "cleanup:temp_files" as `${string}:${string}`,
+    domain: "software",
     module: "cleanup",
     name: "temp_files",
     displayName: "Temp Files",

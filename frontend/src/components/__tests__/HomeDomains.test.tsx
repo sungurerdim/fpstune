@@ -51,6 +51,7 @@ function tweak(
 ): Setting {
   return {
     id: id as `${string}:${string}`,
+    domain: "software",
     module,
     name: id.split(":").pop() ?? id,
     displayName: id,
@@ -81,10 +82,15 @@ function tweak(
   };
 }
 
-const HARDWARE = tweak("gpu-nvidia:shader_cache", "gpu-nvidia");
+const HARDWARE = tweak("gpu-nvidia:shader_cache", "gpu-nvidia", {
+  domain: "hardware",
+  component: "gpu",
+});
 const SOFTWARE = tweak("system:game_mode", "system");
-const GAME = tweak("game_config:mw4:dof_weapon", "game_config");
+const GAME = tweak("game_config:mw4:dof_weapon", "game_config", { domain: "game" });
 const WEAK_WIFI = tweak("network:12:wifi_link_quality", "network", {
+  domain: "hardware",
+  component: "network_adapter",
   displayName: "Wi-Fi Link Quality (Intel Wi-Fi 6 AX201)",
   description: "How strong the Wi-Fi link is and which band it runs on.",
   effect:

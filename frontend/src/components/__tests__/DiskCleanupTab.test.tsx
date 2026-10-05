@@ -23,6 +23,7 @@ vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
 function cleanup(name: string, displayName: string, size: string): Setting {
   return {
     id: `cleanup:${name}` as `${string}:${string}`,
+    domain: "software",
     groupId: "windows",
     groupLabel: "Windows",
     groupOrder: 1,

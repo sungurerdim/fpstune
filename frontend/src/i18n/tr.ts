@@ -365,6 +365,7 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.memory": "Bellek",
   "hw.gpu": "Ekran Kartı",
   "hw.displays": "Ekranlar",
+  "hw.buses": "USB ve PCIe",
   "hw.storage": "Depolama",
   "hw.network": "Ağ",
   "hw.powerPlan": "Güç planı",

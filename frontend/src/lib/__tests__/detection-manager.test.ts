@@ -33,6 +33,7 @@ const mockedDetect = vi.mocked(settingsApi.detect);
 
 const HPET: SettingDefinition = {
   id: "timer:hpet",
+  domain: "software",
   category: "timer",
   display_name: "HPET",
   description: "High Precision Event Timer.",

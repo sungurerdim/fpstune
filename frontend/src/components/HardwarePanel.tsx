@@ -11,6 +11,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Network,
+  Cable,
 } from "lucide-react";
 import { api } from "../lib/api";
 import { hardwareManager, HardwareInfo } from "../lib/hardware-manager";
@@ -82,6 +83,9 @@ function useHardware(): { hardware: HardwareInfo | null; isLoading: boolean } {
  * Returning a name no module uses is deliberate for an unknown vendor: an
  * unrecognised card shows no driver tweaks rather than someone else's.
  */
+/** Modules holding one vendor's driver tweaks; any other GPU tweak is vendor-neutral. */
+const VENDOR_GPU_MODULES = ["gpu-nvidia", "gpu-amd"];
+
 function gpuModuleFor(vendor: string | undefined | null): string {
   const v = (vendor ?? "").toLowerCase();
   if (v.includes("nvidia")) return "gpu-nvidia";
@@ -224,13 +228,15 @@ export function HardwarePanel() {
                     </p>
                     {/* This GPU's own tweaks. Driver settings are matched by vendor
                         so an AMD card never shows NVIDIA's; the vendor-neutral
-                        hardware ones (Resizable BAR, MSI mode, GPU assignment)
-                        attach to the first card, since they are properties of the
+                        ones (Resizable BAR, MSI mode, HAGS, TDR delay) attach to
+                        the first card, since they are properties of the
                         machine's primary GPU rather than of every card present. */}
                     <DeviceTweakList
                       match={(setting) =>
-                        setting.module === gpuModuleFor(gpu?.vendor) ||
-                        (i === 0 && setting.module === "gpu-hardware")
+                        isComponentTweak(setting, "gpu") &&
+                        (VENDOR_GPU_MODULES.includes(setting.module)
+                          ? setting.module === gpuModuleFor(gpu?.vendor)
+                          : i === 0)
                       }
                     />
                   </div>
@@ -262,7 +268,7 @@ export function HardwarePanel() {
                 {/* Windowed flip model and MPO are properties of the display stack,
                     not of one panel, so they sit with the section. */}
                 <DeviceTweakList
-                  match={(setting) => setting.module === "display"}
+                  match={(setting) => isComponentTweak(setting, "display")}
                 />
               </div>
             ) : !isLoading ? (
@@ -287,7 +293,7 @@ export function HardwarePanel() {
                 {/* TRIM, 8.3 names and last-access are filesystem-wide, not
                     properties of one drive, so they belong to the section. */}
                 <DeviceTweakList
-                  match={(setting) => setting.module === "storage"}
+                  match={(setting) => isComponentTweak(setting, "storage")}
                 />
               </div>
             ) : !isLoading ? (
@@ -312,6 +318,14 @@ export function HardwarePanel() {
                 {hardware.network_adapters.map((adapter, i) => (
                   <NetworkAdapterCard key={i} adapter={adapter} />
                 ))}
+                {/* Adapter-class policy (Wi-Fi power saving) is a power-plan
+                    key, not one adapter's property, so it sits with the section.
+                    Per-adapter rows carry their adapter as `subject`. */}
+                <DeviceTweakList
+                  match={(setting) =>
+                    isComponentTweak(setting, "network_adapter") && !setting.subject
+                  }
+                />
               </div>
             ) : !isLoading ? (
               <NotDetected />
@@ -328,6 +342,18 @@ export function HardwarePanel() {
             devices={hardware?.audio_devices}
             loading={isCategoryLoading(hardware, isLoading, "audio")}
           />
+
+          <div className="border-t border-border/50 my-2 lg:hidden 2xl:block" />
+
+          {/* The buses: USB selective suspend and PCIe link power saving act on
+              every device behind them, so they have a section of their own. */}
+          <HardwareSection icon={<Cable className="w-4 h-4" />} title={t("hw.buses")}>
+            <DeviceTweakList
+              match={(setting) =>
+                isComponentTweak(setting, "usb") || isComponentTweak(setting, "pcie")
+              }
+            />
+          </HardwareSection>
         </div>
       </div>
     </Card>

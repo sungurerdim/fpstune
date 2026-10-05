@@ -19,6 +19,7 @@ import type { Setting } from "../../types/setting";
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
     id: "game_config:mw3:shadow_quality" as `${string}:${string}`,
+    domain: "software",
     module: "game_config",
     name: "mw3:shadow_quality",
     displayName: "MW3 Shadow Quality",

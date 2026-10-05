@@ -1,4 +1,5 @@
 import { useT } from "../../i18n";
+import { isComponentTweak } from "../../lib/tweakDomain";
 import { useMutation } from "@tanstack/react-query";
 import {
   Volume2, Mic, } from "lucide-react";
@@ -62,7 +63,7 @@ export function AudioSection({
             {/* The audio settings act on every output at once (effects, sample
                 rate, exclusive access) or on Windows as a whole (ducking), so
                 they belong to the section instead of a device card. */}
-            <DeviceTweakList match={(setting) => setting.module === "audio"} />
+            <DeviceTweakList match={(setting) => isComponentTweak(setting, "audio")} />
           </div>
         ) : !loading ? (
           <NotDetected />

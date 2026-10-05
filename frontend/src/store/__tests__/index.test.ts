@@ -9,6 +9,7 @@ import type { SettingDefinition } from "../../types/setting";
 const mockDefinitions: SettingDefinition[] = [
   {
     id: "timer:hpet",
+    domain: "software",
     category: "timer",
     display_name: "HPET",
     description: "High Precision Event Timer",
@@ -26,6 +27,7 @@ const mockDefinitions: SettingDefinition[] = [
   },
   {
     id: "priority:gpu_priority",
+    domain: "software",
     category: "core",
     display_name: "GPU Priority",
     description: "GPU scheduling priority",
@@ -43,6 +45,7 @@ const mockDefinitions: SettingDefinition[] = [
   },
   {
     id: "gpu-nvidia:cuda_force_p2",
+    domain: "software",
     category: "gpu",
     display_name: "CUDA Force P2 State",
     description: "Force CUDA P2 power state",

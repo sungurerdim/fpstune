@@ -28,6 +28,7 @@ vi.mock("../../hooks/useBulkApply", () => ({
 function makeSetting(over: Partial<Setting> & Pick<Setting, "id">): Setting {
   return {
     module: over.id.split(":")[0],
+    domain: over.id.startsWith("game_config:") ? "game" : "software",
     name: over.id.split(":").slice(1).join(":"),
     displayName: "A Game Tweak",
     description: "Controls something in the game. It matters for frame rate.",

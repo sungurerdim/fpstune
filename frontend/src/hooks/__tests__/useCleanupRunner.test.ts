@@ -30,6 +30,7 @@ function makeActionSetting(
 ): Setting {
   return {
     id: id as `${string}:${string}`,
+    domain: "software",
     module,
     name,
     displayName: name.replace(/_/g, " "),

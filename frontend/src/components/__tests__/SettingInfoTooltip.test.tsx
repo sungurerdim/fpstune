@@ -17,6 +17,7 @@ import type { Setting } from "../../types/setting";
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
     id: "game_config:mw3:texture_streaming" as `${string}:${string}`,
+    domain: "software",
     module: "game_config",
     name: "mw3:texture_streaming",
     displayName: "MW3 Texture Streaming Limit",

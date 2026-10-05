@@ -70,6 +70,7 @@ function advisory(
 ): Setting {
   return {
     id: id as `${string}:${string}`,
+    domain: "software",
     module: id.split(":")[0],
     name: id.split(":").pop() ?? id,
     displayName,

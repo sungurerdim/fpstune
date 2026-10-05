@@ -118,6 +118,7 @@ function makeSetting(over: Partial<Setting> & Pick<Setting, "id">): Setting {
   return {
     ...SETTING_BASE,
     module: over.id.split(":")[0],
+    domain: over.id.startsWith("game_config:") ? "game" : "software",
     name: over.id.split(":").slice(1).join(":"),
     displayName: "A Tweak",
     category: "system",

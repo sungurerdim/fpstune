@@ -384,6 +384,7 @@ export const en = {
   "hw.memory": "Memory",
   "hw.gpu": "GPU",
   "hw.displays": "Displays",
+  "hw.buses": "USB & PCIe",
   "hw.storage": "Storage",
   "hw.network": "Network",
   "hw.powerPlan": "Power plan",

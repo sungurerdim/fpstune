@@ -32,6 +32,7 @@ vi.mock("../../lib/hardware-manager", () => ({
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
     id: "timer:hpet" as `${string}:${string}`,
+    domain: "software",
     module: "timer",
     name: "hpet",
     displayName: "HPET",

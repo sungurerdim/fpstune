@@ -34,6 +34,7 @@ function cleanup(
 ): Setting {
   return {
     id: `cleanup:${name}` as `${string}:${string}`,
+    domain: "software",
     groupId: group.id,
     groupLabel: group.label,
     groupOrder: group.order,

@@ -72,6 +72,7 @@ function measuredCleanup(overrides: Partial<Setting> = {}): Setting {
 function pendingCleanup(): Setting {
   return {
     id: "cleanup:temp_files" as `${string}:${string}`,
+    domain: "software",
     module: "cleanup",
     name: "temp_files",
     displayName: "Temp Files",

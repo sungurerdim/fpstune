@@ -33,6 +33,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
 function makeSetting(id: string, riskLevel: Setting["riskLevel"]): Setting {
   return {
     id: id as `${string}:${string}`,
+    domain: "software",
     module: id.split(":")[0],
     name: id.split(":").slice(1).join(":"),
     displayName: "A Tweak",

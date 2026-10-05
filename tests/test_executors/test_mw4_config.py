@@ -36,6 +36,10 @@ from fpstune.settings.executors.game_config_cache import (
 from fpstune.settings.executors.mw4_config import Mw4ValueRejected, set_mw4_option
 from fpstune.settings.executors.ps_batch import init_scan_cache, reset_scan_cache
 
+# The files are plain text under a temporary %LOCALAPPDATA%; only the platform
+# gate is Windows-specific, and `TestNonWindowsIsInert` pins that gate itself.
+pytestmark = pytest.mark.usefixtures("windows_host")
+
 # Trimmed from a real cod26 config, values changed. Note the LF line endings:
 # the real file uses them even on Windows, and a writer that normalises to CRLF
 # rewrites all of it while claiming to have changed one setting.

@@ -348,7 +348,7 @@ class TestVendorGating:
                 assert "gpu_vendor" not in setting.applicable_conditions, setting.id
 
 
-@pytest.mark.usefixtures("scan_cache")
+@pytest.mark.usefixtures("scan_cache", "windows_host")
 class TestRangesComeFromTheInstalledBuild:
     """C9: the declared choices are a fallback; the file is the authority."""
 
@@ -518,7 +518,7 @@ class TestDerivedFromHardware:
             assert f"game_config:mw4:{derived}" not in static_ids
 
 
-@pytest.mark.usefixtures("scan_cache")
+@pytest.mark.usefixtures("scan_cache", "windows_host")
 class TestNamedCompoundWrites:
     """C8: several keys, one concept — so all of them move or none does."""
 
@@ -758,7 +758,7 @@ class TestAdsSensitivityFamily:
         assert scopes == {"1"}
 
 
-@pytest.mark.usefixtures("scan_cache")
+@pytest.mark.usefixtures("scan_cache", "windows_host")
 class TestBothFilesMoveTogether:
     def _install(self, tmp_path, monkeypatch, global_body: str, profile_body: str):
         players = tmp_path / "Activision" / "Call of Duty" / "players"

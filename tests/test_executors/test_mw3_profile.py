@@ -55,6 +55,10 @@ from fpstune.settings.executors.mw3_profile import (
 from fpstune.settings.executors.powershell import PowerShellExecutor
 from fpstune.settings.executors.ps_batch import init_scan_cache, reset_scan_cache
 
+# The files are plain text under a temporary user folder; only the platform
+# gate is Windows-specific, and `TestNonWindowsIsInert` pins that gate itself.
+pytestmark = pytest.mark.usefixtures("windows_host")
+
 # Trimmed from a real cod23 gamerprofile, values changed. LF line endings and no
 # BOM, like the file itself; the `// comment` on each line is the only statement
 # of what the key accepts, so the tests read the ranges from here rather than

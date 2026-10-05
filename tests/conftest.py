@@ -36,6 +36,31 @@ def _no_real_shell_folders(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(game_config_cache, "_console_user_folder", lambda _name: None)
 
 
+@pytest.fixture
+def windows_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Let Windows-gated pure-Python logic run on a development host.
+
+    Game config files are plain text rewritten in Python, but every reader and
+    writer answers "not installed" off Windows. A test that builds its install
+    under ``tmp_path`` asks for this fixture to exercise that logic anyway.
+
+    On Windows it does nothing, so the real system mutex stays under test there.
+    Elsewhere it fakes the platform and sends ``file_lock`` to its documented
+    process-local fallback, because kernel32 does not exist to be called.
+    """
+    if sys.platform == "win32":
+        return
+    # Imported against the real platform first: the power definitions adopt
+    # Windows' own defaults from the registry at import, and a faked platform
+    # would send that one-time read to the winreg stub above.
+    from fpstune.settings.definitions import get_all_static_settings
+    from fpstune.settings.executors import game_config_writer
+
+    get_all_static_settings()
+    monkeypatch.setattr(sys, "platform", "win32")
+    monkeypatch.setattr(game_config_writer, "_take_system_mutex", lambda _name: None)
+
+
 @pytest.fixture(autouse=True)
 def _isolated_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
     """Every test gets its own ~/.fpstune, never the runner's.

@@ -39,11 +39,7 @@ if TYPE_CHECKING:
 #: How many applies `/bulk/apply` runs at once (`routes/settings.py`).
 _BULK_WORKERS = 16
 
-#: How long an apply waits for a background measurement to give the machine back.
-#: A bench holds `operation_lock.OPERATION_MUTEX` for its run; an apply landing
-#: on a machine mid-measurement would change what the second half of the pair is
-#: measuring, so it waits — and not for long, because a user pressed a button.
-_BENCH_WAIT_SECONDS = 30.0
+#: How often an apply looks again while a measurement holds the machine.
 _BENCH_POLL_SECONDS = 0.5
 
 # Applies in flight in this process. The scheduler reads it before starting a
@@ -59,14 +55,23 @@ def applies_in_flight() -> int:
         return _in_flight
 
 
-def _wait_for_bench() -> bool:
-    """True once no bench holds the machine; False if one still does after the wait."""
-    deadline = time.monotonic() + _BENCH_WAIT_SECONDS
+def _wait_for_bench() -> None:
+    """Return once no bench holds the machine.
+
+    No fixed deadline. A bench holds `operation_lock.OPERATION_MUTEX` for one
+    step, and the scheduler and the suite both stand down before the next step
+    while an apply is in flight (counted before this wait), so the wait is at
+    most the step already running — itself bounded by its own deadline
+    (`benchmark.suite.run_bench_with_deadline`). The old 30 s cap refused the
+    user's apply while a healthy measurement was finishing.
+    """
+    if is_free():
+        return
+    from fpstune.utils.logger import log_activity
+
+    log_activity("Waiting for a background measurement to finish before applying")
     while not is_free():
-        if time.monotonic() >= deadline:
-            return False
         time.sleep(_BENCH_POLL_SECONDS)
-    return True
 
 
 def apply_and_finalize(
@@ -109,19 +114,13 @@ def apply_and_finalize(
     with _in_flight_guard:
         _in_flight += 1
     try:
-        if not _wait_for_bench():
-            success = False
-            error = "A background measurement is using the machine; try again in a moment"
-            freed = NOTHING_MEASURED
-        else:
-            will_run = not action_will_not_run(setting, value)
-            before = measure_cleanup_size(setting) if will_run else None
-            success, error = (
-                write() if write is not None else CommandExecutor.apply(setting, value, on_line)
-            )
-            freed = (
-                freed_after_cleanup(setting, before) if success and will_run else NOTHING_MEASURED
-            )
+        _wait_for_bench()
+        will_run = not action_will_not_run(setting, value)
+        before = measure_cleanup_size(setting) if will_run else None
+        success, error = (
+            write() if write is not None else CommandExecutor.apply(setting, value, on_line)
+        )
+        freed = freed_after_cleanup(setting, before) if success and will_run else NOTHING_MEASURED
     finally:
         with _in_flight_guard:
             _in_flight -= 1

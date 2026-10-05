@@ -49,25 +49,33 @@ def _finalize_stub(*args: Any, **kwargs: Any) -> tuple[Any, ...]:
 
 
 class TestApplyWaitsForBench:
-    def test_refuses_while_a_bench_holds_the_machine(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """A bench mid-run means the after-half of a pair is being measured; an
-        apply landing then would change what it measures. Guards against the
-        apply silently proceeding."""
-        monkeypatch.setattr(settings_apply, "_BENCH_WAIT_SECONDS", 0.0)
-        monkeypatch.setattr(settings_apply, "is_free", lambda: False)
-        apply = MagicMock()
+    def test_waits_for_a_running_bench_instead_of_refusing(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A bench mid-run is measuring; an apply landing then would change what
+        it measures, so the apply waits. It used to give up after a fixed 30 s
+        and refuse the user's change while a healthy measurement finished."""
+        answers = iter([False, False, False, True])
+        monkeypatch.setattr(settings_apply, "is_free", lambda: next(answers))
+        monkeypatch.setattr(settings_apply, "_BENCH_POLL_SECONDS", 0.0)
+        order: list[str] = []
+
+        def _apply(*_a: Any, **_k: Any) -> tuple[bool, None]:
+            order.append("applied")
+            return True, None
+
         with (
-            patch("fpstune.api.routes.settings_apply.CommandExecutor.apply", apply),
+            patch("fpstune.api.routes.settings_apply.CommandExecutor.apply", _apply),
             patch("fpstune.api.routes.settings._finalize_apply_response", _finalize_stub),
+            patch("fpstune.utils.logger.log_activity", lambda m, *_: order.append(m)),
         ):
-            args, kwargs = settings_apply.apply_and_finalize(
-                _setting(), "off", MagicMock(), "Applied"
-            )
-        apply.assert_not_called()
-        success, error = args[3], args[4]
-        assert success is False
-        assert "background measurement" in error
-        assert kwargs["freed_bytes"] is None
+            args, _ = settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+
+        assert args[3] is True
+        assert order == [
+            "Waiting for a background measurement to finish before applying",
+            "applied",
+        ]
 
     def test_counts_itself_in_flight_while_the_command_runs(
         self, monkeypatch: pytest.MonkeyPatch

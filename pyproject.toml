@@ -111,6 +111,9 @@ disallow_untyped_defs = false
 testpaths = ["tests"]
 asyncio_mode = "auto"
 addopts = "-v --tb=short"
+# A test silent this long prints every thread's stack: a hang on the Windows
+# runner (where a cancelled run's log is lost) names itself.
+faulthandler_timeout = 300
 pythonpath = ["src"]
 filterwarnings = [
     "ignore::DeprecationWarning",

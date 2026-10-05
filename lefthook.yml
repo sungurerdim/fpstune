@@ -57,3 +57,10 @@ commit-msg:
       fail_text: Conventional commit required. Subject must start with feat, fix, docs, style, refactor, perf, test, build, ci, chore or revert.
       run: |
         grep -qE '^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\(.+\))?!?: .+' {1}
+
+# The whole CI contract before anything leaves the machine, so a red run is
+# caught here instead of spending Actions minutes (CI runs on demand only).
+pre-push:
+  commands:
+    quality:
+      run: bash scripts/quality.sh

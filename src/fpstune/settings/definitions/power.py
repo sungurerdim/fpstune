@@ -41,6 +41,7 @@ WLAN_POWER_SAVING_SETTING = "12bbebe6-58d6-4636-95bb-3217ef867c1a"
 # === USB Selective Suspend ===
 USB_SELECTIVE_SUSPEND = SettingExecutor(
     id="power:usb_selective_suspend",
+    component="usb",
     category=SettingCategory.POWER,
     display_name="USB Selective Suspend",
     short_name="USB sleep",
@@ -79,6 +80,7 @@ USB_SELECTIVE_SUSPEND = SettingExecutor(
 # === PCIe Link State Power Management ===
 PCIE_LINK_STATE = SettingExecutor(
     id="power:pcie_link_state",
+    component="pcie",
     category=SettingCategory.POWER,
     display_name="PCI-E Link State Power Management",
     short_name="PCI-E power saving",
@@ -122,6 +124,7 @@ PCIE_LINK_STATE = SettingExecutor(
 # === WLAN Power Saving ===
 WLAN_POWER_SAVING = SettingExecutor(
     id="power:wlan_power_saving",
+    component="network_adapter",
     category=SettingCategory.POWER,
     display_name="WiFi Power Saving",
     short_name="Wi-Fi power saving",
@@ -261,6 +264,7 @@ THERMAL_SETTING = "94d3a615-a899-4ac5-ae2b-e4d8f634367f"
 # === CPU Boost Mode ===
 POWER_CPU_BOOST = SettingExecutor(
     id="power:cpu_boost",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Boost Mode",
     short_name="CPU boost behaviour",
@@ -337,6 +341,7 @@ POWER_CPU_BOOST = SettingExecutor(
 # === CPU Increase Threshold ===
 POWER_CPU_INCREASE_THRESHOLD = SettingExecutor(
     id="power:cpu_increase_threshold",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Frequency Scale-Up Threshold",
     short_name="Speed-up trigger point",
@@ -374,6 +379,7 @@ POWER_CPU_INCREASE_THRESHOLD = SettingExecutor(
 # === CPU Decrease Threshold ===
 POWER_CPU_DECREASE_THRESHOLD = SettingExecutor(
     id="power:cpu_decrease_threshold",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Frequency Scale-Down Threshold",
     short_name="Slow-down trigger point",
@@ -433,6 +439,7 @@ POWER_CPU_DECREASE_THRESHOLD = SettingExecutor(
 # the previous map would have written the wrong policy had the GUID been valid.
 POWER_CPU_INCREASE_POLICY = SettingExecutor(
     id="power:cpu_increase_policy",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Scale-Up Policy",
     short_name="How fast the CPU speeds up",
@@ -467,6 +474,7 @@ POWER_CPU_INCREASE_POLICY = SettingExecutor(
 # machine rather than assumed symmetric with the setting above.
 POWER_CPU_DECREASE_POLICY = SettingExecutor(
     id="power:cpu_decrease_policy",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Scale-Down Policy",
     short_name="How fast the CPU slows down",
@@ -498,6 +506,7 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
 # === CPU Core Parking (Min Unparked %) ===
 POWER_CPU_MIN_PARKING = SettingExecutor(
     id="power:cpu_min_parking",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Core Parking (Min Unparked Cores)",
     short_name="Cores kept awake",
@@ -539,6 +548,7 @@ POWER_CPU_MIN_PARKING = SettingExecutor(
 # === CPU Energy Performance Preference ===
 POWER_CPU_EPP = SettingExecutor(
     id="power:cpu_epp",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="CPU Energy Performance Preference",
     short_name="Performance vs battery bias",
@@ -578,6 +588,7 @@ POWER_CPU_EPP = SettingExecutor(
 # === Disk Idle Timeout ===
 POWER_DISK_TIMEOUT = SettingExecutor(
     id="power:disk_timeout",
+    component="storage",
     category=SettingCategory.POWER,
     display_name="Disk Idle Timeout",
     short_name="Disk sleep timer",
@@ -615,6 +626,7 @@ POWER_DISK_TIMEOUT = SettingExecutor(
 # === Thermal Active Cooling ===
 POWER_THERMAL_COOLING = SettingExecutor(
     id="power:thermal_cooling",
+    component="cpu",
     category=SettingCategory.POWER,
     display_name="Thermal Cooling Mode",
     short_name="Fan-first or slow-down-first cooling",
@@ -940,6 +952,7 @@ def _cpu_power_setting(
     return SettingExecutor(
         id=setting_id,
         category=SettingCategory.POWER,
+        component="cpu",
         display_name=display_name,
         short_name=short_name,
         description=description,

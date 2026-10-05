@@ -1794,6 +1794,7 @@ SYSTEM_VM_PLATFORM = SettingExecutor(
 
 SYSTEM_XMP_EXPO = SettingExecutor(
     id="system:xmp_expo",
+    component="memory",
     category=SettingCategory.SYSTEM,
     display_name="XMP / EXPO Profile (RAM Speed)",
     short_name="RAM rated-speed profile (XMP)",
@@ -1850,6 +1851,7 @@ SYSTEM_XMP_EXPO = SettingExecutor(
 
 SYSTEM_THERMAL_CONDITION = SettingExecutor(
     id="system:thermal_condition",
+    component="cpu",
     category=SettingCategory.SYSTEM,
     display_name="Thermal Condition",
     short_name="CPU thermal headroom",
@@ -3820,6 +3822,7 @@ SHUTDOWN_AUTO_END_TASKS = SettingExecutor(
 
 GPU_TDR_DELAY = SettingExecutor(
     id="perf:gpu_tdr_delay",
+    component="gpu",
     category=SettingCategory.SYSTEM,
     display_name="GPU TDR Delay",
     short_name="GPU hang tolerance",

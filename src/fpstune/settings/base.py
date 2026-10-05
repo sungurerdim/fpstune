@@ -6,6 +6,35 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
 
+# The physical component a hardware tweak acts on. The category is what the tweak
+# touches, never how it is set: a power-plan key that parks CPU cores is a CPU
+# tweak although powercfg writes it.
+Component = Literal[
+    "cpu",
+    "memory",
+    "gpu",
+    "display",
+    "storage",
+    "network_adapter",
+    "audio",
+    "usb",
+    "pcie",
+    "power_supply",
+]
+
+# Modules whose every setting acts on one component. Anything else is software
+# unless its definition names a component itself.
+_MODULE_COMPONENTS: dict[str, Component] = {
+    "gpu-nvidia": "gpu",
+    "gpu-amd": "gpu",
+    "gpu-hardware": "gpu",
+    "display": "display",
+    "storage": "storage",
+    "audio": "audio",
+}
+
+Domain = Literal["hardware", "software", "game"]
+
 
 class SettingCategory(StrEnum):
     """Setting categories for grouping."""
@@ -538,6 +567,10 @@ class SettingExecutor:
     # a machine-wide setting. Carried apart from short_name so a translated name
     # can still say which of two same-named rows it is.
     subject: str = ""
+    # The physical component this tweak acts on; None for a software tweak. Left
+    # None in a definition, it is filled from the module (`_MODULE_COMPONENTS`)
+    # or, for a per-adapter `network:<key>:<name>` id, `network_adapter`.
+    component: Component | None = None
     icon: str = ""  # Lucide icon name for UI (e.g., "Clock", "Zap")
     color: str = ""  # Tailwind color class (e.g., "text-yellow-500")
     category_order: int = 0  # Sort order within category (0 = use definition order)
@@ -571,6 +604,11 @@ class SettingExecutor:
             raise ValueError(f"Setting display_name must not be empty: {self.id}")
         if self.value_type == SettingValueType.CHOICE and not self.choices:
             raise ValueError(f"CHOICE type requires non-empty choices tuple: {self.id}")
+        if self.component is None:
+            if self.module == "network" and self.id.count(":") >= 2:
+                self.component = "network_adapter"
+            else:
+                self.component = _MODULE_COMPONENTS.get(self.module)
 
     @property
     def module(self) -> str:
@@ -582,6 +620,13 @@ class SettingExecutor:
         """Extract setting name from ID (e.g., 'usb_selective_suspend')."""
         parts = self.id.split(":")
         return ":".join(parts[1:])  # Handle "network:eth0:interrupt_moderation"
+
+    @property
+    def domain(self) -> Domain:
+        """Which page owns this tweak: a game's own file, a component, or Windows."""
+        if self.module == "game_config":
+            return "game"
+        return "hardware" if self.component is not None else "software"
 
     @property
     def is_service(self) -> bool:
@@ -624,6 +669,8 @@ class SettingExecutor:
             "is_action": self.is_action,
             "scope": self.scope.value,
             "short_name": self.short_name,
+            "component": self.component,
+            "domain": self.domain,
             "icon": self.icon,
             "color": self.color,
             "category_order": self.category_order,

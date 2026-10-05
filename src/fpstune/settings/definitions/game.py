@@ -168,6 +168,7 @@ GAME_DVR_BACKGROUND = SettingExecutor(
 # "disabled", and reset deletes the value to hand the choice back.
 HAGS = SettingExecutor(
     id="game:hags",
+    component="gpu",
     category=SettingCategory.GAME,
     display_name="Hardware-Accelerated GPU Scheduling",
     short_name="GPU hardware scheduling",

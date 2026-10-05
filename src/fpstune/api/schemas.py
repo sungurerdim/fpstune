@@ -268,6 +268,10 @@ class SettingDefinitionResponse(BaseModel):
     # Which device instance the setting belongs to ("Wi-Fi", "Ethernet"); empty
     # when machine-wide. Lets a translated name keep the adapter qualifier.
     subject: str = ""
+    # The physical component a hardware tweak acts on; None for software.
+    component: str | None = None
+    # Which page owns the tweak: "hardware", "software" or "game".
+    domain: Literal["hardware", "software", "game"] = "software"
     icon: str = ""
     color: str = ""
     category_order: int = 0

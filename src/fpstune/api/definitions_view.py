@@ -38,6 +38,8 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         scope=s.scope.value,
         short_name=s.short_name,
         subject=s.subject,
+        component=s.component,
+        domain=s.domain,
         icon=s.icon,
         color=s.color,
         category_order=s.category_order,

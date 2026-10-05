@@ -519,6 +519,22 @@ class TestToggleNetworkConnection:
         assert response.status_code == 500
         assert "GUID" in response.json()["detail"]
 
+    def test_an_unreadable_adapter_type_is_reported_not_guessed_as_ethernet(
+        self, client: TestClient
+    ) -> None:
+        """A failed probe used to fall back to "ETHERNET" and send a Wi-Fi adapter
+        down the wired release/renew path."""
+        ps = _ps([(False, "PowerShell command stopped: no progress for 1 min")])
+        with (
+            _windows(),
+            patch("fpstune.api.routes.system_network._run_powershell_async", new=ps),
+        ):
+            response = _post_connection(client, "Wi-Fi", "disconnect")
+
+        assert response.status_code == 503
+        assert "no progress for 1 min" in response.json()["detail"]
+        assert ps.await_count == 1, "nothing may run after a type it could not read"
+
 
 # ---------------------------------------------------------------------------
 # GET /api/network/adapter/{adapter_name}/status

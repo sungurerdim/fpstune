@@ -95,6 +95,12 @@ class TestASlowRunThatKeepsMovingIsNeverCut:
 
 
 class TestAStuckRunIsNamedAndHandled:
+    def test_a_stall_is_logged_for_every_caller(self, caplog) -> None:
+        """Callers that turn a stall into an empty reading must not hide it."""
+        with caplog.at_level("WARNING", logger="fpstune.utils.process_watch"):
+            run_watched(_py(SILENT_FOR_3S), FAST, probe_factory=_factory([]))
+        assert any("stopped: no progress for" in r.getMessage() for r in caplog.records)
+
     def test_silence_past_the_window_is_a_timeout_and_the_tree_is_stopped(self) -> None:
         probes: list[_Probe] = []
         result = run_watched(_py(SILENT_FOR_3S), FAST, probe_factory=_factory(probes))

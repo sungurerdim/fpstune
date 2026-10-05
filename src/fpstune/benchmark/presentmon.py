@@ -759,7 +759,12 @@ class PresentMonBenchmark:
             _, stderr = self._process.communicate(timeout=5)
         except subprocess.TimeoutExpired:
             self._process.kill()
-            _, stderr = self._process.communicate()
+            try:
+                _, stderr = self._process.communicate(timeout=10)
+            except subprocess.TimeoutExpired:
+                # Killed but a pipe is still held: what it said is lost, and
+                # waiting on it without bound is what hung the stop path.
+                stderr = b""
             # Killed, so it never closed its trace session.
             if self._own_session:
                 stop_etw_session()

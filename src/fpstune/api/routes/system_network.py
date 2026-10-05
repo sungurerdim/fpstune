@@ -321,7 +321,10 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
     else {{ Write-Output 'ETHERNET' }}
     """
     success, output = await _run_powershell_async(detect_cmd)
-    verdict = output.strip() if success else "ETHERNET"
+    if not success:
+        # Guessing "Ethernet" here sent a Wi-Fi adapter down the wired path.
+        raise HTTPException(status_code=503, detail=f"Could not read the adapter type: {output}")
+    verdict = output.strip()
     adapter_type, _, wifi_guid = verdict.partition("|")
     wifi_guid = wifi_guid.strip().strip("{}")
 

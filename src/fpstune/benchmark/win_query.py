@@ -31,7 +31,7 @@ import sys
 from typing import Any
 
 from fpstune.utils.logger import get_logger
-from fpstune.utils.powershell import run_powershell
+from fpstune.utils.powershell import STALLED_PREFIX, run_powershell
 from fpstune.utils.process_watch import QUERY, StallPolicy
 
 logger = get_logger()
@@ -98,6 +98,9 @@ def query_rows(
     wrapped = f"@({script}) | ConvertTo-Json -Compress -Depth 4"
     ok, output = run_powershell(wrapped, policy, component=component)
     if not ok:
+        if output.startswith(STALLED_PREFIX):
+            # Stuck, not refused: the reason says which, so the panel does too.
+            return [], output
         logger.debug("%s: PowerShell refused the query: %s", component, output)
         return [], UNREADABLE
 

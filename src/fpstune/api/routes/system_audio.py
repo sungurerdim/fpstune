@@ -129,7 +129,7 @@ Invoke-FpsLoudness
     success, output = await _run_powershell_async(ps_command, component="audio", policy=CHANGE)
     if not success:
         logger.warning("Loudness EQ toggle for %s failed to run: %s", device_id, output)
-        raise HTTPException(status_code=500, detail="PowerShell command failed")
+        raise HTTPException(status_code=500, detail=f"PowerShell command failed: {output}")
 
     result = _last_line(output)
     if result == "NOT_FOUND":
@@ -176,7 +176,7 @@ async def toggle_audio_device(device_id: str, enabled: bool) -> dict[str, bool |
     success, output = await _run_powershell_async(ps_command, component="audio", policy=CHANGE)
     if not success:
         logger.warning("Failed to %s audio device %s: %s", action.lower(), device_id, output)
-        raise HTTPException(status_code=500, detail="PowerShell command failed")
+        raise HTTPException(status_code=500, detail=f"PowerShell command failed: {output}")
 
     result = _last_line(output)
     if result.startswith("ERROR:"):

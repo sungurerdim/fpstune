@@ -332,6 +332,10 @@ class _LineSplitter:
         self._on_line(line, replaces)
 
 
+#: How a stalled run's message starts, so a caller can tell a stall from a refusal.
+STALLED_PREFIX = "PowerShell command stopped:"
+
+
 def run_powershell_stream(
     command: str,
     on_line: Callable[[str, bool], None],
@@ -387,7 +391,7 @@ def run_powershell_stream(
     splitter.close()
 
     if result.timed_out:
-        error = f"PowerShell command stopped: {result.reason}"
+        error = f"{STALLED_PREFIX} {result.reason}"
         debug_powershell(command, error, False, component)
         return False, error
 
@@ -451,7 +455,7 @@ def run_powershell(
         return False, error
 
     if result.timed_out:
-        error = f"PowerShell command stopped: {result.reason}"
+        error = f"{STALLED_PREFIX} {result.reason}"
         debug_powershell(command, error, False, component)
         return False, error
 

@@ -27,6 +27,8 @@ from __future__ import annotations
 
 import codecs
 import contextlib
+import logging
+import os
 import subprocess
 import sys
 import threading
@@ -36,6 +38,8 @@ from dataclasses import dataclass, field, replace
 from typing import IO, Literal, Protocol
 
 from fpstune.utils.winapi.job import ProcessTreeJob, TreeActivity
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -203,6 +207,9 @@ def run_watched(
                 silent_for = clock() - last_progress
             if silent_for >= policy.stall_s:
                 reason = describe_stall(policy)
+                # Logged here, once for every caller: a stall that a caller turns
+                # into an empty reading must still be visible in the terminal.
+                logger.warning("%s stopped: %s", os.path.basename(argv[0]), reason)
                 if policy.on_stall == "kill":
                     probe.terminate()
                     with contextlib.suppress(subprocess.TimeoutExpired):

@@ -10,6 +10,7 @@ target (C1).
 from __future__ import annotations
 
 import logging
+import re
 from collections.abc import Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING
@@ -36,6 +37,10 @@ def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -
     from fpstune.settings.base import UNMAPPED
     from fpstune.settings.executors import map_raw_to_display
 
+    match = setting.detect_args.get("driver_default_match")
+    if match:
+        return _with_switch_default(setting, defaults, str(match))
+
     keywords = setting.detect_args.get("batch_adapter_keyword")
     # A catch-all row ("changed") is a reading, never a stock value.
     if not keywords or not defaults or UNMAPPED in setting.value_map:
@@ -49,6 +54,33 @@ def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -
             return replace(setting, default_value=display)
         return setting
     return setting
+
+
+def _with_switch_default(
+    setting: SettingExecutor, defaults: Mapping[str, str], pattern: str
+) -> SettingExecutor:
+    """An Enabled/Disabled ``setting`` whose stock value is read from the driver.
+
+    These settings find their property through a cmdlet or a keyword search, so
+    ``detect_args["driver_default_match"]`` names the keywords the detect command
+    reads, as a pattern over the property table's keywords. The state is read the
+    way detection reads it: Disabled only when every matching keyword is 0. So the
+    stock value is Disabled only when the driver publishes at least one matching
+    default and every one of them is 0; any other answer — nothing published, a
+    default that is not a number, one keyword still on — leaves the declared
+    ``Enabled`` in place.
+    """
+    if setting.choices != ("Enabled", "Disabled") or not defaults:
+        return setting
+    matcher = re.compile(pattern, re.IGNORECASE)
+    published = [raw for keyword, raw in defaults.items() if matcher.search(keyword)]
+    if not published:
+        return setting
+    try:
+        every_one_off = all(int(raw.strip()) == 0 for raw in published)
+    except ValueError:
+        return setting
+    return replace(setting, default_value="Disabled") if every_one_off else setting
 
 
 def filter_valid_adapters(adapters: list[NetworkAdapter]) -> list[NetworkAdapter]:

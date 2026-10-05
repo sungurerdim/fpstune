@@ -1738,7 +1738,11 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
             "if ($lso.IPv4Enabled -or $lso.IPv6Enabled) { 'Enabled' } else { 'Disabled' } "
             "} else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index},
+        detect_args={
+            "ifindex": interface_index,
+            # The V2 pair is what IPv4Enabled / IPv6Enabled report; V1 is another knob.
+            "driver_default_match": r"^\*LsoV2IPv[46]$",
+        },
         value_map={},
         # Apply - Use InterfaceIndex
         apply_type=DetectType.POWERSHELL,
@@ -1806,7 +1810,11 @@ def create_checksum_offload_setting(interface_index: int, display_name: str) -> 
             "elseif ([string]$cs.TcpIPv4Enabled -eq 'Disabled') { 'Disabled' } "
             "else { 'Enabled' }"
         ),
-        detect_args={"ifindex": interface_index},
+        detect_args={
+            "ifindex": interface_index,
+            # Detection reads TcpIPv4Enabled alone, so only that keyword speaks for it.
+            "driver_default_match": r"^\*TCPChecksumOffloadIPv4$",
+        },
         value_map={},
         # Apply - Use InterfaceIndex
         apply_type=DetectType.POWERSHELL,
@@ -2163,7 +2171,10 @@ def create_wake_on_lan_setting(interface_index: int, display_name: str) -> Setti
             "if ($mVal -eq 0 -and $pVal -eq 0) { 'Disabled' } else { 'Enabled' } "
             "} else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index},
+        detect_args={
+            "ifindex": interface_index,
+            "driver_default_match": r"^\*WakeOn(MagicPacket|Pattern)$",
+        },
         value_map={},
         apply_type=DetectType.POWERSHELL,
         apply_command=(
@@ -2840,7 +2851,13 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
             "if ($p) { if ([int](@($p.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' } } "
             "else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index},
+        detect_args={
+            "ifindex": interface_index,
+            # The keyword half of the search above. The display-name half cannot be
+            # matched against a table keyed by keyword, so a driver found only that
+            # way keeps the declared default.
+            "driver_default_match": "UAPSD|APSD",
+        },
         value_map={},
         apply_type=DetectType.POWERSHELL,
         apply_command=(
@@ -2909,7 +2926,11 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
             "if ($p) { if ([int](@($p.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' } } "
             "else { 'not_supported' }"
         ),
-        detect_args={"ifindex": interface_index},
+        detect_args={
+            "ifindex": interface_index,
+            # Keyword half of the search above; see the U-APSD setting.
+            "driver_default_match": "ThroughputBoost",
+        },
         value_map={},
         apply_type=DetectType.POWERSHELL,
         apply_command=(

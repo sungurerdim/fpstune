@@ -27,13 +27,13 @@ pre-commit:
         piped: true
         jobs:
           - name: py-lint
-            run: ruff check src tests
+            run: uv run ruff check src tests
           - name: py-format
-            run: ruff format --check src tests
+            run: uv run ruff format --check src tests
           - name: py-types
-            run: mypy src
+            run: uv run mypy src
           - name: py-test
-            run: pytest --no-cov -x -q --tb=short
+            run: uv run pytest --no-cov -x -q --tb=short
 
     - name: frontend
       glob: "frontend/*"

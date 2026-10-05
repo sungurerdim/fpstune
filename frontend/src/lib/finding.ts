@@ -144,6 +144,31 @@ function powerDcRail(finding: Record<string, unknown>): FindingText | null {
   };
 }
 
+/** How many names a startup-apps sentence spells out before "and N more". */
+const STARTUP_NAMES_SHOWN = 5;
+
+function startupApps(finding: Record<string, unknown>): FindingText | null {
+  const count = num(finding.count);
+  if (count === null) return null;
+  if (count === 0) return { summary: t("finding.startupApps.none"), advice: "" };
+  const listed = Array.isArray(finding.names)
+    ? finding.names.filter((name): name is string => typeof name === "string")
+    : [];
+  // A count with no names to show is no sentence; the row keeps its description.
+  if (listed.length === 0) return null;
+  const shown = listed.slice(0, STARTUP_NAMES_SHOWN).join(", ");
+  // The detect script names at most twelve; the count is the whole list.
+  const rest = count - Math.min(listed.length, STARTUP_NAMES_SHOWN);
+  const names = rest > 0 ? t("finding.startupApps.more", { names: shown, rest }) : shown;
+  return {
+    summary:
+      count === 1
+        ? t("finding.startupApps.one", { names })
+        : t("finding.startupApps.many", { count, names }),
+    advice: t("finding.startupApps.advice"),
+  };
+}
+
 /** The finding's sentence(s) for this setting, or null when it carries none. */
 export function describeFinding(setting: Setting): FindingText | null {
   const finding = setting.finding;
@@ -159,6 +184,8 @@ export function describeFinding(setting: Setting): FindingText | null {
       return thermal(finding);
     case "power_dc_rail":
       return powerDcRail(finding);
+    case "startup_apps":
+      return startupApps(finding);
     default:
       return null;
   }
@@ -180,6 +207,8 @@ const CHOICE_KEYS: Record<string, MessageKey> = {
   wpa3_available: "choice.wpa3_available",
   not_throttling: "choice.not_throttling",
   throttling: "choice.throttling",
+  none_at_startup: "choice.none_at_startup",
+  apps_at_startup: "choice.apps_at_startup",
 };
 
 export function advisoryChoiceLabel(value: unknown): string | null {

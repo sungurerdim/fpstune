@@ -203,6 +203,51 @@ describe("a Wi-Fi link's security", () => {
   });
 });
 
+describe("apps that start with Windows", () => {
+  const startup = (finding: Record<string, unknown>, value = "apps_at_startup") =>
+    advisory({
+      id: "system:startup_apps" as `${string}:${string}`,
+      choices: ["none_at_startup", "apps_at_startup"],
+      currentValue: value,
+      finding: { kind: "startup_apps", ...finding },
+    });
+
+  it("names what starts and where to turn it off", () => {
+    expect(describeFinding(startup({ count: 2, names: ["Discord", "Steam"] }))).toEqual({
+      summary: "2 apps start with Windows: Discord, Steam.",
+      advice:
+        "Turn off the ones you don't need in Task Manager > Startup apps; security software is not listed.",
+    });
+  });
+
+  it("names the first five and counts the rest the script listed or not", () => {
+    const names = ["A", "B", "C", "D", "E", "F", "G"];
+    expect(describeFinding(startup({ count: 14, names }))?.summary).toBe(
+      "14 apps start with Windows: A, B, C, D, E and 9 more.",
+    );
+  });
+
+  it("says nothing starts, with no advice, when the list is empty", () => {
+    expect(describeFinding(startup({ count: 0, names: [] }, "none_at_startup"))).toEqual({
+      summary: "No third-party app starts with Windows.",
+      advice: "",
+    });
+  });
+
+  it("falls back to the description for a count with no names to show", () => {
+    expect(describeFinding(startup({ count: 3, names: [] }))).toBeNull();
+    expect(describeFinding(startup({ count: "3", names: ["A"] }))).toBeNull();
+  });
+
+  it("speaks Turkish, and labels the state in words", () => {
+    setLocale("tr");
+    expect(describeFinding(startup({ count: 1, names: ["OneDrive"] }))?.summary).toBe(
+      "Windows ile 1 uygulama başlıyor: OneDrive.",
+    );
+    expect(advisoryChoiceLabel("apps_at_startup")).toBe("Başlangıçta uygulama var");
+  });
+});
+
 describe("findings this module has no sentence for", () => {
   it("yield null, so the row falls back to its description, never to JSON", () => {
     expect(describeFinding(advisory({}))).toBeNull();

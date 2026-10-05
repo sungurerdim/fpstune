@@ -60,20 +60,31 @@ SERVICE_SYSMAIN = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="SysMain (Superfetch)",
     short_name="Superfetch preloading",
-    description="Prefetches apps into memory + manages Memory Compression. Disable on SSD systems.",
+    description="The service that preloads apps and runs the memory manager agent, memory compression "
+    "included. Stopping it switches compression off, so memory pressure goes to the disk instead.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    recommended_value="disabled",
+    # A guard since 0.2.0 (consequence 6). Disabling SysMain disables every
+    # MMAgent feature with it — memory compression included — and enabling any
+    # of them starts SysMain again (Winhance #261, tested with Get-MMAgent
+    # before and after). The "less disk I/O on an SSD" it bought is small next
+    # to pages leaving RAM for the disk under pressure, which is a hitch in a
+    # game; and system:memory_compression would fight a disabled SysMain on
+    # every bulk apply. The disabled state is what this row now undoes.
+    recommended_value="enabled",
     requires_reboot=False,
     evidence_level="proven",
-    sources=["https://www.xda-developers.com/i-make-this-one-change-to-make-windows-faster/"],
-    current_impact="Enabled: Prefetches apps into memory → extra disk I/O",
-    recommended_impact="Disabled: No prefetching → reduced disk I/O on SSD systems",
-    scope=SettingScope.RECOMMENDED,  # Noticeable benefit for SSD systems
-    category_order=1,  # Primary service for SSD
-    effect="Disables app prefetching to reduce disk I/O on SSD systems",
-    impact_scores={"ram_saved": "50-150MB", "latency_ms": 0, "stability": "high"},
+    sources=[
+        "https://github.com/memstechtips/Winhance/issues/261",
+        "https://blogs.windows.com/windowsexperience/2015/08/18/announcing-windows-10-insider-preview-build-10525/",
+    ],
+    current_impact="Disabled: Memory compression is off too → memory pressure is paged to disk",
+    recommended_impact="Enabled: Windows' own state → memory compression can run",
+    scope=SettingScope.RECOMMENDED,
+    category_order=1,
+    effect="Restores the service that runs memory compression if another tool disabled it",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     # Use StartType (2=Automatic, 4=Disabled) instead of Status for reliable verification
     detect_command="$s = Get-Service -Name 'SysMain' -ErrorAction SilentlyContinue; "
@@ -1922,6 +1933,109 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     apply_value_map={},
 )
 
+# =============================================================================
+# Startup Apps Advisory (Detect-Only)
+# =============================================================================
+
+# Detect-only on purpose. Which apps start with Windows is a per-machine list
+# of names, not one value a setting can own, and the right answer for each
+# entry (a chat client, a mouse driver's helper, a VPN) is the user's call.
+# What fpstune can do without guessing is count what runs and name it, so the
+# choice is made in Task Manager > Startup apps, which writes the same
+# StartupApproved flags read here and keeps every entry reversible.
+#
+# Sources read: the Run keys Microsoft documents (HKCU, HKLM and the 32-bit
+# HKLM view) and both Startup folders. An entry Task Manager turned off stays
+# where it is, flagged in Explorer\StartupApproved: byte 0 with bit 0 set is
+# "disabled" (0x02 / 0x06 enabled, 0x03 disabled; no value at all is enabled).
+# That layout is undocumented; it is the one Task Manager writes, read the
+# same way by every startup manager that preserves entries.
+#
+# Security software is never listed as a candidate: Windows Security's own
+# tray entry, and any entry that launches from the folder of an antivirus
+# product Windows Security Center reports (its root/SecurityCenter2 WMI
+# namespace — not on Microsoft Learn, which documents only the wscapi health
+# calls, but the registry every antivirus product registers itself in). An
+# unreadable namespace leaves the list unfiltered, never empty. Derived on the
+# machine, not from a vendor list (C10).
+SYSTEM_STARTUP_APPS = SettingExecutor(
+    id="system:startup_apps",
+    category=SettingCategory.SYSTEM,
+    display_name="Startup Apps",
+    short_name="Apps starting with Windows",
+    description="The third-party apps that start every time you sign in. Each one takes memory and "
+    "processor time in the background for the whole session, a match included.",
+    value_type=SettingValueType.CHOICE,
+    choices=("none_at_startup", "apps_at_startup"),
+    default_value="none_at_startup",
+    recommended_value="none_at_startup",
+    requires_reboot=False,
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/win32/setupapi/run-and-runonce-registry-keys",
+        "https://learn.microsoft.com/en-us/windows/win32/api/wscapi/",
+    ],
+    current_impact="Apps at startup: each keeps memory and background processor time for the session",
+    recommended_impact="None at startup: the session's memory and processor time stay with the game",
+    scope=SettingScope.COMPLETE,
+    category_order=54,
+    effect="Turn off the startup apps you do not need in Task Manager > Startup apps",
+    impact_scores={"ram_saved": "20-200MB", "stability": "high"},
+    is_readonly=True,
+    detect_type=DetectType.POWERSHELL,
+    detect_command=(
+        "$ErrorActionPreference = 'SilentlyContinue'; "
+        "$cv = 'Software\\Microsoft\\Windows\\CurrentVersion'; "
+        "$approvedRoot = $cv + '\\Explorer\\StartupApproved'; "
+        "$guard = @(); "
+        "foreach ($av in @(Get-CimInstance -Namespace root/SecurityCenter2 -ClassName AntiVirusProduct)) { "
+        "  foreach ($p in @($av.pathToSignedProductExe, $av.pathToSignedReportingExe)) { "
+        "    if ($p) { $d = Split-Path -Parent ([Environment]::ExpandEnvironmentVariables([string]$p)); "
+        "      if ($d) { $guard += $d.ToLowerInvariant() } } } }; "
+        "function Test-Kept($name, $command) { "
+        "  if ($name -eq 'SecurityHealth') { return $true }; "
+        "  $c = ([string]$command).ToLowerInvariant(); "
+        "  foreach ($d in $guard) { if ($c.Contains($d)) { return $true } }; return $false }; "
+        "function Test-Off($approved, $name) { "
+        "  $v = (Get-ItemProperty -LiteralPath $approved -Name $name).$name; "
+        "  return (($v -is [byte[]]) -and $v.Length -gt 0 -and (($v[0] -band 1) -eq 1)) }; "
+        "$apps = New-Object System.Collections.Generic.List[string]; "
+        "$runs = @("
+        "  @(('HKCU:\\' + $cv + '\\Run'), ('HKCU:\\' + $approvedRoot + '\\Run')), "
+        "  @(('HKLM:\\' + $cv + '\\Run'), ('HKLM:\\' + $approvedRoot + '\\Run')), "
+        "  @('HKLM:\\Software\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run', "
+        "    ('HKLM:\\' + $approvedRoot + '\\Run32'))); "
+        "foreach ($r in $runs) { "
+        "  $key = Get-Item -LiteralPath $r[0]; if (-not $key) { continue }; "
+        "  foreach ($n in $key.GetValueNames()) { "
+        "    if (-not $n) { continue }; "
+        "    if (Test-Kept $n $key.GetValue($n)) { continue }; "
+        "    if (Test-Off $r[1] $n) { continue }; $apps.Add($n) } }; "
+        # The console user's Startup folder, through the redirected HKCU drive:
+        # [Environment]::GetFolderPath would name the elevated account's.
+        "$userStartup = (Get-ItemProperty -LiteralPath ('HKCU:\\' + $cv + '\\Explorer\\Shell Folders')).Startup; "
+        "$folders = @("
+        "  @($userStartup, ('HKCU:\\' + $approvedRoot + '\\StartupFolder')), "
+        "  @([Environment]::GetFolderPath('CommonStartup'), ('HKLM:\\' + $approvedRoot + '\\StartupFolder'))); "
+        "foreach ($f in $folders) { "
+        "  if (-not $f[0]) { continue }; "
+        "  foreach ($file in @(Get-ChildItem -LiteralPath $f[0] -File)) { "
+        "    if ($file.Name -ieq 'desktop.ini') { continue }; "
+        "    if (Test-Off $f[1] $file.Name) { continue }; "
+        "    $apps.Add([IO.Path]::GetFileNameWithoutExtension($file.Name)) } }; "
+        "$names = @($apps | Sort-Object -Unique); "
+        "Write-Output ('FPSTUNE_FINDING: ' + (@{kind='startup_apps'; count=$names.Count; "
+        "  names=@($names | Select-Object -First 12)} | ConvertTo-Json -Compress)); "
+        "if ($names.Count -gt 0) { 'apps_at_startup' } else { 'none_at_startup' }"
+    ),
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="",
+    apply_args={},
+    apply_value_map={},
+)
+
 _AFD_SOURCES = [
     "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
 ]
@@ -2124,6 +2238,7 @@ SYSTEM_CONFIG_SETTINGS: list[SettingExecutor] = [
     SYSTEM_VM_PLATFORM,
     SYSTEM_XMP_EXPO,
     SYSTEM_THERMAL_CONDITION,
+    SYSTEM_STARTUP_APPS,
     NETWORK_AFD_RECEIVE_WINDOW,
     NETWORK_AFD_SEND_WINDOW,
     NETWORK_DSCP_QOS,
@@ -3039,9 +3154,69 @@ MAINTENANCE_SSD_RETRIM = SettingExecutor(
 )
 
 
+# A drift guard (consequence 2): memory compression is on by default on every
+# Windows 11 client, at any RAM size, and turning it off is a staple of
+# "optimizer" presets. Off, the memory manager answers pressure by writing
+# pages to the page file instead of compressing them in RAM, and a game waits
+# on the disk to get them back — the hitch this guard removes.
+#
+# Read and written through the MMAgent cmdlets, Microsoft's own interface for
+# it. The setting is applied at the next start of the memory manager agent, so
+# a reboot is asked for. It shares its fate with SysMain (disabling SysMain turns
+# every MMAgent feature off, Enable-MMAgent starts SysMain again), which is why
+# services:SysMain is a guard on the same side.
+MEMORY_COMPRESSION = SettingExecutor(
+    id="memory:compression",
+    category=SettingCategory.SYSTEM,
+    display_name="Memory Compression",
+    short_name="RAM compression",
+    description="Whether Windows compresses idle memory pages instead of writing them to the page file. "
+    "Turned off, memory pressure goes to the disk, and a game waits on it to get those pages back.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_value="enabled",
+    recommended_value="enabled",
+    requires_reboot=True,
+    evidence_level="proven",
+    sources=[
+        "https://blogs.windows.com/windowsexperience/2015/08/18/announcing-windows-10-insider-preview-build-10525/",
+        "https://learn.microsoft.com/en-us/powershell/module/mmagent/enable-mmagent",
+        "https://learn.microsoft.com/en-us/powershell/module/mmagent/get-mmagent",
+        "https://github.com/memstechtips/Winhance/issues/261",
+    ],
+    current_impact="Disabled: Memory pressure is paged to disk → hitches while pages come back",
+    recommended_impact="Enabled: Windows' own state → idle pages are compressed in RAM",
+    scope=SettingScope.RECOMMENDED,
+    category_order=2,
+    effect="Restores Windows memory compression if another tool turned it off",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    detect_type=DetectType.POWERSHELL,
+    # Microsoft's Get-MMAgent page lists the older features only; the
+    # MemoryCompression property is what the cmdlet returns on Windows 10 and
+    # 11. A build that returns no such property is not read as "disabled" —
+    # that would have the guard write over a state it cannot see.
+    detect_command=(
+        "try { $m = Get-MMAgent -ErrorAction Stop; "
+        "if ($null -eq $m.MemoryCompression) { 'not_available' } "
+        "elseif ($m.MemoryCompression) { 'enabled' } else { 'disabled' } } "
+        "catch { 'not_available' }"
+    ),
+    detect_args={},
+    value_map={"enabled": "enabled", "disabled": "disabled"},
+    apply_type=DetectType.POWERSHELL,
+    apply_command=(
+        "try { if ('%value%' -eq 'enabled') { Enable-MMAgent -MemoryCompression -ErrorAction Stop } "
+        "else { Disable-MMAgent -MemoryCompression -ErrorAction Stop }; 'ok' } "
+        "catch { 'error:' + $_.Exception.Message }"
+    ),
+    apply_args={},
+    apply_value_map={"enabled": "enabled", "disabled": "disabled"},
+)
+
 # All system settings
 MEMORY_SETTINGS: list[SettingExecutor] = [
     MEMORY_PURGE_STANDBY,
+    MEMORY_COMPRESSION,
 ]
 
 # =============================================================================

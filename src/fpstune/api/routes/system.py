@@ -193,6 +193,18 @@ async def get_self_check(refresh: bool = False) -> dict[str, Any]:
     return report.to_dict()
 
 
+@router.get("/os-build")
+async def get_os_build_change() -> dict[str, Any]:
+    """Whether Windows was updated since fpstune last ran.
+
+    ``changed`` is true when the build recorded last time differs from the one
+    running now; the first call of a process records the running build.
+    """
+    from fpstune.utils.os_build import build_change_since_last_run
+
+    return await asyncio.to_thread(build_change_since_last_run)
+
+
 # =============================================================================
 # Granular Refresh Endpoints (per-category hardware detection)
 # =============================================================================

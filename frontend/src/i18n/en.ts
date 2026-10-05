@@ -100,6 +100,9 @@ export const en = {
     "Detection self-check found {count} disagreements — the values below may be wrong on this machine.",
   "selfCheck.recheck": "Re-check",
   "selfCheck.checking": "Checking…",
+  "osUpdate.body":
+    "Windows was updated since fpstune last ran (build {previous} → {current}). Updates can put settings back to Windows' own values; the scan below was taken on the new build.",
+  "osUpdate.dismiss": "Dismiss",
 
   // Locale switch — names the language it would switch TO, in that language.
   "locale.switch": "Switch to English",
@@ -179,6 +182,12 @@ export const en = {
     "On battery this reads {dc}; Windows' own battery value is {stock}.",
   "finding.powerDcRail.advice":
     "fpstune tunes the plugged-in value only; applying puts the battery value back to Windows' own.",
+  "finding.startupApps.none": "No third-party app starts with Windows.",
+  "finding.startupApps.one": "1 app starts with Windows: {names}.",
+  "finding.startupApps.many": "{count} apps start with Windows: {names}.",
+  "finding.startupApps.more": "{names} and {rest} more",
+  "finding.startupApps.advice":
+    "Turn off the ones you don't need in Task Manager > Startup apps; security software is not listed.",
   // Advisory values, in words
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",
@@ -189,6 +198,8 @@ export const en = {
   "choice.wpa3_available": "WPA3 available",
   "choice.not_throttling": "Not throttling",
   "choice.throttling": "Throttling",
+  "choice.none_at_startup": "None at startup",
+  "choice.apps_at_startup": "Apps at startup",
   "badge.risk": "RISK",
   "badge.note": "NOTE",
 

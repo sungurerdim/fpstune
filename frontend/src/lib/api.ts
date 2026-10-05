@@ -92,6 +92,13 @@ export interface SelfCheckReport {
   findings: SelfCheckFinding[];
 }
 
+/** Whether Windows was updated since fpstune last ran (`/api/os-build`). */
+export interface OsBuildChange {
+  previous: string | null;
+  current: string | null;
+  changed: boolean;
+}
+
 interface GpuDeviceInfo {
   vendor: string;
   name?: string;
@@ -412,6 +419,8 @@ export const api = {
   // Every detector cross-checked against an independent source (A12).
   getSelfCheck: (refresh = false) =>
     fetchJson<SelfCheckReport>(`/self-check${refresh ? "?refresh=true" : ""}`),
+
+  getOsBuildChange: () => fetchJson<OsBuildChange>("/os-build"),
 
   // The drive's own media type picks the pass: retrim on SSD, defrag on HDD.
   optimizeDrive: (driveLetter: string) =>

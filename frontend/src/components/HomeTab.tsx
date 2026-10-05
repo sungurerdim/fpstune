@@ -41,6 +41,7 @@ import { DockerConfirmModal } from "./DockerConfirmModal";
 import { DetectionNotice } from "./DetectionNotice";
 import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
+import { OsUpdateNotice } from "./OsUpdateNotice";
 import { HomeMeasuredCard } from "./MeasuredLedger";
 import { MaintenancePanel } from "./MaintenancePanel";
 import { HardwarePanel } from "./HardwarePanel";
@@ -367,6 +368,9 @@ export function HomeTab() {
       {/* And its self-check owns every detector (A12): a disagreement between
           independent sources is a Home-page fact, not a buried report. */}
       <SelfCheckNotice />
+      {/* A Windows update since the last run is why guarded rows may show
+          drift; the startup scan above already re-read them. */}
+      <OsUpdateNotice />
 
       {/* The two buttons: each applies exactly its category, and says so. */}
       {suboptimal.length > 0 && (

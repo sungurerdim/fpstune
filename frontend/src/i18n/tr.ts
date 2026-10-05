@@ -95,6 +95,9 @@ export const tr: Record<keyof typeof en, string> = {
     "Algılama öz denetimi {count} uyuşmazlık buldu — aşağıdaki değerler bu makinede yanlış olabilir.",
   "selfCheck.recheck": "Yeniden denetle",
   "selfCheck.checking": "Denetleniyor…",
+  "osUpdate.body":
+    "fpstune son çalıştığından beri Windows güncellendi (derleme {previous} → {current}). Güncellemeler ayarları Windows'un kendi değerlerine döndürebilir; aşağıdaki tarama yeni derlemede yapıldı.",
+  "osUpdate.dismiss": "Kapat",
 
   // Locale switch
   "locale.switch": "Türkçeye geç",
@@ -171,6 +174,12 @@ export const tr: Record<keyof typeof en, string> = {
   "finding.powerDcRail.drift": "Pilde bu değer {dc}; Windows'un kendi pil değeri {stock}.",
   "finding.powerDcRail.advice":
     "fpstune yalnız fişteki değeri ayarlar; uygulamak pil değerini Windows'un kendisine geri döndürür.",
+  "finding.startupApps.none": "Windows ile hiçbir üçüncü taraf uygulama başlamıyor.",
+  "finding.startupApps.one": "Windows ile 1 uygulama başlıyor: {names}.",
+  "finding.startupApps.many": "Windows ile {count} uygulama başlıyor: {names}.",
+  "finding.startupApps.more": "{names} ve {rest} tane daha",
+  "finding.startupApps.advice":
+    "Gerekmeyenleri Görev Yöneticisi > Başlangıç uygulamaları'ndan kapatın; güvenlik yazılımı listelenmez.",
   "choice.at_capability": "Bağdaştırıcının en yükseğinde",
   "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
   "choice.good": "İyi",
@@ -180,6 +189,8 @@ export const tr: Record<keyof typeof en, string> = {
   "choice.wpa3_available": "WPA3 mümkün",
   "choice.not_throttling": "Kısılmıyor",
   "choice.throttling": "Kısılıyor",
+  "choice.none_at_startup": "Başlangıçta yok",
+  "choice.apps_at_startup": "Başlangıçta uygulama var",
   "badge.risk": "RİSK",
   "badge.note": "NOT",
 

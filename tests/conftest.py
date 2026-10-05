@@ -37,6 +37,26 @@ def _no_real_shell_folders(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
+def _isolated_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
+    """Every test gets its own ~/.fpstune, never the runner's.
+
+    `utils.config.get_config_dir` resolves the home directory at call time, and
+    the suite drives the real apply, scan and bench paths: without this, a run
+    wrote the change history, the undo record, bench results and the self-check
+    into the developer's own profile — and read them back in the next test.
+    The process-wide stores are dropped too, so none carries one test's state
+    into another.
+    """
+    from fpstune.safety import history, originals
+
+    home = tmp_path_factory.mktemp("home")
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setenv("USERPROFILE", str(home))
+    monkeypatch.setattr(history, "_journal", None)
+    monkeypatch.setattr(originals, "_store", None)
+
+
+@pytest.fixture(autouse=True)
 def _quiet_logging():
     """Reduce logging noise during tests."""
     # Save original levels

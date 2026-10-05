@@ -285,7 +285,7 @@ class TestSettingHardwareContextOffload:
             ctx,
             checker,
             rp,
-            patch("fpstune.api.routes.settings.get_original_values", return_value=originals),
+            patch("fpstune.safety.originals._store", originals),
         ):
             response = client.post("/api/settings/network:nagle_algorithm/undo")
 

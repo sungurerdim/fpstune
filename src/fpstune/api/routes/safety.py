@@ -34,3 +34,37 @@ async def create_restore_point(description: str = "fpstune optimization") -> dic
     # loop for every other request that long. It logs its own outcome.
     outcome = await asyncio.to_thread(restore_mgr.create_restore_point, description)
     return {"success": outcome.kind == "created", "message": outcome.message}
+
+
+@router.get("/history")
+async def change_history(limit: int = 500) -> dict[str, Any]:
+    """What fpstune changed on this machine, across runs (safety/history.py).
+
+    ``settings`` is one row per setting fpstune ever wrote, newest change first:
+    its last action, the value written and when, and whether an undo is still
+    possible (an original is on record). ``entries`` is the raw journal, newest
+    first, for the full timeline.
+    """
+    from fpstune.safety.history import get_change_journal
+    from fpstune.safety.originals import get_original_values
+
+    journal = get_change_journal()
+    originals = get_original_values()
+    latest = sorted(journal.latest().values(), key=lambda c: c.at, reverse=True)
+    return {
+        "settings": [
+            {
+                "setting_id": change.setting_id,
+                "last_action": change.action,
+                "value": change.value,
+                "at": change.at,
+                "can_undo": originals.get(change.setting_id) is not None,
+                "original_value": originals.get(change.setting_id),
+            }
+            for change in latest
+        ],
+        "entries": [
+            {"setting_id": c.setting_id, "action": c.action, "value": c.value, "at": c.at}
+            for c in journal.entries()[: max(0, limit)]
+        ],
+    }

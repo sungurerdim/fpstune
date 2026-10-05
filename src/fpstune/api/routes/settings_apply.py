@@ -15,25 +15,30 @@ already name it there.
 
 from __future__ import annotations
 
+import functools
 import threading
 import time
 from typing import TYPE_CHECKING, Any
 
+from fpstune.api.schemas import ApplyResponse
 from fpstune.benchmark.operation_lock import is_free
+from fpstune.safety.originals import get_original_values
+from fpstune.safety.raw_state import restore as restore_raw_state
 from fpstune.settings import CommandExecutor
+from fpstune.settings.applicability import ApplicabilityChecker
 from fpstune.settings.cleanup_measure import (
     NOTHING_MEASURED,
     freed_after_cleanup,
     measure_cleanup_size,
 )
+from fpstune.settings.detection import DetectionEngine
 from fpstune.settings.executors import action_will_not_run
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
-    from fpstune.api.schemas import ApplyResponse
+    from fpstune.settings.applicability import HardwareContext
     from fpstune.settings.base import SettingExecutor
-    from fpstune.settings.detection import DetectionEngine
 
 
 #: How many applies `/bulk/apply` runs at once (`routes/settings.py`).
@@ -140,3 +145,65 @@ def apply_and_finalize(
         freed_bytes=freed.freed_bytes,
         size_after_bytes=freed.size_after_bytes,
     )
+
+
+def undo_refusal(setting: SettingExecutor) -> str | None:
+    """Why `setting` cannot be undone, or None when it can."""
+    if setting.is_action or setting.is_readonly:
+        return f"{setting.id} is an action or an advisory; there is no earlier state to put back."
+    originals = get_original_values()
+    damaged = originals.damaged()
+    if damaged:
+        return f"Undo is unavailable because {damaged}. Reset to the Windows default still works."
+    if originals.get(setting.id) is None:
+        return (
+            f"fpstune has no record of what {setting.id} held before it was changed. "
+            "Originals are recorded by the first scan that reads a setting, so a "
+            "setting applied before that scan has none."
+        )
+    return None
+
+
+def undo_single_setting(
+    setting: SettingExecutor, hardware_context: HardwareContext | None = None
+) -> tuple[str, ApplyResponse]:
+    """Write back what this machine held, verify, and forget the record once it landed.
+
+    The one undo path, for the single endpoint and the streamed bulk undo alike;
+    here rather than in the route module, which is at its size ceiling.
+    Refusals come back as failed responses; the endpoint turns them into 409s
+    before calling this.
+    """
+    refusal = undo_refusal(setting)
+    if refusal is not None:
+        return setting.id, ApplyResponse(
+            setting_id=setting.id,
+            success=False,
+            error=refusal,
+            new_value=None,
+            requires_reboot=False,
+        )
+    if hardware_context:
+        is_applicable, reason = ApplicabilityChecker(hardware_context).is_applicable(setting)
+        if not is_applicable:
+            return setting.id, ApplyResponse(
+                setting_id=setting.id,
+                success=False,
+                error=reason or "Setting not applicable to this system",
+                new_value=None,
+                requires_reboot=False,
+            )
+    originals = get_original_values()
+    original = originals.get(setting.id)
+    # The stored state itself where it was captured, so nothing is lost to the
+    # display value's many-to-one mapping (safety/raw_state.py).
+    raw = originals.get_raw(setting.id)
+    write = functools.partial(restore_raw_state, setting, raw) if raw is not None else None
+    engine = DetectionEngine(hardware_context=hardware_context)
+    response = apply_and_finalize(setting, original, engine, "Undo", write=write)
+    # Drop the record only once the machine is actually back, so a failed undo
+    # can be retried. Keeping it after a success would pin a value from an
+    # arbitrarily old session and stop the next scan recording a fresh one.
+    if response.success:
+        originals.forget(setting.id)
+    return setting.id, response

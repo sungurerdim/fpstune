@@ -22,7 +22,11 @@ from fastapi import APIRouter, HTTPException
 
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
-from fpstune.api.routes.settings_apply import apply_and_finalize
+from fpstune.api.routes.settings_apply import (
+    apply_and_finalize,
+    undo_refusal,
+    undo_single_setting,
+)
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -38,8 +42,8 @@ from fpstune.api.schemas import (
     VerifyResponse,
 )
 from fpstune.safety import restore
+from fpstune.safety.history import ACTION_FOR_LABEL, get_change_journal
 from fpstune.safety.originals import get_original_values
-from fpstune.safety.raw_state import restore as restore_raw_state
 from fpstune.settings import (
     DetectionEngine,
     SettingsRegistry,
@@ -411,6 +415,19 @@ def _verify_setting_applied(
     return True, None, True
 
 
+def _record_change(setting: SettingExecutor, activity_label: str, value: Any) -> None:
+    """Put a landed, verified write on the change history (safety/history.py).
+
+    Here because every apply, reset and undo ends in `_finalize_apply_response`,
+    so no write can bypass the record. Actions and advisories change nothing
+    that can be put back, so they are not history.
+    """
+    action = ACTION_FOR_LABEL.get(activity_label)
+    if action is None or setting.is_action or setting.is_readonly:
+        return
+    get_change_journal().record(setting.id, action, value)
+
+
 def _finalize_apply_response(
     setting: SettingExecutor,
     requested_value: Any,
@@ -454,6 +471,7 @@ def _finalize_apply_response(
                 f"{activity_label} {setting.display_name}: {requested_value!r} → detected={new_value!r}",
                 "success",
             )
+            _record_change(setting, activity_label, requested_value)
     else:
         log_activity(f"Failed to {activity_label.lower()} {setting.display_name}: {error}", "error")
 
@@ -915,21 +933,9 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
             f"{setting_id} is an action or an advisory; there is no earlier state to put back.",
         )
 
-    originals = get_original_values()
-    damaged = originals.damaged()
-    if damaged:
-        raise HTTPException(
-            409,
-            f"Undo is unavailable because {damaged}. Reset to the Windows default still works.",
-        )
-    original = originals.get(setting_id)
-    if original is None:
-        raise HTTPException(
-            409,
-            f"fpstune has no record of what {setting_id} held before it was changed. "
-            "Originals are recorded by the first scan that reads a setting, so a "
-            "setting applied before that scan has none.",
-        )
+    refusal = undo_refusal(setting)
+    if refusal is not None:
+        raise HTTPException(409, refusal)
 
     hardware_context, is_applicable, reason = await _context_and_applicability(setting)
     if not is_applicable:
@@ -946,23 +952,8 @@ async def undo_setting(setting_id: str) -> ApplyResponse:
     if sys.platform == "win32":
         await asyncio.to_thread(_ensure_restore_point)
 
-    engine = DetectionEngine(hardware_context=hardware_context)
-
-    # The stored state itself where it was captured, so nothing is lost to the
-    # display value's many-to-one mapping (safety/raw_state.py).
-    raw = originals.get_raw(setting_id)
-    write = functools.partial(restore_raw_state, setting, raw) if raw is not None else None
-
-    def _undo() -> ApplyResponse:
-        response = apply_and_finalize(setting, original, engine, "Undo", write=write)
-        # Drop the record only once the machine is actually back, so a failed
-        # undo can be retried. Keeping it after a success would pin a value from
-        # an arbitrarily old session and stop the next scan recording a fresh one.
-        if response.success:
-            originals.forget(setting_id)
-        return response
-
-    return await asyncio.to_thread(_undo)
+    _, response = await asyncio.to_thread(undo_single_setting, setting, hardware_context)
+    return response
 
 
 @router.post("/{setting_id}/verify", response_model=VerifyResponse)

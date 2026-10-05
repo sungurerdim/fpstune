@@ -78,7 +78,7 @@ class TestVerifyAnswersTheQuestionItWasAsked:
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings.get_original_values", return_value=originals),
+            patch("fpstune.safety.originals._store", originals),
             patch(
                 "fpstune.api.routes.settings.DetectionEngine.detect_one",
                 return_value=_detection(detected),
@@ -181,7 +181,7 @@ class TestUndoWritesWhatTheMachineHeld:
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings.get_original_values", return_value=store),
+            patch("fpstune.safety.originals._store", store),
             patch(
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply",
                 # Three parameters because that is what CommandExecutor.apply takes:
@@ -252,7 +252,7 @@ class TestUndoWritesWhatTheMachineHeld:
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings.get_original_values", return_value=store),
+            patch("fpstune.safety.originals._store", store),
             patch(
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ),
@@ -294,7 +294,7 @@ class TestScanRecordsWhatItSaw:
         }
 
         settings = {sid: _fake_setting(sid) for sid in results}
-        with patch("fpstune.api.routes.settings.get_original_values", return_value=store):
+        with patch("fpstune.safety.originals._store", store):
             _record_originals(results, settings)
 
         assert store.get("a:read") == "value"
@@ -314,7 +314,7 @@ class TestScanRecordsWhatItSaw:
             "system:xmp": DetectionResult("system:xmp", "xmp_active", None, 1, False, True),
         }
 
-        with patch("fpstune.api.routes.settings.get_original_values", return_value=store):
+        with patch("fpstune.safety.originals._store", store):
             _record_originals(results, {"cleanup:temp": action, "system:xmp": advisory})
 
         assert store.count() == 0
@@ -344,7 +344,7 @@ class TestScanRecordsWhatItSaw:
         exploding = MagicMock()
         exploding.record_first_seen.side_effect = OSError("disk full")
 
-        with patch("fpstune.api.routes.settings.get_original_values", return_value=exploding):
+        with patch("fpstune.safety.originals._store", exploding):
             _record_originals(
                 {"a:read": DetectionResult("a:read", "v", None, 1, False, True)},
                 {"a:read": _fake_setting("a:read")},
@@ -369,13 +369,13 @@ class TestUndoIsExact:
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
             patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-            patch("fpstune.api.routes.settings.get_original_values", return_value=store),
+            patch("fpstune.safety.originals._store", store),
             patch(
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply",
                 side_effect=AssertionError("the display-value write must not run"),
             ),
             patch(
-                "fpstune.api.routes.settings.restore_raw_state",
+                "fpstune.api.routes.settings_apply.restore_raw_state",
                 side_effect=lambda _s, raw: (
                     (write_calls.append(raw), (True, None))[1]
                     if write_calls is not None

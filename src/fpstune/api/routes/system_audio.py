@@ -21,6 +21,7 @@ from fpstune.settings.definitions.audio import (
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
 from fpstune.utils.logger import log_activity
+from fpstune.utils.process_watch import CHANGE
 
 router = APIRouter()
 
@@ -125,7 +126,7 @@ Invoke-FpsLoudness
 """
     )
 
-    success, output = await _run_powershell_async(ps_command, component="audio")
+    success, output = await _run_powershell_async(ps_command, component="audio", policy=CHANGE)
     if not success:
         logger.warning("Loudness EQ toggle for %s failed to run: %s", device_id, output)
         raise HTTPException(status_code=500, detail="PowerShell command failed")
@@ -172,7 +173,7 @@ async def toggle_audio_device(device_id: str, enabled: bool) -> dict[str, bool |
         f"try {{ {action}-PnpDevice -InstanceId '{instance_id}' -Confirm:$false -EA Stop; "
         "'OK' } catch { 'ERROR: ' + $_.Exception.Message }"
     )
-    success, output = await _run_powershell_async(ps_command, component="audio")
+    success, output = await _run_powershell_async(ps_command, component="audio", policy=CHANGE)
     if not success:
         logger.warning("Failed to %s audio device %s: %s", action.lower(), device_id, output)
         raise HTTPException(status_code=500, detail="PowerShell command failed")

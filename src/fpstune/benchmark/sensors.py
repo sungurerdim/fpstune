@@ -42,6 +42,7 @@ from typing import Any
 from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 from fpstune.benchmark.win_query import query_rows
 from fpstune.utils.logger import get_logger
+from fpstune.utils.process_watch import quiet_for
 
 logger = get_logger()
 
@@ -152,9 +153,12 @@ class SensorBench:
 
     def sample_window(self) -> tuple[list[dict[str, Any]], str]:
         """One window of per-second rows, or an empty list and the reason."""
-        budget = int(self.window_samples * _PER_SAMPLE_SECONDS + 15)
+        # Sleeps between readings and prints once at the end: that quiet is
+        # planned, so only silence beyond it counts as stuck.
         rows, reason = query_rows(
-            build_script(self.window_samples), timeout=budget, component="benchmark.sensors"
+            build_script(self.window_samples),
+            policy=quiet_for(self.window_samples * _PER_SAMPLE_SECONDS),
+            component="benchmark.sensors",
         )
         if reason:
             return [], reason

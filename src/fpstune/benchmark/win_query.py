@@ -32,6 +32,7 @@ from typing import Any
 
 from fpstune.utils.logger import get_logger
 from fpstune.utils.powershell import run_powershell
+from fpstune.utils.process_watch import QUERY, StallPolicy
 
 logger = get_logger()
 
@@ -79,7 +80,7 @@ def _parse(payload: str) -> Any | None:
 
 
 def query_rows(
-    script: str, *, timeout: int = 20, component: str = "benchmark"
+    script: str, *, policy: StallPolicy = QUERY, component: str = "benchmark"
 ) -> tuple[list[dict[str, Any]], str]:
     """Run one PowerShell expression and return its rows, or a reason.
 
@@ -95,7 +96,7 @@ def query_rows(
         return [], NOT_WINDOWS
 
     wrapped = f"@({script}) | ConvertTo-Json -Compress -Depth 4"
-    ok, output = run_powershell(wrapped, timeout=timeout, component=component)
+    ok, output = run_powershell(wrapped, policy, component=component)
     if not ok:
         logger.debug("%s: PowerShell refused the query: %s", component, output)
         return [], UNREADABLE

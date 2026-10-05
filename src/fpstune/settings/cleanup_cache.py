@@ -12,16 +12,15 @@ _TTL = 300  # 5 minutes for a successfully computed size
 _UNAVAILABLE_TTL = 15
 # "calculating" says a worker is on its way back with an answer, and for the life
 # of the process it used to be unfalsifiable: an id whose worker never reported
-# kept the spinner and the UI's 3-second poll going forever. Measured on
-# 2026-09-03, `cleanup:dism_cleanup` sat there for twenty minutes after its scan's
-# PowerShell was killed (see utils.powershell._reap_in_background for why the
-# worker never came back).
+# kept the spinner and the UI's 3-second poll going forever (measured on
+# 2026-09-03: `cleanup:dism_cleanup`, twenty minutes). A fixed deadline replaced
+# that, and was wrong the other way: a scan still working past it was declared
+# unavailable and a second one started.
 #
-# So a claim now carries the deadline its own worker promised — `mark_calculating`
-# takes the scan's timeout — and this is only the default for a caller that names
-# none. It is a backstop, not the mechanism: every worker settles its ids in a
-# `finally`, and this fires only when one dies without reaching it.
-_CALCULATING_TTL = 600
+# So a claim carries its worker's own `done` event, set in the worker's
+# `finally`. The claim settles to "unavailable" only once the worker has ended
+# without writing an outcome — never while it is still running, however long
+# that takes (the stall rule in utils.process_watch bounds a stuck one).
 
 
 class CleanupSizeCache:
@@ -36,7 +35,7 @@ class CleanupSizeCache:
         self._data: dict[str, dict[str, Any]] = {}
 
     def _settle_calculating(self, key: str) -> dict[str, Any] | None:
-        """Give up on a "calculating" entry whose worker is past its own deadline.
+        """Give up on a "calculating" entry whose worker ended without an answer.
 
         Answering "unavailable" rather than dropping the entry is deliberate: it
         carries its own short TTL, so the next detect starts a fresh scan, and in
@@ -48,7 +47,7 @@ class CleanupSizeCache:
             return None
         if entry["status"] != "calculating":
             return entry
-        if time.monotonic() - entry["ts"] <= entry.get("ttl", _CALCULATING_TTL):
+        if not entry["done"].is_set():
             return entry
         settled: dict[str, Any] = {
             "bytes": 0,
@@ -70,7 +69,7 @@ class CleanupSizeCache:
             if entry["status"] == "unavailable" and now - entry["ts"] > _UNAVAILABLE_TTL:
                 del self._data[key]
                 return None
-            return dict(entry)
+            return {f: x for f, x in entry.items() if f != "done"}
 
     def set_result(self, key: str, bytes_val: int) -> None:
         with self._lock:
@@ -98,20 +97,15 @@ class CleanupSizeCache:
                 "ts": time.monotonic(),
             }
 
-    def mark_calculating(self, key: str, ttl: float = _CALCULATING_TTL) -> None:
-        """Claim `key` for a worker that promises an answer within `ttl` seconds.
-
-        The deadline is the worker's own timeout plus its queueing headroom, so
-        the claim expires when that worker has demonstrably failed to report —
-        not on a guess about how long a folder takes to size.
-        """
+    def mark_calculating(self, key: str, done: threading.Event) -> None:
+        """Claim `key` for a worker that sets `done` when it ends, answer or not."""
         with self._lock:
             if key not in self._data or self._data[key]["status"] != "calculating":
                 self._data[key] = {
                     "bytes": 0,
                     "status": "calculating",
                     "ts": time.monotonic(),
-                    "ttl": ttl,
+                    "done": done,
                 }
 
     def is_calculating(self, key: str) -> bool:
@@ -126,13 +120,14 @@ class CleanupSizeCache:
     def all_entries(self) -> dict[str, dict[str, Any]]:
         """Every entry as the UI should see it, abandoned scans settled.
 
-        The deadline is applied here and not only in :meth:`get` because this is
+        Settling happens here and not only in :meth:`get` because this is
         what the polling endpoint reads: a scan that never reported would
         otherwise stay "calculating" in the UI until something happened to
         re-detect it, which for a cleanup size is nothing.
         """
         with self._lock:
-            return {k: dict(v) for k in list(self._data) if (v := self._settle_calculating(k))}
+            entries = {k: v for k in list(self._data) if (v := self._settle_calculating(k))}
+            return {k: {f: x for f, x in v.items() if f != "done"} for k, v in entries.items()}
 
 
 cleanup_size_cache = CleanupSizeCache()

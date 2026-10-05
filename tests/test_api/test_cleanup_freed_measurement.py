@@ -395,45 +395,29 @@ class TestTheStreamReportsTheSameNumbers:
         assert applied["size_after_bytes"] is None
 
 
-class TestTheBulkRunWaitsLongEnoughForWhatItStarted:
-    """A cap shorter than the work is a run abandoned while it is succeeding.
+class TestTheBulkRunWaitsForWhatItStarted:
+    """A cap over the set is a run abandoned while it is succeeding.
 
-    `/bulk/apply` waited a flat 300 s for anything containing an action. On this
-    machine one DISM cleanup is 43.0 s of component store analysis, the cleanup
-    itself (the user timed the whole thing at about 108 s elevated, and the
-    setting's own timeout is 900 s), then 34.7 s more to measure what it freed —
-    so the setting most likely to need the budget was the one guaranteed not to
-    get it.
+    `/bulk/apply` waited a flat 300 s, then a budget derived per setting; both
+    answered "timed out" for applies that went on to succeed, because cancel()
+    cannot stop a running thread. Each apply now carries its own stall rule
+    (utils.process_watch), so the set waits for every member to finish.
     """
 
-    def test_the_budget_covers_the_command_and_both_readings(self) -> None:
-        from fpstune.api.routes.settings_apply import apply_budget_seconds
+    def test_the_set_is_collected_without_a_deadline(self, client: TestClient, cache) -> None:
+        from concurrent import futures as cf
 
-        # The command's own allowance, plus one reading either side of it. The
-        # local fixture declares no per-setting timeout, so it takes the
-        # known-slow default; the shipped row asks for 900 s of its own.
-        assert apply_budget_seconds(_cleanup_setting()) >= 300 + 2 * 120
+        setting = _registry_setting()
+        seen: list[dict[str, Any]] = []
+        real = cf.as_completed
 
-        from fpstune.settings.definitions import get_all_static_settings
+        def spy(fs, **kwargs):
+            seen.append(kwargs)
+            return real(fs, **kwargs)
 
-        shipped = next(s for s in get_all_static_settings() if s.id == "cleanup:dism_cleanup")
-        assert apply_budget_seconds(shipped) >= 900 + 2 * 120
+        with _run(setting, cache, [], detected="off"), patch.object(cf, "as_completed", spy):
+            result = client.post("/api/settings/bulk/apply", json={"settings": {setting.id: "on"}})
 
-    def test_a_folder_cleanup_is_not_charged_for_readings_it_no_longer_takes(self) -> None:
-        """A walk of a folder costs well under a second and starts no process."""
-        from fpstune.api.routes.settings_apply import apply_budget_seconds
-
-        walked = _cleanup_setting("cleanup:pip_cache", "pip_cache")
-        scripted = _cleanup_setting()
-
-        assert apply_budget_seconds(walked) < apply_budget_seconds(scripted)
-
-    def test_the_cap_is_derived_from_the_set_rather_than_fixed(self) -> None:
-        from fpstune.api.routes.settings_apply import bulk_apply_timeout
-
-        assert bulk_apply_timeout([]) == 60
-        one_slow = bulk_apply_timeout([_cleanup_setting()])
-        assert one_slow > 300, "the flat cap was shorter than one DISM cleanup"
-        # A set is at least as long as its slowest member.
-        mixed = bulk_apply_timeout([_cleanup_setting(), _registry_setting()])
-        assert mixed >= one_slow
+        assert result.status_code == 200, result.text
+        assert seen, "the bulk route no longer collects through as_completed"
+        assert all(kwargs.get("timeout") is None for kwargs in seen)

@@ -11,11 +11,12 @@ module that spawns powershell.exe itself and names ``HKCU:``.
 
 from __future__ import annotations
 
+import io
 import sys
 
 import pytest
 
-from fpstune.utils import powershell
+from fpstune.utils import powershell, process_watch
 from fpstune.utils.winapi import session
 from fpstune.utils.winapi.session import UserHive
 
@@ -31,12 +32,16 @@ class _FakeProcess:
     def __init__(self, argv: list[str]) -> None:
         self.args = argv
         self.returncode = 0
+        self.stdout = io.BytesIO(b"0\n")
+        self.stderr = io.BytesIO(b"")
 
-    # Named `timeout` because the runner passes it by keyword; nothing here waits.
-    def communicate(self, timeout: float | None = None) -> tuple[str, str]:  # noqa: ARG002
-        return "0\n", ""
+    def poll(self) -> int:
+        return self.returncode
 
-    def kill(self) -> None:  # pragma: no cover - nothing here ever times out
+    def wait(self, timeout: float | None = None) -> int:  # noqa: ARG002
+        return self.returncode
+
+    def kill(self) -> None:  # pragma: no cover - nothing here ever stalls
         pass
 
 
@@ -47,10 +52,8 @@ def _capture_argv(monkeypatch: pytest.MonkeyPatch) -> list[list[str]]:
         seen.append(argv)
         return _FakeProcess(argv)
 
-    # The runner drives the process itself rather than through `subprocess.run`,
-    # because that call reaps a timed-out child with a wait it cannot bound —
-    # see utils.powershell._reap_in_background.
-    monkeypatch.setattr(powershell.subprocess, "Popen", fake_popen)
+    # Every child process starts in utils.process_watch, the one watched runner.
+    monkeypatch.setattr(process_watch.subprocess, "Popen", fake_popen)
     return seen
 
 

@@ -507,13 +507,6 @@ class SettingExecutor:
     apply_args: dict[str, Any] = field(default_factory=dict)
     apply_value_map: dict[Any, Any] = field(default_factory=dict)  # Display → raw value
 
-    # === Per-setting timeout overrides (seconds) ===
-    # When None, the executor uses its own heuristic / default. Set this for
-    # known-slow detections (e.g., WMI queries) to prevent a hung command from
-    # blocking a parallel-detection slot for the executor's full default.
-    detect_timeout: int | None = None
-    apply_timeout: int | None = None
-
     # === What a long action says while it runs ===
     # How long this takes, in the words the row shows: "~30s", "1-5 min". An
     # action that runs for half an hour behind an unlabelled spinner is

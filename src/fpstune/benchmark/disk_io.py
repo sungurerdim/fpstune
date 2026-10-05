@@ -509,7 +509,6 @@ class DiskIoBench:
         """
         rows, reason = query_rows(
             DISK_SCRIPT.replace("__DIRECTORY__", str(self.directory).replace("'", "''")),
-            timeout=30,
             component="benchmark.disk_io",
         )
         if reason:

@@ -22,7 +22,7 @@ from fastapi import APIRouter, HTTPException
 
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
-from fpstune.api.routes.settings_apply import apply_and_finalize, bulk_apply_timeout
+from fpstune.api.routes.settings_apply import apply_and_finalize
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -647,10 +647,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
         else:
             valid_settings.append((setting, value))
 
-    # What this particular set can legitimately take, command and the readings
-    # around it — never a flat cap, which was shorter than one DISM cleanup.
-    bulk_timeout = bulk_apply_timeout([setting for setting, _ in valid_settings])
-
     # A restore point before the first change of the session (best-effort; this
     # already runs on a worker thread).
     if valid_settings and sys.platform == "win32":
@@ -664,48 +660,38 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
                 for setting, value in valid_settings
             }
 
-            try:
-                for future in as_completed(futures, timeout=bulk_timeout):
-                    try:
-                        setting_id, response = future.result(timeout=bulk_timeout)
-                        results[setting_id] = response
+            # No deadline over the set: each apply runs under its own stall rule
+            # (utils.process_watch), so one that is working is waited for and one
+            # that is stuck ends itself and says so. A set-wide cap answered
+            # "timed out" for applies that went on to succeed — cancel() cannot
+            # stop a running thread, and leaving this block waited for them anyway.
+            for future in as_completed(futures):
+                try:
+                    setting_id, response = future.result()
+                    results[setting_id] = response
 
-                        if response.success:
-                            success_count += 1
-                            if response.requires_reboot:
-                                any_requires_reboot = True
-                        else:
-                            error_count += 1
-                            if response.error:
-                                log_activity(
-                                    f"APPLY FAILED {setting_id}: {response.error}",
-                                    "error",
-                                )
-                    except Exception as e:
-                        setting_id = futures[future]
-                        results[setting_id] = ApplyResponse(
-                            setting_id=setting_id,
-                            success=False,
-                            error=str(e),
-                            new_value=None,
-                            requires_reboot=False,
-                        )
+                    if response.success:
+                        success_count += 1
+                        if response.requires_reboot:
+                            any_requires_reboot = True
+                    else:
                         error_count += 1
-                        log_activity(f"APPLY ERROR {setting_id}: {e}", "error")
-            except TimeoutError:
-                # Handle futures that didn't complete in time
-                for future, setting_id in futures.items():
-                    if setting_id not in results:
-                        future.cancel()
-                        results[setting_id] = ApplyResponse(
-                            setting_id=setting_id,
-                            success=False,
-                            error=f"Operation timed out ({bulk_timeout}s)",
-                            new_value=None,
-                            requires_reboot=False,
-                        )
-                        error_count += 1
-                        log_activity(f"APPLY TIMEOUT {setting_id}", "error")
+                        if response.error:
+                            log_activity(
+                                f"APPLY FAILED {setting_id}: {response.error}",
+                                "error",
+                            )
+                except Exception as e:
+                    setting_id = futures[future]
+                    results[setting_id] = ApplyResponse(
+                        setting_id=setting_id,
+                        success=False,
+                        error=str(e),
+                        new_value=None,
+                        requires_reboot=False,
+                    )
+                    error_count += 1
+                    log_activity(f"APPLY ERROR {setting_id}: {e}", "error")
 
     # Log summary
     if success_count > 0:
@@ -829,86 +815,6 @@ async def get_modules_metadata() -> list[ModuleMetadataResponse]:
         )
     result.extend(_fallback_module_metadata(module_id) for module_id in missing)
     return result
-
-
-# =============================================================================
-# Bulk Reset/Optimize Endpoints
-# =============================================================================
-
-
-def _run_bulk_op(
-    setting_ids: list[str],
-    op: Callable[[SettingExecutor, HardwareContext | None], tuple[str, ApplyResponse]],
-    success_message: Callable[[int], str],
-    error_message: Callable[[int], str],
-) -> BulkApplyResponse:
-    """Run a per-setting operation across many settings in parallel and aggregate.
-
-    Shared core for bulk reset/optimize: unknown IDs become per-setting errors,
-    valid settings run through ``op`` on a thread pool, and results are tallied.
-    """
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
-    registry = _get_registry()
-    hardware_context = _get_hardware_context()
-    results: dict[str, ApplyResponse] = {}
-    success_count = 0
-    error_count = 0
-    any_requires_reboot = False
-
-    valid_settings: list[SettingExecutor] = []
-    for setting_id in setting_ids:
-        setting = registry.get(setting_id)
-        if not setting:
-            results[setting_id] = ApplyResponse(
-                setting_id=setting_id,
-                success=False,
-                error=f"Unknown setting: {setting_id}",
-                new_value=None,
-                requires_reboot=False,
-            )
-            error_count += 1
-        else:
-            valid_settings.append(setting)
-
-    if valid_settings:
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            futures = {
-                executor.submit(op, setting, hardware_context): setting.id
-                for setting in valid_settings
-            }
-            for future in as_completed(futures, timeout=60):
-                try:
-                    setting_id, response = future.result(timeout=60)
-                    results[setting_id] = response
-                    if response.success:
-                        success_count += 1
-                        if response.requires_reboot:
-                            any_requires_reboot = True
-                    else:
-                        error_count += 1
-                except Exception as e:
-                    setting_id = futures[future]
-                    results[setting_id] = ApplyResponse(
-                        setting_id=setting_id,
-                        success=False,
-                        error=str(e),
-                        new_value=None,
-                        requires_reboot=False,
-                    )
-                    error_count += 1
-
-    if success_count > 0:
-        log_activity(success_message(success_count), "success")
-    if error_count > 0:
-        log_activity(error_message(error_count), "error")
-
-    return BulkApplyResponse(
-        results=results,
-        success_count=success_count,
-        error_count=error_count,
-        requires_reboot=any_requires_reboot,
-    )
 
 
 # =============================================================================

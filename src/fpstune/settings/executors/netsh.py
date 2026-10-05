@@ -91,7 +91,7 @@ def _fetch_tcp_snapshot() -> dict[str, str]:
         "$s = Get-NetTCPSetting -SettingName Internet -ErrorAction SilentlyContinue; "
         f"if ($s) {{ @{{ {fields} }} | ConvertTo-Json -Compress }}"
     )
-    success, output = run_powershell(cmd, timeout=15, component="netsh")
+    success, output = run_powershell(cmd, component="netsh")
     if not (success and output and output.strip()):
         return {}
 

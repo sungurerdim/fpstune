@@ -108,7 +108,7 @@ class GpuMemoryBench:
 
     def sample(self) -> tuple[list[dict[str, Any]], str]:
         """Every adapter instance, or an empty list and the reason."""
-        rows, reason = query_rows(SCRIPT, timeout=20, component="benchmark.gpu_memory")
+        rows, reason = query_rows(SCRIPT, component="benchmark.gpu_memory")
         if reason:
             return [], reason
         if not rows:

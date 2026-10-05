@@ -335,6 +335,7 @@ class _ImmediateThreading:
 
     Lock = staticmethod(_real_threading.Lock)
     BoundedSemaphore = staticmethod(_real_threading.BoundedSemaphore)
+    Event = staticmethod(_real_threading.Event)
 
 
 class TestTheEventLogPromise:

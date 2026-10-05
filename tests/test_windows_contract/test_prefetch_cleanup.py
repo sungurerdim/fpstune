@@ -90,7 +90,7 @@ def test_a_subdirectory_is_neither_counted_nor_removed(tmp_path, monkeypatch) ->
     assert (ready_boot / "Trace1.fx").exists()
 
 
-def test_a_thousand_entries_finish_well_inside_the_apply_timeout(tmp_path, monkeypatch) -> None:
+def test_a_thousand_entries_are_deleted_in_seconds(tmp_path, monkeypatch) -> None:
     """The regression: a per-file delete loop is what ran past 30 seconds.
 
     The harness caps PowerShell at 120 s, so a script that reverts to per-file

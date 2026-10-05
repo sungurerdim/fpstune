@@ -55,6 +55,7 @@ from fpstune.settings.executors.game_processes import (
     game_is_running,
 )
 from fpstune.utils.logger import get_logger
+from fpstune.utils.process_watch import quiet_for
 
 logger = get_logger()
 
@@ -178,12 +179,11 @@ class ProcessSamplerBench:
 
     def sample_window(self, process_names: tuple[str, ...]) -> tuple[list[dict[str, Any]], str]:
         """One window of per-second rows, or an empty list and the reason."""
-        # The timeout allows the sleeps plus a slow machine's query time, so a
-        # window that is merely slow is not reported as a machine that refused.
-        budget = int(self.window_samples * _PER_SAMPLE_SECONDS + 15)
+        # Sleeps between readings and prints once at the end: that quiet is
+        # planned, so only silence beyond it counts as stuck.
         rows, reason = query_rows(
             build_script(self.window_samples, process_names),
-            timeout=budget,
+            policy=quiet_for(self.window_samples * _PER_SAMPLE_SECONDS),
             component="benchmark.process_sampler",
         )
         if reason:

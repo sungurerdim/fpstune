@@ -89,7 +89,7 @@ def _fetch_services_snapshot() -> dict[str, dict[str, Any]]:
         return snapshot
 
     cmd = "Get-Service | Select-Object -Property Name,StartType | ConvertTo-Json -Compress -Depth 1"
-    success, output = run_powershell(cmd, timeout=15)
+    success, output = run_powershell(cmd)
     if success and output and output.strip():
         try:
             data = json.loads(output.strip())
@@ -145,7 +145,7 @@ def _fetch_adapter_properties_snapshot() -> dict[str, Any]:
         "RegistryKeyword,RegistryValue | "
         "ConvertTo-Json -Compress -Depth 3"
     )
-    success, output = run_powershell(cmd, timeout=30)
+    success, output = run_powershell(cmd)
     if not (success and output and output.strip()):
         logger.debug("prefetch_adapter_properties returned no data")
         return snapshot
@@ -207,7 +207,7 @@ def _fetch_adapter_power_snapshot() -> dict[str, str]:
         "$out[[string]$_.InterfaceIndex] = $state }; "
         "$out | ConvertTo-Json -Compress"
     )
-    success, output = run_powershell(cmd, timeout=30, component="ps_batch")
+    success, output = run_powershell(cmd, component="ps_batch")
     if not (success and output and output.strip()):
         return {}
 
@@ -292,30 +292,6 @@ def get_adapter_property(interface_index: Any, keyword: str) -> Any:
 _CLEANUP_CALL = "Get-CleanupStatus '%type%'"
 
 
-#: What one reading costs, where the default is wrong about it. DISM's
-#: `/AnalyzeComponentStore` is the only one measured in tens of seconds: 43.0 s
-#: elevated before a cleanup and 34.7 s after it, on 2026-09-10, both while the
-#: machine was otherwise busy. Twelve seconds of headroom is not a timeout for
-#: that; it is a guarantee the reading is killed and the row says "unavailable"
-#: for a component store that answered perfectly well, just slowly.
-CLEANUP_TYPE_SECONDS: dict[str, int] = {"dism": 120}
-
-#: Every other cleanup reading left in PowerShell — docker's own accounting, the
-#: shadow storage allocation, the event log record counts — is a query rather
-#: than a walk, and each measured inside two seconds.
-_DEFAULT_TYPE_SECONDS = 12
-
-
-def cleanup_batch_timeout(types: tuple[str, ...]) -> int:
-    """How long the batch may take for `types`, derived from what each one costs.
-
-    Exposed because the cache entry each claimed setting gets must expire *after*
-    the worker that claimed it has given up, and a second copy of this arithmetic
-    would be the first thing to drift.
-    """
-    return 30 + sum(CLEANUP_TYPE_SECONDS.get(t, _DEFAULT_TYPE_SECONDS) for t in types)
-
-
 def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
     """Ask one PowerShell session for every cleanup type's reclaimable size.
 
@@ -364,9 +340,7 @@ def _fetch_cleanup_sizes(types: tuple[str, ...]) -> dict[str, str]:
 
     # Folder sizing dominates: a large npm or shader cache takes real seconds,
     # and this now carries every type in one call.
-    success, output = run_powershell(
-        script, timeout=cleanup_batch_timeout(types), component="ps_batch"
-    )
+    success, output = run_powershell(script, component="ps_batch")
     if not (success and output and output.strip()):
         logger.debug("cleanup size batch produced nothing")
         return {}
@@ -475,7 +449,7 @@ def _run_detect_group(specs: list[tuple[str, str]]) -> dict[str, str]:
     script = _build_group_script(specs)
     # Budget scales with group size; a single command's own timeout no longer
     # applies because they share a process.
-    success, output = run_powershell(script, timeout=15 + 8 * len(specs))
+    success, output = run_powershell(script)
     if not (success and output and output.strip()):
         logger.debug("powershell detect group failed (%d commands)", len(specs))
         return results

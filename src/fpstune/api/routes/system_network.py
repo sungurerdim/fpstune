@@ -19,6 +19,7 @@ from fpstune.utils.admin import is_admin
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
 from fpstune.utils.logger import log_activity
+from fpstune.utils.process_watch import CHANGE
 from fpstune.utils.winapi import wlan
 
 router = APIRouter()
@@ -252,7 +253,7 @@ async def toggle_network_adapter(
         """
         identifier = f"index:{safe_index}"
 
-    success, output = await _run_powershell_async(ps_command, component="network", timeout=30)
+    success, output = await _run_powershell_async(ps_command, component="network", policy=CHANGE)
     debug_log("network", f"toggle_adapter PS result: success={success}, output='{output}'")
 
     if not success:
@@ -379,7 +380,7 @@ async def toggle_network_connection(adapter_name: str, action: str) -> dict[str,
                 Write-Output "ERROR: $($_.Exception.Message)"
             }}
             """
-        success, output = await _run_powershell_async(ps_command, timeout=30)
+        success, output = await _run_powershell_async(ps_command, policy=CHANGE)
 
     if not success:
         logger.warning(f"PowerShell failed for connection toggle '{adapter_name}': {output}")

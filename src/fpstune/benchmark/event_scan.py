@@ -215,9 +215,7 @@ class EventScanBench:
 
     def sample(self, since_epoch: float) -> tuple[dict[str, float], str]:
         """One pass: every count, or an empty result and the reason."""
-        rows, reason = query_rows(
-            build_script(int(since_epoch)), timeout=30, component="benchmark.event_scan"
-        )
+        rows, reason = query_rows(build_script(int(since_epoch)), component="benchmark.event_scan")
         if reason:
             return {}, reason
         if not rows:

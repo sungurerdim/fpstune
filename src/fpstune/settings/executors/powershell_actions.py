@@ -516,6 +516,7 @@ _PATH_CLEANUP = r"""
     $keepHours = [int]'%keep_recent_hours%'
     $cutoff = (Get-Date).AddHours(-$keepHours)
 __PROLOGUE__
+    try {
     foreach ($path in $paths) {
         if (-not (Test-Path -LiteralPath $path)) { continue }
         if ($mode -eq 'directory') {
@@ -549,7 +550,9 @@ __PROLOGUE__
                 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
         }
     }
+    } finally {
 __EPILOGUE__
+    }
     Write-Output "Cleanup ran over $($paths.Count) path(s)"
 """
 
@@ -566,6 +569,16 @@ def _path_cleanup(prologue: str = "", epilogue: str = "") -> str:
         .replace("__PROLOGUE__", prologue)
         .replace("__EPILOGUE__", epilogue)
     )
+
+
+#: Cleanups that stop a service around their delete, and which service. The
+#: script restarts it in a `finally`; a run the stall rule stops is killed before
+#: that `finally` can run, so the executor restarts the service itself afterwards
+#: rather than leave Windows Update or Delivery Optimization stopped.
+SERVICE_CLEANUPS: dict[str, str] = {
+    "windows_update_cache_cleanup": "wuauserv",
+    "delivery_optimization_cleanup": "dosvc",
+}
 
 
 def _service_cleanup(service: str) -> str:
@@ -778,8 +791,12 @@ ACTION_COMMANDS: dict[str, str] = {
     # Windows keeps some .pf files open and those survive the delete.
     "prefetch_cleanup": _path_cleanup(),
     "browser_cache_cleanup": _path_cleanup(),
-    "windows_update_cache_cleanup": _service_cleanup("wuauserv"),
-    "delivery_optimization_cleanup": _service_cleanup("dosvc"),
+    "windows_update_cache_cleanup": _service_cleanup(
+        SERVICE_CLEANUPS["windows_update_cache_cleanup"]
+    ),
+    "delivery_optimization_cleanup": _service_cleanup(
+        SERVICE_CLEANUPS["delivery_optimization_cleanup"]
+    ),
     # Only the cache databases, never the folder: Explorer keeps its own state
     # here. The measured-freed rule matters most on this one — Explorer usually
     # holds these files open, so the old script reported the full cache size as

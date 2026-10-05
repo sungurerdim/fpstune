@@ -93,16 +93,17 @@ class TestTheSettingIsRegistered:
         assert setting.value_map == {}
         assert setting.choices == ()
 
-    def test_the_apply_gets_more_time_than_the_thirty_second_default(
-        self, setting: SettingExecutor
-    ) -> None:
+    def test_the_apply_has_no_fixed_cap(self, setting: SettingExecutor) -> None:
         """Measured at 8.4 s and 5.3 s for two volumes of one NVMe SSD.
 
-        A SATA SSD with a fuller volume is slower by a large multiple, and a
-        timeout does not stop the retrim — it stops fpstune reading it, so the
-        run is reported failed while the drive is still working.
+        A SATA SSD with a fuller volume is slower by a large multiple, and a fixed
+        cap stopped fpstune reading a retrim that was still working. It runs under
+        the change policy: only a retrim that stops moving bytes is stuck.
         """
-        assert setting.apply_timeout == 600
+        from fpstune.settings.executors.powershell import apply_policy
+        from fpstune.utils.process_watch import CHANGE
+
+        assert apply_policy(setting.apply_command) is CHANGE
         assert setting.duration_estimate == "10-60 sec"
 
 

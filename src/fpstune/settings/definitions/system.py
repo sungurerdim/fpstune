@@ -2281,7 +2281,6 @@ CLEANUP_DISM = SettingExecutor(
     apply_command="dism_cleanup",
     apply_args={},
     apply_value_map={},
-    apply_timeout=900,
     duration_estimate="5-15 min",
     progress_pattern=PERCENT_PROGRESS,
 )
@@ -3046,13 +3045,6 @@ MAINTENANCE_SFC = SettingExecutor(
     apply_value_map={},
     duration_estimate="5-15 min",
     progress_pattern=PERCENT_PROGRESS,
-    # A full system-file verification pass, not a check that can be hurried: the
-    # 300 s the slow-apply heuristic gives is shorter than the scan itself, and a
-    # timeout there does not stop the scan — it stops fpstune watching it, so the
-    # run is reported failed while it is still repairing. Measured on this
-    # machine 2026-09-03: `maintenance:dism_health` timed out at 300 s twice and
-    # left `Dism.exe` running both times, with no parent left to read it.
-    apply_timeout=1800,
 )
 
 MAINTENANCE_DISM_HEALTH = SettingExecutor(
@@ -3088,10 +3080,6 @@ MAINTENANCE_DISM_HEALTH = SettingExecutor(
     apply_value_map={},
     duration_estimate="10-30 min",
     progress_pattern=PERCENT_PROGRESS,
-    # `/RestoreHealth` verifies the whole component store and fetches replacement
-    # payloads from Windows Update; half an hour is a normal run, not a stuck
-    # one. See MAINTENANCE_SFC's note for what the old 300 s cap actually did.
-    apply_timeout=3600,
 )
 
 # The threshold is 14 days, and it is derived from Windows' own schedule rather
@@ -3145,12 +3133,6 @@ MAINTENANCE_SSD_RETRIM = SettingExecutor(
     apply_args={},
     apply_value_map={},
     duration_estimate="10-60 sec",
-    # Measured 2026-09-10 on a 1 TB NVMe SSD: 8.4 s for the system volume (28.26
-    # GB trimmed) and 5.3 s for the second one. Ten minutes is the headroom for a
-    # SATA SSD, a fuller volume and more of them — a retrim that is still running
-    # when the timeout fires is not stopped by it, only left with nobody reading
-    # it, which is what `maintenance:dism_health` learned at 300 s.
-    apply_timeout=600,
 )
 
 
@@ -4066,7 +4048,6 @@ CLEANUP_DOCKER_PRUNE = SettingExecutor(
     apply_command="docker_prune",
     apply_args={},
     apply_value_map={},
-    apply_timeout=300,
 )
 
 CLEANUP_DOCKER_PRUNE_ALL = SettingExecutor(
@@ -4101,7 +4082,6 @@ CLEANUP_DOCKER_PRUNE_ALL = SettingExecutor(
     apply_command="docker_prune_all",
     apply_args={},
     apply_value_map={},
-    apply_timeout=300,
 )
 
 CLEANUP_WSL_COMPACT = SettingExecutor(
@@ -4134,7 +4114,6 @@ CLEANUP_WSL_COMPACT = SettingExecutor(
     apply_command="wsl_compact",
     apply_args={},
     apply_value_map={},
-    apply_timeout=600,
 )
 
 CLEANUP_SETTINGS: list[SettingExecutor] = [

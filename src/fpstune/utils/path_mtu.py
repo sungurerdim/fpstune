@@ -108,7 +108,7 @@ def _probe_target(target: str) -> int | None:
 
     # 9 probes x 2 attempts x 1.2 s is the theoretical worst case; in practice a
     # PacketTooBig comes back from the first hop immediately.
-    success, output = run_powershell(_build_script(target), timeout=40, component="path_mtu")
+    success, output = run_powershell(_build_script(target), component="path_mtu")
     if not success:
         logger.debug("Path MTU probe against %s failed: %s", target, output)
         return None

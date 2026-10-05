@@ -6,16 +6,12 @@ PowerShell commands with user-provided or dynamic values.
 
 from __future__ import annotations
 
-import codecs
-import contextlib
-import io
 import re
-import subprocess
 import sys
-import threading
 from collections.abc import Callable
 from typing import Any
 
+from fpstune.utils.process_watch import CHANGE, QUERY, StallPolicy, no_window_flags, run_watched
 from fpstune.utils.system_tools import powershell_exe
 
 _PLACEHOLDER = re.compile(r"%([A-Za-z_][A-Za-z0-9_]*)%")
@@ -269,36 +265,6 @@ def build_ps_variable(name: str, value: str, escape_braces: bool = False) -> str
         return f"${name} = '{escaped}'"
 
 
-def _reap_in_background(process: subprocess.Popen[str]) -> None:
-    """Drain a killed child's pipes off the calling thread, however long it takes.
-
-    Killing PowerShell does not close the pipe handles it handed to whatever it
-    started, and ``subprocess.run`` reaps a timed-out child with a
-    ``communicate()`` that takes no timeout — so the timeout it promises is only
-    honoured when the child leaves no grandchild behind. It does here: the
-    cleanup-size scan runs ``dism.exe``, which keeps the pipe open long after
-    PowerShell is gone.
-
-    Measured on 2026-09-03: the DISM size scan started 02:34:30, its PowerShell
-    was killed at the 90 s timeout, and ``Dism.exe`` was still running — parent
-    dead, pipe held — twenty minutes later, with ``run_powershell`` still inside
-    that reaping ``communicate()``. The caller never returned, so
-    ``cleanup:dism_cleanup`` never left "calculating", the freed-space number
-    never arrived, and the UI polled for it every three seconds for the life of
-    the process.
-
-    The orphan is deliberately left alone rather than tree-killed: the same
-    runner carries ``dism /StartComponentCleanup``, and interrupting servicing
-    mid-write is a bigger risk than an analysis that finishes unread (C1).
-    """
-
-    def _drain() -> None:
-        with contextlib.suppress(Exception):
-            process.communicate()
-
-    threading.Thread(target=_drain, daemon=True, name="powershell-reap").start()
-
-
 def _powershell_argv(command: str) -> list[str]:
     """The argument vector both runners start, so they cannot drift apart."""
     # Prefix command with UTF-8 encoding for international Windows
@@ -369,17 +335,17 @@ class _LineSplitter:
 def run_powershell_stream(
     command: str,
     on_line: Callable[[str, bool], None],
-    timeout: int = 30,
+    policy: StallPolicy = CHANGE,
     encoding: str = "utf-8",
     component: str = "powershell",
 ) -> tuple[bool, str]:
     """Run a PowerShell command, handing each line over as it is printed.
 
     Same contract as :func:`run_powershell` — same argv, same hive rewrite, same
-    timeout promise, same ``(success, output)`` answer — with the output
-    delivered while the command is still running rather than only at the end.
-    That is the whole point: a thirty-minute repair that reports nothing until it
-    finishes is indistinguishable from one that has hung.
+    stall rule, same ``(success, output)`` answer — with the output delivered
+    while the command is still running rather than only at the end. A
+    thirty-minute repair that reports nothing until it finishes is
+    indistinguishable from one that has hung.
 
     ``on_line(text, replaces_previous)`` is called on a reader thread.
     ``replaces_previous`` is True when the line ended in a carriage return, i.e.
@@ -395,23 +361,6 @@ def run_powershell_stream(
         return False, "PowerShell is only available on Windows"
 
     command = redirect_hkcu(command)
-
-    try:
-        process = subprocess.Popen(
-            _powershell_argv(command),
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,  # type: ignore[unused-ignore]
-        )
-    except FileNotFoundError:
-        error = "PowerShell executable not found"
-        debug_powershell(command, error, False, component)
-        return False, error
-    except Exception as e:
-        error = f"PowerShell execution error: {e}"
-        debug_powershell(command, error, False, component)
-        return False, error
-
     collected: list[str] = []
 
     def _record(line: str, replaces: bool) -> None:
@@ -421,71 +370,54 @@ def run_powershell_stream(
             collected.append(line)
         on_line(line, replaces)
 
-    def _pump() -> None:
-        splitter = _LineSplitter(_record)
-        decoder = codecs.getincrementaldecoder(encoding)("replace")
-        stream = process.stdout
-        # Narrowed rather than cast: `read1` is what makes this incremental, and
-        # it lives on the buffered reader Popen actually hands back, not on the
-        # IO[bytes] the type stubs promise.
-        if not isinstance(stream, io.BufferedReader):  # pragma: no cover
-            return
-        try:
-            while True:
-                # `read1` hands back whatever has arrived instead of waiting for
-                # a full buffer, which is what makes a bar redrawn every few
-                # seconds visible every few seconds.
-                chunk = stream.read1(4096)
-                if not chunk:
-                    break
-                splitter.feed(decoder.decode(chunk))
-            splitter.feed(decoder.decode(b"", final=True))
-            splitter.close()
-        except Exception:  # pragma: no cover - the pipe died with the process
-            pass
+    splitter = _LineSplitter(_record)
+    try:
+        result = run_watched(
+            _powershell_argv(command),
+            policy,
+            on_text=splitter.feed,
+            merge_stderr=True,
+            encoding=encoding,
+            creationflags=no_window_flags(),
+        )
+    except OSError as e:
+        error = _start_error(e)
+        debug_powershell(command, error, False, component)
+        return False, error
+    splitter.close()
 
-    # A daemon, because a grandchild holding the pipe keeps this read blocked
-    # exactly as it kept `communicate` blocked; the caller must not wait on it.
-    reader = threading.Thread(target=_pump, daemon=True, name="powershell-stream")
-    reader.start()
-    reader.join(timeout)
-
-    if reader.is_alive():
-        process.kill()
-        error = f"PowerShell command timed out after {timeout}s"
+    if result.timed_out:
+        error = f"PowerShell command stopped: {result.reason}"
         debug_powershell(command, error, False, component)
         return False, error
 
-    try:
-        returncode = process.wait(timeout=5)
-    except subprocess.TimeoutExpired:  # pragma: no cover - EOF without exit
-        process.kill()
-        returncode = -1
-
     output = "\n".join(collected).strip()
-    if returncode == 0:
+    if result.returncode == 0:
         debug_powershell(command, output, True, component)
         return True, output
 
-    message = output or f"PowerShell exit code: {returncode}"
+    message = output or f"PowerShell exit code: {result.returncode}"
     debug_powershell(command, message, False, component)
     return False, message
 
 
 def run_powershell(
     command: str,
-    timeout: int = 30,
+    policy: StallPolicy = QUERY,
     encoding: str = "utf-8",
     component: str = "powershell",
 ) -> tuple[bool, str]:
     """Run a PowerShell command and return (success, output).
 
-    The timeout is a promise: this returns within it whatever the command
-    started (see :func:`_reap_in_background`).
+    Runs until the command finishes or stops making progress — the stall rule in
+    ``utils.process_watch``, which watches PowerShell and everything it starts.
+    A long command that keeps working is never cut off; a stuck one ends with
+    ``"PowerShell command stopped: no progress for ..."``.
 
     Args:
         command: PowerShell command to execute.
-        timeout: Maximum execution time in seconds.
+        policy: The named stall policy (``QUERY`` for reads, ``CHANGE`` for
+            writes, ``SERVICING`` for DISM/SFC).
         encoding: Output encoding (default: utf-8).
         component: Component name for debug logging.
 
@@ -507,56 +439,34 @@ def run_powershell(
     command = redirect_hkcu(command)
 
     try:
-        # Prefix command with UTF-8 encoding for international Windows
-        utf8_prefix = "[Console]::OutputEncoding = [System.Text.Encoding]::UTF8; "
-        full_command = utf8_prefix + command
-
-        process = subprocess.Popen(
-            [
-                powershell_exe(),
-                "-NoProfile",
-                "-ExecutionPolicy",
-                "Bypass",
-                "-Command",
-                full_command,
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
+        result = run_watched(
+            _powershell_argv(command),
+            policy,
             encoding=encoding,
-            errors="replace",
-            creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,  # type: ignore[unused-ignore]
+            creationflags=no_window_flags(),
         )
-    except FileNotFoundError:
-        error = "PowerShell executable not found"
-        debug_powershell(command, error, False, component)
-        return False, error
-    except Exception as e:
-        error = f"PowerShell execution error: {e}"
+    except OSError as e:
+        error = _start_error(e)
         debug_powershell(command, error, False, component)
         return False, error
 
-    try:
-        stdout, stderr = process.communicate(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        process.kill()
-        _reap_in_background(process)
-        error = f"PowerShell command timed out after {timeout}s"
-        debug_powershell(command, error, False, component)
-        return False, error
-    except Exception as e:
-        process.kill()
-        _reap_in_background(process)
-        error = f"PowerShell execution error: {e}"
+    if result.timed_out:
+        error = f"PowerShell command stopped: {result.reason}"
         debug_powershell(command, error, False, component)
         return False, error
 
-    if process.returncode == 0:
-        output = (stdout or "").strip()
+    if result.returncode == 0:
+        output = result.stdout.strip()
         debug_powershell(command, output, True, component)
         return True, output
 
-    error = (stderr or "").strip() or (stdout or "").strip()
-    output = error or f"PowerShell exit code: {process.returncode}"
+    error = result.stderr.strip() or result.stdout.strip()
+    output = error or f"PowerShell exit code: {result.returncode}"
     debug_powershell(command, output, False, component)
     return False, output
+
+
+def _start_error(exc: OSError) -> str:
+    if isinstance(exc, FileNotFoundError):
+        return "PowerShell executable not found"
+    return f"PowerShell execution error: {exc}"

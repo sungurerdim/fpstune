@@ -116,7 +116,7 @@ class PcieLinkBench:
 
     def sample(self) -> tuple[list[dict[str, Any]], str]:
         """Every adapter that reports a link, or an empty list and the reason."""
-        rows, reason = query_rows(build_script(), timeout=45, component="benchmark.pcie_link")
+        rows, reason = query_rows(build_script(), component="benchmark.pcie_link")
         if reason:
             return [], reason
         linked = [row for row in rows if _lanes(row.get("current_width")) is not None]

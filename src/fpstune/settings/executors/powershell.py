@@ -14,6 +14,7 @@ from fpstune.settings.cleanup_measure import store_cleanup_reading
 from fpstune.settings.executors import BaseExecutor, map_raw_to_display
 from fpstune.settings.executors.powershell_actions import (
     ACTION_COMMANDS,
+    SERVICE_CLEANUPS,
     constant_status_reading,
     detect_script,
 )
@@ -23,6 +24,7 @@ from fpstune.utils.powershell import (
     run_powershell_stream,
     substitute_placeholders,
 )
+from fpstune.utils.process_watch import CHANGE, QUERY, SERVICING, StallPolicy
 
 _logger = logging.getLogger(__name__)
 
@@ -37,26 +39,6 @@ type LineCallback = Callable[[str, bool], None]
 # immediately, so queued scans just resolve a beat later via polling).
 _CLEANUP_SCAN_LIMIT = 4
 _cleanup_scan_semaphore = threading.BoundedSemaphore(_CLEANUP_SCAN_LIMIT)
-
-# What one per-setting scan may take, and by when its claim on the cache has
-# demonstrably failed: its own PowerShell timeout, plus one full wave of waiting
-# behind the semaphore, plus process-start slack. Handed to `mark_calculating` so
-# an entry cannot outlive the worker that claimed it.
-#
-# The timeout is the one `cleanup_batch_timeout` derives for that single type, so
-# the fallback and the batch agree about what a reading costs. They did not: the
-# flat 90 s here would have killed a DISM component store analysis measured at
-# 43.0 s before a cleanup and 34.7 s after it, on a machine where the two run
-# back to back, and reported "unavailable" for a reading that was on its way.
-
-
-def _cleanup_scan_timeout(cleanup_type: str | None) -> tuple[int, int]:
-    """(timeout, cache deadline) for one per-setting cleanup size scan."""
-    from fpstune.settings.executors.ps_batch import cleanup_batch_timeout
-
-    timeout = cleanup_batch_timeout((cleanup_type,) if cleanup_type else ())
-    return timeout, timeout * 2 + 30
-
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -114,17 +96,21 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
 
     # Claim them before the thread starts, so a detect racing this one reads
     # "calculating" and does not start a second computation of the same folder.
-    # Each claim expires just after this batch's own timeout, so an id cannot
-    # outlive the run that claimed it however that run ends. The deadline is the
-    # PowerShell half's, because that is the half that can take minutes.
-    from fpstune.settings.executors.ps_batch import cleanup_batch_timeout
-
-    deadline = cleanup_batch_timeout(scripted) + 30
+    # The claim lasts exactly as long as the worker: `done` is set when it ends.
+    done = threading.Event()
     for ids in pending.values():
         for setting_id in ids:
-            cleanup_size_cache.mark_calculating(setting_id, deadline)
+            cleanup_size_cache.mark_calculating(setting_id, done)
 
     def _run() -> None:
+        # `done` releases the claims whatever happens below; a claim left set
+        # after its worker ended would spin in the UI for the life of the process.
+        try:
+            _settle_all()
+        finally:
+            done.set()
+
+    def _settle_all() -> None:
         global _cleanup_batch_running
         from fpstune.settings.cleanup_measure import as_reading, store_measurement
         from fpstune.settings.cleanup_targets import size_types
@@ -173,37 +159,17 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
         raise
 
 
-# Actions whose command routinely runs for minutes, and what they get instead of
-# the 30 s default. A per-setting `apply_timeout` overrides both.
-_SLOW_APPLY = {
-    "dism_cleanup",
-    "sfc_scan",
-    "dism_health",
-    # Docker prune + wsl shutdown + vhdx compact can take several minutes.
-    "docker_prune",
-    "docker_prune_all",
-    "wsl_compact",
-    # Dev tool caches can contain 100k+ files; deletion takes minutes
-    "gradle_cache_cleanup",
-    "maven_cache_cleanup",
-    "npm_cache_cleanup",
-    "nuget_cache_cleanup",
-    "cargo_cache_cleanup",
-    "pnpm_cache_cleanup",
-    "yarn_cache_cleanup",
-    "pip_cache_cleanup",
-}
-_MEDIUM_APPLY = {
-    "service_toggle",
-    # Two recursive sizing passes over %TEMP% measured 2.8 s each on a folder
-    # holding 12719 files, before any deleting — inside 30 s, but not by enough
-    # to leave a bigger Temp or a slower disk any room.
-    "temp_cleanup",
-    "hyper_v_only_toggle",
-    "vm_platform_toggle",
-    "windows_update_cache_cleanup",
-    "delivery_optimization_cleanup",
-}
+# DISM component servicing and SFC: long quiet phases are normal, and killing one
+# mid-write can damage the component store, so a stall is reported and the tree
+# is left to finish. Measured 2026-09-03: `maintenance:dism_health` hit the old
+# fixed 300 s cap twice, was reported failed and left `Dism.exe` running both
+# times with no parent left to read it.
+_SERVICING_COMMANDS = frozenset({"dism_cleanup", "sfc_scan", "dism_health"})
+
+
+def apply_policy(cmd_key: str) -> StallPolicy:
+    """The stall rule an apply runs under; there is no per-setting duration."""
+    return SERVICING if cmd_key in _SERVICING_COMMANDS else CHANGE
 
 
 def _cleanup_status_reading(setting: SettingExecutor) -> tuple[Any, str | None]:
@@ -242,14 +208,14 @@ def _cleanup_status_reading(setting: SettingExecutor) -> tuple[Any, str | None]:
         return measured.reading, None
 
     # Cache miss: start background calculation and return immediately.
-    scan_timeout, scan_deadline = _cleanup_scan_timeout(cleanup_type)
-    cleanup_size_cache.mark_calculating(setting.id, scan_deadline)
+    done = threading.Event()
+    cleanup_size_cache.mark_calculating(setting.id, done)
     try:
         bg_cmd = substitute_placeholders(ACTION_COMMANDS["cleanup_status"], **setting.detect_args)
     except ValueError as exc:
         cleanup_size_cache.set_unavailable(setting.id)
         return None, f"PowerShell command rejected: {exc}"
-    _start_bg_cleanup_detection(setting.id, bg_cmd, scan_timeout)
+    _start_bg_cleanup_detection(setting.id, bg_cmd, done)
     return "ready|calculating", None
 
 
@@ -309,36 +275,24 @@ def _apply_command(
         return None, f"PowerShell command rejected: {exc}"
 
 
-def apply_timeout_seconds(setting: SettingExecutor, cmd_key: str) -> int:
-    """How long this apply may take: per-setting override, then the known-slow
-    table, then 30 s.
-
-    One resolution for the quiet run and the streamed one — a second copy is how
-    the two would come to disagree about when a repair has stopped responding.
-    """
-    if setting.apply_timeout is not None:
-        return setting.apply_timeout
-    if cmd_key in _SLOW_APPLY:
-        return 300
-    if cmd_key in _MEDIUM_APPLY:
-        return 60
-    return 30
-
-
-def _start_bg_cleanup_detection(setting_id: str, cmd: str, timeout: int) -> None:
+def _start_bg_cleanup_detection(setting_id: str, cmd: str, done: threading.Event) -> None:
     """Run cleanup_status PS in a daemon thread; store result in cleanup_size_cache.
 
-    The per-setting fallback, for a cleanup the batch did not cover.
+    The per-setting fallback, for a cleanup the batch did not cover. ``done`` is
+    the claim's release, set however the worker ends.
     """
     from fpstune.settings.cleanup_cache import cleanup_size_cache
 
     def _compute() -> None:
-        with _cleanup_scan_semaphore:
-            _compute_inner()
+        try:
+            with _cleanup_scan_semaphore:
+                _compute_inner()
+        finally:
+            done.set()
 
     def _compute_inner() -> None:
         try:
-            ok, out = run_powershell(cmd, timeout=timeout)
+            ok, out = run_powershell(cmd)
             if ok and out and store_cleanup_reading(setting_id, out):
                 return
         except Exception:
@@ -641,21 +595,6 @@ class PowerShellExecutor(BaseExecutor):
 
         debug_log("powershell", f"DETECT CMD for {setting.id}: {cmd[:200]}...")
 
-        # Use longer timeout for known slow detection commands.
-        # cleanup_status with type=dism runs AnalyzeComponentStore which can take 30-60s.
-        _slow_detect_commands = {
-            "memory_status",
-            "cleanup_status",
-            "maintenance_status",
-        }
-        # Resolution order: per-setting override -> known-slow heuristic -> default 30s.
-        if setting.detect_timeout is not None:
-            timeout = setting.detect_timeout
-        elif cmd_key in _slow_detect_commands:
-            timeout = 90
-        else:
-            timeout = 30
-
         # A scan runs these commands in shared sessions, because starting a
         # PowerShell costs far more than any of them. Anything the batch did
         # not resolve — a failed group, an excluded command, or a detect
@@ -665,7 +604,7 @@ class PowerShellExecutor(BaseExecutor):
             debug_log("powershell", f"DETECT BATCHED {setting.id}: {batched[:200]!r}")
             success, output = True, batched
         else:
-            success, output = self._run(cmd, timeout=timeout)
+            success, output = self._run(cmd)
 
         debug_log(
             "powershell",
@@ -711,9 +650,9 @@ class PowerShellExecutor(BaseExecutor):
         `on_line` turns the same run into a streamed one: every line the command
         prints is handed over as it is printed, so a repair that takes half an
         hour can say what it is doing. It changes nothing about *what* runs —
-        the command, the timeout and the refusals below are resolved once, here,
-        for both callers, because a second copy of the timeout table is how the
-        streamed run would come to disagree with the quiet one.
+        the command, the stall policy and the refusals below are resolved once,
+        here, for both callers, because a second copy is how the streamed run
+        would come to disagree with the quiet one.
         """
         from fpstune.utils.debug import debug_log
 
@@ -811,7 +750,7 @@ class PowerShellExecutor(BaseExecutor):
 
         debug_log("powershell", f"APPLY CMD {setting.id}: {cmd[:300]}...")
 
-        timeout = apply_timeout_seconds(setting, cmd_key)
+        policy = apply_policy(cmd_key)
 
         if on_line is not None:
             # The command about to run, before it runs: this is what the UI shows
@@ -820,7 +759,7 @@ class PowerShellExecutor(BaseExecutor):
             # record of it.
             on_line(cmd, False)
 
-        success, output = self._run(cmd, timeout=timeout, on_line=on_line)
+        success, output = self._run(cmd, policy, on_line=on_line)
 
         debug_log(
             "powershell",
@@ -828,16 +767,23 @@ class PowerShellExecutor(BaseExecutor):
         )
 
         if not success:
+            service = SERVICE_CLEANUPS.get(cmd_key)
+            if service is not None:
+                # Stopped mid-delete, the script's own `finally` never ran.
+                restarted, _ = self._run(
+                    f"Start-Service -Name {service} -ErrorAction Stop; 'ok'", QUERY
+                )
+                debug_log("powershell", f"APPLY {setting.id}: restarted {service}={restarted}")
             return False, f"PowerShell failed: {output}"
         return _finish_apply(setting, output)
 
     def _run(
-        self, command: str, timeout: int = 30, on_line: LineCallback | None = None
+        self, command: str, policy: StallPolicy = QUERY, on_line: LineCallback | None = None
     ) -> tuple[bool, str]:
         """Run PowerShell command and return (success, output).
 
         Delegates to the shared utility function for consistent behavior.
         """
         if on_line is not None:
-            return run_powershell_stream(command, on_line, timeout=timeout)
-        return run_powershell(command, timeout=timeout)
+            return run_powershell_stream(command, on_line, policy)
+        return run_powershell(command, policy)

@@ -21,6 +21,7 @@ from fpstune.api.hardware import get_detailed_storage_drives
 from fpstune.utils.admin import is_admin
 from fpstune.utils.logger import log_activity
 from fpstune.utils.powershell import run_powershell
+from fpstune.utils.process_watch import CHANGE
 
 router = APIRouter()
 
@@ -30,11 +31,6 @@ logger = logging.getLogger(__name__)
 # shell — the path parameter is interpolated into a PowerShell command, and
 # this pattern is the boundary validation that keeps it a drive letter.
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]$")
-
-# An HDD defrag legitimately runs for minutes; a retrim is seconds. One
-# generous ceiling for both, so a slow spinning disk is not reported failed
-# mid-pass.
-_OPTIMIZE_TIMEOUT_S = 900
 
 
 @router.post("/storage/{drive_letter}/optimize")
@@ -79,7 +75,9 @@ async def optimize_drive(drive_letter: str) -> dict[str, Any]:
     success, output = await asyncio.to_thread(
         run_powershell,
         f"Optimize-Volume -DriveLetter {letter} {flag}",
-        _OPTIMIZE_TIMEOUT_S,
+        # A defrag runs for minutes and moves bytes the whole time; only a pass
+        # that stops moving them is stuck.
+        CHANGE,
     )
     if not success:
         log_activity(f"{verb.capitalize()} on drive {letter}: failed: {output}", level="error")

@@ -23,7 +23,6 @@ from fpstune.benchmark.operation_lock import is_free
 from fpstune.settings import CommandExecutor
 from fpstune.settings.cleanup_measure import (
     NOTHING_MEASURED,
-    cleanup_type_of,
     freed_after_cleanup,
     measure_cleanup_size,
 )
@@ -68,46 +67,6 @@ def _wait_for_bench() -> bool:
             return False
         time.sleep(_BENCH_POLL_SECONDS)
     return True
-
-
-def apply_budget_seconds(setting: SettingExecutor) -> int:
-    """The longest one apply of `setting` can legitimately take, measurement included.
-
-    A cleanup is not only its command: the same size instrument runs immediately
-    before it and immediately after it, and for the readings still taken through
-    PowerShell that is the expensive part. DISM's component store analysis
-    measured 43.0 s before a cleanup and 34.7 s after it on this machine, either
-    side of a run the user timed at about 108 s — so a flat cap that ignored the
-    readings would abandon a cleanup that was working.
-    """
-    from fpstune.settings.executors.powershell import apply_timeout_seconds
-    from fpstune.settings.executors.ps_batch import cleanup_batch_timeout
-
-    budget = apply_timeout_seconds(setting, setting.apply_command.strip())
-    cleanup_type = cleanup_type_of(setting)
-    if cleanup_type:
-        from fpstune.settings.cleanup_targets import CLEANUP_TARGETS
-
-        if cleanup_type not in CLEANUP_TARGETS:
-            # A folder is walked in this process in well under a second; only the
-            # readings left in PowerShell are worth budgeting for.
-            budget += 2 * cleanup_batch_timeout((cleanup_type,))
-    return budget
-
-
-def bulk_apply_timeout(settings: list[SettingExecutor]) -> int:
-    """How long `/bulk/apply` may wait for this particular set of settings.
-
-    Derived rather than fixed. The flat 300 s it replaces was shorter than a
-    single DISM cleanup on this machine — 43 s of analysis, the cleanup itself,
-    then 35 s more — so the one setting most likely to need the whole budget was
-    the one guaranteed not to get it.
-    """
-    if not settings:
-        return 60
-    budgets = [apply_budget_seconds(setting) for setting in settings]
-    waves = -(-len(budgets) // _BULK_WORKERS)  # ceiling division
-    return max(60, max(budgets), (sum(budgets) + waves - 1) // _BULK_WORKERS)
 
 
 def apply_and_finalize(

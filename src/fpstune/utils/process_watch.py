@@ -32,7 +32,7 @@ import sys
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import IO, Literal, Protocol
 
 from fpstune.utils.winapi.job import ProcessTreeJob, TreeActivity
@@ -63,6 +63,16 @@ CHANGE = StallPolicy("change", stall_s=300.0)
 # one mid-write can damage the component store, so a stall is reported and the
 # tree is left to finish.
 SERVICING = StallPolicy("servicing", stall_s=900.0, on_stall="leave")
+
+
+def quiet_for(seconds: float, base: StallPolicy = QUERY) -> StallPolicy:
+    """``base`` for a command that is silent for ``seconds`` by design.
+
+    A sampling script that sleeps between readings and prints once at the end
+    looks exactly like a stuck one until it prints. Its own planned quiet period
+    is added to the stall window, so only silence *beyond* the plan counts.
+    """
+    return replace(base, name=f"{base.name}+quiet", stall_s=base.stall_s + seconds)
 
 
 @dataclass

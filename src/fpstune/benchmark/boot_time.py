@@ -184,9 +184,7 @@ class BootTimeBench:
 
     def read_log(self) -> tuple[list[dict[str, Any]], str]:
         """Every boot and shutdown record, or an empty list and the reason."""
-        rows, reason = query_rows(
-            build_script(self.occurrences), timeout=60, component="benchmark.boot_time"
-        )
+        rows, reason = query_rows(build_script(self.occurrences), component="benchmark.boot_time")
         if reason:
             return [], reason
         status = next((row for row in rows if row.get("kind") == "status"), None)

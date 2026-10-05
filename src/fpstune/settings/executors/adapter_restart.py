@@ -36,6 +36,7 @@ _pending: dict[int, threading.Timer] = {}
 
 def _restart_now(ifindex: int) -> None:
     from fpstune.utils.powershell import run_powershell
+    from fpstune.utils.process_watch import CHANGE
 
     with _lock:
         _pending.pop(ifindex, None)
@@ -44,7 +45,7 @@ def _restart_now(ifindex: int) -> None:
         f"try {{ Get-NetAdapter -InterfaceIndex {ifindex} -ErrorAction Stop | "
         "Restart-NetAdapter -Confirm:$false -ErrorAction Stop; 'ok' } "
         "catch { 'error:' + $_.Exception.Message }",
-        timeout=60,
+        CHANGE,
         component="adapter_restart",
     )
     text = (output or "").strip()

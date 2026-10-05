@@ -110,7 +110,7 @@ class StorageHealthBench:
 
     def sample(self) -> tuple[list[dict[str, Any]], str]:
         """Every drive's counters, or an empty list and the reason."""
-        rows, reason = query_rows(SCRIPT, timeout=45, component="benchmark.storage_health")
+        rows, reason = query_rows(SCRIPT, component="benchmark.storage_health")
         if reason:
             return [], reason
         if not rows:

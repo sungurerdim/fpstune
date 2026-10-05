@@ -95,7 +95,7 @@ ConvertTo-Json -InputObject @($results) -Depth 2 -Compress
 def get_audio_devices() -> list[AudioDeviceInfo]:
     """Every active or disabled audio endpoint, with its loudness-EQ state."""
     debug_log("audio", "get_audio_devices() called")
-    success, output = run_powershell(_AUDIO_SCRIPT, timeout=15, component="audio")
+    success, output = run_powershell(_AUDIO_SCRIPT, component="audio")
     if not success:
         logger.warning("Audio device detection failed: %s", output)
         return []

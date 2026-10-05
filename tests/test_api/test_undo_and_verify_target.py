@@ -193,6 +193,10 @@ class TestUndoWritesWhatTheMachineHeld:
                 return_value=response_obj,
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
+            # No bench holds the machine. Patching ``sys.platform`` is global, so
+            # without this the operation lock would reach for kernel32, which
+            # exists only on a real Windows host.
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
             patch("fpstune.api.routes.settings._ensure_restore_point"),
         ):
             result = client.post("/api/settings/core:fake/undo")
@@ -268,6 +272,7 @@ class TestUndoWritesWhatTheMachineHeld:
                 ),
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
             patch("fpstune.api.routes.settings._ensure_restore_point") as restore_point,
         ):
             client.post("/api/settings/core:fake/undo")

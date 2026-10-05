@@ -64,6 +64,16 @@ class TestPowerProfileStatus:
 
 
 class TestActivateAndRevert:
+    @pytest.fixture(autouse=True)
+    def _on_windows(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """The routes answer 400 off Windows before the manager is reached.
+
+        The manager is mocked, so what these tests pin — how its result becomes
+        a status code — runs the same on every host once the route believes it
+        is on Windows.
+        """
+        monkeypatch.setattr("fpstune.api.routes.system_power.sys.platform", "win32")
+
     def test_activate_failure_is_a_500_with_the_managers_words(self, client) -> None:
         """powercfg failing (not elevated, GUID collision) must surface as an
         error carrying the manager's message — not a green success the UI

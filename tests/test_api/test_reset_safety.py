@@ -61,6 +61,10 @@ class TestResetCreatesRestorePoint:
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
+            # No bench holds the machine. Patching ``sys.platform`` is global, so
+            # without this the operation lock would reach for kernel32, which
+            # exists only on a real Windows host.
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
             patch("fpstune.api.routes.settings._ensure_restore_point") as mock_rp,
         ):
             result = client.post(f"/api/settings/{setting.id}/reset")

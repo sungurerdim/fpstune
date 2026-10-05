@@ -155,6 +155,10 @@ def _run(
         patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         patch("fpstune.utils.self_check.ensure_checked_before_first_apply"),
         patch("fpstune.settings.executors.powershell.sys.platform", "win32"),
+        # No bench holds the machine. Patching ``sys.platform`` is global, so
+        # without this the operation lock would reach for kernel32, which exists
+        # only on a real Windows host.
+        patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
         patch("fpstune.settings.cleanup_cache.cleanup_size_cache", cache),
         patch("fpstune.settings.executors.ps_batch._fetch_cleanup_sizes", sizes),
         patch("fpstune.settings.executors.powershell._start_bg_cleanup_detection", rescan),

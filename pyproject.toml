@@ -94,6 +94,9 @@ known-first-party = ["fpstune"]
 
 [tool.mypy]
 python_version = "3.12"
+# The product runs on Windows only and CI type-checks on windows-latest; checking
+# for the host platform reports every winreg/ctypes.WinDLL use on macOS/Linux.
+platform = "win32"
 strict = true
 warn_return_any = true
 warn_unused_ignores = true

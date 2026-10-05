@@ -15,7 +15,7 @@ import { SelectionToolbar } from "./SelectionToolbar";
 import { ResetAllAction } from "./ResetAllAction";
 import { TweakRows, type TweakRow } from "./TweakRows";
 import { useBulkApply } from "../hooks/useBulkApply";
-import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
+import { isSoftwareTweak } from "../lib/tweakDomain";
 import { DetectionNotice } from "./DetectionNotice";
 import { cn } from "../lib/utils";
 import { IMPACT_CATEGORY_META } from "../types/setting";
@@ -101,10 +101,10 @@ export function SettingsTab({
 
       for (const s of settings) {
         if (!s.isApplicable || s.isAction) continue;
-        // A game's config lines are their own tab. Excluded here rather than
-        // filtered by category, because the category is what a setting *is* and
-        // this is a question about which screen owns it.
-        if (isGameTweak(s)) continue;
+        // Games and hardware are their own tabs. Excluded by the domain
+        // predicate rather than by category, because the category is what a
+        // setting *is* and this is a question about which screen owns it.
+        if (!isSoftwareTweak(s)) continue;
         // Nothing read yet: "ideal or not" is unknown, and putting it in either
         // band would assert a result the app does not have.
         if (s.currentValue === null) continue;
@@ -164,7 +164,7 @@ export function SettingsTab({
 
   return (
     <div className="space-y-4 pb-16">
-      <DetectionNotice owns={(s) => !isGameTweak(s) && !isHardwareTweak(s)} />
+      <DetectionNotice owns={isSoftwareTweak} />
       {/* Filter bar: the only navigation this screen needs now that the rows are flat. */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 max-w-xs">

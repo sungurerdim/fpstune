@@ -88,3 +88,8 @@ export function isHardwareTweak(setting: Setting): boolean {
     )
   );
 }
+
+/** True for a software tweak: everything neither hardware nor a game's own file. */
+export function isSoftwareTweak(setting: Setting): boolean {
+  return !isHardwareTweak(setting) && !isGameTweak(setting);
+}

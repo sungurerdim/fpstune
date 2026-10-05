@@ -3109,17 +3109,20 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
             + _MSI_KEY
             + "$cur = (Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue); "
             "if ('%value%' -eq 'enabled') { "
-            "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force | Out-Null }; "
+            # -EA Stop on every write: under Enum\<device> Windows often lets
+            # only SYSTEM write, and a refused write was a non-terminating error
+            # the catch never saw — apply said ok, verify read the old value.
+            "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force -EA Stop | Out-Null }; "
             "if ($null -eq $cur.fpstuneOriginalMSISupported) { "
             "$was = if ($null -eq $cur.MSISupported) { -1 } else { [int]$cur.MSISupported }; "
             "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' -Value $was "
-            "-Type DWord -Force }; "
-            "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force "
+            "-Type DWord -Force -EA Stop }; "
+            "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force -EA Stop "
             "} elseif ($null -ne $cur.fpstuneOriginalMSISupported) { "
             "$was = [int]$cur.fpstuneOriginalMSISupported; "
             "if ($was -eq -1) { Remove-ItemProperty -Path $rp -Name 'MSISupported' "
             "-ErrorAction SilentlyContinue } "
-            "else { Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was -Type DWord -Force }; "
+            "else { Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was -Type DWord -Force -EA Stop }; "
             "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' "
             "-ErrorAction SilentlyContinue }; 'ok' "
             "} catch { 'error:' + $_.Exception.Message }"

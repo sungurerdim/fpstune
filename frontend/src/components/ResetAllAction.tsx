@@ -6,9 +6,10 @@ import { cn } from "../lib/utils";
 import { useBulkStream } from "../hooks/useBulkStream";
 import { valuesEqual, type Setting } from "../types/setting";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
+import { isSoftwareTweak } from "../lib/tweakDomain";
 
 /**
- * "Reset to Defaults" across every applicable tweak, for the Software Tweaks tab.
+ * "Reset to Defaults" across every applicable software tweak, for the Software Tweaks tab.
  *
  * Applying is deliberately NOT here: the band's own button applies, scoped to
  * the rows the user can see. This one stays global because "put everything
@@ -29,6 +30,9 @@ export function ResetAllAction() {
     for (const s of settingsMap.values()) {
       if (!s.isApplicable || s.isAction || s.currentValue === null || s.isReadonly)
         continue;
+      // This button sits on the Software tab and says so: monitors, network
+      // adapters and game config files are other tabs' rows. It reset them all.
+      if (!isSoftwareTweak(s)) continue;
       if (!valuesEqual(s.currentValue, s.defaultValue)) rows.push(s);
     }
     return rows;

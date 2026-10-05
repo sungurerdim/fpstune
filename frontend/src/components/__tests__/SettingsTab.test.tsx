@@ -157,19 +157,21 @@ describe("SettingsTab flat list", () => {
       displayName: "Nagle's Algorithm",
     });
     const advisory = makeSetting({
-      id: "system:xmp_expo" as `${string}:${string}`,
-      displayName: "XMP / EXPO Memory Profile",
+      // A software advisory: XMP used to stand in here, but it is a memory
+      // finding and belongs to the Hardware tab.
+      id: "system:startup_apps" as `${string}:${string}`,
+      displayName: "Startup apps",
       category: "system",
       isReadonly: true,
-      currentValue: "disabled",
-      recommendedValue: "enabled",
+      currentValue: "apps_at_startup",
+      recommendedValue: "none_at_startup",
     });
     renderTab([
       { category: NETWORK, settings: [fixable] },
       { category: SYSTEM, settings: [advisory] },
     ]);
 
-    expect(screen.getByText("XMP / EXPO Memory Profile")).toBeInTheDocument();
+    expect(screen.getByText("Startup apps")).toBeInTheDocument();
     expect(screen.getByText("Advisory")).toBeInTheDocument();
 
     const fixAll = screen.getByRole("button", { name: /fix all/i });
@@ -274,12 +276,14 @@ describe("SettingsTab flat list", () => {
 
   it("offers no Fix all when every visible row is an advisory", () => {
     const advisory = makeSetting({
-      id: "system:xmp_expo" as `${string}:${string}`,
-      displayName: "XMP / EXPO Memory Profile",
+      // A software advisory: XMP used to stand in here, but it is a memory
+      // finding and belongs to the Hardware tab.
+      id: "system:startup_apps" as `${string}:${string}`,
+      displayName: "Startup apps",
       category: "system",
       isReadonly: true,
-      currentValue: "disabled",
-      recommendedValue: "enabled",
+      currentValue: "apps_at_startup",
+      recommendedValue: "none_at_startup",
     });
     renderTab([{ category: SYSTEM, settings: [advisory] }]);
 

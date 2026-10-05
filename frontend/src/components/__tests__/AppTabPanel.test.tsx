@@ -26,6 +26,7 @@ vi.mock("../DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p>
 vi.mock("../HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
 vi.mock("../GameTweaksTab", () => ({ GameTweaksTab: () => <p>games panel</p> }));
 vi.mock("../BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
+vi.mock("../HistoryTab", () => ({ HistoryTab: () => <p>history panel</p> }));
 
 function assertTabOwnsThePanel() {
   const selected = screen.getByRole("tab", { selected: true });
@@ -65,7 +66,7 @@ describe("the selected tab and the panel on screen are one thing", () => {
     home.focus();
     fireEvent.keyDown(home, { key: "End" });
 
-    expect(screen.getByText("benchmarks panel")).toBeInTheDocument();
+    expect(screen.getByText("history panel")).toBeInTheDocument();
     assertTabOwnsThePanel();
   });
 

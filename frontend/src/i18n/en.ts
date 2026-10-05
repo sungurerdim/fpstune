@@ -84,6 +84,32 @@ export const en = {
   "tab.games": "Game Tweaks",
   "tab.cleanup": "Cleanup & Repair",
   "tab.benchmarks": "Benchmarks",
+  "tab.history": "History",
+
+  // Change history
+  "history.title": "What fpstune changed",
+  "history.intro":
+    "Every setting fpstune changed on this machine, in this run and earlier ones. Undo puts back what this machine held before fpstune touched it; Windows default writes the stock value instead.",
+  "history.loading": "Reading the history…",
+  "history.error": "Could not read the history: {reason}",
+  "history.empty": "fpstune has not changed anything on this machine yet.",
+  "history.active": "Still changed by fpstune ({count})",
+  "history.reverted": "Already put back ({count})",
+  "history.action.apply": "Applied",
+  "history.action.reset": "Reset to the Windows default",
+  "history.action.undo": "Undone",
+  "history.value": "set to {value}",
+  "history.was": "was {value} before",
+  "history.noOriginal":
+    "No earlier value is on record for this setting, so only the Windows default can be restored.",
+  "history.undo": "Undo",
+  "history.reset": "Windows default",
+  "history.undoNamed": "Undo fpstune's change to {name}",
+  "history.resetNamed": "Restore the Windows default for {name}",
+  "history.selectNamed": "Select {name}",
+  "history.selectAll": "Select all",
+  "history.undoSelected": "Undo selected ({count})",
+  "history.resetSelected": "Windows default for selected ({count})",
 
   // Detection notice
   "detection.failedOne": "1 setting could not be checked on this machine",

@@ -681,6 +681,25 @@ export const settingsApi = {
     ),
 
   /**
+   * Sequential SSE bulk undo — each setting back to what this machine held.
+   * A setting with nothing recorded fails with that reason; it is never reset.
+   */
+  bulkStreamUndo: (
+    ids: string[],
+    onEvent: (event: Record<string, unknown>) => void,
+    onDone?: () => void,
+    onError?: (error: unknown) => void,
+  ): (() => void) =>
+    postEventStream(
+      "/settings/bulk/stream-undo",
+      { ids },
+      "bulkStreamUndo",
+      onEvent,
+      onDone,
+      onError,
+    ),
+
+  /**
    * Get full category metadata for UI rendering (SSOT)
    */
   getCategoriesMetadata: () =>
@@ -1209,4 +1228,32 @@ export const updateApi = {
   check: () => fetchJson<UpdateStatus>("/update/check"),
   install: () =>
     fetchJson<UpdateInstallResult>("/update/install", { method: "POST" }),
+};
+
+/** One setting fpstune changed: its latest change and whether undo is possible. */
+export interface HistorySetting {
+  setting_id: string;
+  last_action: "apply" | "reset" | "undo";
+  value: unknown;
+  /** Unix seconds. */
+  at: number;
+  can_undo: boolean;
+  original_value: unknown;
+}
+
+export interface HistoryEntry {
+  setting_id: string;
+  action: "apply" | "reset" | "undo";
+  value: unknown;
+  at: number;
+}
+
+export interface HistoryResponse {
+  settings: HistorySetting[];
+  entries: HistoryEntry[];
+}
+
+export const historyApi = {
+  /** Every change fpstune made on this machine, across runs. */
+  get: () => fetchJson<HistoryResponse>("/history"),
 };

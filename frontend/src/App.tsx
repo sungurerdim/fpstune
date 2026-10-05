@@ -9,6 +9,7 @@ import { DiskCleanupTab } from "./components/DiskCleanupTab";
 import { HardwareTab } from "./components/HardwareTab";
 import { GameTweaksTab } from "./components/GameTweaksTab";
 import { BenchmarksTab } from "./components/BenchmarksTab";
+import { HistoryTab } from "./components/HistoryTab";
 import { CleanupRunnerProvider } from "./components/CleanupRunnerProvider";
 import { NotificationToasts } from "./components/ui/NotificationToasts";
 import { tabButtonId, tabPanelId } from "./components/ui/tabIds";
@@ -138,6 +139,7 @@ function App() {
           {activeTab === "cleanup" && <DiskCleanupTab />}
           {activeTab === "hardware" && <HardwareTab />}
           {activeTab === "benchmarks" && <BenchmarksTab />}
+          {activeTab === "history" && <HistoryTab />}
         </div>
       </main>
     </div>

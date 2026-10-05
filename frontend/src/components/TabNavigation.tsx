@@ -10,6 +10,7 @@ import {
   Monitor,
   Gamepad2,
   Gauge,
+  History,
   Activity,
   ShieldCheck,
   ShieldAlert,
@@ -40,6 +41,8 @@ const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = 
   { id: "games", labelKey: "tab.games", icon: Gamepad2 },
   { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
   { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
+  // Last: what fpstune changed, and the way back from each change.
+  { id: "history", labelKey: "tab.history", icon: History },
 ];
 
 export function TabNavigation() {

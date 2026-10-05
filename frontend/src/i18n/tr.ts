@@ -80,6 +80,32 @@ export const tr: Record<keyof typeof en, string> = {
   "tab.games": "Oyun İnce Ayarları",
   "tab.cleanup": "Temizlik ve Onarım",
   "tab.benchmarks": "Ölçümler",
+  "tab.history": "Geçmiş",
+
+  // Değişiklik geçmişi
+  "history.title": "fpstune'un değiştirdikleri",
+  "history.intro":
+    "fpstune'un bu makinede değiştirdiği her ayar; bu oturumda ve öncekilerde. Geri al, fpstune dokunmadan önce makinede olan değeri geri yazar; Windows varsayılanı ise Windows'un fabrika değerini yazar.",
+  "history.loading": "Geçmiş okunuyor…",
+  "history.error": "Geçmiş okunamadı: {reason}",
+  "history.empty": "fpstune bu makinede henüz hiçbir şeyi değiştirmedi.",
+  "history.active": "Hâlâ fpstune'un değiştirdiği haliyle ({count})",
+  "history.reverted": "Zaten geri alınmış ({count})",
+  "history.action.apply": "Uygulandı",
+  "history.action.reset": "Windows varsayılanına döndürüldü",
+  "history.action.undo": "Geri alındı",
+  "history.value": "{value} yapıldı",
+  "history.was": "önceden {value} idi",
+  "history.noOriginal":
+    "Bu ayarın önceki değeri kayıtlı değil; yalnızca Windows varsayılanı geri yüklenebilir.",
+  "history.undo": "Geri al",
+  "history.reset": "Windows varsayılanı",
+  "history.undoNamed": "{name} için fpstune değişikliğini geri al",
+  "history.resetNamed": "{name} için Windows varsayılanını geri yükle",
+  "history.selectNamed": "{name} seç",
+  "history.selectAll": "Tümünü seç",
+  "history.undoSelected": "Seçilenleri geri al ({count})",
+  "history.resetSelected": "Seçilenler için Windows varsayılanı ({count})",
 
   // Detection notice
   "detection.failedOne": "1 ayar bu makinede okunamadı",

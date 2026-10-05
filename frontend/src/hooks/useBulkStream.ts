@@ -3,11 +3,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "../i18n";
 import { errorMessage, settingsApi } from "../lib/api";
 import { detectionManager } from "../lib/detection-manager";
-import { useStore } from "../store";
+import { useStore, type BulkAction } from "../store";
 import { valuesEqual, type SettingId } from "../types/setting";
 
 /**
- * One streamed bulk apply or reset at a time, shared by every surface that
+ * One streamed bulk apply, reset or undo at a time, shared by every surface that
  * starts one. The run lives in the store, so switching tabs neither loses its
  * Stop nor lets a second run start over it; every row shows how far it got and,
  * when it failed, why; and however the run ends, every row is read again.
@@ -18,7 +18,7 @@ export function useBulkStream() {
   const bulkRun = useStore((s) => s.bulkRun);
 
   const run = useCallback(
-    (action: "apply" | "reset", ids: string[]) => {
+    (action: BulkAction, ids: string[]) => {
       const store = useStore.getState();
       if (store.bulkRun || ids.length === 0) return;
       store.clearOperationStatus();
@@ -32,6 +32,7 @@ export function useBulkStream() {
         state.setBulkRun(null);
         state.endOperation();
         queryClient.invalidateQueries({ queryKey: ["activity"] });
+        queryClient.invalidateQueries({ queryKey: ["history"] });
         const status = state.operationStatus;
         const failed = ids.filter((id) => status[id] === "failed").length;
         const done = ids.filter(
@@ -44,8 +45,11 @@ export function useBulkStream() {
         void detectionManager.redetectSettings(ids);
       };
 
-      const stream =
-        action === "apply" ? settingsApi.bulkStreamApply : settingsApi.bulkStreamReset;
+      const stream = {
+        apply: settingsApi.bulkStreamApply,
+        reset: settingsApi.bulkStreamReset,
+        undo: settingsApi.bulkStreamUndo,
+      }[action];
       const cancel = stream(
         ids,
         (event) => {

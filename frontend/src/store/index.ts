@@ -7,7 +7,15 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 // the tab is gone; nothing persists the active tab, so no stored value can point
 // at a route that no longer exists.
 export type TabId =
-  "home" | "settings" | "hardware" | "games" | "cleanup" | "benchmarks";
+  | "home"
+  | "settings"
+  | "hardware"
+  | "games"
+  | "cleanup"
+  | "benchmarks"
+  | "history";
+/** What a streamed bulk run does to each row: apply, Windows default, or undo. */
+export type BulkAction = "apply" | "reset" | "undo";
 export type OperationStatus =
   | "queued"
   | "running"
@@ -15,9 +23,9 @@ export type OperationStatus =
   | "failed"
   | "skipped";
 
-/** The bulk apply/reset in flight, kept here so a tab switch cannot lose it. */
+/** The bulk apply/reset/undo in flight, kept here so a tab switch cannot lose it. */
 interface BulkRun {
-  action: "apply" | "reset";
+  action: BulkAction;
   cancel: () => void;
 }
 

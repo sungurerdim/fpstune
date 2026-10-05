@@ -24,6 +24,11 @@ function tabButtons() {
   return screen.getAllByRole("tab");
 }
 
+const lastTab = (): HTMLElement => {
+  const tabs = tabButtons();
+  return tabs[tabs.length - 1];
+};
+
 describe("TabNavigation keeps the keyboard contract its roles promise", () => {
   beforeEach(() => {
     useStore.setState({
@@ -32,11 +37,11 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     } as never);
   });
 
-  it("exposes exactly one tab strip over the six tabs", () => {
+  it("exposes exactly one tab strip over the seven tabs", () => {
     render(<TabNavigation />);
 
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    expect(tabButtons()).toHaveLength(6);
+    expect(tabButtons()).toHaveLength(7);
   });
 
   it("keeps every tab findable by the words on it, at any width", () => {
@@ -79,7 +84,7 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     tabs[0].focus();
     fireEvent.keyDown(tabs[0], { key: "ArrowLeft" });
 
-    const last = tabButtons()[5];
+    const last = lastTab();
     expect(last).toHaveAttribute("aria-selected", "true");
     expect(document.activeElement).toBe(last);
   });
@@ -88,9 +93,9 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     render(<TabNavigation />);
 
     fireEvent.keyDown(tabButtons()[0], { key: "End" });
-    expect(tabButtons()[5]).toHaveAttribute("aria-selected", "true");
+    expect(lastTab()).toHaveAttribute("aria-selected", "true");
 
-    fireEvent.keyDown(tabButtons()[5], { key: "Home" });
+    fireEvent.keyDown(lastTab(), { key: "Home" });
     expect(tabButtons()[0]).toHaveAttribute("aria-selected", "true");
   });
 

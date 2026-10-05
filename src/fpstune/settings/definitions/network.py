@@ -1013,7 +1013,10 @@ DNS_OVER_HTTPS = SettingExecutor(
         "Remove-Item -LiteralPath $key -Recurse -Force -ErrorAction SilentlyContinue; $done++ "
         "} } } }; "
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
-        "if ($done -gt 0) { 'ok' } "
+        # Turning it off has nothing to do once no entry is left (an undo of this
+        # same setting removed them), and detect reads that state as `disabled`;
+        # only enabling can find "nothing to enable".
+        "if ($done -gt 0 -or '%value%' -ne 'enabled') { 'ok' } "
         "elseif ($unknown -gt 0) { 'error:no DoH template known for the configured resolvers' } "
         "else { 'error:no applicable adapter found' } "
         "} catch { 'error:' + $_.Exception.Message }"

@@ -214,3 +214,60 @@ def test_the_two_dns_settings_share_one_adapter_filter() -> None:
         DNS_SECURITY.apply_command,
     ):
         assert filter_text in command, f"adapter filter drifted in: {command[:120]}"
+
+
+# The cmdlets the apply command calls, shadowed so no resolver, registry key or
+# DNS cache on the machine running the tests is touched. Remove-Item reports what
+# it was asked to remove, which is how a test sees a key deleted.
+_APPLY_HARNESS = (
+    _HARNESS
+    + """
+function Get-DnsClientDohServerAddress { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) $null }
+function Add-DnsClientDohServerAddress { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
+function New-Item { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
+function New-ItemProperty { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
+function Clear-DnsClientCache { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
+function Remove-Item { param($LiteralPath, [Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
+"""
+)
+
+
+def _apply(
+    value: str,
+    adapters: list[dict[str, object]],
+    dns: dict[str, list[str]],
+    registry: dict[str, dict[str, int]] | None = None,
+) -> str:
+    command = loud_catch(
+        DNS_OVER_HTTPS.apply_command.replace("%value%", value),
+        "catch { 'error:' + $_.Exception.Message }",
+    )
+    payload = {
+        "adapters": fake_adapters(*adapters),
+        "dns": dns,
+        "registry": registry or {},
+    }
+    return run_shipped_command(_APPLY_HARNESS + command, payload)
+
+
+def test_reset_with_no_interface_entry_left_is_already_done() -> None:
+    """An undo that ran moments earlier had removed every `DohFlags` entry, so the
+    reset that followed found nothing to remove, counted no work, and answered
+    "no applicable adapter found" - for a state detect reads as `disabled`."""
+    assert _apply("disabled", [ETHERNET], {"19": SECURITY_PAIR}, {}) == "ok"
+
+
+def test_reset_with_no_adapter_at_all_is_already_done() -> None:
+    """Detect reads `disabled` when no adapter qualifies, so there is nothing to undo."""
+    assert _apply("disabled", [], {}, {}) == "ok"
+
+
+def test_reset_still_removes_an_entry_that_is_there() -> None:
+    key = _doh_key("{eth-guid}", "1.1.1.2")
+    assert _apply("disabled", [ETHERNET], {"19": SECURITY_PAIR}, {key: {"DohFlags": 2}}) == "ok"
+
+
+def test_enabling_with_no_adapter_still_says_so() -> None:
+    """The other direction keeps its refusal: enabling nothing is not success."""
+    answer = _apply("enabled", [], {}, {})
+    assert answer == "error:no applicable adapter found"

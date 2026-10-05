@@ -563,6 +563,7 @@ export const tr: Record<keyof typeof en, string> = {
   "verify.statusUnmeasured": "Ölçülmedi",
   "verify.statusUnattributable": "Atfedilemez",
   // Activity log
+  "activity.button": "Etkinlik",
   "activity.title": "Etkinlik Günlüğü",
   "activity.open": "Etkinlik günlüğünü aç",
   "activity.close": "Etkinlik günlüğünü kapat",

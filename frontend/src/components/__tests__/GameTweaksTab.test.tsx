@@ -16,12 +16,12 @@ import { GameTweaksTab } from "../GameTweaksTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
-const applyMock = vi.fn();
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({
-    apply: (payload: Record<string, unknown>) => applyMock(payload),
-    isApplying: false,
-    lastResult: null,
+const runMock = vi.fn();
+vi.mock("../../hooks/useBulkStream", () => ({
+  useBulkStream: () => ({
+    run: (action: string, ids: string[]) => runMock(action, ids),
+    stop: vi.fn(),
+    isRunning: false,
   }),
 }));
 
@@ -85,7 +85,7 @@ const CS2 = makeSetting({
 
 describe("GameTweaksTab", () => {
   beforeEach(() => {
-    applyMock.mockClear();
+    runMock.mockClear();
     setStore([]);
   });
 
@@ -93,8 +93,8 @@ describe("GameTweaksTab", () => {
     setStore([MW4, CS2]);
     render(<GameTweaksTab />);
 
-    // By role, because the game's name is also an option in the filter — which is
-    // itself the point: both come from the same backend label.
+    // By role, because the game's name is also a filter chip — which is itself
+    // the point: both come from the same backend label.
     expect(
       screen.getByRole("heading", { name: "Modern Warfare IV" }),
     ).toBeInTheDocument();
@@ -109,20 +109,19 @@ describe("GameTweaksTab", () => {
     setStore([MW4, CS2]);
     render(<GameTweaksTab />);
 
-    const buttons = screen.getAllByRole("button", { name: /apply all/i });
-    expect(buttons).toHaveLength(2);
-
-    await userEvent.click(buttons[0]);
-    expect(applyMock).toHaveBeenCalledWith({
-      "game_config:mw4:shadow_quality": "Low",
-    });
+    // One Apply per game card, named after its game.
+    await userEvent.click(
+      screen.getByRole("button", { name: "Apply 1 tweaks: Modern Warfare IV" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(runMock).toHaveBeenCalledWith("apply", ["game_config:mw4:shadow_quality"]);
   });
 
   it("shows only the game the filter selects", async () => {
     setStore([MW4, CS2]);
     render(<GameTweaksTab />);
 
-    await userEvent.selectOptions(screen.getByLabelText("Filter by game"), "cs2");
+    await userEvent.click(screen.getByRole("button", { name: "Counter-Strike 2" }));
 
     expect(screen.queryByText("Shadow Quality")).not.toBeInTheDocument();
     expect(screen.getByText("FPS Max")).toBeInTheDocument();
@@ -145,7 +144,7 @@ describe("GameTweaksTab", () => {
     expect(screen.getByText("Shadow Quality")).toBeInTheDocument();
     expect(screen.queryByText("Motion Blur")).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByText("Optimized"));
+    await userEvent.click(screen.getByRole("button", { name: /show 1 already ideal/i }));
     expect(screen.getByText("Motion Blur")).toBeInTheDocument();
   });
 

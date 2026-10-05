@@ -6,7 +6,8 @@ import { localizedName } from "../i18n/settings";
 import { errorMessage, historyApi, type HistorySetting } from "../lib/api";
 import { useBulkStream } from "../hooks/useBulkStream";
 import { useStore } from "../store";
-import type { SettingId } from "../types/setting";
+import type { Setting, SettingId } from "../types/setting";
+import { ScopeActions } from "./ScopeActions";
 import { cn } from "../lib/utils";
 import { Card } from "./ui/Card";
 
@@ -38,6 +39,14 @@ export function HistoryTab() {
   const rows = useMemo(() => data?.settings ?? [], [data]);
   const active = rows.filter((r) => r.last_action === "apply");
   const reverted = rows.filter((r) => r.last_action !== "apply");
+  const activeSettings = useMemo(
+    () =>
+      active
+        .map((r) => settings.get(r.setting_id as SettingId))
+        .filter((s): s is Setting => s !== undefined),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `active` derives from rows
+    [rows, settings],
+  );
 
   const nameOf = (id: string): string => {
     const setting = settings.get(id as SettingId);
@@ -79,7 +88,17 @@ export function HistoryTab() {
   return (
     <div className="space-y-4">
       <Card className="p-4 space-y-2">
-        <h2 className="text-base font-semibold">{t("history.title")}</h2>
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="text-base font-semibold">{t("history.title")}</h2>
+          {/* Page scope: every setting fpstune still has applied, with the
+              same Undo and Windows default every other page offers. */}
+          <ScopeActions
+            settings={activeSettings}
+            name={t("tab.history")}
+            only={["undo", "reset"]}
+            className="ml-auto"
+          />
+        </div>
         <p className="text-sm text-muted-foreground">{t("history.intro")}</p>
       </Card>
 

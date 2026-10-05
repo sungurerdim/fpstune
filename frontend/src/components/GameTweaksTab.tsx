@@ -1,32 +1,24 @@
 import { useT } from "../i18n";
 import { localizedDescription, localizedName } from "../i18n/settings";
 import { useMemo, useState } from "react";
-import {
-  AlertCircle,
-  CheckCircle2,
-  ChevronDown,
-  ChevronRight,
-  Gamepad2,
-  Loader2,
-  Search,
-  Zap,
-} from "lucide-react";
+import { Gamepad2, Loader2, Search } from "lucide-react";
 import { SelectionToolbar } from "./SelectionToolbar";
-import { TweakRows, type TweakRow } from "./TweakRows";
-import { useBulkApply } from "../hooks/useBulkApply";
+import { type TweakRow } from "./TweakRows";
+import { TweakBands } from "./TweakBands";
+import { ScopeActions } from "./ScopeActions";
 import { useStore } from "../store";
 import { DetectionNotice } from "./DetectionNotice";
 import { isGameTweak } from "../lib/tweakDomain";
+import { isTweakSuboptimal } from "../lib/tweakStatus";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
 
-/** One game's settings, split by whether they are already where they should be. */
+/** One game's settings, in the order its config file's own copy ranks them. */
 interface GameSection {
   id: string;
   label: string;
   order: number;
-  needs: TweakRow[];
-  optimized: TweakRow[];
+  rows: TweakRow[];
 }
 
 /**
@@ -91,34 +83,45 @@ export function GameTweaksTab() {
           id: groupId,
           label: groupLabel,
           order: s.groupOrder ?? Number.MAX_SAFE_INTEGER,
-          needs: [],
-          optimized: [],
+          rows: [],
         };
         byGame.set(groupId, section);
       }
-      (s.isOptimized ? section.optimized : section.needs).push({ setting: s });
+      section.rows.push({ setting: s });
     }
 
     const ordered = Array.from(byGame.values()).sort(
       (a, b) => a.order - b.order || a.label.localeCompare(b.label),
     );
     for (const section of ordered) {
-      const byName = (a: TweakRow, b: TweakRow) =>
-        a.setting.categoryOrder - b.setting.categoryOrder ||
-        a.setting.displayName.localeCompare(b.setting.displayName);
-      section.needs.sort(byName);
-      section.optimized.sort(byName);
+      section.rows.sort(
+        (a, b) =>
+          a.setting.categoryOrder - b.setting.categoryOrder ||
+          a.setting.displayName.localeCompare(b.setting.displayName),
+      );
     }
 
     return {
       sections: ordered,
-      gameOptions: Array.from(options, ([id, label]) => ({ id, label })).sort(
-        (a, b) => a.label.localeCompare(b.label),
+      gameOptions: Array.from(options, ([id, label]) => ({ id, label })).sort((a, b) =>
+        a.label.localeCompare(b.label),
       ),
       hiddenBySearch: hidden,
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settings, settingsVersion, searchQuery, gameFilter]);
+  const visibleSettings = useMemo(
+    () => sections.flatMap((section) => section.rows.map((r) => r.setting)),
+    [sections],
+  );
+
+  const chipClass = (active: boolean) =>
+    cn(
+      "text-xs px-2 py-0.5 rounded-full border transition-colors",
+      active
+        ? "bg-primary/15 text-primary border-primary/40"
+        : "text-muted-foreground border-border hover:border-muted-foreground/50",
+    );
 
   return (
     <div className="space-y-4 pb-16">
@@ -135,26 +138,39 @@ export function GameTweaksTab() {
             className="w-full pl-8 pr-3 py-1.5 text-xs bg-muted border border-border rounded-md text-foreground placeholder:text-muted-foreground"
           />
         </div>
-        <select
-          value={gameFilter}
-          onChange={(e) => setGameFilter(e.target.value)}
-          aria-label={t("games.filterGame")}
-          className="py-1.5 px-2 text-xs bg-muted border border-border rounded-md text-foreground"
-        >
-          <option value="all">{t("games.allGames")}</option>
-          {gameOptions.map((game) => (
-            <option key={game.id} value={game.id}>
-              {game.label}
-            </option>
-          ))}
-        </select>
         {detecting && (
           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Reading your game configs…
+            {t("games.reading")}
           </span>
         )}
+        {/* Page scope: exactly the games and rows the filters leave on screen. */}
+        <ScopeActions settings={visibleSettings} name={t("tab.games")} className="ml-auto" />
       </div>
+
+      {gameOptions.length > 1 && (
+        <div className="flex items-center gap-1.5 flex-wrap" role="group" aria-label={t("games.filterGame")}>
+          <button
+            type="button"
+            onClick={() => setGameFilter("all")}
+            aria-pressed={gameFilter === "all"}
+            className={chipClass(gameFilter === "all")}
+          >
+            {t("games.allGames")}
+          </button>
+          {gameOptions.map((game) => (
+            <button
+              key={game.id}
+              type="button"
+              onClick={() => setGameFilter(gameFilter === game.id ? "all" : game.id)}
+              aria-pressed={gameFilter === game.id}
+              className={chipClass(gameFilter === game.id)}
+            >
+              {game.label}
+            </button>
+          ))}
+        </div>
+      )}
 
       {sections.length === 0 ? (
         // Three different states, and saying the wrong one is a false claim: still
@@ -167,9 +183,7 @@ export function GameTweaksTab() {
               : t("games.noneFound")}
         </p>
       ) : (
-        sections.map((section) => (
-          <GameSectionCard key={section.id} section={section} />
-        ))
+        sections.map((section) => <GameSectionCard key={section.id} section={section} />)
       )}
 
       <SelectionToolbar />
@@ -178,103 +192,34 @@ export function GameTweaksTab() {
 }
 
 /**
- * One game: what still needs applying, with an apply scoped to that game alone,
- * and its already-correct settings behind a fold.
+ * One game: its heading and count, Apply / Undo / Windows default scoped to that
+ * game alone — a press never writes two games' files — then its rows.
  */
 function GameSectionCard({ section }: { section: GameSection }) {
-  const { apply, isApplying, lastResult } = useBulkApply();
-  const [showOptimized, setShowOptimized] = useState(false);
-
-  // Advisory rows are reported, never applied: fpstune can read the state and
-  // cannot write it, so counting them into "Apply all" would promise a write.
-  const fixable = section.needs.filter((r) => !r.setting.isReadonly);
-
-  const applyAll = () => {
-    const payload: Record<string, unknown> = {};
-    for (const { setting } of fixable) payload[setting.id] = setting.recommendedValue;
-    if (Object.keys(payload).length > 0) apply(payload);
-  };
+  const { t } = useT();
+  const members = section.rows.map((r) => r.setting);
+  const toApply = members.filter(isTweakSuboptimal).length;
+  const headingId = `game-${section.id}`;
 
   return (
-    <section className="rounded-lg border border-border bg-card p-4 space-y-3">
+    <section
+      aria-labelledby={headingId}
+      className={cn(
+        "rounded-lg border border-border border-l-4 bg-card p-4 space-y-3",
+        toApply > 0 ? "border-l-warning" : "border-l-success",
+      )}
+    >
       <div className="flex items-center gap-2 flex-wrap">
-        <Gamepad2 className="w-4 h-4 text-primary" />
-        <h2 className="text-sm font-bold">{section.label}</h2>
-        <span
-          className={cn(
-            "text-xs",
-            section.needs.length > 0 ? "text-warning" : "text-success",
-          )}
-        >
-          {section.needs.length > 0
-            ? `${section.needs.length} to apply`
-            : "all applied"}
+        <Gamepad2 className="w-4 h-4 text-primary" aria-hidden />
+        <h2 id={headingId} className="text-sm font-bold">
+          {section.label}
+        </h2>
+        <span className={cn("text-xs", toApply > 0 ? "text-warning" : "text-success")}>
+          {t("settings.groupCount", { toFix: toApply, total: members.length })}
         </span>
-        <span className="text-xs text-muted-foreground/60">
-          · {section.needs.length + section.optimized.length} settings
-        </span>
-        {lastResult && (
-          <span className="text-xs text-muted-foreground">
-            {lastResult.success} applied
-            {lastResult.error > 0 && (
-              <span className="text-destructive"> · {lastResult.error} failed</span>
-            )}
-          </span>
-        )}
-        {fixable.length > 0 && (
-          <button
-            type="button"
-            onClick={applyAll}
-            disabled={isApplying}
-            className="ml-auto flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-md font-medium bg-warning/15 text-warning hover:bg-warning/25 disabled:opacity-50 transition-colors"
-          >
-            {isApplying ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            ) : (
-              <Zap className="w-3.5 h-3.5" />
-            )}
-            Apply all {fixable.length}
-          </button>
-        )}
+        <ScopeActions settings={members} name={section.label} className="ml-auto" />
       </div>
-
-      {section.needs.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-center gap-2">
-            <AlertCircle className="w-3.5 h-3.5 text-warning" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-warning">
-              Needs optimization
-            </h3>
-          </div>
-          <TweakRows rows={section.needs} />
-        </div>
-      )}
-
-      {section.optimized.length > 0 && (
-        <div className="space-y-2">
-          <button
-            type="button"
-            onClick={() => setShowOptimized(!showOptimized)}
-            className="flex items-center gap-2 w-full text-left"
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-success" />
-            <h3 className="text-xs font-bold uppercase tracking-wider text-success">
-              Optimized
-            </h3>
-            <span className="text-xs text-muted-foreground/60">
-              ({section.optimized.length})
-            </span>
-            <span className="ml-auto text-muted-foreground">
-              {showOptimized ? (
-                <ChevronDown className="w-4 h-4" />
-              ) : (
-                <ChevronRight className="w-4 h-4" />
-              )}
-            </span>
-          </button>
-          {showOptimized && <TweakRows rows={section.optimized} />}
-        </div>
-      )}
+      <TweakBands rows={section.rows} />
     </section>
   );
 }

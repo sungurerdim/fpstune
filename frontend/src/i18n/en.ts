@@ -584,6 +584,7 @@ export const en = {
   "verify.statusUnattributable": "Not attributable",
 
   // Activity log
+  "activity.button": "Activity",
   "activity.title": "Activity Log",
   "activity.open": "Open activity log",
   "activity.close": "Close activity log",

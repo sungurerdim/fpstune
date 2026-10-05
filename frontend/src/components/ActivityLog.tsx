@@ -56,7 +56,7 @@ export function ActivityLog() {
         className="flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium bg-muted/60 text-muted-foreground hover:bg-muted transition-colors"
       >
         <ScrollText className="w-3.5 h-3.5" />
-        <span className="hidden md:inline">Activity</span>
+        <span className="hidden md:inline">{t("activity.button")}</span>
         {hasError && (
           <span className="w-1.5 h-1.5 rounded-full bg-destructive" aria-hidden />
         )}
@@ -77,7 +77,7 @@ export function ActivityLog() {
             <div className="flex items-center justify-between px-4 py-3 border-b border-border">
               <div className="flex items-center gap-2">
                 <ScrollText className="w-4 h-4 text-primary" />
-                <h3 className="font-semibold text-sm">Activity Log</h3>
+                <h3 className="font-semibold text-sm">{t("activity.title")}</h3>
               </div>
               <button
                 onClick={() => setOpen(false)}

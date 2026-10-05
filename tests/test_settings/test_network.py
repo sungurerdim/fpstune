@@ -408,11 +408,12 @@ class TestDnsResolverWiring:
 
 
 class TestWifiRadioWhenWired:
-    """The safety lives in the command, not in the warning.
+    """A guard: fpstune never switches the Wi-Fi adapter off.
 
-    A user clicks past a warning once and lives with the setting for months. So
-    apply refuses to disable the radio unless it can first see a connected wired
-    link — it cannot take away the only link a machine has.
+    It used to, whenever a cable was connected, and a machine whose cable was
+    later unplugged was left with no network and no visible reason. The device
+    must always keep a way to reach the internet, so the setting now only ever
+    enables the radio (consequence 6).
     """
 
     @staticmethod
@@ -423,40 +424,25 @@ class TestWifiRadioWhenWired:
         assert setting is not None
         return setting
 
-    def test_apply_refuses_without_a_connected_wired_link(self) -> None:
+    def test_recommends_the_radio_on(self) -> None:
+        setting = self._setting()
+        assert setting.recommended_value == setting.default_value == "radio_on"
+
+    def test_no_command_can_disable_an_adapter(self) -> None:
+        setting = self._setting()
+        for command in (setting.detect_command, setting.apply_command):
+            assert "Disable-NetAdapter" not in command
+
+    def test_asking_for_radio_off_is_refused(self) -> None:
+        """Undo or a manual pick could still ask for it; the command says no."""
         command = self._setting().apply_command
-        assert "refusing to disable Wi-Fi" in command
-        # The refusal must be checked in the disable branch, before the disable.
-        disable_branch = command.split("'radio_off'", 1)[1]
-        assert disable_branch.index("$wired.Count -eq 0") < disable_branch.index(
-            "Disable-NetAdapter"
-        ), "the wired-link check must run before the adapter is disabled"
+        refusal = command.index("does not switch the Wi-Fi adapter off")
+        assert refusal < command.index("Enable-NetAdapter")
 
-    def test_it_requires_an_explicit_confirmation(self) -> None:
+    def test_it_is_not_a_risk_the_user_must_confirm(self) -> None:
         setting = self._setting()
-        assert setting.risk_level == "advanced"
-        assert setting.risk_warning
-        assert "no network at all" in setting.risk_warning
-
-    def test_reset_turns_the_radio_back_on(self) -> None:
-        """default_value is what reset writes, so it must restore connectivity.
-
-        This test passed for months while reset could not work at all: the enable
-        branch looked the adapter up with `Get-NetAdapter -Physical`, which stops
-        returning it once it is disabled, so fpstune could switch the radio off and
-        never switch it back on. Asserting that a string appears in a command says
-        nothing about whether that command can reach anything.
-        `tests/test_windows_contract/test_wifi_radio.py` is the check that can fail.
-        """
-        setting = self._setting()
-        assert setting.default_value == "radio_on"
-        assert "Enable-NetAdapter" in setting.apply_command
-
-    def test_it_reports_not_applicable_rather_than_pretending(self) -> None:
-        """No Wi-Fi, or no wired link, means the recommendation is meaningless."""
-        command = self._setting().detect_command
-        assert "not_applicable" in command
-        assert "not_applicable" in self._setting().choices
+        assert setting.risk_level != "advanced"
+        assert setting.risk_warning is None
 
     def test_failures_are_reported_not_swallowed(self) -> None:
         command = self._setting().apply_command

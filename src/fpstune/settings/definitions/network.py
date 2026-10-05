@@ -3123,106 +3123,76 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
 #       DNS_QUERY_PRIORITY, DNS_NETBT_PRIORITY (each manages 1 registry value)
 # NOTE: NAGLE_ALGORITHM split: TCP_ACK_FREQUENCY and TCP_DEL_ACK_TICKS are separate
 # NOTE: MAX_USER_PORT split: TCP_NUM_CONNECTIONS is a separate tweak
-# === Idle Wi-Fi radio while a wired link is up ===
-# A Wi-Fi adapter that is enabled but not connected still scans for networks on
-# a timer, and each scan is kernel-mode work on the same cores the game uses.
-# LatencyMon's own guidance when chasing DPC spikes is to disable the WLAN
-# adapter and re-measure, which is as close to a documented mechanism as this
-# gets. The dev machine is the exact case: Wi-Fi present, Disconnected, enabled,
-# with Ethernet carrying all the traffic.
+# === Wi-Fi adapter left enabled (guard) ===
+# Retired as a tweak in favour of a guard (consequence 6). It used to switch the
+# Wi-Fi adapter off with `Disable-NetAdapter` whenever a cable was connected,
+# on the theory that an idle radio's background scans cost DPC time — a mechanism
+# with no measured figure behind it. The cost was concrete: unplug the cable later
+# and the machine has no network and no visible reason why. Disabling a device
+# the user owns because another one happens to be present is not fpstune's call,
+# so the setting now only ever enables. Machines that ran the old tweak keep a
+# disabled radio until something turns it back on; this is that something.
 #
-# This is `advanced` on purpose, and it is the one setting here whose risk is
-# not about performance: turning the radio off and later unplugging the cable
-# leaves a machine with no network and no obvious reason why. The user asked for
-# it to require an explicit confirmation, which is what `advanced` plus a
-# risk_warning surfaces in the UI.
+# The id is kept so originals recorded under it stay attributable.
 #
-# The safety that matters is in the command, not the warning: apply refuses to
-# disable anything unless it can first see a connected wired link. A warning the
-# user clicked past three weeks ago is not a safeguard.
 # Finding the Wi-Fi adapter, shared by detect and apply so they cannot disagree.
 #
-# `-Physical` is deliberately absent, and this is the whole bug. Once
-# `Disable-NetAdapter` has run, the adapter reports `Status = 'Not Present'` and
-# `Get-NetAdapter -Physical` stops returning it at all — measured on the host, and
-# not even `-IncludeHidden` brings it back. So after a successful apply:
-#   * detect saw no Wi-Fi adapter and answered `not_applicable`, which is why
-#     verification failed with expected='radio_off' detected='not_applicable'
-#   * and apply's *enable* branch answered "no Wi-Fi adapter on this machine",
-#     so fpstune could switch the radio off and then could not switch it back on
-# A one-way door, dressed as a tweak. Without `-Physical` the adapter is still
-# there (`Virtual = False`, `HardwareInterface = True`), so those two properties
-# reproduce what `-Physical` meant while surviving the state this setting creates.
+# `-Physical` is deliberately absent. Once `Disable-NetAdapter` has run, the
+# adapter reports `Status = 'Not Present'` and `Get-NetAdapter -Physical` stops
+# returning it at all — measured on the host, and not even `-IncludeHidden`
+# brings it back. A guard that cannot see a disabled radio could never turn it
+# back on. Without `-Physical` the adapter is still there (`Virtual = False`,
+# `HardwareInterface = True`), so those two properties reproduce what `-Physical`
+# meant while surviving the disabled state.
 _WIFI_ADAPTERS = (
     "$wifi = @(Get-NetAdapter -EA SilentlyContinue | Where-Object { "
     "$_.PhysicalMediaType -like '*802.11*' -and -not $_.Virtual -and $_.HardwareInterface }); "
 )
 
-# The wired link the guard depends on is by definition connected, so `-Physical`
-# would work here — it uses the same lookup anyway, because two spellings of "which
-# adapters count" in one setting is how they drift apart.
-_WIRED_LINKS_UP = (
-    "$wired = @(Get-NetAdapter -EA SilentlyContinue | Where-Object { "
-    "$_.PhysicalMediaType -eq '802.3' -and -not $_.Virtual -and $_.Status -eq 'Up' }); "
-)
-
 # `AdminStatus`, not `Status`. Status describes what the link is doing and takes at
-# least three values here — 'Up', 'Disconnected', 'Not Present' — so the old
-# `Status -ne 'Disabled'` test would have called a disabled adapter 'radio_on' even
-# once it could see it. AdminStatus is the administrative state that
-# Disable-NetAdapter actually writes: 'Down' when off, 'Up' when on, whether or not
-# anything is connected. An enabled-but-unconnected radio still scans, and that is
-# exactly the case this setting exists for, so it must read as radio_on.
-_RADIO_IS_ON = "@($wifi | Where-Object { $_.AdminStatus -ne 'Down' }).Count -gt 0"
+# least three values here — 'Up', 'Disconnected', 'Not Present' — while AdminStatus
+# is the administrative state Disable-NetAdapter writes: 'Down' when off, 'Up' when
+# on, whether or not anything is connected. Every radio must be on for the guard to
+# hold, so one disabled card is enough to read `radio_off`.
+_RADIO_IS_OFF = "@($wifi | Where-Object { $_.AdminStatus -eq 'Down' }).Count -gt 0"
 
 NETWORK_WIFI_RADIO_WHEN_WIRED = SettingExecutor(
     id="network:wifi_radio_when_wired",
     category=SettingCategory.NETWORK,
-    display_name="Wi-Fi Radio While Wired",
-    short_name="Wi-Fi off while on cable",
-    description="An enabled Wi-Fi adapter keeps scanning for networks even with nothing "
-    "connected, and every scan is kernel work competing with the game.",
+    display_name="Wi-Fi Adapter Enabled",
+    short_name="Wi-Fi adapter left on",
+    description="Whether Windows keeps the Wi-Fi adapter enabled. A disabled adapter leaves the "
+    "machine with no network the moment the cable is unplugged, with nothing saying why.",
     value_type=SettingValueType.CHOICE,
     choices=("radio_on", "radio_off", "not_applicable"),
     default_value="radio_on",
-    recommended_value="radio_off",
+    recommended_value="radio_on",
     requires_reboot=False,
-    evidence_level="experimental",
-    risk_level="advanced",
-    risk_warning="This switches your Wi-Fi adapter off. If you later unplug the Ethernet cable "
-    "you will have no network at all, with nothing on screen explaining why — re-enable it here, "
-    "or in Windows' network adapter settings. Applying is refused while no wired link is "
-    "connected, so it cannot strand you at the moment you press it, only afterwards. The benefit "
-    "is a mechanism rather than a measurement: periodic scans are real kernel work, but no "
-    "isolated figure for their cost was found.",
-    sources=["https://www.resplendence.com/latencymon"],
-    current_impact="Radio on: the adapter scans on a timer, adding kernel work during play",
-    recommended_impact="Radio off: no scans while you are on the cable",
+    evidence_level="proven",
+    sources=["https://learn.microsoft.com/en-us/powershell/module/netadapter/enable-netadapter"],
+    current_impact="Disabled: no wireless fallback when the cable is unplugged",
+    recommended_impact="Enabled (Windows default): Wi-Fi is there when the cable is not",
     scope=SettingScope.COMPLETE,
     category_order=30,
-    impact_scores={"latency_spike_ms": "removes periodic scan wakeups", "stability": "high"},
-    effect="Turns off an idle Wi-Fi radio while the wired link carries the traffic",
-    # not_applicable covers both "no Wi-Fi adapter" and "no wired link", because
-    # in either case the recommendation is meaningless rather than unapplied.
+    impact_scores={"latency_spike_ms": 0.0, "stability": "high"},
+    effect="Turns a disabled Wi-Fi adapter back on",
+    # not_applicable means "no Wi-Fi adapter". A wired link no longer matters: a
+    # disabled radio on a machine whose cable is out is the case this guards.
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        _WIFI_ADAPTERS + _WIRED_LINKS_UP + "if ($wifi.Count -eq 0 -or $wired.Count -eq 0) "
-        "{ 'not_applicable' } "
-        f"elseif ({_RADIO_IS_ON}) {{ 'radio_on' }} "
-        "else { 'radio_off' }"
+        _WIFI_ADAPTERS + "if ($wifi.Count -eq 0) { 'not_applicable' } "
+        f"elseif ({_RADIO_IS_OFF}) {{ 'radio_off' }} "
+        "else { 'radio_on' }"
     ),
     detect_args={},
     value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
         _WIFI_ADAPTERS + "if ($wifi.Count -eq 0) { 'error: no Wi-Fi adapter on this machine' } "
-        "elseif ('%value%' -eq 'radio_off') { "
-        # The guard: never take away the only link the machine has.
-        + _WIRED_LINKS_UP
-        + "if ($wired.Count -eq 0) { 'error: no connected wired link, refusing to disable Wi-Fi' } "
-        "else { try { $wifi | Disable-NetAdapter -Confirm:$false -EA Stop; 'ok' } "
-        "catch { 'error: ' + $_.Exception.Message } } "
-        "} else { try { $wifi | Enable-NetAdapter -Confirm:$false -EA Stop; 'ok' } "
+        # Never a disable path: fpstune does not switch off a device the user owns.
+        "elseif ('%value%' -ne 'radio_on') { 'error: fpstune does not switch the Wi-Fi adapter off' } "
+        "else { try { $wifi | Where-Object { $_.AdminStatus -eq 'Down' } | "
+        "Enable-NetAdapter -Confirm:$false -EA Stop; 'ok' } "
         "catch { 'error: ' + $_.Exception.Message } }"
     ),
     apply_args={},

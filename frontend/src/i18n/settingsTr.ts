@@ -206,9 +206,9 @@ export const settingsTr: Record<
       "Her dosya okumasında son erişim zamanını günceller. Kapatmak gereksiz SSD yazmalarını azaltır.",
   },
   "network:wifi_radio_when_wired": {
-    name: "Kabloda Wi-Fi kapalı",
+    name: "Wi-Fi bağdaştırıcısı açık",
     description:
-      "Etkin bir Wi-Fi bağdaştırıcısı hiçbir şeye bağlı değilken bile ağ taramaya devam eder ve her tarama oyunla yarışan çekirdek işidir.",
+      "Windows'un Wi-Fi bağdaştırıcısını etkin tutup tutmadığı. Devre dışı bir bağdaştırıcı, kablo çıktığı anda makineyi nedeni görünmeden ağsız bırakır.",
   },
   "network:tcp_auto_tuning": {
     name: "Ağ penceresi otomatik ayarı",

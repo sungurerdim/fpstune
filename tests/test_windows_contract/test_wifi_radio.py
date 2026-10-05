@@ -1,4 +1,7 @@
-"""Switching the Wi-Fi radio off must not make fpstune blind to it.
+"""A switched-off Wi-Fi radio must stay visible, so the guard can turn it back on.
+
+The setting was once a tweak that disabled the radio; it is now a guard that only
+enables it. The history below is why the lookup avoids `-Physical`.
 
 A user hit `VERIFY FAILED Wi-Fi Radio While Wired: expected='radio_off',
 detected='not_applicable'` — after an apply that had worked. Measured on that host:
@@ -97,18 +100,17 @@ def test_a_radio_that_was_switched_off_reads_as_switched_off() -> None:
     """The exact regression: this used to answer `not_applicable`.
 
     `Status` is 'Not Present' rather than 'Disabled' on a disabled adapter, which is
-    why reading Status would have called it `radio_on` even once it could see it.
+    why the guard reads AdminStatus.
     """
     assert _detect(WIFI_OFF, ETHERNET_UP) == "radio_off"
 
 
-def test_an_idle_radio_reads_as_on() -> None:
-    """Enabled but unconnected is the case the setting exists for.
+def test_a_switched_off_radio_without_a_cable_is_still_seen() -> None:
+    """The stranded machine — no cable, radio off — is the case the guard exists for."""
+    assert _detect(WIFI_OFF, ETHERNET_DOWN) == "radio_off"
 
-    That adapter is scanning on a timer, which is the kernel work being removed, so
-    calling it `radio_off` because nothing is connected would report the tweak as
-    applied while the scans continue.
-    """
+
+def test_an_idle_radio_reads_as_on() -> None:
     assert _detect(WIFI_IDLE, ETHERNET_UP) == "radio_on"
 
 
@@ -116,36 +118,23 @@ def test_a_connected_radio_reads_as_on() -> None:
     assert _detect(WIFI_CONNECTED, ETHERNET_UP) == "radio_on"
 
 
-def test_no_wired_link_makes_the_recommendation_meaningless() -> None:
-    assert _detect(WIFI_IDLE, ETHERNET_DOWN) == "not_applicable"
-
-
 def test_a_machine_with_no_wifi_is_not_judged() -> None:
     assert _detect(ETHERNET_UP) == "not_applicable"
 
 
 def test_a_virtual_wifi_adapter_is_not_a_radio() -> None:
-    """Wi-Fi Direct publishes 802.11 media on a virtual adapter.
-
-    Counting it would report `radio_on` forever, because disabling the physical
-    radio does not touch it — the setting could then never reach its own target.
-    """
-    assert _detect(WIFI_OFF, WIFI_DIRECT, ETHERNET_UP) == "radio_off"
+    """Wi-Fi Direct publishes 802.11 media on a virtual adapter; it is not the radio."""
+    assert _detect(WIFI_DIRECT, ETHERNET_UP) == "not_applicable"
 
 
-def test_one_radio_still_on_decides_the_answer() -> None:
-    """A laptop with a second wireless card must not read as done while it scans."""
+def test_one_radio_switched_off_decides_the_answer() -> None:
+    """A second card that is on does not hide the one that was switched off."""
     second = _adapter("Wi-Fi 2", "Native 802.11", status="Disconnected", admin="Up")
-    assert _detect(WIFI_OFF, second, ETHERNET_UP) == "radio_on"
+    assert _detect(WIFI_OFF, second, ETHERNET_UP) == "radio_off"
 
 
 def test_both_commands_find_adapters_the_same_way() -> None:
-    """Detect and apply share one lookup, so enable can reach what disable created.
-
-    Two spellings of "which adapters count" in one setting is how they drift apart,
-    and here the drift was fatal in one direction: apply could disable a radio that
-    it could then no longer find to enable.
-    """
+    """Detect and apply share one lookup, so enable can reach every radio detect sees."""
     assert _WIFI_ADAPTERS in WIFI_RADIO.detect_command
     assert _WIFI_ADAPTERS in WIFI_RADIO.apply_command
 

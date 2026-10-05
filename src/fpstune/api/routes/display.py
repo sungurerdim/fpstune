@@ -18,13 +18,6 @@ from fpstune.utils.hardware_manager import hardware_manager
 router = APIRouter(prefix="/display", tags=["display"])
 logger = logging.getLogger(__name__)
 
-# The guarded mode write (CDS_TEST, then a revert unless kept) is shared with the
-# per-monitor display-mode setting and lives in `settings.display_mode`.
-_REVERT_TIMEOUT_S = display_mode.REVERT_TIMEOUT_S
-_run_mode_change = display_mode.run_mode_change
-_schedule_revert = display_mode.schedule_revert
-_cancel_revert = display_mode.cancel_revert
-
 
 class DisplayAutoResponse(BaseModel):
     """Response for setting display to auto."""
@@ -102,100 +95,41 @@ async def set_display_to_auto(display_index: int = Path(ge=0, le=10)) -> Display
             message="Display is already at optimal settings",
         )
 
-    # Write only what is actually wrong. Setting both unconditionally meant that
-    # fixing a refresh rate also raised a resolution the user may have lowered on
-    # purpose — this project's stated priority is performance first, and dropping
-    # resolution for frame rate is a legitimate choice, not a defect to correct.
-    DM_PELSWIDTH = 0x00080000
-    DM_PELSHEIGHT = 0x00100000
-    DM_DISPLAYFREQUENCY = 0x00400000
-
-    fields = 0
-    changed: list[str] = []
-    if not monitor.is_resolution_optimal:
-        fields |= DM_PELSWIDTH | DM_PELSHEIGHT
-        changed.append(f"{target_width}x{target_height}")
-    if not monitor.is_refresh_optimal:
-        fields |= DM_DISPLAYFREQUENCY
-        changed.append(f"{target_refresh}Hz")
-
-    # PowerShell script to change display settings using ChangeDisplaySettingsEx
-    # Use the actual device name from detection (handles non-contiguous numbering).
-    #
-    # Detection already returns the full device path, so prefixing unconditionally
-    # built a name with the prefix twice over. Windows cannot resolve it, so
-    # ChangeDisplaySettingsEx answered DISP_CHANGE_BADPARAM (-5) and this endpoint
-    # 500'd for every display on every machine, for as long as it existed. Verified
-    # on real hardware after the fix: 200 Hz -> 300 Hz, read back from the mode.
-    device_name = monitor.name if monitor.name.startswith("\\\\.\\") else f"\\\\.\\{monitor.name}"
-
+    # Only what is wrong is written (a lowered resolution is a legitimate choice
+    # when the refresh is what needs fixing), guarded by CDS_TEST and a revert
+    # unless kept — the one write path, shared with the per-monitor setting.
+    changed = [
+        part
+        for part, wrong in (
+            (f"{target_width}x{target_height}", not monitor.is_resolution_optimal),
+            (f"{target_refresh}Hz", not monitor.is_refresh_optimal),
+        )
+        if wrong
+    ]
     try:
-        status_line, prior = await asyncio.to_thread(
-            _run_mode_change, device_name, target_width, target_height, target_refresh, fields
-        )
-
-        if status_line == "NOPRIOR":
-            # No mode to revert to means no write happened: a change that
-            # cannot be undone is a one-way door.
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=(
-                    "The display's current mode could not be read, so the change "
-                    "was refused — a mode this endpoint could not revert would be "
-                    "a one-way door."
-                ),
-            )
-        if status_line.startswith("TESTFAIL:"):
-            code = status_line.split(":", 1)[1]
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    f"The driver rejected this mode before anything was written "
-                    f"(CDS_TEST returned {code}). Nothing was changed."
-                ),
-            )
-        if status_line != "SUCCESS" or prior is None:
-            error_code = (
-                status_line.replace("ERROR:", "")
-                if status_line.startswith("ERROR:")
-                else status_line or "no output"
-            )
-            logger.error(f"Failed to change display settings: {error_code}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to change display settings (code: {error_code})",
-            )
-
-        # The write went through; unless the user keeps it, the prior mode
-        # comes back — Windows' own "keep these display settings?" pattern.
-        _schedule_revert(device_name, prior, fields)
-        hardware_manager.invalidate_cache("monitors")
-
-        return DisplayAutoResponse(
-            success=True,
-            display_index=display_index,
-            resolution=f"{target_width}x{target_height}",
-            refresh_rate=target_refresh,
-            message=(
-                f"Display set to {' and '.join(changed)} — reverts in "
-                f"{int(_REVERT_TIMEOUT_S)}s unless kept"
-            ),
-            requires_confirmation=True,
-            revert_timeout_s=_REVERT_TIMEOUT_S,
-        )
-
-    except HTTPException:
-        # The branches above already raised specific errors carrying the
-        # DISP_CHANGE code. Letting the catch-all below swallow them turned
-        # "code: -5" into an opaque "Internal server error", which is why the
-        # real cause stayed hidden for as long as this endpoint existed.
-        raise
+        outcome = await asyncio.to_thread(display_mode.write_native, monitor)
     except Exception as e:
         logger.exception("Error changing display settings")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Internal server error",
-        ) from e
+        raise HTTPException(status_code=500, detail="Internal server error") from e
+    if not outcome.ok:
+        # The specific reason, never an opaque 500: "code: -5" hidden behind a
+        # catch-all is how a broken device name stayed undiagnosed.
+        code = status.HTTP_409_CONFLICT if outcome.kind == "testfail" else 500
+        logger.error("Display mode not written: %s", outcome.message)
+        raise HTTPException(status_code=code, detail=outcome.message)
+
+    return DisplayAutoResponse(
+        success=True,
+        display_index=display_index,
+        resolution=f"{target_width}x{target_height}",
+        refresh_rate=target_refresh,
+        message=(
+            f"Display set to {' and '.join(changed)} — reverts in "
+            f"{int(display_mode.REVERT_TIMEOUT_S)}s unless kept"
+        ),
+        requires_confirmation=True,
+        revert_timeout_s=display_mode.REVERT_TIMEOUT_S,
+    )
 
 
 @router.post("/{display_index}/confirm", response_model=DisplayConfirmResponse)
@@ -213,7 +147,7 @@ async def confirm_display_change(display_index: int = Path(ge=0, le=10)) -> Disp
         )
     monitor = monitors[display_index]
     device_name = monitor.name if monitor.name.startswith("\\\\.\\") else f"\\\\.\\{monitor.name}"
-    if not _cancel_revert(device_name):
+    if not display_mode.cancel_revert(device_name):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No display change is awaiting confirmation — it may already have reverted.",
@@ -224,7 +158,10 @@ async def confirm_display_change(display_index: int = Path(ge=0, le=10)) -> Disp
 @router.get("/pending")
 async def pending_display_changes() -> dict[str, Any]:
     """Displays whose new mode reverts unless kept, and how long the window is."""
-    return {"devices": display_mode.pending_devices(), "revert_timeout_s": _REVERT_TIMEOUT_S}
+    return {
+        "devices": display_mode.pending_devices(),
+        "seconds_left": round(display_mode.seconds_until_revert()),
+    }
 
 
 @router.post("/keep-all", response_model=DisplayConfirmResponse)

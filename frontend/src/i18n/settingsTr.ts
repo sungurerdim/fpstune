@@ -2078,6 +2078,11 @@ export const settingsTr: Record<
     description:
       "Windows'un güç tasarrufu için bağdaştırıcıyı kapatmasına izin verir. Kapatmak kopmaları önler.",
   },
+  "display:*:mode": {
+    name: "Doğal çözünürlük ve yenileme hızı",
+    description:
+      "Monitörün kendi doğal çözünürlüğünde ve en yüksek yenileme hızında çalışıp çalışmadığı. Altındaysa görüntü ölçeklenir ya da her kare ekranda gerekenden uzun kalır.",
+  },
   "network:*:lso": {
     name: "Büyük paket devretme",
     description:

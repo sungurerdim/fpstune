@@ -1,6 +1,6 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
-import { advisoryChoiceLabel, describeFinding } from "../lib/finding";
+import { advisoryChoiceLabel, describeFinding, explainsWithFinding } from "../lib/finding";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -35,7 +35,7 @@ export function SettingValueState({
   // state — "Link running at 100 Mbps; the adapter supports 2.5 Gbps." — on
   // every surface that shows the row. The arrow form would only repeat the
   // state name the measurement already explains.
-  const measured = setting.isReadonly ? describeFinding(setting) : null;
+  const measured = explainsWithFinding(setting) ? describeFinding(setting) : null;
   if (measured) {
     return (
       <span
@@ -59,7 +59,7 @@ export function SettingValueState({
   const label = (value: unknown) => {
     // An advisory's value is a state name for the comparison code; the user
     // reads "Below the adapter's maximum", never `below_capability`.
-    if (setting.isReadonly) {
+    if (explainsWithFinding(setting)) {
       const words = advisoryChoiceLabel(value);
       if (words) return words;
     }

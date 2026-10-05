@@ -82,6 +82,13 @@ export const tr: Record<keyof typeof en, string> = {
   "tab.benchmarks": "Ölçümler",
   "tab.history": "Geçmiş",
 
+  // Ekran modu onayı
+  "displayConfirm.title": "Yeni ekran modu korunsun mu?",
+  "displayConfirm.body":
+    "{count} monitör doğal moduna geçti. Görüntü düzgünse koruyun; değilse {seconds} sn içinde kendiliğinden geri döner.",
+  "displayConfirm.keep": "Koru",
+  "displayConfirm.dontKeep": "Koruma",
+
   // Değişiklik geçmişi
   "history.title": "fpstune'un değiştirdikleri",
   "history.intro":
@@ -206,6 +213,17 @@ export const tr: Record<keyof typeof en, string> = {
   "finding.startupApps.more": "{names} ve {rest} tane daha",
   "finding.startupApps.advice":
     "Gerekmeyenleri Görev Yöneticisi > Başlangıç uygulamaları'ndan kapatın; güvenlik yazılımı listelenmez.",
+  "finding.displayMode.native": "Doğal {width}×{height} @ {hz} Hz değerinde çalışıyor.",
+  "finding.displayMode.lowRefresh":
+    "{hz} Hz'de çalışıyor; bu panel {max} Hz gösterebiliyor. {max} Hz'de her kare ekranda {oldMs} ms yerine {newMs} ms kalır: daha akıcı hareket ve daha az giriş gecikmesi.",
+  "finding.displayMode.lowResolution":
+    "{width}×{height} çözünürlükte çalışıyor; panelin doğal çözünürlüğü {nativeWidth}×{nativeHeight}. Doğalın altında Windows görüntüyü ölçekler ve görüntü yumuşar.",
+  "finding.displayMode.secondary":
+    "İkincil monitör, bu yüzden isteğe bağlı: oyunun kare hızı buna bağlı değil.",
+  "finding.displayMode.advice":
+    "Uygulamak doğal modu ayarlar; siz korumazsanız 15 saniye sonra kendiliğinden geri döner.",
+  "choice.native": "Doğal",
+  "choice.not_native": "Doğalın altında",
   "choice.at_capability": "Bağdaştırıcının en yükseğinde",
   "choice.below_capability": "Bağdaştırıcının en yükseğinin altında",
   "choice.good": "İyi",

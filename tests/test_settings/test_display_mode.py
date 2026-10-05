@@ -138,8 +138,8 @@ class TestDetectAndApply:
             ),
             patch("fpstune.utils.winapi.display.change_mode", change_mode),
         ):
-            ok, error = display_mode.write_native(_monitor(refresh_rate_hz=60))
-        assert ok is False and "CDS_TEST" in (error or "")
+            outcome = display_mode.write_native(_monitor(refresh_rate_hz=60))
+        assert outcome.kind == "testfail" and "CDS_TEST" in outcome.message
         assert calls == [True], "nothing but the test may reach the driver"
 
     def test_a_written_mode_reverts_unless_kept(self) -> None:
@@ -150,8 +150,8 @@ class TestDetectAndApply:
             ),
             patch("fpstune.utils.winapi.display.change_mode", return_value=0),
         ):
-            ok, _ = display_mode.write_native(_monitor(refresh_rate_hz=60), "display:k:mode")
-            assert ok
+            outcome = display_mode.write_native(_monitor(refresh_rate_hz=60), "display:k:mode")
+            assert outcome.kind == "written"
             assert display_mode.pending_devices() == ["\\\\.\\DISPLAY1"]
             assert display_mode.keep_all() == ["\\\\.\\DISPLAY1"]
             assert display_mode.pending_devices() == []

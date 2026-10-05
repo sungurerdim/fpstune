@@ -434,6 +434,16 @@ export const api = {
       method: "POST",
     }),
 
+  /** Displays whose new mode reverts unless kept, and the seconds left to keep them. */
+  getPendingDisplayChanges: () =>
+    fetchJson<{ devices: string[]; seconds_left: number }>("/display/pending"),
+
+  /** Keep every display mode waiting for confirmation. */
+  keepAllDisplayChanges: () =>
+    fetchJson<{ success: boolean; message: string }>("/display/keep-all", {
+      method: "POST",
+    }),
+
   confirmDisplayChange: (displayIndex: number) =>
     fetchJson<{ success: boolean; message: string }>(
       `/display/${displayIndex}/confirm`,

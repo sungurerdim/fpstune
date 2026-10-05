@@ -12,6 +12,7 @@ import { BenchmarksTab } from "./components/BenchmarksTab";
 import { HistoryTab } from "./components/HistoryTab";
 import { CleanupRunnerProvider } from "./components/CleanupRunnerProvider";
 import { NotificationToasts } from "./components/ui/NotificationToasts";
+import { DisplayModeConfirm } from "./components/DisplayModeConfirm";
 import { tabButtonId, tabPanelId } from "./components/ui/tabIds";
 import { settingsApi } from "./lib/api";
 import { useStore } from "./store";
@@ -108,6 +109,8 @@ function App() {
           first message does — and so a notification raised on one tab is not
           lost by navigating to another. */}
       <NotificationToasts />
+      {/* Asks "keep the new display mode?" for any monitor fpstune switched. */}
+      <DisplayModeConfirm />
 
       {/* Tab Navigation (also hosts the app chrome: brand, activity, admin) */}
       <TabNavigation />

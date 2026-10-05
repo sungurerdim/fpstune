@@ -34,8 +34,10 @@ export interface ConfirmDialogProps {
   title: string;
   /** The explanation, pointed at by `aria-describedby`. */
   children: ReactNode;
-  /** The affirmative button's words. Cancel is always the catalogue's cancel. */
+  /** The affirmative button's words. */
   confirmLabel: string;
+  /** The other button's words; the catalogue's "Cancel" unless a choice needs its own. */
+  cancelLabel?: string;
   onConfirm: () => void;
   onCancel: () => void;
 }
@@ -45,6 +47,7 @@ export function ConfirmDialog({
   title,
   children,
   confirmLabel,
+  cancelLabel,
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
@@ -141,7 +144,7 @@ export function ConfirmDialog({
         </div>
         <div className="flex justify-end gap-2">
           <Button variant="outline" onClick={onCancel}>
-            {t("action.cancel")}
+            {cancelLabel ?? t("action.cancel")}
           </Button>
           <Button variant="confirm" onClick={onConfirm}>
             {confirmLabel}

@@ -27,6 +27,7 @@ import hashlib
 import logging
 import sys
 import threading
+import time
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -186,7 +187,11 @@ def schedule_revert(
             stale["timer"].cancel()
         timer = threading.Timer(REVERT_TIMEOUT_S, _revert)
         timer.daemon = True
-        _pending_reverts[device] = {"timer": timer, "prior": prior}
+        _pending_reverts[device] = {
+            "timer": timer,
+            "prior": prior,
+            "reverts_at": time.monotonic() + REVERT_TIMEOUT_S,
+        }
         timer.start()
 
 
@@ -206,37 +211,61 @@ def pending_devices() -> list[str]:
         return list(_pending_reverts)
 
 
+def seconds_until_revert() -> float:
+    """How long until the first pending display goes back; 0 when none is pending."""
+    with _pending_lock:
+        deadlines = [p["reverts_at"] for p in _pending_reverts.values()]
+    return max(0.0, min(deadlines) - time.monotonic()) if deadlines else 0.0
+
+
 def keep_all() -> list[str]:
     """Keep every mode waiting for confirmation; return the devices kept."""
     kept = [device for device in pending_devices() if cancel_revert(device)]
     return kept
 
 
-def write_native(monitor: MonitorInfo, setting_id: str | None = None) -> tuple[bool, str | None]:
-    """Put `monitor` at its own best mode, guarded; (ok, error)."""
+@dataclass(frozen=True)
+class WriteOutcome:
+    """How a guarded mode write ended: `written`, `unchanged`, `noprior`,
+    `testfail` or `error`, with the sentence a user reads."""
+
+    kind: str
+    message: str = ""
+
+    @property
+    def ok(self) -> bool:
+        return self.kind in ("written", "unchanged")
+
+
+def write_native(monitor: MonitorInfo, setting_id: str | None = None) -> WriteOutcome:
+    """Put `monitor` at its own best mode, guarded; the one write path, shared by
+    the Hardware-panel button and the per-monitor setting."""
     from fpstune.utils.hardware_manager import hardware_manager
 
     plan = plan_for(monitor)
     if not plan.needed:
-        return True, None
+        return WriteOutcome("unchanged")
     device = device_name(monitor)
     status, prior = run_mode_change(device, plan.width, plan.height, plan.refresh, plan.fields)
     if status == "NOPRIOR":
-        return False, (
+        return WriteOutcome(
+            "noprior",
             "The display's current mode could not be read, so the change was refused — "
-            "a mode that could not be reverted would be a one-way door."
+            "a mode that could not be reverted would be a one-way door.",
         )
     if status.startswith("TESTFAIL:"):
         code = status.split(":", 1)[1]
-        return False, (
+        return WriteOutcome(
+            "testfail",
             f"The driver rejected {plan.width}x{plan.height} @ {plan.refresh} Hz before "
-            f"anything was written (CDS_TEST returned {code}). Nothing was changed."
+            f"anything was written (CDS_TEST returned {code}). Nothing was changed.",
         )
     if status != "SUCCESS" or prior is None:
-        return False, f"Windows refused the display mode ({status})"
+        code = status.removeprefix("ERROR:") or "no output"
+        return WriteOutcome("error", f"Failed to change display settings (code: {code})")
     schedule_revert(device, prior, plan.fields, setting_id)
     hardware_manager.invalidate_cache("monitors")
-    return True, None
+    return WriteOutcome("written")
 
 
 # --- the setting's detect and apply ----------------------------------------
@@ -284,4 +313,5 @@ def display_mode_native(args: dict[str, Any]) -> tuple[bool, str | None]:
         return False, "This monitor is no longer connected"
     if not is_readable(monitor):
         return False, "This monitor's native mode could not be read"
-    return write_native(monitor, str(args.get("setting_id") or "") or None)
+    outcome = write_native(monitor, str(args.get("setting_id") or "") or None)
+    return outcome.ok, (outcome.message or None)

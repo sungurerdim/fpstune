@@ -86,6 +86,13 @@ export const en = {
   "tab.benchmarks": "Benchmarks",
   "tab.history": "History",
 
+  // Display mode confirmation
+  "displayConfirm.title": "Keep the new display mode?",
+  "displayConfirm.body":
+    "{count} monitor(s) switched to their native mode. If the picture looks right, keep it; otherwise it goes back on its own in {seconds} s.",
+  "displayConfirm.keep": "Keep",
+  "displayConfirm.dontKeep": "Don't keep",
+
   // Change history
   "history.title": "What fpstune changed",
   "history.intro":
@@ -214,7 +221,18 @@ export const en = {
   "finding.startupApps.more": "{names} and {rest} more",
   "finding.startupApps.advice":
     "Turn off the ones you don't need in Task Manager > Startup apps; security software is not listed.",
+  "finding.displayMode.native": "Running at its native {width}×{height} @ {hz} Hz.",
+  "finding.displayMode.lowRefresh":
+    "Running at {hz} Hz; this panel can show {max} Hz. At {max} Hz each frame stays on screen {newMs} ms instead of {oldMs} ms: smoother motion and less input delay.",
+  "finding.displayMode.lowResolution":
+    "Running at {width}×{height}; the panel's native resolution is {nativeWidth}×{nativeHeight}. Below native, Windows scales the image and it looks soft.",
+  "finding.displayMode.secondary":
+    "Secondary monitor, so optional: the game's frame rate does not depend on it.",
+  "finding.displayMode.advice":
+    "Applying sets the native mode; it goes back on its own after 15 seconds unless you keep it.",
   // Advisory values, in words
+  "choice.native": "Native",
+  "choice.not_native": "Below native",
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",
   "choice.good": "Good",

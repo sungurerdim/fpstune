@@ -7,22 +7,22 @@ import type { Setting } from "../types/setting";
  *
  * The backend stays English per C4 — descriptions are code-adjacent prose
  * reviewed against the registry — and the Turkish forms live here, keyed by
- * setting id. Per-adapter settings carry a machine-specific adapter key
- * in their id (network:nic3f09a1c2d4:eee), which must never appear in source (C9), so
- * they fall back to a name-keyed table matched on the id's stable last
- * segment. An id neither table knows falls back to the English copy —
+ * setting id. Per-device settings carry a machine-specific key in their
+ * id (network:nic3f09a1c2d4:eee, display:mon1a2b3c4d5e:mode), which must never
+ * appear in source (C9), so they fall back to a name-keyed table matched on the
+ * id's module and stable last segment. An id neither table knows falls back to the English copy —
  * honest, and visible, rather than a blank.
  */
 
-const PER_ADAPTER = /^network:[^:]+:(.+)$/;
+const PER_DEVICE = /^(network|display):[^:]+:(.+)$/;
 
 function entryFor(
   id: string,
 ): { name?: string; description?: string; effect?: string } | undefined {
   const direct = settingsTr[id];
   if (direct) return direct;
-  const adapter = PER_ADAPTER.exec(id);
-  if (adapter) return settingsTr["network:*:" + adapter[1]];
+  const device = PER_DEVICE.exec(id);
+  if (device) return settingsTr[`${device[1]}:*:${device[2]}`];
   return undefined;
 }
 

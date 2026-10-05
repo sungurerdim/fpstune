@@ -169,6 +169,54 @@ function startupApps(finding: Record<string, unknown>): FindingText | null {
   };
 }
 
+/** "16.7" — a frame's time on screen at `hz`, in the active locale. */
+function frameMs(hz: number): string {
+  return (1000 / hz).toLocaleString(getLocale(), { maximumFractionDigits: 1 });
+}
+
+function displayMode(finding: Record<string, unknown>): FindingText | null {
+  const width = num(finding.width);
+  const height = num(finding.height);
+  const hz = num(finding.refresh_hz);
+  const nativeWidth = num(finding.native_width);
+  const nativeHeight = num(finding.native_height);
+  const max = num(finding.max_refresh_hz);
+  if ([width, height, hz, nativeWidth, nativeHeight, max].some((v) => v === null || v === 0)) {
+    return null;
+  }
+  const lowRefresh = hz! < max!;
+  const lowResolution = width !== nativeWidth || height !== nativeHeight;
+  const parts: string[] = [];
+  if (lowRefresh) {
+    parts.push(
+      t("finding.displayMode.lowRefresh", {
+        hz: hz!,
+        max: max!,
+        oldMs: frameMs(hz!),
+        newMs: frameMs(max!),
+      }),
+    );
+  }
+  if (lowResolution) {
+    parts.push(
+      t("finding.displayMode.lowResolution", {
+        width: width!,
+        height: height!,
+        nativeWidth: nativeWidth!,
+        nativeHeight: nativeHeight!,
+      }),
+    );
+  }
+  if (parts.length === 0) {
+    return {
+      summary: t("finding.displayMode.native", { width: width!, height: height!, hz: hz! }),
+      advice: "",
+    };
+  }
+  if (finding.primary === false) parts.push(t("finding.displayMode.secondary"));
+  return { summary: parts.join(" "), advice: t("finding.displayMode.advice") };
+}
+
 /** The finding's sentence(s) for this setting, or null when it carries none. */
 export function describeFinding(setting: Setting): FindingText | null {
   const finding = setting.finding;
@@ -186,6 +234,8 @@ export function describeFinding(setting: Setting): FindingText | null {
       return powerDcRail(finding);
     case "startup_apps":
       return startupApps(finding);
+    case "display_mode":
+      return displayMode(finding);
     default:
       return null;
   }
@@ -209,7 +259,14 @@ const CHOICE_KEYS: Record<string, MessageKey> = {
   throttling: "choice.throttling",
   none_at_startup: "choice.none_at_startup",
   apps_at_startup: "choice.apps_at_startup",
+  native: "choice.native",
+  not_native: "choice.not_native",
 };
+
+/** A tweak that explains its state with measured numbers, like an advisory does. */
+export function explainsWithFinding(setting: Setting): boolean {
+  return setting.isReadonly || setting.finding?.kind === "display_mode";
+}
 
 export function advisoryChoiceLabel(value: unknown): string | null {
   const key = typeof value === "string" ? CHOICE_KEYS[value] : undefined;
@@ -221,7 +278,7 @@ export function advisoryChoiceLabel(value: unknown): string | null {
  * words, else the raw-value hint the definition carries, else the value.
  */
 export function valueLabel(setting: Setting, value: unknown): string {
-  if (setting.isReadonly) {
+  if (explainsWithFinding(setting)) {
     const words = advisoryChoiceLabel(value);
     if (words) return words;
   }

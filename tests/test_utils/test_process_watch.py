@@ -140,8 +140,10 @@ class TestOrdinaryOutcomes:
 
     def test_output_is_handed_over_while_running(self) -> None:
         seen: list[str] = []
+        # Raw UTF-8 bytes: on Windows a piped child's print() encodes with the
+        # system code page, which cannot write these letters at all.
         run_watched(
-            _py("print('ğüşıöç', flush=True)"),
+            _py("import sys; sys.stdout.buffer.write('ğüşıöç'.encode()); sys.stdout.flush()"),
             FAST,
             on_text=seen.append,
             probe_factory=_factory([]),

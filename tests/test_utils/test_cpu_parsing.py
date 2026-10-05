@@ -8,7 +8,6 @@ answer from the kernel is *unknown*, never "not hybrid".
 
 from __future__ import annotations
 
-import subprocess
 import sys
 from types import SimpleNamespace
 
@@ -36,8 +35,10 @@ def _cpu(
 ) -> CpuDetailedInfo:
     monkeypatch.setattr(detect, "_cpu_detailed_cache", None)
     monkeypatch.setattr(detect, "core_split", lambda: split)
+    # Every process the detector starts goes through process_watch; patching
+    # `subprocess.run` here let the real CPU query run on a Windows runner.
     monkeypatch.setattr(
-        subprocess,
+        detect.process_watch,
         "run",
         lambda *_a, **_k: SimpleNamespace(returncode=0, stdout=stdout, stderr=""),
     )

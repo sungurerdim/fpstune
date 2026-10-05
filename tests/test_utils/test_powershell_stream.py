@@ -15,6 +15,7 @@ import time
 import pytest
 
 from fpstune.utils.powershell import _LineSplitter, run_powershell_stream
+from fpstune.utils.process_watch import StallPolicy
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "win32", reason="the PowerShell runner is Windows-only"
@@ -69,7 +70,6 @@ def test_output_arrives_while_the_command_is_still_running() -> None:
     ok, output = run_powershell_stream(
         'foreach ($i in 1..3) { Write-Output "step $i"; Start-Sleep -Milliseconds 700 }',
         lambda text, _replaces: seen.append((time.monotonic() - start, text)),
-        timeout=30,
     )
 
     assert ok is True
@@ -91,7 +91,6 @@ def test_a_redrawn_bar_collapses_into_one_line_of_output() -> None:
         'foreach ($p in 10,20,30) { [Console]::Out.Write("[ $p% ]`r") }; '
         "Write-Output 'The operation completed successfully.'",
         lambda text, replaces: seen.append((text, replaces)),
-        timeout=30,
     )
 
     assert ok is True
@@ -101,26 +100,26 @@ def test_a_redrawn_bar_collapses_into_one_line_of_output() -> None:
     assert output.splitlines() == ["[ 30% ]", "The operation completed successfully."]
 
 
-def test_the_timeout_is_honoured() -> None:
+def test_a_stall_ends_the_run_and_says_so() -> None:
+    """One line, then silence: stuck after the stall window, never cut while working."""
     start = time.monotonic()
 
     ok, output = run_powershell_stream(
         "Write-Output 'working'; Start-Sleep -Seconds 30",
         lambda _text, _replaces: None,
-        timeout=3,
+        StallPolicy("contract", stall_s=3.0, sample_s=0.5),
     )
 
     elapsed = time.monotonic() - start
     assert ok is False
-    assert "timed out" in output
-    assert elapsed < 15, f"returned after {elapsed:.1f}s for a 3 s timeout"
+    assert "no progress for 3 s" in output
+    assert elapsed < 15, f"returned after {elapsed:.1f}s for a 3 s stall window"
 
 
 def test_a_failing_command_reports_its_output_as_the_error() -> None:
     ok, output = run_powershell_stream(
         "Write-Output 'nothing to do here'; exit 3",
         lambda _text, _replaces: None,
-        timeout=30,
     )
 
     assert ok is False

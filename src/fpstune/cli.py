@@ -7,7 +7,7 @@ import logging
 import socket
 import sys
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, TypedDict
 
 import click
 
@@ -463,6 +463,26 @@ def _pump_output(name: str, proc: subprocess.Popen[bytes]) -> None:
         ui.relay(name, raw.decode("utf-8", errors="replace").rstrip("\r\n"))
 
 
+class _GroupOptions(TypedDict, total=False):
+    creationflags: int
+    start_new_session: bool
+
+
+def _own_process_group() -> _GroupOptions:
+    """Popen options that give a dev-server child a process group of its own.
+
+    The shutdown stops each child on its own: ``terminate`` on Windows, a
+    ``killpg`` of the child's group elsewhere. Off Windows a child started
+    without a session of its own shares fpstune's group, so that signal would
+    land on fpstune and on the terminal job it was started from.
+    """
+    import subprocess
+
+    if sys.platform == "win32":
+        return {"creationflags": subprocess.CREATE_NEW_PROCESS_GROUP}
+    return {"start_new_session": True}
+
+
 def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: bool) -> None:
     """Run the API and the Vite dev server as children, so both reload on edit."""
     import os
@@ -505,7 +525,7 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             env=child_env,
-            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+            **_own_process_group(),
         )
         processes.append(("API", api_process))
         threading.Thread(target=_pump_output, args=("API", api_process), daemon=True).start()
@@ -543,7 +563,7 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 env=child_env,
-                creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == "win32" else 0,
+                **_own_process_group(),
             )
             processes.append(("Frontend", frontend_process))
             threading.Thread(

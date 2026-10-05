@@ -27,6 +27,7 @@ nothing in that loop ever stopped.
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -139,15 +140,34 @@ class TestPackagedServeSpawnsNothing:
         assert cli._lock_sock is None
 
 
+@pytest.fixture
+def signalled(monkeypatch: pytest.MonkeyPatch) -> list[tuple[int, int]]:
+    """Process-group signals the shutdown sent, instead of sending them.
+
+    Off Windows the shutdown ends each child with ``os.killpg``; the children
+    here are fakes, so a real signal would land on whatever group the fake pid
+    happened to name. Recorded rather than sent, on every host.
+    """
+    sent: list[tuple[int, int]] = []
+    monkeypatch.setattr(os, "getpgid", lambda pid: pid, raising=False)
+    monkeypatch.setattr(os, "killpg", lambda pgid, sig: sent.append((pgid, sig)), raising=False)
+    return sent
+
+
+@pytest.mark.usefixtures("signalled")
 class TestTheSourcePathStillSpawns:
     """Fixing the packaged path must not take the dev workflow with it."""
 
     def test_it_starts_the_api_as_a_child(self) -> None:
         started: list[list[str]] = []
+        options: list[dict] = []
 
         class _Alive:
-            def __init__(self, argv, **_kwargs):
+            pid = 424242
+
+            def __init__(self, argv, **kwargs):
                 started.append(argv)
+                options.append(kwargs)
 
             def poll(self):
                 return None
@@ -175,8 +195,16 @@ class TestTheSourcePathStillSpawns:
 
         assert started, "the source path stopped starting the API"
         assert "uvicorn" in started[0]
+        # Off Windows the shutdown signals the child's process group. Without a
+        # session of its own the child shares fpstune's group, and that signal
+        # lands on fpstune and on the terminal job it was started from.
+        if sys.platform == "win32":
+            assert options[0].get("creationflags") == subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            assert options[0].get("start_new_session") is True
 
 
+@pytest.mark.usefixtures("signalled")
 class TestADeadChildIsReportedOnce:
     def test_it_stops_instead_of_repeating_the_warning(self, capsys) -> None:
         """The original loop printed "API process exited" every second forever.
@@ -186,6 +214,8 @@ class TestADeadChildIsReportedOnce:
         """
 
         class _Dead:
+            pid = 424243
+
             def __init__(self, *_a, **_k):
                 pass
 

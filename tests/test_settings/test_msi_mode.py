@@ -26,7 +26,4 @@ def test_a_permission_refusal_is_named_by_exception_type_not_message() -> None:
     assert (
         "catch [System.UnauthorizedAccessException], [System.Security.SecurityException]" in script
     )
-    assert (
-        "'error:Windows refused the write: this device key accepts changes from SYSTEM only'"
-        in script
-    )
+    assert "'error:Windows refused the registry write (access denied)'" in script

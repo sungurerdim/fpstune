@@ -301,7 +301,7 @@ class DetectionEngine:
             # 3. Excludes it from scope selections
             if is_absent_reading(value):
                 is_applicable = False
-                applicable_reason = absent_reason(setting)
+                applicable_reason = absent_reason(setting, value)
                 value = None  # Clear the value since it's not applicable
 
             # Compute is_optimized: current value matches recommended.

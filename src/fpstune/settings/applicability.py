@@ -31,6 +31,11 @@ ABSENT_READINGS: frozenset[str] = frozenset(
         "not_found",  # the service or key does not exist
         "not_available",  # the subsystem cannot answer on this machine
         "not_installed",  # the software the setting configures is not installed
+        # The hardware's own default already is the tuned state (a NIC whose
+        # INF sets MSISupported=1, a driver whose default buffer count is its
+        # maximum): "default" and "tuned" are one state, so there is nothing
+        # to apply and no reset that could ever read back as "default".
+        "already_at_hardware_default",
     }
 )
 
@@ -40,6 +45,7 @@ NOT_SUPPORTED = "not_supported"
 NOT_FOUND = "not_found"
 NOT_AVAILABLE = "not_available"
 NOT_INSTALLED = "not_installed"
+ALREADY_AT_HARDWARE_DEFAULT = "already_at_hardware_default"
 
 
 def is_absent_reading(value: Any) -> bool:
@@ -53,8 +59,10 @@ def is_absent_reading(value: Any) -> bool:
     return isinstance(value, str) and value.strip().lower() in ABSENT_READINGS
 
 
-def absent_reason(setting: SettingExecutor | None = None) -> str:
+def absent_reason(setting: SettingExecutor | None = None, reading: object = None) -> str:
     """The user-facing explanation that accompanies an absent reading."""
+    if isinstance(reading, str) and reading.strip().lower() == ALREADY_AT_HARDWARE_DEFAULT:
+        return "The driver already ships this tuned: nothing to change on this device"
     if setting is not None and setting.is_service:
         return "Service not installed on this system"
     return "Feature not available on this system"

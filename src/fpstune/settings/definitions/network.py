@@ -2562,7 +2562,11 @@ def create_receive_buffers_setting(interface_index: int, display_name: str) -> S
             "if (-not $prop) { 'not_supported' } else { "
             "$cur = [int](@($prop.RegistryValue)[0]); "
             "$max = [int]$prop.NumericParameterMaxValue; "
-            "if ($max -gt 0 -and $cur -ge $max) { 'maximum' } else { 'default' } }"
+            # A driver whose own default is its maximum has nothing to tune:
+            # reset writes the maximum and could never read back as 'default'.
+            "if ($max -gt 0 -and [int]$prop.DefaultRegistryValue -ge $max) "
+            "{ 'already_at_hardware_default' } "
+            "elseif ($max -gt 0 -and $cur -ge $max) { 'maximum' } else { 'default' } }"
         ),
         # No batch keyword on purpose: the snapshot returns the raw count, and
         # "is this the maximum" cannot be answered without the adapter's own
@@ -3091,9 +3095,16 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
             "try { "
             "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
             + _MSI_KEY
-            + "$v = (Get-ItemProperty -Path $rp -Name 'MSISupported' "
-            "-ErrorAction SilentlyContinue).MSISupported; "
-            "if ($v -eq 1) { 'enabled' } else { 'default' } "
+            + "$p = Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue; "
+            # The driver's stock value: what fpstune recorded before its first
+            # write (-1 = absent), else what is there now. Many NIC INF files
+            # set MSISupported=1 themselves; on those "default" is "enabled",
+            # so there is nothing to tune and reset can never read 'default'.
+            "$stock = if ($null -ne $p.fpstuneOriginalMSISupported) "
+            "{ [int]$p.fpstuneOriginalMSISupported } elseif ($null -ne $p.MSISupported) "
+            "{ [int]$p.MSISupported } else { -1 }; "
+            "if ($stock -eq 1) { 'already_at_hardware_default' } "
+            "elseif ($p.MSISupported -eq 1) { 'enabled' } else { 'default' } "
             "} catch { 'not_supported' }"
         ),
         detect_args={"ifindex": interface_index},

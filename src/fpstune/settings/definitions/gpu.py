@@ -1371,7 +1371,7 @@ GPU_MSI_MODE = SettingExecutor(
         # Named by exception type, never by message text: the message is in the
         # system language.
         "} catch [System.UnauthorizedAccessException], [System.Security.SecurityException] { "
-        "'error:Windows refused the write: this device key accepts changes from SYSTEM only' "
+        "'error:Windows refused the registry write (access denied)' "
         "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},

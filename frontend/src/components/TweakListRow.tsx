@@ -57,7 +57,10 @@ export function TweakListRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           {categoryLabel && (
-            <span className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded shrink-0">
+            <span
+              className="text-xs px-1.5 py-0.5 bg-primary/10 text-primary rounded max-w-full truncate"
+              title={categoryLabel}
+            >
               {categoryLabel}
             </span>
           )}
@@ -67,7 +70,7 @@ export function TweakListRow({
           <RiskWarningBadge setting={setting} />
           <SettingInfoTooltip setting={setting} />
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5">
+        <p className="text-xs text-muted-foreground mt-0.5 wrap-break-word">
           {localizedDescription(setting)}
         </p>
         <div className="flex items-center gap-2 flex-wrap mt-1">

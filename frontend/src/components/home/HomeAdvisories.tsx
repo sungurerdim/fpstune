@@ -42,12 +42,12 @@ export function ActionableAdvisories({ settings: actionableAdvisories }: { setti
               className="p-3 rounded-md border border-warning/30 border-l-4 border-l-warning bg-warning/6"
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">
+                <span className="font-medium text-sm min-w-0 wrap-break-word">
                   {localizedName(s)}
                 </span>
                 <SettingInfoTooltip setting={s} />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5 wrap-break-word">
                 {localizedDescription(s)}
               </p>
               {/* The current state — the measured numbers when the detector
@@ -61,7 +61,7 @@ export function ActionableAdvisories({ settings: actionableAdvisories }: { setti
                   A measured finding carries its own, sized to the numbers
                   (the cable class the ceiling needs); otherwise the static one. */}
               {(describeFinding(s)?.advice || localizedEffect(s)) && (
-                <p className="text-xs mt-1.5" data-testid="advisory-advice">
+                <p className="text-xs mt-1.5 wrap-break-word" data-testid="advisory-advice">
                   <span className="font-semibold text-warning">
                     {t("home.whatToDo")}
                   </span>{" "}
@@ -110,12 +110,12 @@ export function UnreadAdvisories({
               className="p-3 rounded-md border border-border border-l-2 border-l-muted-foreground/40"
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">
+                <span className="font-medium text-sm min-w-0 wrap-break-word">
                   {localizedName(s)}
                 </span>
                 <SettingInfoTooltip setting={s} />
               </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5 wrap-break-word">
                 {s.detectionError
                   ? t("home.advisoryUnreadReason", {
                       reason: s.detectionError,
@@ -159,7 +159,7 @@ export function ClearAdvisories({ settings: clearAdvisories }: { settings: Setti
               className="p-3 rounded-md border border-border border-l-2 border-l-success/60"
             >
               <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-medium text-sm">
+                <span className="font-medium text-sm min-w-0 wrap-break-word">
                   {localizedName(s)}
                 </span>
                 <SettingInfoTooltip setting={s} />

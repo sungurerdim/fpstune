@@ -54,7 +54,9 @@ export function SettingInfoTooltip({
         >
           {/* Title and badges */}
           <div className="flex items-start justify-between gap-2">
-            <p className="font-medium text-sm">{localizedName(setting)}</p>
+            <p className="font-medium text-sm min-w-0 wrap-break-word">
+              {localizedName(setting)}
+            </p>
             <div className="flex gap-1">
               <span
                 className={cn(

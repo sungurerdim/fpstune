@@ -348,7 +348,9 @@ export function TweakSetting({
           {contextLabel && (
             <span className="flex items-center gap-1 min-w-0 text-xs text-muted-foreground/70">
               {contextIcon}
-              <span className="truncate">{contextLabel}</span>
+              <span className="truncate" title={contextLabel}>
+                {contextLabel}
+              </span>
             </span>
           )}
           {/* What the row improves — a label, not a filter: one way to narrow
@@ -407,7 +409,7 @@ export function TweakSetting({
 
       {/* Row 3: Last error banner */}
       {setting.lastError && (
-        <p className="mt-1 ml-7 text-xs text-destructive leading-tight">
+        <p className="mt-1 ml-7 text-xs text-destructive leading-tight wrap-break-word">
           {setting.lastError}
         </p>
       )}

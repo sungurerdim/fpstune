@@ -201,10 +201,12 @@ section [flex-col]
   div#tweak-group-rows [grid-cols-1]
     div#tweak-list-row
       div [flex-wrap]
+        span [max-w-full]
       div [flex-wrap]
         span#setting-value-state
     div#tweak-list-row
       div [flex-wrap]
+        span [max-w-full]
       div [flex-wrap]
         span#setting-value-state
 section [flex-col]
@@ -300,10 +302,12 @@ div [grid-cols-[2fr_1fr]]
     div#tweak-group-rows [grid-cols-2]
       div#tweak-list-row
         div [flex-wrap]
+          span [max-w-full]
         div [flex-wrap]
           span#setting-value-state
       div#tweak-list-row
         div [flex-wrap]
+          span [max-w-full]
         div [flex-wrap]
           span#setting-value-state
   section [flex-col]

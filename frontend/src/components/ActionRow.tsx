@@ -256,7 +256,7 @@ function Outcome({
     return (
       <div className="flex items-start gap-1.5 text-xs text-destructive">
         <XCircle className="w-3 h-3 mt-0.5 shrink-0" aria-hidden="true" />
-        <span className="wrap-break-word">
+        <span className="min-w-0 wrap-break-word">
           {t("cleanup.failed")}
           {error ? `: ${error}` : ""}
         </span>

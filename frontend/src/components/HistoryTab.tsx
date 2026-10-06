@@ -243,11 +243,11 @@ function HistoryRow({
         <div className="text-sm font-medium truncate" title={name}>
           {name}
         </div>
-        <div className="text-xs text-muted-foreground">
+        <div className="text-xs text-muted-foreground wrap-break-word">
           {actionLabel} · {t("history.value", { value: String(row.value) })} · {when}
         </div>
         {status === "failed" && statusError && (
-          <div role="status" className="text-xs text-destructive">
+          <div role="status" className="text-xs text-destructive wrap-break-word">
             {t("row.statusFailedBecause", { reason: statusError })}
           </div>
         )}

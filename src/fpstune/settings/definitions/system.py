@@ -1926,13 +1926,32 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
     # that a warning would be wrong on exactly the machine it was read from. The
     # temperature still travels, as the finding's context, labelled as the zone
     # reading it is.
+    #
+    # Absence is proven, never inferred from an empty variable. Each read runs
+    # -ErrorAction Stop and its failure is kept, not erased: a source counts as
+    # "proven" when the query ran (an empty answer without an error means no zone) or
+    # when the provider itself answered InvalidClass / NotSupported / InvalidNamespace
+    # (the class is not on this machine). Anything else — access denied to an
+    # unelevated caller, a broken counter provider — proves nothing, so when neither
+    # source gave a reading and one is unproven the command throws, and the row reads
+    # "could not read" with the reason instead of "not_available".
     detect_command=(
-        "$acpi = Get-CimInstance -Namespace root/wmi "
-        "-ClassName MSAcpi_ThermalZoneTemperature -EA SilentlyContinue "
+        "$acpi = $null; $acpiProven = $false; $acpiWhy = ''; "
+        "try { $acpi = Get-CimInstance -Namespace root/wmi "
+        "-ClassName MSAcpi_ThermalZoneTemperature -ErrorAction Stop "
         "| Sort-Object CurrentTemperature -Descending | Select-Object -First 1; "
-        "$perf = Get-CimInstance "
-        "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA SilentlyContinue "
+        "$acpiProven = $true } "
+        "catch { $acpiWhy = $_.Exception.Message; "
+        "if ((\"$($_.Exception.NativeErrorCode)\") -in 'InvalidClass', 'NotSupported', 'InvalidNamespace') "
+        "{ $acpiProven = $true } } "
+        "$perf = $null; $perfProven = $false; $perfWhy = ''; "
+        "try { $perf = Get-CimInstance "
+        "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction Stop "
         "| Sort-Object HighPrecisionTemperature -Descending | Select-Object -First 1; "
+        "$perfProven = $true } "
+        "catch { $perfWhy = $_.Exception.Message; "
+        "if ((\"$($_.Exception.NativeErrorCode)\") -in 'InvalidClass', 'NotSupported', 'InvalidNamespace') "
+        "{ $perfProven = $true } } "
         "$celsius = $null; $zone = ''; "
         # The zone label names whichever source supplied the temperature. It used
         # to prefer the counter's name whenever the counter existed, so an
@@ -1945,7 +1964,10 @@ SYSTEM_THERMAL_CONDITION = SettingExecutor(
         "  $zone = $perf.Name } "
         "$throttling = $null; "
         "if ($perf) { $throttling = ($perf.ThrottleReasons -ne 0) -or ($perf.PercentPassiveLimit -lt 100) } "
-        "if ($null -eq $celsius -and $null -eq $throttling) { 'not_available' } else { "
+        "if ($null -eq $celsius -and $null -eq $throttling) { "
+        "  if ($acpiProven -and $perfProven) { 'not_available' } "
+        "  else { throw ('could not read the thermal state. ACPI: ' + $acpiWhy + ' Counter: ' + $perfWhy) } "
+        "} else { "
         "  Write-Output ('FPSTUNE_FINDING: ' + (@{kind='thermal'; celsius=$celsius; "
         "throttling=$throttling; zone=$zone} | ConvertTo-Json -Compress)); "
         "  if ($throttling -eq $true) { 'throttling' } else { 'not_throttling' } "

@@ -213,24 +213,7 @@ _SILENT_RAISING_READ = re.compile(
 
 # Snippet (the matched read, whitespace as written) -> why silencing its error is
 # right there. An entry needs a measured reason, in words.
-_SILENT_READ_ALLOWED: dict[str, str] = {
-    (
-        "Get-CimInstance -Namespace root/wmi "
-        "-ClassName MSAcpi_ThermalZoneTemperature -EA SilentlyContinue"
-    ): (
-        "answers only to an elevated caller (measured: zero zones unelevated, two "
-        "elevated); the unelevated failure is the expected case and the "
-        "performance counter beside it is the fallback"
-    ),
-    (
-        "Get-CimInstance "
-        "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA SilentlyContinue"
-    ): (
-        "the fallback to the read above: either source standing keeps the "
-        "advisory answering. Debt, not a verdict: when BOTH fail the row still "
-        "reads not_available instead of unknown (issue #104 follow-up)"
-    ),
-}
+_SILENT_READ_ALLOWED: dict[str, str] = {}
 
 
 def failed_reads_as_absent(source: str, allowed: dict[str, str] | None = None) -> list[str]:

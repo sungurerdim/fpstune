@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import re
 import sys
+from typing import Any
 
 import pytest
 from tests.test_windows_contract.conftest import run_shipped_script
@@ -32,7 +33,7 @@ SCRIPT = SYSTEM_THERMAL_CONDITION.detect_command
 
 # Both CIM classes the script asks for, shadowed by a function of the same name
 # so the shipped command runs unmodified against a described machine.
-_HARNESS = """
+_HARNESS = r"""
 $ErrorActionPreference = 'Stop'
 $fake = Get-Content -LiteralPath $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
 
@@ -41,6 +42,24 @@ function Get-CimInstance {
     $wanted = ''
     for ($i = 0; $i -lt $Ignored.Count; $i++) {
         if ("$($Ignored[$i])" -eq '-ClassName') { $wanted = "$($Ignored[$i + 1])" }
+    }
+    # How a source fails: 'unreadable' is any refusal (access denied, a broken provider);
+    # 'class_absent' is the real cmdlet answering a class that does not exist, so the
+    # exception is the genuine InvalidClass one and not a stand-in.
+    # A failing cmdlet honours the caller's -ErrorAction, as the real one does: silenced
+    # it answers nothing, which is how a failed read became "absent".
+    # (A function with a [Parameter] attribute is advanced: the common -ErrorAction/-EA
+    # binds to it and lands in $ErrorActionPreference.)
+    $ea = "$ErrorActionPreference"
+    $failure = $null
+    if ($wanted -eq 'MSAcpi_ThermalZoneTemperature') { $failure = $fake.acpi_failure }
+    if ($wanted -eq 'Win32_PerfFormattedData_Counters_ThermalZoneInformation') { $failure = $fake.perf_failure }
+    if ($failure -eq 'unreadable') {
+        if ($ea -in 'SilentlyContinue', 'Ignore') { return $null }
+        throw 'simulated read failure'
+    }
+    if ($failure -eq 'class_absent') {
+        return CimCmdlets\Get-CimInstance -ClassName Win32_NoSuchClass_Fpstune -ErrorAction $ea
     }
     if ($wanted -eq 'MSAcpi_ThermalZoneTemperature') {
         if ($null -eq $fake.acpi) { return $null }
@@ -65,12 +84,27 @@ function Get-CimInstance {
 
 
 def _detect(
-    *, acpi: dict | None = None, perf: dict | None = None
-) -> tuple[str | None, dict | None]:
+    *, acpi: dict[str, Any] | None = None, perf: dict[str, Any] | None = None
+) -> tuple[str | None, dict[str, Any] | None]:
     """Run the shipped command and split it the way the executor does."""
     output = run_shipped_script(_HARNESS + SCRIPT, {"acpi": acpi, "perf": perf})
     lines, finding = _split_detect_output(SYSTEM_THERMAL_CONDITION.id, output)
     return (lines[-1] if lines else None), finding
+
+
+def _detect_raises(*, acpi_failure: str | None = None, perf_failure: str | None = None) -> str:
+    """Run the shipped command against failing sources; return what it threw.
+
+    The shipped command ends with an uncaught throw when it cannot read, which the
+    executor reads as a failed detect. The harness catches it only to hand the
+    message back; ``THREW:`` never appears when the command answered.
+    """
+    script = _HARNESS + "try { " + SCRIPT + " } catch { 'THREW: ' + $_.Exception.Message }"
+    output = run_shipped_script(
+        script,
+        {"acpi": None, "perf": None, "acpi_failure": acpi_failure, "perf_failure": perf_failure},
+    )
+    return output.strip().splitlines()[-1]
 
 
 # The development laptop's own numbers, read on 2026-09-02: no ACPI WMI class,
@@ -150,6 +184,48 @@ class TestWhenNothingAnswers:
         value, finding = _detect(acpi=None, perf=None)
         assert value in ABSENT_READINGS
         assert finding is None
+
+    def test_both_classes_missing_is_proven_absence(self) -> None:
+        """The cmdlet itself says InvalidClass for both: that is "not on this machine"."""
+        from fpstune.settings.applicability import ABSENT_READINGS
+
+        answer = _detect_raises(acpi_failure="class_absent", perf_failure="class_absent")
+        assert answer in ABSENT_READINGS
+
+
+class TestWhenReadsFailTheRowSaysSo:
+    """A read that failed proves nothing about the machine (issue #104 follow-up).
+
+    Both CIM reads used to run ``-EA SilentlyContinue``: an access-denied ACPI read
+    plus a broken counter provider left both empty, and the empty pair read as
+    ``not_available`` — "this machine has no thermal zone" — instead of "could not
+    read". Absence is proven only by a read that ran and found nothing, or by the
+    provider answering that the class does not exist.
+    """
+
+    def test_both_sources_failing_throws_instead_of_reading_absent(self) -> None:
+        answer = _detect_raises(acpi_failure="unreadable", perf_failure="unreadable")
+        assert answer.startswith("THREW: could not read the thermal state")
+
+    def test_a_failed_counter_read_does_not_become_absence_beside_an_empty_acpi_read(self) -> None:
+        answer = _detect_raises(perf_failure="unreadable")
+        assert answer.startswith("THREW: ")
+
+    def test_a_refused_acpi_read_does_not_become_absence_beside_an_empty_counter_read(self) -> None:
+        """MSAcpi answers only elevated; unelevated and no zone in the counter is "could not read"."""
+        answer = _detect_raises(acpi_failure="unreadable")
+        assert answer.startswith("THREW: ")
+
+    def test_a_refused_acpi_read_still_lets_the_counter_answer(self) -> None:
+        """The normal unelevated case: ACPI refuses, the counter reads, the verdict stands."""
+        output = run_shipped_script(
+            _HARNESS + SCRIPT,
+            {"acpi": None, "perf": THIS_MACHINE_PERF, "acpi_failure": "unreadable"},
+        )
+        lines, finding = _split_detect_output(SYSTEM_THERMAL_CONDITION.id, output)
+        assert lines[-1] == "not_throttling"
+        assert finding is not None
+        assert finding["zone"] == THIS_MACHINE_PERF["Name"]
 
 
 class TestTheDefinitionItself:

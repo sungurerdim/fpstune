@@ -7,8 +7,13 @@ the primary IPv4 resolver, had shown the row as actionable. Three defects:
 1. detect and apply walked different resolver sets (primary IPv4 vs every v4+v6);
 2. the template came from fpstune's own table only, never from Windows' own
    ``Get-DnsClientDohServerAddress``;
-3. "no configured resolver has a template" was an apply failure, not a capability:
-   it belongs in detection as an ABSENT_READINGS value (not applicable).
+3. "no configured resolver has a template" was an apply failure the row gave no
+   warning of. First moved into detection as an ABSENT_READINGS value, which hid the
+   row from "apply all" (it takes only applicable, suboptimal rows) so DoH surfaced
+   after ``network:dns_security`` as a second click. DoH is always reachable -- that
+   setting installs templated resolvers and the bulk plan runs it first -- so the
+   row reads ``disabled`` and its apply names the prerequisite. ``not_supported`` is
+   left for a machine with no physical adapter at all.
 
 The scripts are PowerShell text, so these tests run the real text under the real
 runner (`run_powershell`) with the network cmdlets replaced by functions (a
@@ -19,13 +24,14 @@ irrelevant. Windows-only for that reason: there is no PowerShell to run elsewher
 from __future__ import annotations
 
 import json
+import re
 import sys
 
 import pytest
 
 from fpstune.settings.applicability import is_absent_reading
 from fpstune.settings.definitions import network as network_module
-from fpstune.settings.definitions.network import DNS_OVER_HTTPS
+from fpstune.settings.definitions.network import DNS_OVER_HTTPS, DNS_SECURITY
 from fpstune.utils.powershell import run_powershell
 
 GUID = "{11111111-2222-3333-4444-555555555555}"
@@ -149,8 +155,18 @@ class TestOneQuestionOneResolverSet:
 
 
 class TestDetect:
-    def test_no_resolver_with_a_template_is_not_supported_and_absent(self) -> None:
+    def test_no_resolver_with_a_template_reads_disabled_not_absent(self) -> None:
+        # Issue #104: an absent reading hid the row from "apply all", so DoH came
+        # back as a new pending item after dns_security had run. DoH is reachable
+        # (dns_security installs templated resolvers), so the row stays actionable.
         ok, result, _ = _run(DNS_OVER_HTTPS.detect_command, servers=[ROUTER_V4, ROUTER_V6])
+        assert ok
+        assert result == "disabled"
+        assert not is_absent_reading(result)
+
+    def test_no_physical_adapter_at_all_is_not_supported_and_absent(self) -> None:
+        no_adapter = "function Get-NetAdapter { [CmdletBinding()] param() }; "
+        ok, result, _ = _run(no_adapter + DNS_OVER_HTTPS.detect_command, servers=[ROUTER_V4])
         assert ok
         assert result == "not_supported"
         assert is_absent_reading(result)
@@ -198,11 +214,26 @@ class TestDetect:
 
 
 class TestApply:
-    def test_enabling_with_only_router_dns_reports_why_not(self) -> None:
+    def test_enabling_with_only_router_dns_names_the_prerequisite_by_its_label(self) -> None:
         ok, result, calls = _run(_apply("enabled"), servers=[ROUTER_V4, ROUTER_V6])
         assert ok
-        assert result == "error:no DoH template known for the configured resolvers"
+        assert result == (
+            "error:No configured DNS server has a known encrypted endpoint; apply "
+            f"{DNS_SECURITY.display_name} first."
+        )
         assert calls == []
+
+    def test_disabling_with_only_router_dns_has_nothing_to_undo_and_succeeds(self) -> None:
+        ok, result, calls = _run(_apply("disabled"), servers=[ROUTER_V4, ROUTER_V6])
+        assert ok
+        assert result == "ok"
+        assert calls == []
+
+    def test_enabling_with_no_physical_adapter_says_so(self) -> None:
+        no_adapter = "function Get-NetAdapter { [CmdletBinding()] param() }; "
+        ok, result, _ = _run(no_adapter + _apply("enabled"), servers=[ROUTER_V4])
+        assert ok
+        assert result == "error:no applicable adapter found"
 
     def test_a_resolver_windows_already_knows_is_flagged_without_re_registering_it(self) -> None:
         ok, result, calls = _run(
@@ -244,18 +275,53 @@ class TestApply:
 
     def test_a_detect_that_says_applicable_is_one_apply_can_act_on(self) -> None:
         # The pair that shipped broken: the row was shown as actionable, then
-        # failed. Whatever detect answers "not applicable" for, apply refuses with
-        # the matching reason; whatever it answers an applicable value for, apply
-        # acts on.
-        for servers, windows in (
-            ([ROUTER_V4], {}),
-            ([ROUTER_V4, WINDOWS_ONLY], {WINDOWS_ONLY: WINDOWS_ONLY_TEMPLATE}),
-            ([QUAD9_V4, QUAD9_V6], {}),
+        # failed. An applicable value with a templated resolver in place is one
+        # apply acts on; without one the row is still applicable (dns_security
+        # makes it reachable) and apply refuses with the prerequisite's name.
+        for servers, windows, reachable in (
+            ([ROUTER_V4], {}, False),
+            ([ROUTER_V4, WINDOWS_ONLY], {WINDOWS_ONLY: WINDOWS_ONLY_TEMPLATE}, True),
+            ([QUAD9_V4, QUAD9_V6], {}, True),
         ):
             _, detected, _ = _run(DNS_OVER_HTTPS.detect_command, servers=servers, windows=windows)
             _, applied, calls = _run(_apply("enabled"), servers=servers, windows=windows)
-            if is_absent_reading(detected):
-                assert applied.startswith("error:"), (servers, applied)
-            else:
+            assert not is_absent_reading(detected), (servers, detected)
+            if reachable:
                 assert applied == "ok", (servers, applied)
                 assert calls, servers
+            else:
+                assert applied.startswith("error:"), (servers, applied)
+                assert DNS_SECURITY.display_name in applied, (servers, applied)
+
+
+class TestDohIsReachableThroughDnsSecurity:
+    """The claim that makes ``disabled`` honest on a machine with ISP DNS: applying
+    ``network:dns_security`` leaves a templated resolver on every adapter. Were a
+    choice ever to write an address ``_DOH_TEMPLATES`` lacks, the row would be
+    shown as actionable and still fail after dns_security ran."""
+
+    @staticmethod
+    def _written_by(choice: str) -> set[str]:
+        branch = re.search(
+            rf"'%value%' -eq '{choice}'\) \{{ (.*?)\$changed\+\+", DNS_SECURITY.apply_command
+        )
+        assert branch, f"apply_command has no branch for {choice!r}"
+        return set(re.findall(r"'([0-9a-f.:]+)'", branch.group(1)))
+
+    def test_every_non_default_choice_writes_resolvers_that_all_have_a_template(self) -> None:
+        choices = [c for c in DNS_SECURITY.choices if c != DNS_SECURITY.default_value]
+        assert DNS_SECURITY.recommended_value in choices
+        for choice in choices:
+            written = self._written_by(choice)
+            assert len(written) == 4, (choice, written)  # an IPv4 pair and an IPv6 pair
+            missing = written - set(network_module._DOH_TEMPLATES)
+            assert not missing, f"{choice} writes {sorted(missing)} with no DoH template"
+
+    def test_the_default_choice_writes_no_resolver_so_there_is_nothing_to_template(self) -> None:
+        assert DNS_SECURITY.default_value not in {
+            c for c in DNS_SECURITY.choices if f"'%value%' -eq '{c}'" in DNS_SECURITY.apply_command
+        }
+
+    def test_dns_over_https_runs_after_dns_security_on_the_same_resource(self) -> None:
+        assert "network:dns_security" in DNS_OVER_HTTPS.apply_after
+        assert DNS_OVER_HTTPS.resource == DNS_SECURITY.resource

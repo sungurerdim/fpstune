@@ -951,6 +951,14 @@ _DOH_RESOLVER_SCAN_PS = (
     "} }; "
 )
 
+# The apply failure when no configured resolver has a template. It names the
+# prerequisite by the row's own display name, read from the definition so a rename
+# cannot leave this text pointing at a label nobody sees.
+_DOH_NEEDS_RESOLVER = (
+    "No configured DNS server has a known encrypted endpoint; apply "
+    f"{DNS_SECURITY.display_name.replace(chr(39), chr(39) * 2)} first."
+)
+
 DNS_OVER_HTTPS = SettingExecutor(
     id="network:dns_over_https",
     category=SettingCategory.NETWORK,
@@ -991,13 +999,18 @@ DNS_OVER_HTTPS = SettingExecutor(
     # known template must carry its flag. Windows' UI writes the flag for the
     # primary resolver only, so a UI-enabled setup reads `disabled` here and apply
     # completes it -- a secondary resolver without its flag is a plaintext path.
-    # No configured resolver has a known template (a router's own DNS): DoH cannot
-    # be applied, so the row is `not_supported` -> not applicable, instead of an
-    # apply that can only fail. It becomes applicable once dns_security has put a
-    # resolver with a template on the adapter. A failed read raises (detect fails,
-    # the row reads "unknown"), it is never `disabled` or `not_supported`.
+    # No configured resolver has a known template (a router's or ISP's own DNS): the
+    # row reads `disabled` -- applicable and suboptimal -- because DoH is always
+    # reachable: network:dns_security installs templated resolvers and the bulk plan
+    # runs it first (apply_after). A `not_supported` here hid the row from "apply
+    # all" (it only takes applicable, suboptimal rows), so DoH surfaced afterwards as
+    # a new pending item needing a second click (issue #104). Applied on its own,
+    # without a templated resolver, it fails naming that prerequisite. `not_supported`
+    # stays for "no physical adapter at all". A failed read raises (detect fails, the
+    # row reads "unknown"), it is never `disabled` or `not_supported`.
     detect_command=(
-        "try { " + _DOH_RESOLVER_SCAN_PS + "if ($pairs.Count -eq 0) { 'not_supported' } else { "
+        "try { " + _DOH_RESOLVER_SCAN_PS + "if ($pairs.Count -eq 0) { "
+        "if ($adapters.Count -gt 0) { 'disabled' } else { 'not_supported' } } else { "
         "$result = 'enabled'; "
         "foreach ($pair in $pairs) { "
         "$flags = $null; "
@@ -1043,8 +1056,7 @@ DNS_OVER_HTTPS = SettingExecutor(
         # removed them), and detect reads that state as `disabled`;
         # only enabling can find "nothing to enable".
         "if ($done -gt 0 -or '%value%' -ne 'enabled') { 'ok' } "
-        "elseif ($adapters.Count -gt 0) { "
-        "'error:no DoH template known for the configured resolvers' } "
+        "elseif ($adapters.Count -gt 0) { " + f"'error:{_DOH_NEEDS_RESOLVER}' " + "} "
         "else { 'error:no applicable adapter found' } "
         "} catch { 'error:' + $_.Exception.Message }"
     ),

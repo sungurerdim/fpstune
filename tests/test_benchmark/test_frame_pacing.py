@@ -211,13 +211,21 @@ class TestTheWait:
         tighter one measures how busy the machine running the tests is — it went
         red at 2 ms on a loaded runner — and the failure this guards against is
         the wait returning a timer tick late, which is far larger than that.
-        """
-        deadline = time.perf_counter() + 0.02
-        _wait_until(deadline)
-        overshoot_ms = (time.perf_counter() - deadline) * 1000.0
 
-        assert overshoot_ms >= 0, "returned before the deadline"
-        assert overshoot_ms < 16.0, "returned a timer tick late"
+        The best of several waits is what is bounded. A wait that is *always* a
+        timer tick late is a defect in the wait and shows in every attempt; one
+        attempt landing 60 ms late under `-n 8` is the scheduler taking the core
+        away from the spin (measured: 59.6 ms in the full gate), which says
+        nothing about the wait. Taking the minimum separates the two.
+        """
+        overshoots_ms = []
+        for _ in range(5):
+            deadline = time.perf_counter() + 0.02
+            _wait_until(deadline)
+            overshoots_ms.append((time.perf_counter() - deadline) * 1000.0)
+
+        assert all(ms >= 0 for ms in overshoots_ms), "returned before the deadline"
+        assert min(overshoots_ms) < 16.0, "returned a timer tick late"
 
     def test_a_deadline_already_past_returns_immediately(self) -> None:
         """A late frame must not wait out a whole extra period to catch up."""

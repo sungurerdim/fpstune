@@ -43,7 +43,7 @@ this rule raises a setting as readily as it lowers one.
 | System | 62 | Services, privacy, telemetry, scheduler, memory compression, startup apps |
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
 | GPU | 28 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
-| Network | 25 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
+| Network | 26 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
 | Power | 29 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
 | Launchers | 9 | Steam, Battle.net overlay/GPU/shader settings |
 | Core | 4 | Priority separation and MMCSS, held at Windows' own values |

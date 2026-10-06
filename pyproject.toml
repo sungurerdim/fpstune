@@ -53,6 +53,7 @@ dev = [
     "nodejs-wheel>=24.19.0",
     "httpx2>=2.4.0",
     "pyinstaller>=6.0",
+    "pytest-xdist>=3.8.0",
 ]
 
 [project.scripts]

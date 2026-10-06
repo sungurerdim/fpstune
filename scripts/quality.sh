@@ -54,7 +54,11 @@ for block in backend frontend; do
   else
     code=$?
     status=1
-    echo "red: $block (exit=$code) — last lines:"
+    # The evidence outlives the run: a second run that comes back green
+    # replaces the first measurement instead of explaining it.
+    kept="${TMPDIR:-${TEMP:-/tmp}}/fpstune-quality-red-$block.log"
+    cp "${!log_var}" "$kept"
+    echo "red: $block (exit=$code) — full log: $kept — last lines:"
     tail -40 "${!log_var}"
   fi
 done

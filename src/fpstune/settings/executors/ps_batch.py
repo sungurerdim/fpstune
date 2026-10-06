@@ -82,31 +82,42 @@ def cache_once[T](cache: dict[str, Any], key: str, compute: Callable[[], T]) -> 
         return value
 
 
-def _fetch_services_snapshot() -> dict[str, dict[str, Any]]:
-    """Run Get-Service once and return {lowercase_name: {start_type}} map."""
+def _fetch_services_snapshot() -> dict[str, dict[str, Any]] | None:
+    """Run Get-Service once and return {lowercase_name: {start_type}} map.
+
+    ``None`` means the read failed (PowerShell failed, or answered something that
+    is not the service list). A failed read used to come back as an empty map, and
+    every service then read as ``not_found`` — "this service is not installed" —
+    on a machine that had them all.
+    """
     snapshot: dict[str, dict[str, Any]] = {}
     if sys.platform != "win32":
         return snapshot
 
     cmd = "Get-Service | Select-Object -Property Name,StartType | ConvertTo-Json -Compress -Depth 1"
     success, output = run_powershell(cmd)
-    if success and output and output.strip():
-        try:
-            data = json.loads(output.strip())
-            items: list[dict[str, Any]] = data if isinstance(data, list) else [data]
-            for item in items:
-                name = str(item.get("Name", ""))
-                if name:
-                    snapshot[name.lower()] = {"start_type": item.get("StartType")}
-        except (json.JSONDecodeError, AttributeError, TypeError) as exc:
-            logger.debug("prefetch_services JSON parse failed: %s", exc)
+    if not (success and output and output.strip()):
+        logger.debug("prefetch_services returned no data")
+        return None
+    try:
+        data = json.loads(output.strip())
+        items: list[dict[str, Any]] = data if isinstance(data, list) else [data]
+        for item in items:
+            name = str(item.get("Name", ""))
+            if name:
+                snapshot[name.lower()] = {"start_type": item.get("StartType")}
+    except (json.JSONDecodeError, AttributeError, TypeError) as exc:
+        logger.debug("prefetch_services JSON parse failed: %s", exc)
+        return None
 
     logger.debug("[scan] services_snapshot fetched: %d services", len(snapshot))
     return snapshot
 
 
-def prefetch_services() -> dict[str, dict[str, Any]]:
+def prefetch_services() -> dict[str, dict[str, Any]] | None:
     """Run Get-Service once and store snapshot in the active scan cache.
+
+    ``None`` is a failed read (see ``_fetch_services_snapshot``).
 
     Idempotent — subsequent calls within the same scan return the cached dict.
     Safe to call outside a scan context (result is not cached, just computed).
@@ -119,12 +130,17 @@ def prefetch_services() -> dict[str, dict[str, Any]]:
     return _fetch_services_snapshot()
 
 
-def _fetch_adapter_properties_snapshot() -> dict[str, Any]:
+def _fetch_adapter_properties_snapshot() -> dict[str, Any] | None:
     """Run Get-NetAdapterAdvancedProperty once for every adapter and keyword.
 
     Returns {"<ifindex>|<lowercase keyword>": raw_value}. Each per-adapter
     setting otherwise spawns its own PowerShell that reloads the NetAdapter
     module — 20 such settings dominated scan wall-clock.
+
+    ``None`` means the read failed. An empty map is a real answer (no adapter
+    publishes an advanced property) and reads as "not supported"; a failed read
+    used to come back as that same empty map, so every per-adapter setting was
+    reported not supported on a machine whose query had merely failed.
     """
     snapshot: dict[str, Any] = {}
     if sys.platform != "win32":
@@ -136,25 +152,31 @@ def _fetch_adapter_properties_snapshot() -> dict[str, Any]:
     # get_adapter_property answer "not_supported" for every keyword, so all
     # per-adapter network settings silently reported as unsupported and never
     # appeared as applicable in the UI. Resolve the index from the adapter Name.
+    #
+    # Errors are not silenced: a cmdlet that fails ends the script with an
+    # ``error:`` line, which is a failed read, never an empty one. The rows go
+    # through -InputObject so "no rows" is "[]" and not "no output at all".
     cmd = (
+        "try { "
         "$map = @{}; "
-        "Get-NetAdapter -ErrorAction SilentlyContinue | "
+        "Get-NetAdapter -ErrorAction Stop | "
         "ForEach-Object { $map[$_.Name] = $_.InterfaceIndex }; "
-        "Get-NetAdapterAdvancedProperty -AllProperties -ErrorAction SilentlyContinue | "
+        "$rows = @(Get-NetAdapterAdvancedProperty -AllProperties -ErrorAction Stop | "
         "Select-Object -Property @{Name='InterfaceIndex';Expression={$map[$_.Name]}},"
-        "RegistryKeyword,RegistryValue | "
-        "ConvertTo-Json -Compress -Depth 3"
+        "RegistryKeyword,RegistryValue); "
+        "ConvertTo-Json -InputObject $rows -Compress -Depth 3 "
+        "} catch { 'error:' + $_.Exception.Message }"
     )
     success, output = run_powershell(cmd)
     if not (success and output and output.strip()):
         logger.debug("prefetch_adapter_properties returned no data")
-        return snapshot
+        return None
 
     try:
         data = json.loads(output.strip())
     except (json.JSONDecodeError, TypeError) as exc:
-        logger.debug("prefetch_adapter_properties JSON parse failed: %s", exc)
-        return snapshot
+        logger.debug("prefetch_adapter_properties failed: %r (%s)", output.strip()[:200], exc)
+        return None
 
     items: list[dict[str, Any]] = data if isinstance(data, list) else [data]
     for item in items:
@@ -174,13 +196,10 @@ def _fetch_adapter_properties_snapshot() -> dict[str, Any]:
     return snapshot
 
 
-# Sentinel for "this scan resolved no PnP power state for that adapter".
-ADAPTER_POWER_MISSING = "Enabled"
-
 _ADAPTER_POWER_KEY = "adapter_pnp_power"
 
 
-def _fetch_adapter_power_snapshot() -> dict[str, str]:
+def _fetch_adapter_power_snapshot() -> dict[str, str] | None:
     """Read the PnP power-management state of every adapter in one call.
 
     ``power_management`` resolves an adapter to its driver key and reads
@@ -189,38 +208,53 @@ def _fetch_adapter_power_snapshot() -> dict[str, str]:
 
     PnPCapabilities lives in the adapter's driver key (Control\\Class\\{guid}\\NNNN,
     reached from its PnP device id): bits 0x18 set = "allow the computer to turn
-    this device off" cleared; anything else (including absent) = still allowed.
+    this device off" cleared; anything else = still allowed. A readable key with
+    no PnPCapabilities value is a real answer ("Enabled", the Windows stock
+    state). An adapter whose driver key could not be resolved or read gets **no
+    entry**: it is unknown, never "Enabled". The script used to seed
+    ``$state = 'Enabled'`` and swallow every error, so a read during the adapter
+    restart reported the default for a NIC that had just been set to Disabled.
+
+    ``None`` means the whole read failed. A restart still running is waited for
+    first (``adapter_restart.wait_for_restarts``) so the read does not start in
+    the middle of one.
     """
     if sys.platform != "win32":
         return {}
 
+    from fpstune.settings.executors.adapter_restart import wait_for_restarts
+
+    if not wait_for_restarts():
+        logger.warning("an adapter restart is still running; reading PnP power state anyway")
+
     cmd = (
         "$out = @{}; "
-        "Get-NetAdapter -EA SilentlyContinue | ForEach-Object { "
-        "$state = 'Enabled'; "
+        "Get-NetAdapter -ErrorAction Stop | ForEach-Object { "
+        "try { "
         "$drv = (Get-PnpDeviceProperty -InstanceId $_.PnPDeviceID "
-        "-KeyName 'DEVPKEY_Device_Driver' -EA SilentlyContinue).Data; "
-        "if ($drv) { "
+        "-KeyName 'DEVPKEY_Device_Driver' -ErrorAction Stop).Data; "
+        "if (-not $drv) { throw 'no driver key' }; "
         '$k = "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\$drv"; '
-        "$v = [int](Get-ItemProperty -Path $k -Name 'PnPCapabilities' -EA SilentlyContinue).PnPCapabilities; "
-        "if (($v -band 0x18) -eq 0x18) { $state = 'Disabled' } }; "
-        "$out[[string]$_.InterfaceIndex] = $state }; "
+        "$v = [int](Get-Item -LiteralPath $k -ErrorAction Stop).GetValue('PnPCapabilities'); "
+        "$out[[string]$_.InterfaceIndex] = "
+        "if (($v -band 0x18) -eq 0x18) { 'Disabled' } else { 'Enabled' } "
+        "} catch { } }; "
         "$out | ConvertTo-Json -Compress"
     )
     success, output = run_powershell(cmd, component="ps_batch")
     if not (success and output and output.strip()):
-        return {}
+        return None
 
     try:
         data = json.loads(output.strip())
     except (json.JSONDecodeError, TypeError):
-        return {}
+        return None
     if not isinstance(data, dict):
-        return {}
+        return None
     return {str(k): str(v) for k, v in data.items()}
 
 
-def prefetch_adapter_power() -> dict[str, str]:
+def prefetch_adapter_power() -> dict[str, str] | None:
     """Populate the scan cache with every adapter's PnP power state."""
     cache = _get_cache()
     if cache is not None:
@@ -228,13 +262,15 @@ def prefetch_adapter_power() -> dict[str, str]:
     return _fetch_adapter_power_snapshot()
 
 
-def get_adapter_power_state(ifindex: Any) -> str:
-    """Return one adapter's PnP power state from the per-scan snapshot."""
+def get_adapter_power_state(ifindex: Any) -> str | None:
+    """Return one adapter's PnP power state, or None when it could not be read."""
     snapshot = prefetch_adapter_power()
-    return snapshot.get(str(ifindex), ADAPTER_POWER_MISSING)
+    if snapshot is None:
+        return None
+    return snapshot.get(str(ifindex))
 
 
-def prefetch_adapter_properties() -> dict[str, Any]:
+def prefetch_adapter_properties() -> dict[str, Any] | None:
     """Populate the active scan cache with every adapter advanced property.
 
     Idempotent within a scan; computed without caching outside one.
@@ -256,7 +292,8 @@ def get_adapter_property(interface_index: Any, keyword: str) -> Any:
     """Return one adapter advanced property from the batch snapshot.
 
     Falls back to ADAPTER_PROPERTY_MISSING when the adapter does not expose the
-    keyword, which is the same sentinel the individual commands produced.
+    keyword, which is the same sentinel the individual commands produced. ``None``
+    is a snapshot that could not be read, which is not "not supported".
     """
     cache = _get_cache()
     if cache is not None:
@@ -266,6 +303,8 @@ def get_adapter_property(interface_index: Any, keyword: str) -> Any:
     else:
         snapshot = _fetch_adapter_properties_snapshot()
 
+    if snapshot is None:
+        return None
     if not snapshot:
         return ADAPTER_PROPERTY_MISSING
 
@@ -522,8 +561,11 @@ def get_batched_detect(setting_id: str) -> str | None:
     return value if isinstance(value, str) else None
 
 
-def get_service_start_type(service_name: str) -> str:
+def get_service_start_type(service_name: str) -> str | None:
     """Return service StartType string from snapshot: '2', '3', '4', or 'not_found'.
+
+    ``None`` means the service list could not be read, which says nothing about
+    whether the service exists.
 
     StartType values: 2=Automatic, 3=Manual, 4=Disabled.
     Reads from scan cache if available; otherwise fetches on-demand.
@@ -538,6 +580,8 @@ def get_service_start_type(service_name: str) -> str:
         # Single-setting detect outside a full scan — fetch on-demand
         snapshot = _fetch_services_snapshot()
 
+    if snapshot is None:
+        return None
     entry = snapshot.get(service_name.lower())
     if entry is None:
         return "not_found"

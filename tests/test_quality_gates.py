@@ -616,10 +616,6 @@ class TestFunctionLengthCeiling:
 
     # Frozen at the H3 audit (2026-08-26): (file, function) -> allowed length.
     _CEILING = {
-        # 182 -> 160 on 2026-09-11: the cleanup-size branch left for
-        # `_cleanup_status_reading` when a folder target stopped needing a
-        # PowerShell process to answer.
-        ("src/fpstune/settings/executors/powershell.py", "detect"): 145,
         ("src/fpstune/api/routes/system_network.py", "toggle_network_adapter"): 228,
         ("src/fpstune/api/main.py", "create_app"): 183,
     }

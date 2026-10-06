@@ -10,7 +10,6 @@ settings) before the fast paths were switched on.
 from __future__ import annotations
 
 import sys
-from typing import Any
 
 import pytest
 
@@ -98,12 +97,20 @@ class TestAdapterPowerFastPath:
         assert ps_batch_mod.get_adapter_power_state(17) == "Disabled"
         assert ps_batch_mod.get_adapter_power_state("17") == "Disabled"
 
-    def test_unknown_adapter_falls_back_to_enabled(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        # Matches what the per-setting command answered when it could not
-        # resolve the PnP device: Enabled, i.e. "Windows may still power it down".
-        monkeypatch.setattr(ps_batch_mod, "prefetch_adapter_power", lambda: {})
-        assert ps_batch_mod.get_adapter_power_state(99) == "Enabled"
-        assert ps_batch_mod.ADAPTER_POWER_MISSING == "Enabled"
+    def test_an_adapter_the_snapshot_does_not_hold_is_unknown_not_enabled(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        # "Enabled" is a claim about the machine ("Windows may still power the NIC
+        # down"). An adapter that could not be read during the batch has no state,
+        # and answering Enabled made a write that had landed verify as undone.
+        monkeypatch.setattr(ps_batch_mod, "prefetch_adapter_power", lambda: {"17": "Disabled"})
+        assert ps_batch_mod.get_adapter_power_state(99) is None
+
+    def test_a_snapshot_that_failed_makes_every_adapter_unknown(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(ps_batch_mod, "prefetch_adapter_power", lambda: None)
+        assert ps_batch_mod.get_adapter_power_state(17) is None
 
     def test_every_power_management_setting_is_batched(
         self, adapter_backed_registry: SettingsRegistry
@@ -148,20 +155,19 @@ class TestSnapshotShape:
     def test_power_snapshot_keys_are_strings(self, monkeypatch: pytest.MonkeyPatch) -> None:
         # InterfaceIndex arrives as an int from the settings and as a JSON key
         # (string) from PowerShell; storing anything else makes every lookup miss.
-        captured: dict[str, Any] = {}
-
         def fake_run(*_a: object, **_k: object) -> tuple[bool, str]:
             return True, '{"17":"Disabled","4":"Enabled"}'
 
         monkeypatch.setattr(ps_batch_mod, "run_powershell", fake_run)
         monkeypatch.setattr(ps_batch_mod.sys, "platform", "win32")
         captured = ps_batch_mod._fetch_adapter_power_snapshot()
+        assert captured is not None
         assert captured == {"17": "Disabled", "4": "Enabled"}
         assert all(isinstance(k, str) for k in captured)
 
-    def test_unparseable_output_yields_an_empty_snapshot_not_a_crash(
+    def test_unparseable_output_is_an_unread_snapshot_not_a_crash(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
         monkeypatch.setattr(ps_batch_mod, "run_powershell", lambda *_a, **_k: (True, "not json"))
         monkeypatch.setattr(ps_batch_mod.sys, "platform", "win32")
-        assert ps_batch_mod._fetch_adapter_power_snapshot() == {}
+        assert ps_batch_mod._fetch_adapter_power_snapshot() is None

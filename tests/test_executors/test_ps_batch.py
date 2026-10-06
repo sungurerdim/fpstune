@@ -112,6 +112,7 @@ class TestFetchServicesSnapshot:
         ):
             snapshot = _fetch_services_snapshot()
 
+        assert snapshot is not None
         assert "sysmain" in snapshot
         assert snapshot["sysmain"]["start_type"] == 2
         assert "diagtrack" in snapshot
@@ -126,28 +127,30 @@ class TestFetchServicesSnapshot:
         ):
             snapshot = _fetch_services_snapshot()
 
+        assert snapshot is not None
         assert "onesvc" in snapshot
         assert snapshot["onesvc"]["start_type"] == 3
 
     @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows only")
-    def test_returns_empty_on_powershell_failure(self):
+    def test_a_failed_powershell_is_unread_not_an_empty_list(self):
+        # An empty map would read every service as "not_found" (not installed).
         with patch(
             "fpstune.settings.executors.ps_batch.run_powershell",
             return_value=(False, "Error"),
         ):
             snapshot = _fetch_services_snapshot()
 
-        assert snapshot == {}
+        assert snapshot is None
 
     @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows only")
-    def test_returns_empty_on_malformed_json(self):
+    def test_malformed_json_is_unread_not_an_empty_list(self):
         with patch(
             "fpstune.settings.executors.ps_batch.run_powershell",
             return_value=(True, "{ not valid json"),
         ):
             snapshot = _fetch_services_snapshot()
 
-        assert snapshot == {}
+        assert snapshot is None
 
     @pytest.mark.skipif(__import__("sys").platform != "win32", reason="Windows only")
     def test_keys_are_lowercased(self):
@@ -171,6 +174,7 @@ class TestFetchServicesSnapshot:
         ):
             snapshot = _fetch_services_snapshot()
 
+        assert snapshot is not None
         assert len(snapshot) == 1
         assert "validsvc" in snapshot
 

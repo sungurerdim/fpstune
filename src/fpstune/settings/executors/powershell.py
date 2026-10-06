@@ -32,6 +32,17 @@ _logger = logging.getLogger(__name__)
 # line before it (a progress bar) rather than following it.
 type LineCallback = Callable[[str, bool], None]
 
+# What a batch detect says when it could not read at all: a detection error
+# (value None + this text), never a default value and never an absent reading.
+_UNREAD_SERVICES = "Could not read the service list; the start type is unknown."
+_UNREAD_ADAPTER_PROPERTIES = (
+    "Could not read the network adapter properties; this setting's state is unknown."
+)
+_UNREAD_ADAPTER_POWER = (
+    "Could not read this adapter's power-management state (it may be restarting); "
+    "the state is unknown."
+)
+
 # Cap concurrent background cleanup-size scans. Each size-bearing cleanup spawns
 # its own daemon → its own powershell.exe; with ~20 cleanups that is a 20-process
 # disk/CPU burst on app load. A small bound keeps several scans running in
@@ -461,6 +472,45 @@ def _batch_config_reading(batch_config: str, setting: SettingExecutor) -> Any:
     raise KeyError(f"unknown batch_config {batch_config!r} on {setting.id}")
 
 
+def _batch_adapter_reading(
+    setting: SettingExecutor, batch_keyword: Any
+) -> tuple[Any | None, str | None]:
+    """Read one adapter advanced property out of the per-scan snapshot.
+
+    A snapshot that could not be read is a detection error, not "not supported".
+    """
+    from fpstune.settings.executors.ps_batch import (
+        ADAPTER_PROPERTY_MISSING,
+        get_adapter_property,
+    )
+    from fpstune.utils.debug import debug_log
+
+    # A list is accepted, not just one name, because vendors spell the same
+    # feature differently (Intel `*EEE`, Realtek `EEE`, Broadcom `EEEControl`)
+    # and several settings therefore probe a handful of candidates. Those
+    # settings were doing it with one live PowerShell call per spelling —
+    # measured at 2.5-3.8 s each — while the snapshot already holds every
+    # keyword the adapter publishes and can answer all of them for free.
+    # First hit wins, matching the order the live command tried.
+    candidates = (
+        [str(k) for k in batch_keyword]
+        if isinstance(batch_keyword, (list, tuple))
+        else [str(batch_keyword)]
+    )
+    ifindex = setting.detect_args.get("ifindex")
+    batched: Any = ADAPTER_PROPERTY_MISSING
+    for candidate in candidates:
+        batched = get_adapter_property(ifindex, candidate)
+        if batched is None or batched != ADAPTER_PROPERTY_MISSING:
+            break
+    debug_log("powershell", f"DETECT BATCH_ADAPTER {setting.id}: {candidates!r} → {batched!r}")
+    if batched is None:
+        return None, _UNREAD_ADAPTER_PROPERTIES
+    if batched == ADAPTER_PROPERTY_MISSING:
+        return ADAPTER_PROPERTY_MISSING, None
+    return map_raw_to_display(setting.value_map, batched), None
+
+
 def _finish_apply(setting: SettingExecutor, output: str | None) -> tuple[bool, str | None]:
     """The outcome of a command that exited 0, and what follows a write.
 
@@ -507,6 +557,8 @@ class PowerShellExecutor(BaseExecutor):
             debug_log(
                 "powershell", f"DETECT BATCH_SERVICE {setting.id}: {batch_service!r} → {raw!r}"
             )
+            if raw is None:
+                return None, _UNREAD_SERVICES
             mapped = map_raw_to_display(setting.value_map, raw)
             return mapped, None
 
@@ -514,36 +566,7 @@ class PowerShellExecutor(BaseExecutor):
         # instead of one PowerShell process per keyword.
         batch_keyword = setting.detect_args.get("batch_adapter_keyword")
         if batch_keyword:
-            from fpstune.settings.executors.ps_batch import (
-                ADAPTER_PROPERTY_MISSING,
-                get_adapter_property,
-            )
-
-            # A list is accepted, not just one name, because vendors spell the same
-            # feature differently (Intel `*EEE`, Realtek `EEE`, Broadcom `EEEControl`)
-            # and several settings therefore probe a handful of candidates. Those
-            # settings were doing it with one live PowerShell call per spelling —
-            # measured at 2.5-3.8 s each — while the snapshot already holds every
-            # keyword the adapter publishes and can answer all of them for free.
-            # First hit wins, matching the order the live command tried.
-            candidates = (
-                [str(k) for k in batch_keyword]
-                if isinstance(batch_keyword, (list, tuple))
-                else [str(batch_keyword)]
-            )
-            ifindex = setting.detect_args.get("ifindex")
-            batched: Any = ADAPTER_PROPERTY_MISSING
-            for candidate in candidates:
-                batched = get_adapter_property(ifindex, candidate)
-                if batched != ADAPTER_PROPERTY_MISSING:
-                    break
-            debug_log(
-                "powershell",
-                f"DETECT BATCH_ADAPTER {setting.id}: {candidates!r} → {batched!r}",
-            )
-            if batched == ADAPTER_PROPERTY_MISSING:
-                return ADAPTER_PROPERTY_MISSING, None
-            return map_raw_to_display(setting.value_map, batched), None
+            return _batch_adapter_reading(setting, batch_keyword)
 
         # Fast path: the PnP power state of every adapter comes from one
         # enumeration instead of one Get-PnpDevice sweep per NIC.
@@ -552,6 +575,8 @@ class PowerShellExecutor(BaseExecutor):
 
             raw = get_adapter_power_state(setting.detect_args.get("ifindex"))
             debug_log("powershell", f"DETECT BATCH_PNP_POWER {setting.id}: → {raw!r}")
+            if raw is None:
+                return None, _UNREAD_ADAPTER_POWER
             return map_raw_to_display(setting.value_map, raw), None
 
         # Fast path: every Get-NetTCPSetting property comes off one object, so a

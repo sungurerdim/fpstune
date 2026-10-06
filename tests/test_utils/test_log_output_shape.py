@@ -22,8 +22,10 @@ editor and every grep, on a stream that has no colour to render.
 from __future__ import annotations
 
 import logging
+from collections.abc import Iterator
 from pathlib import Path
 
+import pytest
 from rich.text import Text
 
 from fpstune.utils.logger import (
@@ -141,3 +143,197 @@ class TestEscapePattern:
         """Bracketed text is not an escape; stripping must not eat a message."""
         text = r"[skipped] rate 786432 // 0 to 3"
         assert _ANSI_ESCAPE.sub("", text) == text
+
+
+# ---------------------------------------------------------------------------
+# Class-wide guards. The tests above pin the two reported lines; these pin the
+# *class*: whatever a message carries and whoever logs it, the file is plain
+# text, and an activity is written once to each sink.
+#
+# They go through the real thing — `setup_logging` with a real temp file and the
+# real shared `console` with its output captured — and touch only the public
+# surface (`setup_logging`, `log_activity`, `activity_log`, `console`), so the
+# same file runs unchanged against the tree as it was before either fix.
+# ---------------------------------------------------------------------------
+
+
+_Wired = tuple[logging.Logger, Path]
+
+
+@pytest.fixture
+def wired_logger(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[_Wired]:
+    """The product's own logger wiring over a temp file; the shared state is restored.
+
+    ``request.param`` (optional) is whether the console formatter emits colour —
+    the terminal case, where escapes are in the line before Rich parses them.
+    """
+    from fpstune.utils import logger as logger_module
+
+    use_colors = bool(getattr(request, "param", False))
+    logger = logging.getLogger(logger_module.LOGGER_NAME)
+    saved = (list(logger.handlers), logger.level, logger.propagate, logger.disabled)
+    previous_disable = logging.root.manager.disable
+    logging.disable(logging.NOTSET)
+    logger.disabled = False
+    original = logger_module._should_use_colors
+    logger_module._should_use_colors = lambda: use_colors
+    log_file = tmp_path / "fpstune.log"
+    try:
+        logger_module.setup_logging(level=logging.DEBUG, log_file=log_file)
+        yield logger, log_file
+    finally:
+        logger_module._should_use_colors = original
+        for handler in list(logger.handlers):
+            handler.close()
+            logger.removeHandler(handler)
+        for handler in saved[0]:
+            logger.addHandler(handler)
+        logger.setLevel(saved[1])
+        logger.propagate = saved[2]
+        logger.disabled = saved[3]
+        logging.disable(previous_disable)
+
+
+def _file_text(logger: logging.Logger, log_file: Path) -> str:
+    for handler in logger.handlers:
+        handler.flush()
+    return log_file.read_text(encoding="utf-8")
+
+
+# Every shape of terminal control a message can carry in from outside: our own
+# palette, a child process's cursor moves and erases (PowerShell progress), an
+# OSC title or hyperlink, a private-mode toggle, an 8-bit CSI, a bare ESC, and
+# Rich markup (which is plain text to a file and must stay so).
+_PAYLOADS = {
+    "palette": f"{_Colors.BOLD}{_Colors.BRIGHT_RED}[FAIL]{_Colors.RESET} APPLY ERROR x",
+    "sgr-256": "\x1b[38;5;208mwarm\x1b[0m",
+    "sgr-truecolor": "\x1b[38;2;10;20;30mtrue\x1b[0m",
+    "erase-line": "progress 40%\x1b[2K\x1b[1Gprogress 100%",
+    "cursor-hide": "\x1b[?25lworking\x1b[?25h",
+    "osc-title": "\x1b]0;PowerShell\x07window",
+    "osc-hyperlink": "\x1b]8;;https://example.com\x1b\\link text\x1b]8;;\x1b\\",
+    "c1-csi": "\x9b31mred\x9b0m",
+    "bare-esc": "tail\x1b",
+    "rich-markup": "[bold red]not markup[/bold red] [link=https://example.com]x[/link]",
+}
+# The words a reader must still find once the escapes are gone.
+_READABLE = {
+    "palette": "[FAIL] APPLY ERROR x",
+    "sgr-256": "warm",
+    "sgr-truecolor": "true",
+    "erase-line": "progress 40%",
+    "cursor-hide": "working",
+    "osc-title": "window",
+    "osc-hyperlink": "link text",
+    "c1-csi": "red",
+    "bare-esc": "tail",
+    "rich-markup": "[bold red]not markup[/bold red]",
+}
+_LEVELS = (
+    ("debug", logging.DEBUG),
+    ("info", logging.INFO),
+    ("warning", logging.WARNING),
+    ("error", logging.ERROR),
+    ("critical", logging.CRITICAL),
+)
+_SOURCES = ("fpstune", "fpstune.api", "fpstune.settings.executors.registry")
+
+
+class TestLogFileNeverHoldsAnEscape:
+    """Class guard 1: no level, no source, no payload puts an escape in the file."""
+
+    @pytest.mark.parametrize("wired_logger", [False, True], indirect=True, ids=["plain", "colour"])
+    @pytest.mark.parametrize("key", list(_PAYLOADS))
+    def test_every_level_from_every_source(self, wired_logger: _Wired, key: str) -> None:
+        logger, log_file = wired_logger
+        for source in _SOURCES:
+            for name, level in _LEVELS:
+                logging.getLogger(source).log(level, "%s %s", name, _PAYLOADS[key])
+
+        content = _file_text(logger, log_file)
+
+        assert "\x1b" not in content, "an escape sequence reached the log file"
+        assert "\x9b" not in content, "an 8-bit CSI reached the log file"
+        assert content.count(_READABLE[key]) == len(_SOURCES) * len(_LEVELS), (
+            "stripping ate the message text itself"
+        )
+
+    @pytest.mark.parametrize("wired_logger", [True], indirect=True)
+    def test_an_escape_inside_a_traceback_is_stripped_too(self, wired_logger: _Wired) -> None:
+        """`exc_info` is formatted by the same formatter; its text is message-controlled."""
+        logger, log_file = wired_logger
+        try:
+            raise RuntimeError("\x1b[31mpowershell said no\x1b[0m")
+        except RuntimeError:
+            logger.exception("apply failed")
+
+        content = _file_text(logger, log_file)
+
+        assert "\x1b" not in content
+        assert "RuntimeError: powershell said no" in content
+
+    @pytest.mark.parametrize("wired_logger", [True], indirect=True)
+    @pytest.mark.parametrize("level", ["info", "success", "warning", "error", "bogus"])
+    def test_activities_with_escapes_in_the_message(self, wired_logger: _Wired, level: str) -> None:
+        from fpstune.utils.logger import log_activity
+
+        logger, log_file = wired_logger
+        log_activity(f"{tweak_label('system:hyper_v')} \x1b[2Kdone\x1b[0m", level)
+
+        content = _file_text(logger, log_file)
+
+        assert "\x1b" not in content
+        assert "system:hyper_v" in content
+        assert "done" in content
+
+
+class TestEveryActivityIsWrittenOnce:
+    """Class guard 2: one activity → one terminal line and one file line.
+
+    Only ``log_activity`` used to forward, so direct writers to the store showed
+    in the app and nowhere else (zero); the fix must not turn into a second
+    forwarder at some other layer (two). Counting both sinks, through both entry
+    points, catches either direction.
+    """
+
+    @pytest.mark.parametrize("wired_logger", [False, True], indirect=True, ids=["plain", "colour"])
+    @pytest.mark.parametrize("level", ["info", "success", "warning", "error", "bogus"])
+    @pytest.mark.parametrize("entry", ["log_activity", "store_add"])
+    def test_one_terminal_line_and_one_file_line(
+        self, wired_logger: _Wired, level: str, entry: str
+    ) -> None:
+        from fpstune.utils.console import console
+        from fpstune.utils.logger import activity_log, log_activity
+
+        logger, log_file = wired_logger
+        marker = f"marker-{entry}-{level}-7f3a"
+        with console.capture() as capture:
+            if entry == "log_activity":
+                log_activity(marker, level)
+            else:
+                activity_log.add(marker, level)
+
+        terminal = capture.get()
+        content = _file_text(logger, log_file)
+
+        assert terminal.count(marker) == 1, f"terminal saw it {terminal.count(marker)} times"
+        assert content.count(marker) == 1, f"log file has it {content.count(marker)} times"
+
+    @pytest.mark.parametrize("wired_logger", [False], indirect=True)
+    def test_calling_setup_logging_twice_does_not_double_the_sinks(
+        self, wired_logger: _Wired, tmp_path: Path
+    ) -> None:
+        """A second `setup_logging` (a re-init, a `--verbose` restart) must replace handlers, not stack them."""
+        from fpstune.utils.console import console
+        from fpstune.utils.logger import log_activity, setup_logging
+
+        logger, _ = wired_logger
+        second = tmp_path / "second.log"
+        setup_logging(level=logging.DEBUG, log_file=second)
+        marker = "marker-reinit-91bc"
+        with console.capture() as capture:
+            log_activity(marker, "success")
+
+        assert capture.get().count(marker) == 1
+        assert _file_text(logger, second).count(marker) == 1
+        assert len(logger.handlers) == 2

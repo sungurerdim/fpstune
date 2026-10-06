@@ -19,10 +19,18 @@ from fpstune.utils.console import console
 # Logger name
 LOGGER_NAME = "fpstune"
 
-# CSI sequences — the only kind this module emits (colour and reset). Matched
-# rather than assumed away, because the colour enters through the message and a
-# message can come from anywhere.
-_ANSI_ESCAPE = re.compile(r"\x1b\[[0-9;]*m")
+# Every terminal control sequence a message can carry, not just the colour codes
+# this module emits. The colour enters through the message and a message can come
+# from anywhere: a child process's output brings cursor moves and line erases
+# (PowerShell progress: ``ESC[2K``), private-mode toggles (``ESC[?25l``), OSC
+# titles and hyperlinks (``ESC]0;title BEL``), 8-bit CSI, and a stray ESC. A
+# pattern that knew only ``ESC[...m`` let all of those into the log file. Order
+# matters: the multi-character forms must be tried before the bare two-byte form.
+_ANSI_ESCAPE = re.compile(
+    r"\x1b\][^\x07\x1b]*(?:\x07|\x1b\\)"  # OSC ... BEL | ST
+    r"|(?:\x1b\[|\x9b)[0-?]*[ -/]*[@-~]"  # CSI: parameters, intermediates, final byte
+    r"|\x1b[@-_]?"  # any other two-byte escape, or a bare ESC
+)
 
 
 # ANSI color codes (Windows 10+ and all Unix terminals support these)

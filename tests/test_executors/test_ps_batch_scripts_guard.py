@@ -27,6 +27,18 @@ PowerShell string in ``src/fpstune``:
    ``if`` over a readable feature list or ``Get-Command`` -- and rethrows otherwise;
    its scripted behaviour is tested where the script lives (test_optional_feature_detect,
    test_unread_tcp_snapshot).
+
+Rule 4 only sees the sentinel *inside* the catch. Two shapes got past it (issue #104):
+
+5. a flat ``catch { $f = $null }`` whose variable is tested later to answer an
+   ABSENT_READINGS value (``if (-not $f) { 'not_available' }``): the failure is
+   erased into "nothing there" one statement before the verdict;
+6. a CIM / WMI / optional-feature read run with ``-ErrorAction SilentlyContinue``
+   in a script that can answer an ABSENT_READINGS value. For these reads an empty
+   answer *without* an error is already proof of absence (the query ran and the
+   class or feature is not there), so silencing the error buys nothing but the
+   confusion of "could not ask" with "nothing there". Run it ``-ErrorAction
+   Stop``. A genuine best-effort read goes on ``_SILENT_READ_ALLOWED`` with why.
 """
 
 from __future__ import annotations
@@ -182,6 +194,70 @@ def catch_sentinels(source: str, allowed: dict[str, str] | None = None) -> list[
     return found
 
 
+# ---------------------------------------------------------------------------
+# 5. a catch must not erase the failure into $null that a later sentinel reads
+# 6. a CIM / WMI read must not silence its errors where a sentinel can follow
+# ---------------------------------------------------------------------------
+
+_SENTINEL_LITERAL = re.compile(
+    r"['\"](" + "|".join(sorted(ABSENT_READINGS)) + r")['\"]", re.IGNORECASE
+)
+_CATCH_NULL = re.compile(
+    r"\bcatch\b(?:\s*\[[^\]]*\])?\s*\{[^{}]*\$(\w+)\s*=\s*\$null[^{}]*\}", re.IGNORECASE
+)
+_SILENT_RAISING_READ = re.compile(
+    r"Get-(?:CimInstance|WmiObject|WindowsOptionalFeature)\b[^;|]*"
+    r"-(?:EA|ErrorAction)\s+(?:SilentlyContinue|Ignore)\b",
+    re.IGNORECASE,
+)
+
+# Snippet (the matched read, whitespace as written) -> why silencing its error is
+# right there. An entry needs a measured reason, in words.
+_SILENT_READ_ALLOWED: dict[str, str] = {
+    (
+        "Get-CimInstance -Namespace root/wmi "
+        "-ClassName MSAcpi_ThermalZoneTemperature -EA SilentlyContinue"
+    ): (
+        "answers only to an elevated caller (measured: zero zones unelevated, two "
+        "elevated); the unelevated failure is the expected case and the "
+        "performance counter beside it is the fallback"
+    ),
+    (
+        "Get-CimInstance "
+        "-ClassName Win32_PerfFormattedData_Counters_ThermalZoneInformation -EA SilentlyContinue"
+    ): (
+        "the fallback to the read above: either source standing keeps the "
+        "advisory answering. Debt, not a verdict: when BOTH fail the row still "
+        "reads not_available instead of unknown (issue #104 follow-up)"
+    ),
+}
+
+
+def failed_reads_as_absent(source: str, allowed: dict[str, str] | None = None) -> list[str]:
+    """Shapes 5 and 6: a failed read that is dressed as "nothing there"."""
+    allowed = _SILENT_READ_ALLOWED if allowed is None else allowed
+    found: list[str] = []
+    for text in _strings(ast.parse(source)):
+        if not _SENTINEL_LITERAL.search(text):
+            continue
+        for match in _CATCH_NULL.finditer(text):
+            name = re.escape(match.group(1))
+            tail = text[match.end() :]
+            tested = re.search(
+                rf"-not\s*\(?\s*\${name}\b|!\s*\${name}\b|\${name}\s*-eq\s*\$null|\$null\s*-eq\s*\${name}\b",
+                tail,
+                re.IGNORECASE,
+            )
+            if tested and _SENTINEL_LITERAL.search(tail):
+                found.append(f"catch erases the failure into ${match.group(1)}: {match.group(0)!r}")
+        for match in _SILENT_RAISING_READ.finditer(text):
+            if match.group(0) not in allowed:
+                found.append(
+                    f"silences the error of a read that can answer absent: {match.group(0)!r}"
+                )
+    return found
+
+
 def _shipped_sources() -> list[Path]:
     root = Path(fpstune.__file__).parent
     return sorted(path for path in root.rglob("*.py") if "__pycache__" not in path.parts)
@@ -198,6 +274,31 @@ def test_no_shipped_catch_turns_a_failed_read_into_an_absent_reading() -> None:
         "'not here': end the script with `catch { throw }`, or allow-list the "
         "snippet in _CATCH_SENTINEL_ALLOWED with the reason it really means absent"
     )
+
+
+def test_no_shipped_script_dresses_a_failed_read_as_nothing_there() -> None:
+    found = {
+        str(path.relative_to(Path(fpstune.__file__).parent)): hits
+        for path in _shipped_sources()
+        if (hits := failed_reads_as_absent(path.read_text(encoding="utf-8")))
+    }
+    assert found == {}, (
+        "a failed read must raise, not read as an absent value: use -ErrorAction Stop "
+        "(CIM/WMI/optional-feature empty-without-error already proves absence), or a "
+        "catch that proves absence from a readable list and rethrows otherwise"
+    )
+
+
+def test_every_silent_read_allowance_is_still_in_the_shipped_scripts() -> None:
+    # An allow-list entry for a script that no longer exists excuses nothing and
+    # hides the next one that copies its text.
+    present = {
+        match.group(0)
+        for path in _shipped_sources()
+        for text in _strings(ast.parse(path.read_text(encoding="utf-8")))
+        for match in _SILENT_RAISING_READ.finditer(text)
+    }
+    assert set(_SILENT_READ_ALLOWED) <= present, set(_SILENT_READ_ALLOWED) - present
 
 
 def test_the_catch_guard_sees_the_scripts_it_polices() -> None:
@@ -237,7 +338,8 @@ def test_the_catch_guard_flags_each_shape_of_the_pattern(script: str) -> None:
         "try { Get-Item x } catch { 'error:' + $_.Exception.Message }",
         # an absent answer from the try body is a read answer, not a catch
         "try { if (-not $drv) { 'not_supported'; return }; 'Enabled' } catch { throw }",
-        # a sentinel in a later statement, outside the catch block
+        # a sentinel in a later statement, outside the catch block (rule 4 only;
+        # the null-assign form of this is rule 5, below)
         "try { Get-Item x } catch { $f = $null }; if (-not $f) { 'not_available' }",
     ],
 )
@@ -250,3 +352,90 @@ def test_an_allow_listed_catch_is_let_through_with_its_reason() -> None:
     snippet = "catch { 'not_found' }"
     assert catch_sentinels(f"X = {script!r}", {}) == [snippet]
     assert catch_sentinels(f"X = {script!r}", {snippet: "the module is not on Home"}) == []
+
+
+# ---------------------------------------------------------------------------
+# rules 5 and 6, proven on the shapes that shipped
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        # privacy:recall as it shipped
+        "try { $f = Get-WindowsOptionalFeature -Online -FeatureName 'Recall' -ErrorAction Stop } "
+        "catch { $f = $null }; if (-not $f) { 'not_available' } else { 'enabled' }",
+        "try { $f = Get-Foo -ErrorAction Stop } catch { $f = $null }; "
+        "if ($null -eq $f) { 'not_found' } else { 'on' }",
+        "try { $f = Get-Foo -ErrorAction Stop } catch [System.Exception] { $f = $null }; "
+        "if ($f -eq $null) { 'not_installed' } else { 'on' }",
+    ],
+)
+def test_the_guard_flags_a_catch_that_nulls_what_a_sentinel_then_reads(script: str) -> None:
+    found = failed_reads_as_absent(f"X = {script!r}")
+    assert len(found) == 1 and "catch erases the failure" in found[0], found
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        # absence proven from a readable list, rethrown otherwise (the sanctioned form)
+        "try { $f = Get-WindowsOptionalFeature -Online -FeatureName 'Recall' -ErrorAction Stop } "
+        "catch { $all = Get-WindowsOptionalFeature -Online -ErrorAction Stop; "
+        "if (@($all | Where-Object { $_.FeatureName -eq 'Recall' }).Count -eq 0) { $f = $null } "
+        "else { throw } }; if (-not $f) { 'not_available' } else { 'enabled' }",
+        # nulled in the catch, but no sentinel can follow: a value read, not an absence claim
+        "try { $f = Get-Foo -ErrorAction Stop } catch { $f = $null }; if (-not $f) { 'off' }",
+        # the variable the sentinel tests is not the one the catch nulled
+        "try { $f = Get-Foo -ErrorAction Stop } catch { $f = $null }; $g = 1; "
+        "if (-not $g) { 'not_available' }",
+    ],
+)
+def test_the_guard_leaves_a_catch_that_proves_absence_or_claims_none(script: str) -> None:
+    assert failed_reads_as_absent(f"X = {script!r}") == []
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        # system:xmp_expo as it shipped
+        "$m = Get-CimInstance Win32_PhysicalMemory -EA SilentlyContinue | Select-Object -First 1; "
+        "if (-not $m) { 'not_available' } else { 'xmp_active' }",
+        # system:vbs_core_isolation as it shipped
+        "$g = Get-CimInstance -Namespace root/Microsoft/Windows/DeviceGuard "
+        "-ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue; "
+        "if (-not $g) { 'not_available' } else { 'enabled' }",
+        "$w = Get-WmiObject Win32_Foo -ErrorAction Ignore; if (-not $w) { 'not_supported' }",
+        "$f = Get-WindowsOptionalFeature -Online -FeatureName X -EA SilentlyContinue; "
+        "if (-not $f) { 'not_available' }",
+    ],
+)
+def test_the_guard_flags_a_silenced_cim_read_in_a_script_that_can_answer_absent(
+    script: str,
+) -> None:
+    found = failed_reads_as_absent(f"X = {script!r}")
+    assert len(found) == 1 and "silences the error" in found[0], found
+
+
+@pytest.mark.parametrize(
+    "script",
+    [
+        "$m = Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop | Select-Object -First 1; "
+        "if (-not $m) { 'not_available' } else { 'xmp_active' }",
+        # silenced, but nothing in the script can answer an absent value
+        "$m = Get-CimInstance Win32_PhysicalMemory -EA SilentlyContinue; if ($m) { 'a' } else { 'b' }",
+        # a registry or service read: its own absence is the empty answer, not covered here
+        "$s = Get-Service -Name Fax -ErrorAction SilentlyContinue; if ($s) { 'a' } else { 'not_found' }",
+    ],
+)
+def test_the_guard_leaves_a_cim_read_that_raises_or_cannot_claim_absence(script: str) -> None:
+    assert failed_reads_as_absent(f"X = {script!r}") == []
+
+
+def test_an_allow_listed_silent_read_is_let_through_with_its_reason() -> None:
+    script = "$a = Get-CimInstance Foo -EA SilentlyContinue; if (-not $a) { 'not_available' }"
+    snippet = "Get-CimInstance Foo -EA SilentlyContinue"
+    assert len(failed_reads_as_absent(f"X = {script!r}", {})) == 1
+    assert (
+        failed_reads_as_absent(f"X = {script!r}", {snippet: "unelevated failure is expected"}) == []
+    )

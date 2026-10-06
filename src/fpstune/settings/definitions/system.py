@@ -1845,7 +1845,10 @@ SYSTEM_XMP_EXPO = SettingExecutor(
     is_readonly=True,
     detect_type=DetectType.POWERSHELL,
     detect_command=(
-        "$m = Get-CimInstance Win32_PhysicalMemory -EA SilentlyContinue "
+        # Stop, not SilentlyContinue: a query that ran and listed no module is proof
+        # the board reports none (soldered RAM), so the `not_available` below stays;
+        # a query that failed raises and the row reads "unknown" with the reason.
+        "$m = Get-CimInstance Win32_PhysicalMemory -ErrorAction Stop "
         "| Select-Object -First 1; "
         "if (-not $m) { "
         "  Write-Host 'FPSTUNE_WARN: WMI Win32_PhysicalMemory returned no results. "
@@ -3321,9 +3324,16 @@ PRIVACY_RECALL = SettingExecutor(
     impact_scores={"privacy": "improved", "cpu_usage": -0.5},
     applicable_conditions={"requires_admin": True},
     detect_type=DetectType.POWERSHELL,
+    # An unreadable feature query is not "Recall is not here": the catch asks for the
+    # whole list (the way `_optional_feature_detect` does) and only a readable list
+    # without Recall proves it absent; otherwise the original error is raised and the
+    # row reads "unknown" with the reason.
     detect_command=(
         "try { $f = Get-WindowsOptionalFeature -Online -FeatureName 'Recall' -ErrorAction Stop } "
-        "catch { $f = $null }; "
+        "catch { "
+        "$all = Get-WindowsOptionalFeature -Online -ErrorAction Stop; "
+        "if (@($all | Where-Object { $_.FeatureName -eq 'Recall' }).Count -eq 0) { $f = $null } "
+        "else { throw } }; "
         "if (-not $f) { 'not_available' } else { "
         "$v = (Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\WindowsAI' "
         "-Name 'AllowRecallEnablement' -ErrorAction SilentlyContinue).AllowRecallEnablement; "
@@ -3718,7 +3728,9 @@ PERF_VBS_CORE_ISOLATION = SettingExecutor(
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "$g = Get-CimInstance -Namespace root\\Microsoft\\Windows\\DeviceGuard "
-        "-ClassName Win32_DeviceGuard -ErrorAction SilentlyContinue; "
+        # Stop: no instance from a query that ran means the platform has no Device
+        # Guard to report; a failed query raises instead of reading as that.
+        "-ClassName Win32_DeviceGuard -ErrorAction Stop; "
         "if (-not $g) { 'not_available' } "
         "elseif ($g.SecurityServicesRunning -contains 2) { 'enabled' } else { 'disabled' }"
     ),

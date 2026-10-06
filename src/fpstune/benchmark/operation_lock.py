@@ -118,13 +118,16 @@ class _Held:
         self._release()
 
 
-def try_acquire(name: str = OPERATION_MUTEX) -> _Held | None:
+def try_acquire(name: str | None = None) -> _Held | None:
     """Take the operation lock if it is free, or answer None immediately.
 
     Never blocks. A caller that finds it held is expected to do nothing and ask
     again later — queueing would mean a backlog of measurements all describing a
     machine that has since changed.
     """
+    # Read at call time, not bound as a default: the test session renames the
+    # lock per process, so parallel workers do not see each other as a busy machine.
+    name = name or OPERATION_MUTEX
     held = _try_take_system_mutex(name)
     if held is not None:
         kernel32, handle = held
@@ -147,7 +150,7 @@ def try_acquire(name: str = OPERATION_MUTEX) -> _Held | None:
     return _Held(local.release)
 
 
-def is_free(name: str = OPERATION_MUTEX) -> bool:
+def is_free(name: str | None = None) -> bool:
     """Whether the lock could be taken right now.
 
     Take-and-release rather than a peek, because Windows offers no peek and one
@@ -164,7 +167,7 @@ def is_free(name: str = OPERATION_MUTEX) -> bool:
 
 
 @contextlib.contextmanager
-def operation_lock(name: str = OPERATION_MUTEX) -> Generator[bool, None, None]:
+def operation_lock(name: str | None = None) -> Generator[bool, None, None]:
     """Hold the operation lock for a block, or report that it could not be had.
 
     Yields whether it was taken, rather than raising or blocking. The caller is

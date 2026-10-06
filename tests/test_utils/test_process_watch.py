@@ -23,6 +23,10 @@ from fpstune.utils.process_watch import (
 from fpstune.utils.winapi.job import TreeActivity
 
 FAST = StallPolicy("test", stall_s=0.6, sample_s=0.05)
+# For tests that are not about stalling: a child's cold start on a machine busy
+# with parallel workers outlasted FAST's 0.6 s before its first byte, and an
+# ordinary run was cut as stuck.
+ORDINARY = StallPolicy("test", stall_s=30, sample_s=0.05)
 
 
 def _py(code: str) -> list[str]:
@@ -130,7 +134,7 @@ class TestAStuckRunIsNamedAndHandled:
 class TestOrdinaryOutcomes:
     def test_exit_code_and_stderr_come_back(self) -> None:
         code = "import sys; print('out'); print('err', file=sys.stderr); sys.exit(3)"
-        result = run_watched(_py(code), FAST, probe_factory=_factory([]))
+        result = run_watched(_py(code), ORDINARY, probe_factory=_factory([]))
         assert (result.returncode, result.stdout.strip(), result.stderr.strip()) == (
             3,
             "out",
@@ -144,7 +148,7 @@ class TestOrdinaryOutcomes:
         # system code page, which cannot write these letters at all.
         run_watched(
             _py("import sys; sys.stdout.buffer.write('ğüşıöç'.encode()); sys.stdout.flush()"),
-            FAST,
+            ORDINARY,
             on_text=seen.append,
             probe_factory=_factory([]),
         )
@@ -152,7 +156,7 @@ class TestOrdinaryOutcomes:
 
     def test_merged_stderr_keeps_terminal_order(self) -> None:
         code = "import sys\nprint('a', flush=True)\nprint('b', file=sys.stderr, flush=True)"
-        result = run_watched(_py(code), FAST, merge_stderr=True, probe_factory=_factory([]))
+        result = run_watched(_py(code), ORDINARY, merge_stderr=True, probe_factory=_factory([]))
         assert result.stdout.split() == ["a", "b"]
 
 

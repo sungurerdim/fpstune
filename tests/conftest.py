@@ -23,6 +23,23 @@ if sys.platform != "win32":
         subprocess.CREATE_NO_WINDOW = 0x08000000
 
 
+@pytest.fixture(autouse=True, scope="session")
+def _operation_lock_per_process() -> None:
+    """Each test process takes its own operation lock, never the machine's.
+
+    The lock is a machine-wide named mutex on purpose: one apply, cleanup or
+    bench at a time. The suite runs in parallel worker processes, so under the
+    shipped name a test in one worker holding the lock read as "the machine is
+    busy" to a bench test in another, and three suite-route tests went red. A
+    running fpstune on the developer's machine would do the same.
+    """
+    import os
+
+    from fpstune.benchmark import operation_lock
+
+    operation_lock.OPERATION_MUTEX = f"{operation_lock.OPERATION_MUTEX}-test-{os.getpid()}"
+
+
 @pytest.fixture(autouse=True)
 def _no_real_shell_folders(monkeypatch: pytest.MonkeyPatch) -> None:
     """Game config paths come from the test, never from the runner's own profile.

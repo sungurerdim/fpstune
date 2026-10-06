@@ -629,14 +629,16 @@ class TestModeWriteGuards:
         with (
             patch("fpstune.api.routes.display.sys.platform", "win32"),
             patch("fpstune.api.routes.display.hardware_manager") as mock_hw,
-            patch.object(display_mode, "REVERT_TIMEOUT_S", 0.2),
+            # Wide enough that a loaded machine (parallel workers) still confirms
+            # before the revert fires; 0.2 s was not, and confirm found nothing.
+            patch.object(display_mode, "REVERT_TIMEOUT_S", 1.0),
             _fake_user32((1920, 1080, 60)) as calls,
         ):
             mock_hw.detect_monitors.return_value = [self._suboptimal()]
             assert client.post("/api/display/0/auto").status_code == 200
             confirm = client.post("/api/display/0/confirm")
             assert confirm.status_code == 200
-            time.sleep(0.4)
+            time.sleep(1.2)
             assert sum(c[0] == "write" for c in calls) == 1, "the cancelled revert still ran"
 
     def test_confirming_with_nothing_pending_is_a_404(self, client: TestClient) -> None:

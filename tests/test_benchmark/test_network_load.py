@@ -246,8 +246,27 @@ class TestTheUploadLeg:
     def test_latency_is_probed_while_the_upload_runs(self, monkeypatch) -> None:
         """Three idle probes, then the download's, then the upload's. The last
         window is the one that has to be reported here."""
-        answers = iter([5.0, 5.0, 5.0] + [12.0] * 4 + [40.0] * 60)
-        monkeypatch.setattr(network_load, "_tcp_rtt_ms", lambda *_a, **_k: next(answers, 40.0))
+        # The answer follows the phase, never the call count: with unspaced
+        # probes how many land in each window is thread scheduling, and a
+        # count-based script went red in the full gate when the download
+        # window took fewer than four. Idle is the first `probes` calls; the
+        # download stub flips to the upload's answer as it returns, and no
+        # probe runs between the two transfers.
+        phase = {"calls": 0, "uploading": False}
+
+        def _rtt(*_a: object, **_k: object) -> float:
+            phase["calls"] += 1
+            if phase["calls"] <= 3:
+                return 5.0
+            return 40.0 if phase["uploading"] else 12.0
+
+        def _download(_url: str, cap: int, _seconds: float) -> tuple[int, float]:
+            time.sleep(0.05)
+            phase["uploading"] = True
+            return cap, cap / 1_000_000
+
+        monkeypatch.setattr(network_load, "_tcp_rtt_ms", _rtt)
+        monkeypatch.setattr(network_load, "_download", _download)
 
         readings = _bench().run(1).readings
 

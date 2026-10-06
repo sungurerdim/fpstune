@@ -313,6 +313,7 @@ hardware-ID changes and kernel drivers are never offered, measured or not.
 
 **Stack:** Python 3.12/FastAPI (uvicorn) + React 18/TypeScript/Vite/Tailwind | **Platform:** Windows 11 | **Deploy:** Local desktop
 **Toolchain:** ruff + mypy | pytest + pytest-asyncio | Vite + vitest | lefthook (pre-commit) | PyInstaller
+**Affected tests (#105):** `scripts/affected_tests.py` maps changed files to the tests that import or name them (module imports by AST, dotted module name, repo path, file name, setting ids the file defines; a changed `conftest.py` selects its directory) and prints each with its reason, or "nothing selected". Pre-commit runs it on staged Python (`--staged --run`); the full gate stays on pre-push (`scripts/quality.sh`). Agents run it after every unit, before reporting: `python scripts/affected_tests.py --base <ref> [--run]` (`--run` = `uv run pytest --no-cov -q -m "not timing" -n <cores/2> <selected>`).
 
 ```
 src/fpstune/

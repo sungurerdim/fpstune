@@ -18,8 +18,9 @@
 # because they contend for different tools, and within each group the steps run
 # one after another. The wall clock is set by the Python group, which ends in
 # the full pytest run either way.
-# pre-commit keeps only what answers in seconds (lint and format). Types and
-# tests ran here too and made every commit wait ~45 s for checks pre-push runs
+# pre-commit keeps what answers in seconds (lint and format) plus the tests
+# selected by what changed (scripts/affected_tests.py). Types and the full
+# test run ran here too and made every commit wait ~45 s for checks pre-push runs
 # anyway; one place for the slow half is enough.
 pre-commit:
   parallel: true
@@ -33,6 +34,12 @@ pre-commit:
             run: uv run ruff check src tests
           - name: py-format
             run: uv run ruff format --check src tests
+          # The tests that import or name a staged file, so a red the change
+          # causes is seen by that change and not first by the full gate on push
+          # (#104: eleven contract tests over definitions/network.py). Python
+          # changes only (the glob above): a doc-only commit never reaches it.
+          - name: py-affected-tests
+            run: uv run python scripts/affected_tests.py --staged --run
 
     - name: frontend
       glob: "frontend/*"

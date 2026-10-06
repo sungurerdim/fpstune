@@ -426,7 +426,8 @@ def _finalize_apply_response(
             )
             _record_change(setting, activity_label, requested_value)
     else:
-        log_activity(f"Failed to {activity_label.lower()} {setting.display_name}: {error}", "error")
+        verb = ACTION_FOR_LABEL.get(activity_label, activity_label.lower())
+        log_activity(f"Failed to {verb} {setting.display_name}: {error}", "error")
 
     return ApplyResponse(
         setting_id=setting.id,

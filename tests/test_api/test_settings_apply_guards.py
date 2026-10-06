@@ -31,6 +31,7 @@ from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
 from fpstune.api.routes.settings import (
+    _finalize_apply_response,
     _verify_setting_applied,
     bulk_apply_settings,
     get_definitions,
@@ -318,3 +319,15 @@ class TestAbsenceSentinelsSkipVerification:
         assert success is False
         assert error is not None
         assert verified is False
+
+
+@pytest.mark.parametrize(("label", "verb"), [("Applied", "apply"), ("Reset", "reset")])
+def test_a_failed_write_is_logged_with_its_verb_not_its_past_tense(label: str, verb: str) -> None:
+    """The log read "Failed to applied <name>" because the past-tense label was lowercased."""
+    setting = _choice_setting()
+    with patch("fpstune.api.routes.settings.log_activity") as log:
+        response = _finalize_apply_response(setting, "on", MagicMock(), False, "refused", label)
+
+    assert response.success is False
+    message = log.call_args.args[0]
+    assert message == f"Failed to {verb} {setting.display_name}: refused"

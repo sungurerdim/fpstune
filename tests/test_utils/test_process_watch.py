@@ -71,11 +71,18 @@ SILENT_FOR_3S = "import time; time.sleep(3)"
 
 class TestASlowRunThatKeepsMovingIsNeverCut:
     def test_steady_output_outlives_the_stall_window(self) -> None:
-        code = "import time\nfor i in range(12):\n    print(i, flush=True); time.sleep(0.15)"
+        """A run printing every 0.15 s lasts 4.5 s, more than twice its 2 s window.
+
+        FAST's 0.6 s window was shorter than a child's cold start on the loaded
+        pre-push gate, so the run was cut before its first line ("no progress
+        for 0 s"). The window still bounds a silent gap; the run still outlives it.
+        """
+        policy = replace(FAST, stall_s=2.0)
+        code = "import time\nfor i in range(30):\n    print(i, flush=True); time.sleep(0.15)"
         probes: list[_Probe] = []
-        result = run_watched(_py(code), FAST, probe_factory=_factory(probes))
+        result = run_watched(_py(code), policy, probe_factory=_factory(probes))
         assert result.ok, result.reason
-        assert result.stdout.split() == [str(i) for i in range(12)]
+        assert result.stdout.split() == [str(i) for i in range(30)]
         assert not probes[0].terminated
 
     def test_a_silent_run_moving_bytes_is_not_stuck(self) -> None:

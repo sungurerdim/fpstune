@@ -129,9 +129,16 @@ class CleanupTarget:
 # ---------------------------------------------------------------------------
 
 
+#: Both name the same machine-wide folder; ``ALLUSERSPROFILE`` is the older spelling.
+_PROGRAM_DATA_NAMES = frozenset({"PROGRAMDATA", "ALLUSERSPROFILE"})
+
+
 def _env(name: str) -> str | None:
     if name in user_paths.PROFILE_VARIABLES:
         return user_paths.profile_env(name)
+    if name.upper() in _PROGRAM_DATA_NAMES:
+        root = user_paths.program_data()
+        return str(root) if root else None
     value = os.environ.get(name)
     if not value:
         return None
@@ -176,25 +183,15 @@ def _child_dirs(parent: str | None) -> list[str]:
 def _documents_dir() -> str | None:
     """This account's Documents folder, wherever the shell says it is.
 
-    Read from the shell folder registry rather than assembled from the profile
+    Resolved by ``user_paths.documents`` rather than assembled from the profile
     path, because Documents is routinely redirected — to OneDrive, or to another
     drive entirely — and a cleanup that walks the wrong one reports zero for a
-    folder that is full.
+    folder that is full. The profile path is the answer only when nothing else is.
     """
-    fallback = _under(_env("USERPROFILE"), "Documents")
-    if sys.platform != "win32":
-        return fallback
-    import winreg
-
-    try:
-        with winreg.OpenKey(
-            winreg.HKEY_CURRENT_USER,
-            r"Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders",
-        ) as key:
-            raw, _ = winreg.QueryValueEx(key, "Personal")
-    except OSError:
-        return fallback
-    return os.path.expandvars(str(raw)) or fallback
+    found = user_paths.documents()
+    if found is not None:
+        return str(found)
+    return _under(_env("USERPROFILE"), "Documents")
 
 
 #: A drive-rooted path as Battle.net writes it into its own product database.

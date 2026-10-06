@@ -79,51 +79,11 @@ MW4_PROFILE_GLOB = "players*/*/g.*.cod26.[0-9]*.l.txt"
 _CACHE_KEY = "game_config_files"
 
 
-def _console_user_folder(value_name: str) -> Path | None:
-    """One of the console user's shell folders, as Explorer resolved it.
-
-    Read from the console user's ``Shell Folders`` key, not the elevated token's:
-    under another administrator's credentials HKEY_CURRENT_USER, ``%LOCALAPPDATA%``
-    and ``Path.home()`` are all that administrator's, whose folders hold no game
-    config at all. ``Shell Folders`` also follows OneDrive redirection, which
-    reading ``%USERPROFILE%\\Documents`` directly would miss.
-    """
-    if sys.platform != "win32":
-        return None
-    try:
-        import winreg
-
-        from fpstune.utils.winapi.session import registry_root
-
-        root, key_path = registry_root(
-            "HKCU", r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
-        )
-        with winreg.OpenKey(root, key_path) as key:
-            folder, _ = winreg.QueryValueEx(key, value_name)
-        expanded = Path(str(folder))
-        if expanded.exists():
-            return expanded
-    except Exception as exc:  # pragma: no cover - environment dependent
-        logger.debug("%s folder lookup failed: %s", value_name, exc)
-    return None
-
-
-def _documents_dir() -> Path | None:
-    """Resolve the console user's Documents folder, honouring OneDrive redirection."""
-    if sys.platform != "win32":
-        return None
-    found = _console_user_folder("Personal")
-    if found is not None:
-        return found
-    fallback = user_paths.home() / "Documents"
-    return fallback if fallback.exists() else None
-
-
 def _local_app_data_dir() -> Path | None:
     """Resolve the console user's LocalAppData, where MW4 keeps its configs."""
     if sys.platform != "win32":
         return None
-    found = _console_user_folder("Local AppData")
+    found = user_paths.shell_folder("Local AppData")
     if found is not None:
         return found
     return user_paths.local_appdata()
@@ -237,7 +197,7 @@ def mw3_players_dir(documents: Path | None = None) -> Path | None:
     folders (``mw3_paths``); when only one holds the options file that one wins,
     and with neither the standalone folder is returned if it exists at all.
     """
-    documents = documents if documents is not None else _documents_dir()
+    documents = documents if documents is not None else user_paths.documents()
     if documents is None:
         return None
     folders = [documents / rel for rel in MW3_PLAYERS_DIRS]
@@ -326,7 +286,7 @@ def _load_snapshot() -> dict[str, Any]:
     if mw4_profile is not None:
         snapshot["mw4_profile"] = _read_text(mw4_profile)
 
-    documents = _documents_dir()
+    documents = user_paths.documents()
     if documents:
         mw3_players = mw3_players_dir(documents)
         mw3_path = mw3_players / MW3_OPTIONS_FILE if mw3_players is not None else None

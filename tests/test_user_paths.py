@@ -32,9 +32,17 @@ from tests.conftest import ProfileWriteWatch
 SRC = Path(__file__).resolve().parents[1] / "src" / "fpstune"
 HELPER = SRC / "utils" / "user_paths.py"
 
-# The variables that name a user-profile root. Machine-wide ones (ProgramData,
-# SystemRoot, ProgramFiles) are not a user's profile.
-PROFILE_VARIABLES = frozenset({"LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME"})
+# The variables that name a root the suite redirects: the user's profile, and
+# ProgramData (machine-wide, but the cleanups delete under it; #106). SystemRoot
+# and ProgramFiles are neither and are not written under.
+PROFILE_VARIABLES = frozenset(
+    {"LOCALAPPDATA", "APPDATA", "USERPROFILE", "HOME", "PROGRAMDATA", "ALLUSERSPROFILE"}
+)
+
+# The registry path the shell folders live under. A module that opens it itself
+# bypasses the one seam the suite silences, and reads the real profile's folders.
+_SHELL_FOLDERS_PREFIX = r"software\microsoft\windows\currentversion\explorer"
+_SHELL_FOLDERS_SAMPLE = r"Software\Microsoft\Windows\CurrentVersion\Explorer\Shell Folders"
 
 
 def _violations(tree: ast.AST) -> list[tuple[int, str]]:
@@ -67,6 +75,13 @@ def _violations(tree: ast.AST) -> list[tuple[int, str]]:
                 found.append((node.lineno, f"os.environ[{key.value}]"))
         elif isinstance(node, ast.Constant) and node.value == ".fpstune":
             found.append((node.lineno, "the '.fpstune' directory name"))
+        elif (
+            isinstance(node, ast.Constant)
+            and isinstance(node.value, str)
+            and node.value.lower().startswith(_SHELL_FOLDERS_PREFIX)
+            and "shell folders" in node.value.lower()
+        ):
+            found.append((node.lineno, "the Shell Folders registry key"))
     return found
 
 
@@ -96,8 +111,14 @@ def test_the_scan_sees_each_form_it_claims_to_forbid() -> None:
         "e = Path('~').expanduser()\n"
         "f = base / '.fpstune'\n"
         "g = os.environ.get('SYSTEMROOT')\n"
+        "h = os.environ.get('ProgramData')\n"
+        "i = os.environ['ALLUSERSPROFILE']\n"
+        f"j = winreg.OpenKey(root, {_SHELL_FOLDERS_SAMPLE!r})\n"
+        f"k = winreg.OpenKey(root, {_SHELL_FOLDERS_SAMPLE.replace('Shell', 'User Shell')!r})\n"
+        # A PowerShell script that names the key is not a Python read of it.
+        "m = cv + '/Explorer/Shell Folders'\n"
     )
-    assert [line for line, _ in _violations(sample)] == [3, 4, 5, 6, 7, 8]
+    assert sorted(line for line, _ in _violations(sample)) == [3, 4, 5, 6, 7, 8, 10, 11, 12, 13]
 
 
 # ---------------------------------------------------------------------------
@@ -402,11 +423,11 @@ def test_mw4_local_appdata_falls_back_to_the_variable(roots: dict[str, Path]) ->
 def test_documents_fall_back_to_the_profile_when_it_exists(
     roots: dict[str, Path],
 ) -> None:
-    from fpstune.settings.executors import game_config_cache
+    from fpstune.utils import user_paths
 
-    assert game_config_cache._documents_dir() is None
+    assert user_paths.documents() is None
     (roots["home"] / "Documents").mkdir()
-    assert game_config_cache._documents_dir() == roots["home"] / "Documents"
+    assert user_paths.documents() == roots["home"] / "Documents"
 
 
 def test_nvidia_app_config_is_under_local_appdata(roots: dict[str, Path]) -> None:
@@ -467,3 +488,286 @@ def test_wsa_probe_looks_under_local_appdata_packages(roots: dict[str, Path]) ->
     found = virtualization._windows_subsystem_for_android()
     assert found is not None
     assert found.key == "wsa"
+
+
+# ---------------------------------------------------------------------------
+# The shell folders and ProgramData (#106). `_isolated_profile` silences the two
+# operating-system lookups for every test; these pin what they return and what
+# each caller made of the answer, over a faked Shell Folders key.
+# ---------------------------------------------------------------------------
+
+_WINDOWS_ONLY = pytest.mark.skipif(sys.platform != "win32", reason="the shell is Windows'")
+
+
+class _FakeShellFolders:
+    """The console user's Shell Folders key: values by name, or no key at all."""
+
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+        self.present = True
+
+    def __enter__(self) -> _FakeShellFolders:
+        return self
+
+    def __exit__(self, *_exc: object) -> bool:
+        return False
+
+
+@pytest.fixture
+def shell_registry(monkeypatch: pytest.MonkeyPatch) -> _FakeShellFolders:
+    """A faked Shell Folders key under the real reader, which conftest had silenced."""
+    import winreg
+
+    from fpstune.utils import user_paths
+    from fpstune.utils.winapi import session
+    from tests.conftest import REAL_SHELL_LOOKUPS
+
+    registry = _FakeShellFolders()
+
+    def open_key(_root: int, path: str, *_rest: object) -> _FakeShellFolders:
+        assert path.endswith("Explorer\\Shell Folders"), path
+        if not registry.present:
+            raise FileNotFoundError(path)
+        return registry
+
+    def query(_key: object, name: str) -> tuple[str, int]:
+        if name not in registry.values:
+            raise FileNotFoundError(name)
+        return registry.values[name], 1
+
+    monkeypatch.setattr(winreg, "OpenKey", open_key)
+    monkeypatch.setattr(winreg, "QueryValueEx", query)
+    monkeypatch.setattr(session, "registry_root", lambda _hive, path: (0, path))
+    monkeypatch.setattr(user_paths, "_shell_folders_value", REAL_SHELL_LOOKUPS[0])
+    return registry
+
+
+@_WINDOWS_ONLY
+def test_a_shell_folder_is_the_registry_value_when_it_exists(
+    shell_registry: _FakeShellFolders, tmp_path: Path
+) -> None:
+    from fpstune.utils import user_paths
+
+    redirected = tmp_path / "OneDrive" / "Documents"
+    redirected.mkdir(parents=True)
+    shell_registry.values["Personal"] = str(redirected)
+    assert user_paths.shell_folder("Personal") == redirected
+    assert user_paths.documents() == redirected, "Shell Folders beats the profile's own Documents"
+
+
+@_WINDOWS_ONLY
+@pytest.mark.parametrize("answer", ["missing-directory", "absent-value", "absent-key"])
+def test_a_shell_folder_that_cannot_be_used_is_none(
+    answer: str, shell_registry: _FakeShellFolders, tmp_path: Path
+) -> None:
+    """A registry value naming a folder that is gone must not be handed on as a place."""
+    from fpstune.utils import user_paths
+
+    if answer == "missing-directory":
+        shell_registry.values["Personal"] = str(tmp_path / "gone")
+    elif answer == "absent-key":
+        shell_registry.present = False
+    assert user_paths.shell_folder("Personal") is None
+
+
+@_WINDOWS_ONLY
+def test_documents_fall_through_to_the_profile_when_the_shell_has_no_answer(
+    shell_registry: _FakeShellFolders, roots: dict[str, Path]
+) -> None:
+    from fpstune.utils import user_paths
+
+    shell_registry.present = False
+    assert user_paths.documents() is None
+    (roots["home"] / "Documents").mkdir()
+    assert user_paths.documents() == roots["home"] / "Documents"
+
+
+@_WINDOWS_ONLY
+@pytest.mark.parametrize(
+    ("hive_root", "asked"),
+    [("HKCU", True), ("HKU", False)],
+    ids=["same-user", "other-console-user"],
+)
+@pytest.mark.usefixtures("roots")
+def test_the_known_folder_is_asked_only_for_the_process_user(
+    hive_root: str,
+    asked: bool,
+    shell_registry: _FakeShellFolders,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """SHGetKnownFolderPath has no way to ask for anyone but the token's own user."""
+    from fpstune.utils import user_paths
+    from fpstune.utils.winapi import session
+
+    shell_registry.present = False
+    known = tmp_path / "known-documents"
+    known.mkdir()
+    monkeypatch.setattr(user_paths, "_known_folder", lambda _folder_id: known)
+    monkeypatch.setattr(session, "user_hive", lambda: session.UserHive(root=hive_root, prefix=""))
+    assert (user_paths.documents() == known) is asked
+
+
+@_WINDOWS_ONLY
+def test_program_data_prefers_the_shell_and_falls_back_to_the_variable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fpstune.utils import user_paths
+
+    from_shell = tmp_path / "shell"
+    from_variable = tmp_path / "variable"
+    monkeypatch.setenv("PROGRAMDATA", str(from_variable))
+    assert user_paths.program_data() == from_variable
+    monkeypatch.setattr(user_paths, "_known_folder", lambda _folder_id: from_shell)
+    assert user_paths.program_data() == from_shell
+    monkeypatch.setattr(user_paths, "_known_folder", lambda _folder_id: None)
+    monkeypatch.delenv("PROGRAMDATA")
+    assert user_paths.program_data() is None
+
+
+@_WINDOWS_ONLY
+def test_program_data_resolves_inside_the_throwaway_tree() -> None:
+    """Guards the cleanups deleting under the developer's real ProgramData."""
+    from fpstune.utils import user_paths
+
+    tree = os.path.normcase(str(user_paths.home()))
+    program_data = user_paths.program_data()
+    assert program_data is not None
+    assert os.path.normcase(str(program_data)).startswith(tree + os.sep)
+    real = _real("PROGRAMDATA")
+    assert real is None or os.path.normcase(str(program_data)) != os.path.normcase(str(real))
+
+
+@_WINDOWS_ONLY
+def test_the_operating_system_answers_what_the_variables_say() -> None:
+    """The real SHGetKnownFolderPath call, over the id table, against this machine.
+
+    ProgramData's id is checked against the variable captured before the redirect;
+    a wrong GUID would return another folder (or nothing) and fail here instead of
+    sending a cleanup somewhere else. Reads a path string only, never a folder.
+    """
+    from fpstune.utils import user_paths
+    from tests.conftest import REAL_PROFILE_ROOTS, REAL_SHELL_LOOKUPS
+
+    shell_folders_value, known_folder = REAL_SHELL_LOOKUPS
+    real_program_data = REAL_PROFILE_ROOTS.get("PROGRAMDATA")
+    assert real_program_data, "this runner has no %PROGRAMDATA%"
+    asked = known_folder(user_paths._FOLDERID_PROGRAM_DATA)
+    assert asked is not None
+    assert os.path.normcase(str(asked)) == os.path.normcase(real_program_data)
+
+    # Documents is expanded from %USERPROFILE% and refused when it does not exist,
+    # which the redirected tree does not satisfy: ask from a child that has the
+    # environment this process started with.
+    child = subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; sys.path.insert(0, sys.argv[1]); "
+            "from fpstune.utils import user_paths as u; "
+            "print(u._known_folder(u._FOLDERID_DOCUMENTS))",
+            str(SRC.parent),
+        ],
+        env={**os.environ, **REAL_PROFILE_ROOTS},
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    )
+    assert Path(child.stdout.strip()).is_absolute(), child.stdout
+    assert known_folder("00000000-0000-0000-0000-000000000000") is None
+    personal = shell_folders_value("Personal")
+    assert personal is not None
+    assert Path(personal).is_absolute()
+    assert shell_folders_value("No Such Shell Folder") is None
+
+
+@_WINDOWS_ONLY
+def test_cleanup_documents_follow_the_console_users_shell_folder(
+    shell_registry: _FakeShellFolders, roots: dict[str, Path], tmp_path: Path
+) -> None:
+    """Characterization of `cleanup_targets._documents_dir` across the routing.
+
+    Before: User Shell Folders of the token's hive, the profile's Documents when the
+    key or value was absent. Now: the console user's Shell Folders. The one answer
+    that moved: a registry value naming a folder that does not exist used to be
+    returned as it was, and now falls to the profile's Documents.
+    """
+    from fpstune.settings import cleanup_targets
+
+    redirected = tmp_path / "elsewhere" / "Documents"
+    redirected.mkdir(parents=True)
+    shell_registry.values["Personal"] = str(redirected)
+    assert cleanup_targets._documents_dir() == str(redirected)
+
+    shell_registry.values["Personal"] = str(tmp_path / "gone")
+    assert cleanup_targets._documents_dir() == str(roots["home"] / "Documents")
+
+    shell_registry.present = False
+    assert cleanup_targets._documents_dir() == str(roots["home"] / "Documents")
+
+
+def test_cleanup_machine_wide_roots_are_the_programdata_folder(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """ProgramData and its older spelling ALLUSERSPROFILE are one folder."""
+    from fpstune.settings import cleanup_targets
+    from fpstune.utils import user_paths
+
+    monkeypatch.setattr(user_paths, "program_data", lambda: tmp_path)
+    assert cleanup_targets._env("ProgramData") == str(tmp_path)
+    assert cleanup_targets._env("ALLUSERSPROFILE") == str(tmp_path)
+    monkeypatch.setattr(user_paths, "program_data", lambda: None)
+    assert cleanup_targets._env("ProgramData") is None
+    monkeypatch.setenv("SYSTEMROOT", "somewhere")
+    assert cleanup_targets._env("SYSTEMROOT") == "somewhere", "other variables are untouched"
+
+
+@_WINDOWS_ONLY
+def test_mw4_local_appdata_prefers_the_console_users_shell_folder(
+    shell_registry: _FakeShellFolders, roots: dict[str, Path], tmp_path: Path
+) -> None:
+    from fpstune.settings.executors import game_config_cache
+
+    console = tmp_path / "console-local"
+    console.mkdir()
+    shell_registry.values["Local AppData"] = str(console)
+    assert game_config_cache._local_app_data_dir() == console
+    shell_registry.present = False
+    assert game_config_cache._local_app_data_dir() == roots["local"]
+
+
+@_WINDOWS_ONLY
+def test_a_write_under_the_real_program_data_fails_the_test() -> None:
+    """Guards the suite writing machine-wide state: the hook watches the real ProgramData.
+
+    The probe is a remove of a path that does not exist: the audit event fires
+    before the call, so the hook sees it and nothing is created or deleted.
+    """
+    from tests.conftest import _WATCH, REAL_PROFILE_ROOTS
+
+    real = REAL_PROFILE_ROOTS.get("PROGRAMDATA")
+    assert real, "this runner has no %PROGRAMDATA%"
+    assert os.path.normcase(os.path.abspath(real)) in _WATCH.roots
+    with pytest.raises(FileNotFoundError):
+        os.remove(os.path.join(real, "fpstune-audit-probe-that-never-exists"))
+    with pytest.raises(AssertionError, match="real user profile"):
+        _WATCH.assert_clean()
+
+
+@_WINDOWS_ONLY
+def test_a_powershell_child_sees_the_redirected_roots() -> None:
+    """Guards the scripts: `$env:LOCALAPPDATA` inside PowerShell is read from the
+    environment the child inherits, which the redirect set, not the real profile's.
+    """
+    from fpstune.utils.powershell import run_powershell
+
+    names = ("LOCALAPPDATA", "APPDATA", "USERPROFILE", "PROGRAMDATA", "ALLUSERSPROFILE")
+    ok, output = run_powershell("(" + ", ".join(f"$env:{name}" for name in names) + ") -join '|'")
+    assert ok, output
+    seen = dict(zip(names, output.strip().split("|"), strict=True))
+    for name in names:
+        assert os.path.normcase(seen[name]) == os.path.normcase(os.environ[name]), name
+        real = _real(name)
+        assert real is None or os.path.normcase(seen[name]) != os.path.normcase(str(real)), name

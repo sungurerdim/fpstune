@@ -41,9 +41,7 @@ def config_path() -> Path | None:
     """The console user's Battle.net.config, or None off Windows."""
     if sys.platform != "win32":
         return None
-    from fpstune.settings.executors.game_config_cache import _console_user_folder
-
-    roaming = _console_user_folder("AppData")
+    roaming = user_paths.shell_folder("AppData")
     if roaming is None:
         roaming = user_paths.roaming_appdata()
     return roaming / _RELATIVE if roaming is not None else None

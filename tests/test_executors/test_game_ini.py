@@ -16,6 +16,7 @@ import pytest
 
 from fpstune.settings.applicability import NOT_INSTALLED, NOT_SUPPORTED
 from fpstune.settings.executors import game_ini
+from fpstune.utils import user_paths
 
 FORTNITE = (
     "[/Script/FortniteGame.FortGameUserSettings]\r\n"
@@ -246,6 +247,6 @@ def test_siege_reads_the_account_that_played_last(
         path.parent.mkdir(parents=True)
         path.write_text(SIEGE)
         os.utime(path, (stamp, stamp))
-    monkeypatch.setattr(game_ini, "_documents", lambda: tmp_path)
+    monkeypatch.setattr(user_paths, "documents", lambda: tmp_path)
 
     assert game_ini.siege_path() == new

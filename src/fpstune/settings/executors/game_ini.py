@@ -42,6 +42,7 @@ from pathlib import Path
 from typing import Any
 
 from fpstune.settings.applicability import NOT_INSTALLED, NOT_SUPPORTED
+from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -75,24 +76,12 @@ class GameConfigFile:
         return f"Global\\fpstune-{self.game}-config"
 
 
-def _console_folder(value_name: str) -> Path | None:
-    from fpstune.settings.executors.game_config_cache import _console_user_folder
-
-    return _console_user_folder(value_name)
-
-
 def _local_appdata() -> Path | None:
-    return _console_folder("Local AppData")
-
-
-def _documents() -> Path | None:
-    from fpstune.settings.executors.game_config_cache import _documents_dir
-
-    return _documents_dir()
+    return user_paths.shell_folder("Local AppData")
 
 
 def _saved_games() -> Path | None:
-    folder = _console_folder(_SAVED_GAMES_ID)
+    folder = user_paths.shell_folder(_SAVED_GAMES_ID)
     if folder is not None:
         return folder
     # Saved Games sits in the profile root; Local AppData is <profile>\AppData\Local.
@@ -132,7 +121,7 @@ def apex_path() -> Path | None:
 def overwatch_path() -> Path | None:
     # https://filepathgeek.com/posts/overwatch-2-settings-screenshots-location/
     # https://www.esportstales.com/overwatch/how-to-increase-fps-video-options
-    documents = _documents()
+    documents = user_paths.documents()
     if documents is None:
         return None
     return documents / "Overwatch" / "Settings" / "Settings_v0.ini"
@@ -143,7 +132,7 @@ def siege_path() -> Path | None:
     # the account that played last (C9: the folder name is never carried).
     # https://steamcommunity.com/app/359550/discussions/0/1621724915806554641/
     # https://github.com/cjLGH/game-settings/blob/master/r6siege/GameSettings.ini
-    documents = _documents()
+    documents = user_paths.documents()
     if documents is None:
         return None
     root = documents / "My Games" / "Rainbow Six - Siege"

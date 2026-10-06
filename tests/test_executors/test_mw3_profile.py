@@ -54,6 +54,7 @@ from fpstune.settings.executors.mw3_profile import (
 )
 from fpstune.settings.executors.powershell import PowerShellExecutor
 from fpstune.settings.executors.ps_batch import init_scan_cache, reset_scan_cache
+from fpstune.utils import user_paths
 
 # The files are plain text under a temporary user folder; only the platform
 # gate is Windows-specific, and `TestNonWindowsIsInert` pins that gate itself.
@@ -100,7 +101,7 @@ def scan_cache():
 @pytest.fixture
 def documents(tmp_path, monkeypatch):
     """A Documents folder of our own, and no MW4 install beside it."""
-    monkeypatch.setattr(gcc, "_documents_dir", lambda: tmp_path)
+    monkeypatch.setattr(user_paths, "documents", lambda: tmp_path)
     # MW4 discovery runs in the same snapshot load; point it somewhere empty so
     # this suite never reads the machine it happens to run on.
     monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "empty-local"))
@@ -175,7 +176,7 @@ class TestDiscovery:
         assert mw3_profile_path() is None
 
     def test_no_documents_folder_is_not_an_error(self, monkeypatch):
-        monkeypatch.setattr(gcc, "_documents_dir", lambda: None)
+        monkeypatch.setattr(user_paths, "documents", lambda: None)
         assert mw3_profile_path() is None
 
 

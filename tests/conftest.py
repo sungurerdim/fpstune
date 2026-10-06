@@ -26,7 +26,11 @@ import pytest
 # who wrote it, and the developer's own Battle.net client rewrites its config
 # while the suite runs.
 _REAL_PROFILE_MARK = "FPSTUNE_TEST_REAL_PROFILE"
-_ROOT_VARIABLES = ("LOCALAPPDATA", "APPDATA", "USERPROFILE")
+# ProgramData is machine-wide, not a user's profile, but the cleanups delete under it
+# and the audit hook has to see a write to it all the same (#106).
+_ROOT_VARIABLES = ("LOCALAPPDATA", "APPDATA", "USERPROFILE", "PROGRAMDATA")
+# The older spelling of ProgramData's variable; read by PowerShell scripts.
+_ALIAS_VARIABLES = ("ALLUSERSPROFILE",)
 
 if _REAL_PROFILE_MARK in os.environ:
     # A pytest-xdist worker inherits the controller's already-redirected
@@ -49,6 +53,15 @@ def _point_roots_at(home: Path) -> None:
     os.environ["USERPROFILE"] = str(home)
     os.environ["LOCALAPPDATA"] = str(local)
     os.environ["APPDATA"] = str(roaming)
+    program_data = home / "ProgramData"
+    # The shell expands the all-users Startup folder from %PROGRAMDATA% and answers
+    # "" for one that does not exist, so a child asking
+    # [Environment]::GetFolderPath('CommonStartup') needs the place to be there.
+    (program_data / "Microsoft" / "Windows" / "Start Menu" / "Programs" / "StartUp").mkdir(
+        parents=True, exist_ok=True
+    )
+    os.environ["PROGRAMDATA"] = str(program_data)
+    os.environ["ALLUSERSPROFILE"] = str(program_data)
 
 
 _SESSION_PROFILE = tempfile.TemporaryDirectory(prefix="fpstune-test-profile-")
@@ -148,6 +161,11 @@ sys.addaudithook(_WATCH)
 
 
 from fpstune.settings.applicability import HardwareContext  # noqa: E402
+from fpstune.utils import user_paths as _user_paths  # noqa: E402
+
+# The operating system's own answers, kept before `_isolated_profile` silences them,
+# so the test that pins what they return on this machine can still ask.
+REAL_SHELL_LOOKUPS = (_user_paths._shell_folders_value, _user_paths._known_folder)
 
 # Mock Windows-specific modules when running on non-Windows
 if sys.platform != "win32":
@@ -179,19 +197,6 @@ def _operation_lock_per_process() -> None:
     from fpstune.benchmark import operation_lock
 
     operation_lock.OPERATION_MUTEX = f"{operation_lock.OPERATION_MUTEX}-test-{os.getpid()}"
-
-
-@pytest.fixture(autouse=True)
-def _no_real_shell_folders(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Game config paths come from the test, never from the runner's own profile.
-
-    The product reads the console user's Shell Folders first, so a test that
-    builds a fake install under a temporary %LOCALAPPDATA% would otherwise be
-    pointed at the real one on a Windows runner.
-    """
-    from fpstune.settings.executors import game_config_cache
-
-    monkeypatch.setattr(game_config_cache, "_console_user_folder", lambda _name: None)
 
 
 @pytest.fixture
@@ -226,7 +231,7 @@ def _isolated_profile(
     """Every test gets its own user profile, never the runner's.
 
     `utils.user_paths` resolves every root (home, %LOCALAPPDATA%, %APPDATA%,
-    ~/.fpstune) at call time, and the suite drives the real apply, scan and
+    ~/.fpstune, Documents, ProgramData) at call time, and the suite drives the real apply, scan and
     bench paths: without this, a run wrote bench results, the self-check and
     game config lines into the developer's own profile, and read them back in
     the next test. The process-wide stores are dropped too, so none carries one
@@ -237,19 +242,22 @@ def _isolated_profile(
     variable is refused before anything is written.
     """
     from fpstune.safety import history
-    from fpstune.settings import cleanup_targets, performance_headroom
+    from fpstune.settings import performance_headroom
     from fpstune.utils import user_paths
 
     home = tmp_path_factory.mktemp("home")
     # monkeypatch.setenv registers the restore; _point_roots_at assigns.
-    for name in ("HOME", *_ROOT_VARIABLES):
+    for name in ("HOME", *_ROOT_VARIABLES, *_ALIAS_VARIABLES):
         monkeypatch.setenv(name, os.environ[name])
     _point_roots_at(home)
     monkeypatch.setattr(history, "_journal", None)
     monkeypatch.setattr(performance_headroom, "HEADROOM_PATH", home / ".fpstune" / "headroom.json")
-    # Documents is read from the registry on Windows, which the env redirect
-    # cannot reach; the profile fallback is the redirected one.
-    monkeypatch.setattr(cleanup_targets, "_documents_dir", lambda: str(home / "Documents"))
+    # The two answers an environment variable cannot redirect: the console user's
+    # Shell Folders key and SHGetKnownFolderPath. A test sees a shell that says
+    # nothing, so Documents is `<home>\Documents` and ProgramData is the
+    # redirected `%PROGRAMDATA%`, both in the throwaway tree.
+    monkeypatch.setattr(user_paths, "_shell_folders_value", lambda _name: None)
+    monkeypatch.setattr(user_paths, "_known_folder", lambda _folder_id: None)
 
     real = {os.path.normcase(os.path.normpath(v)) for v in REAL_PROFILE_ROOTS.values()}
     resolve = user_paths.profile_env

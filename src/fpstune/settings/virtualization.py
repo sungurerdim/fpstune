@@ -25,10 +25,8 @@ CLI probes do not.
 
 from __future__ import annotations
 
-import os
 import sys
 from dataclasses import dataclass
-from pathlib import Path
 
 from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
@@ -155,11 +153,11 @@ def _hyper_v_machines() -> VirtualizationConsumer | None:
     if sys.platform != "win32":
         return None
 
-    program_data = os.environ.get("PROGRAMDATA")
-    if not program_data:
+    program_data = user_paths.program_data()
+    if program_data is None:
         return None
 
-    vm_dir = Path(program_data) / "Microsoft" / "Windows" / "Hyper-V" / "Virtual Machines"
+    vm_dir = program_data / "Microsoft" / "Windows" / "Hyper-V" / "Virtual Machines"
     if not vm_dir.is_dir():
         return None
 

@@ -13,6 +13,7 @@ from pathlib import Path
 
 from fpstune.settings.executors import game_config_cache as gcc
 from fpstune.settings.executors.mw3_paths import MW3_OPTIONS_FILE, MW3_PLAYERS_PS
+from fpstune.utils import user_paths
 
 
 def _options(documents: Path, folder: str, mtime: float) -> Path:
@@ -73,6 +74,6 @@ def test_mw4_reads_the_console_users_local_app_data(tmp_path: Path, monkeypatch:
     mp.setattr(gcc.sys, "platform", "win32")
     mp.setenv("LOCALAPPDATA", str(tmp_path / "elevated-admin"))
     mp.setattr(
-        gcc, "_console_user_folder", lambda name: console if name == "Local AppData" else None
+        user_paths, "shell_folder", lambda name: console if name == "Local AppData" else None
     )
     assert gcc._local_app_data_dir() == console

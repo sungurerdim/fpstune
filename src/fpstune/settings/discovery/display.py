@@ -31,7 +31,7 @@ def discover_monitor_modes(registry: Registrar, probes: HardwareProbes) -> int: 
         How many monitors got a setting.
     """
     from fpstune.settings.definitions.display import create_monitor_mode_setting
-    from fpstune.settings.display_mode import is_readable, monitor_key, target_refresh
+    from fpstune.settings.display_mode import is_readable, monitor_key
     from fpstune.utils.hardware_manager import hardware_manager
 
     try:
@@ -50,8 +50,6 @@ def discover_monitor_modes(registry: Registrar, probes: HardwareProbes) -> int: 
                 monitor_key(monitor, monitors),
                 monitor.friendly_name or monitor.name.removeprefix("\\\\.\\"),
                 primary=monitor is primary,
-                refresh_hz=monitor.refresh_rate_hz,
-                max_refresh_hz=target_refresh(monitor),
             )
         )
         count += 1

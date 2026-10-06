@@ -35,13 +35,12 @@ action, claimed by the row that undoes it (``network:tcp_ack_frequency``: latenc
 
 from __future__ import annotations
 
-import inspect
 import re
 
 import pytest
 
 from fpstune.settings.base import SettingExecutor
-from fpstune.settings.definitions import get_all_static_settings
+from tests.test_settings.dynamic_rows import all_settings
 
 # word -> True when it names the "on" side
 _POLARITY = {"enabled": True, "on": True, "disabled": False, "off": False}
@@ -60,23 +59,10 @@ def _contradicts_recommendation(setting: SettingExecutor) -> bool:
     return recommended is not None and stated is not None and recommended != stated
 
 
-def _per_adapter_settings() -> list[SettingExecutor]:
-    """Per-adapter rows are built per machine; the factories that take only an adapter."""
-    from fpstune.settings.definitions import network
-
-    rows: list[SettingExecutor] = []
-    for name, factory in vars(network).items():
-        if not (name.startswith("create_") and name.endswith("_setting")):
-            continue
-        if list(inspect.signature(factory).parameters) == ["interface_index", "display_name"]:
-            rows.append(factory(7, "Test adapter"))
-    return rows
-
-
 def _guards() -> list[SettingExecutor]:
     return [
         s
-        for s in [*get_all_static_settings(), *_per_adapter_settings()]
+        for s in all_settings()
         if s.recommended_value == s.default_value and not s.is_readonly and not s.is_action
     ]
 
@@ -275,6 +261,8 @@ def _claims_a_gain(key: str, value: str | float) -> bool:
         return False
     if key == "stability":
         return str(value).lower() == "improved"
+    if "ceiling" in str(value).lower():
+        return False  # a cap's own value or its absence ("ceiling 300", "ceiling removed")
     reach = _reach(value)
     if reach is None:
         return str(value).strip().lower() not in _KEPT_WORDS
@@ -327,6 +315,9 @@ def test_no_guard_row_scores_a_gain_from_the_action_it_undoes() -> None:
         ("stability", "high", False),
         ("stability", "improved", True),
         ("fps_unfocused_ceiling", 30, False),
+        ("fps", "ceiling 300", False),
+        ("fps", "up to +360Hz ceiling", False),
+        ("fps", "ceiling removed", False),
         ("some_new_metric", 4, True),
         ("some_new_metric", 0, False),
     ],

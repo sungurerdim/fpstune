@@ -219,9 +219,7 @@ DISPLAY_SETTINGS: list[SettingExecutor] = [
 ]
 
 
-def create_monitor_mode_setting(
-    key: str, subject: str, *, primary: bool, refresh_hz: int, max_refresh_hz: int
-) -> SettingExecutor:
+def create_monitor_mode_setting(key: str, subject: str, *, primary: bool) -> SettingExecutor:
     """One monitor's mode: its own native resolution at its own maximum refresh.
 
     The primary monitor's is RECOMMENDED — it is where the game runs. Every other
@@ -231,11 +229,6 @@ def create_monitor_mode_setting(
     """
     from fpstune.settings.display_mode import NATIVE, NOT_AVAILABLE, NOT_NATIVE
 
-    # What a frame costs on screen at each rate: the claim is the panel's own
-    # refresh interval, not a benchmark (C11 rule 4 class for the visual part).
-    saved_ms = 0.0
-    if 0 < refresh_hz < max_refresh_hz:
-        saved_ms = round(1000 / refresh_hz - 1000 / max_refresh_hz, 1)
     where = "the main monitor, where games run" if primary else "a secondary monitor"
     return SettingExecutor(
         id=f"display:{key}:mode",
@@ -260,7 +253,10 @@ def create_monitor_mode_setting(
         scope=SettingScope.RECOMMENDED if primary else SettingScope.COMPLETE,
         category_order=50,
         effect="Sets the monitor to its native resolution and maximum refresh rate",
-        impact_scores={"latency_ms": -saved_ms, "target_visibility": "native pixels"},
+        # A guard: the native mode is this panel's own default, so keeping it claims no
+        # latency saved. The frame interval a lower refresh would add is the opposite
+        # action's cost, derived from this panel's two readings but not a gain to claim.
+        impact_scores={"latency_ms": 0.0, "target_visibility": "preserved"},
         detect_type=DetectType.POWERSHELL,
         detect_command="display_mode_status",
         detect_args={"monitor": key},

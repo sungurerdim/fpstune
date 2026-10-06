@@ -3402,7 +3402,9 @@ def create_mtu_setting(interface_index: int, display_name: str, path_mtu: int) -
         # No latency figure: fragmentation costs throughput and stall time on large
         # transfers, and game packets are far below any MTU. Claiming milliseconds
         # here would be the invented-number defect this file has paid for before.
-        impact_scores={"packet_loss": "removes PMTU black-hole stalls"},
+        impact_scores={
+            "packet_loss": "removes PMTU black-hole stalls" if path_mtu < 1500 else "preserved"
+        },
         detect_type=DetectType.POWERSHELL,
         detect_command=(
             "$i = Get-NetIPInterface -InterfaceIndex %ifindex% -AddressFamily IPv4 "

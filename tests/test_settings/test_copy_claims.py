@@ -33,14 +33,22 @@ from pathlib import Path
 import pytest
 
 from fpstune.settings.base import SettingExecutor
-from fpstune.settings.definitions import get_all_static_settings
+from tests.test_settings.dynamic_rows import (
+    FIXTURE_READINGS,
+    all_settings,
+    factories,
+    factory_settings,
+    id_key,
+)
 
 _NUMBER = r"(?<![\w.,])~?\+?\d+(?:[.,]\d+)?(?:\s*[-–]\s*\d+(?:[.,]\d+)?)?"
 _CLAIM = re.compile(
     rf"(?:{_NUMBER}\s*(?:%|(?:ms|fps|kb|mb|gb|x)(?![A-Za-z]))|%\s*{_NUMBER})",
     re.IGNORECASE,
 )
-_NOT_A_QUANTITY = re.compile(r"(?:\{[^}]*\}|\b1%\s*lows?\b|%1\s*(?:düşük|low)\w*)", re.IGNORECASE)
+_NOT_A_QUANTITY = re.compile(
+    r"(?:\{[^}]*\}|\b1%\s*lows?\b|%1\s*(?:düşük|low)\w*|\b\d{3,5}x\d{3,5}\b)", re.IGNORECASE
+)
 
 COPY_FIELDS = ("description", "current_impact", "recommended_impact", "effect", "risk_warning")
 _I18N = Path(__file__).resolve().parents[2] / "frontend" / "src" / "i18n"
@@ -64,6 +72,10 @@ def _body(field: str, text: str) -> str:
         return rest if colon else text
     return text
 
+
+_VRAM_QUOTED = ("4gb", "8gb", "24gb")  # the VRAM fixtures, 4096 / 8192 / 24576 MB
+_VRAM_SHARE = {"70%": "the share this row writes", "95%": "the share this row writes"}
+_HZ_QUOTED = ("60fps", "144fps", "240fps", "360fps")  # the ``max_hz`` fixtures
 
 # (setting id, field) -> {quantity: reason}. A listed quantity is a fact, not a performance claim.
 FACTS: dict[tuple[str, str], dict[str, str]] = {
@@ -144,6 +156,20 @@ FACTS: dict[tuple[str, str], dict[str, str]] = {
     ("game_config:mw3:texture_resolution", "description"): {"8gb": "a card's VRAM capacity"},
     ("game_config:mw3:texture_resolution", "current_impact"): {"8gb": "a card's VRAM capacity"},
     ("game_config:mw3:texture_resolution", "effect"): {"8gb": "a card's VRAM capacity"},
+    # Rows built for a machine quote that machine's own reading back (C9): the figures below are
+    # the fixture readings in ``dynamic_rows.FIXTURE_READINGS``, so a changed fixture fails
+    # ``test_every_fact_is_still_a_quantity_in_the_copy`` instead of silently exempting nothing.
+    **{
+        (f"game_config:{game}:vram_scale", field): {
+            **dict.fromkeys(_VRAM_QUOTED, "this card's own VRAM, quoted back from the reading"),
+            **(_VRAM_SHARE if field == "description" else {}),
+        }
+        for game in ("mw3", "mw4")
+        for field in ("description", "effect", "recommended_impact")
+    },
+    ("gpu-nvidia:fps_limit", "current_impact"): dict.fromkeys(
+        _HZ_QUOTED, "this panel's own refresh rate, quoted back from the reading"
+    ),
 }
 
 # Quantities in the frontend catalogues that are facts, keyed by (file, a distinctive
@@ -178,89 +204,26 @@ I18N_FACTS: dict[tuple[str, str], dict[str, str]] = {
     },
 }
 
-# Rows that still carry a claim, measured 2026-10-06. Shrink-only: delete a line when its
-# row is fixed; the test fails on a line whose row no longer violates.
-PENDING: dict[tuple[str, str], str] = {
-    ("game_config:mw3:anisotropic", "current_impact"): "8x, 16x, 2-3%",
-    ("game_config:mw3:dlss_frame_generation", "current_impact"): "10-20ms",
-    ("game_config:mw3:dxr_mode", "current_impact"): "20-40%",
-    ("game_config:mw3:dxr_mode", "description"): "20-40%",
-    ("game_config:mw3:dxr_mode", "recommended_impact"): "20-40%",
-    ("game_config:mw3:fsr_frame_interpolation", "current_impact"): "10-20ms",
-    ("game_config:mw3:nvidia_reflex", "current_impact"): "10-20ms",
-    ("game_config:mw3:nvidia_reflex", "recommended_impact"): "5-15ms",
-    ("game_config:mw3:particle_quality", "recommended_impact"): "1.3%, 4%",
-    ("game_config:mw3:shader_quality", "current_impact"): "11%",
-    ("game_config:mw3:shader_quality", "recommended_impact"): "11%",
-    ("game_config:mw3:shadow_quality", "recommended_impact"): "3.6%",
-    ("game_config:mw3:ssao", "recommended_impact"): "3-5%",
-    ("game_config:mw3:ssr", "current_impact"): "10%",
-    ("game_config:mw3:ssr", "recommended_impact"): "5-10%",
-    ("game_config:mw3:static_reflection_quality", "current_impact"): "0-1%",
-    ("game_config:mw3:static_reflection_quality", "description"): "0-1%",
-    ("game_config:mw3:static_reflection_quality", "recommended_impact"): "0-1%",
-    ("game_config:mw3:sun_shadow_cascade", "current_impact"): "5-8%",
-    ("game_config:mw3:sun_shadow_cascade", "recommended_impact"): "5-8%",
-    ("game_config:mw3:tessellation", "current_impact"): "2-5%",
-    ("game_config:mw3:tessellation", "recommended_impact"): "2-5%",
-    ("game_config:mw3:texture_resolution", "current_impact"): "1-3gb",
-    ("game_config:mw3:texture_resolution", "description"): "1-2gb",
-    ("game_config:mw3:texture_resolution", "recommended_impact"): "4-6gb",
-    ("game_config:mw3:volumetric_quality", "current_impact"): "5-15%",
-    ("game_config:mw3:vrs", "description"): "10%",
-    ("game_config:mw3:vrs", "recommended_impact"): "0-10%",
-    ("game_config:mw3:water_caustics", "current_impact"): "1-2%",
-    ("game_config:mw3:water_caustics", "recommended_impact"): "1-2%",
-    ("game_config:mw3:weather_grid", "recommended_impact"): "0-1%",
-    ("game_config:mw4:amd_antilag", "current_impact"): "10-20ms",
-    ("game_config:mw4:dlss_model", "current_impact"): "3%",
-    ("game_config:mw4:dlss_model", "description"): "3%",
-    ("game_config:mw4:intel_xell", "current_impact"): "10-20ms",
-    ("game_config:mw4:model_quality", "current_impact"): "3-6%",
-    ("game_config:mw4:nvidia_reflex", "current_impact"): "10-20ms",
-    ("game_config:mw4:world_streaming", "current_impact"): "2%",
-}
+# Rows that still carry a claim. Empty since 2026-10-06 (#104): every game-config row and every
+# Turkish catalogue string was rewritten to say what changes and what it costs, in words.
+# Shrink-only: a line may be removed when its row is fixed, and a new one needs a reason.
+PENDING: dict[tuple[str, str], str] = {}
 # (file, fragment of the string) -> what the claim is. Same rule, for the catalogues.
-I18N_PENDING: dict[tuple[str, str], str] = {
-    ("settingsTr.ts", "Dünya yüzeyleri ve nesneler için doku ay"): "1-2gb",
-    ("settingsTr.ts", "Gölge ve yansımalar için DirectX ışın iz"): "%20-40",
-    ("settingsTr.ts", "Küp harita yansıma sondalarının yeniden "): "%0-1",
-    ("settingsTr.ts", "Sürücünün daha az fark edilir saydığı ek"): "%10",
-    ("settingsTr.ts", "Yükselticiden ÖNCE uygulanan dış çizim ö"): "%89",
-    ("settingsTr.ts", "Yükseltmeyi hangi DLSS sinir modelinin y"): "%3",
-}
-
-
-def _per_adapter_settings() -> list[SettingExecutor]:
-    """The per-adapter rows are built per machine; the factories that take only an adapter."""
-    from fpstune.settings.definitions import network
-
-    rows: list[SettingExecutor] = []
-    for name, factory in vars(network).items():
-        if not (name.startswith("create_") and name.endswith("_setting")):
-            continue
-        if list(inspect.signature(factory).parameters) == ["interface_index", "display_name"]:
-            rows.append(factory(7, "Test adapter"))
-    return rows
-
-
-def _id_key(setting_id: str) -> str:
-    """A per-adapter id carries the adapter's index; the record names the pattern (C9)."""
-    return re.sub(r"^network:\d+:", "network:*:", setting_id)
+I18N_PENDING: dict[tuple[str, str], str] = {}
 
 
 def _setting_violations() -> dict[tuple[str, str], list[str]]:
     found: dict[tuple[str, str], list[str]] = {}
-    for setting in [*get_all_static_settings(), *_per_adapter_settings()]:
+    for setting in all_settings():
         for field in COPY_FIELDS:
             text = getattr(setting, field, None)
             if not text:
                 continue
-            key = (_id_key(setting.id), field)
+            key = (id_key(setting.id), field)
             allowed = FACTS.get(key, {})
             bad = [q for q in quantified_claims(_body(field, text)) if q not in allowed]
             if bad:
-                found[key] = bad
+                found[key] = sorted({*found.get(key, []), *bad})
     return found
 
 
@@ -304,15 +267,45 @@ def test_pending_settings_only_shrink() -> None:
 
 def test_every_fact_is_still_a_quantity_in_the_copy() -> None:
     """A fact whose figure left the copy is a stale exemption that could mask a new claim."""
-    by_id: dict[str, SettingExecutor] = {s.id: s for s in get_all_static_settings()}
+    variants: dict[str, list[SettingExecutor]] = {}
+    for setting in all_settings():
+        variants.setdefault(id_key(setting.id), []).append(setting)
     stale = []
     for (sid, field), quantities in FACTS.items():
-        setting = by_id.get(sid)
-        text = getattr(setting, field, None) if setting else None
-        present = set(quantified_claims(_body(field, text))) if text else set()
+        present: set[str] = set()
+        for setting in variants.get(sid, []):
+            text = getattr(setting, field, None)
+            if text:
+                present |= set(quantified_claims(_body(field, text)))
         stale += [(sid, field, q) for q in quantities if q not in present]
 
     assert not stale, f"FACTS lists a quantity the copy no longer contains: {stale}"
+
+
+def test_every_factory_argument_has_a_fixture_reading() -> None:
+    """A factory added to the definitions is scanned too, or this fails naming what it lacks.
+
+    The per-adapter, per-game and per-panel rows are built at run time from what the hardware
+    reports, so they are in no static list. Without a reading for each argument the scan would
+    skip the factory, and a figure in its copy would ship unseen.
+    """
+    missing = sorted(
+        f"{qualified}({name})"
+        for qualified, factory in factories().items()
+        for name, p in inspect.signature(factory).parameters.items()
+        if p.default is inspect.Parameter.empty and name not in FIXTURE_READINGS
+    )
+
+    assert not missing, f"add a reading to FIXTURE_READINGS for: {missing}"
+
+
+def test_the_scan_reaches_the_dynamic_rows_of_every_kind() -> None:
+    """Pins that the factory pass finds per-adapter, per-game and per-panel rows at all."""
+    ids = {id_key(s.id) for s in factory_settings()}
+
+    assert "network:*:lso" in ids, "per-adapter rows are not scanned"
+    assert "game_config:fortnite:fps_cap" in ids, "per-game rows are not scanned"
+    assert any(i.endswith(":mode") for i in ids), "per-panel rows are not scanned"
 
 
 def test_no_catalogue_string_quotes_a_quantity_nothing_measured() -> None:
@@ -373,6 +366,7 @@ def test_every_catalogue_fact_is_still_a_quantity_in_its_string() -> None:
         ("Signal {signal}% on the {band} GHz band", []),
         ("Windows 11 build 26200, 3 retries, 2 frames", []),
         ("max stable 5 mbps? no", []),
+        ("The attached panel is native 2560x1440; 2x as fast", ["2x"]),
     ],
 )
 def test_the_detector_reads_quantities_in_both_languages(text: str, expected: list[str]) -> None:

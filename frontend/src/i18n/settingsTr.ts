@@ -1206,7 +1206,7 @@ export const settingsTr: Record<
   "game_config:mw3:vrs": {
     name: "MW3 değişken oranlı gölgeleme",
     description:
-      "Sürücünün daha az fark edilir saydığı ekran bölgelerini düşük oranda gölgeler. Bildirilen kazanım GPU'ya göre ~%10'dan önemsize kadar iner; bazı sistemlerde kararsızlık görülür.",
+      "Sürücünün daha az fark edilir saydığı ekran bölgelerini düşük oranda gölgeler. Bildirilen kazanım GPU'ya göre büyükten önemsize kadar değişir; bazı sistemlerde kararsızlık görülür.",
   },
   "game_config:mw3:texture_streaming": {
     name: "MW3 doku akışı sınırı",
@@ -1286,7 +1286,7 @@ export const settingsTr: Record<
   "game_config:mw3:dxr_mode": {
     name: "MW3 ışın izleme (DXR)",
     description:
-      "Gölge ve yansımalar için DirectX ışın izleme. Kare hızının %20-40'ına mal olur ve rekabetçi getirisi yoktur, bu yüzden çok oyunculuda kapalıdır.",
+      "Gölge ve yansımalar için DirectX ışın izleme. Menünün en pahalı seçeneklerindendir ve rekabetçi getirisi yoktur, bu yüzden çok oyunculuda kapalıdır.",
   },
   "game_config:mw3:audio_mix": {
     name: "MW3 ses karışımı",
@@ -1306,7 +1306,7 @@ export const settingsTr: Record<
   "game_config:mw3:static_reflection_quality": {
     name: "MW3 statik yansıma kalitesi",
     description:
-      "Küp harita yansıma sondalarının yeniden aydınlatma sıklığı/kalitesi. 1=Düşük, 4=Yüksek. 1'e inmek yalnızca %0-1 FPS ölçüyor; oyunun varsayılanı bu yüzden korunur.",
+      "Küp harita yansıma sondalarının yeniden aydınlatma sıklığı/kalitesi. 1=Düşük, 4=Yüksek. 1'e inmek neredeyse hiçbir şey kazandırmaz; oyunun varsayılanı bu yüzden korunur.",
   },
   "game_config:mw3:deferred_physics": {
     name: "MW3 ertelenmiş fizik kalitesi",
@@ -1316,7 +1316,7 @@ export const settingsTr: Record<
   "game_config:mw3:render_resolution": {
     name: "MW3 çizim çözünürlüğü çarpanı",
     description:
-      "Yükselticiden ÖNCE uygulanan dış çizim ölçeği (ekranın yüzdesi). Kalite-performans dengesi: 50, doğala göre +%89 FPS ama çok bulanık; 75 dengelidir.",
+      "Yükselticiden ÖNCE uygulanan dış çizim ölçeği (ekranın yüzdesi). DLSS Quality ile 100'ü koruyun, o zaten iç ölçeği düşürür; 75 yalnızca yerel çözünürlük hedeflerinde.",
   },
   "game_config:mw3:weather_grid": {
     name: "MW3 hava durumu ızgaraları",
@@ -1376,7 +1376,7 @@ export const settingsTr: Record<
   "game_config:mw3:texture_resolution": {
     name: "MW3 doku çözünürlüğü",
     description:
-      "Dünya yüzeyleri ve nesneler için doku ayrıntı düzeyi. VRAM'e bağlıdır; High'dan Normal'e inmek 1-2 GB VRAM kazandırır ve 8 GB kartlarda doygunluk takılmalarını bitirir.",
+      "Dünya yüzeyleri ve nesneler için doku ayrıntı düzeyi. VRAM'e bağlıdır; High yerine Normal video belleğini boşaltır ve 8 GB kartlarda doygunluk takılmalarını bitirir.",
   },
   "game_config:mw3:water_quality": {
     name: "MW3 su kalitesi",
@@ -1576,7 +1576,7 @@ export const settingsTr: Record<
   "game_config:mw4:dlss_model": {
     name: "MW4 DLSS modeli",
     description:
-      "Yükseltmeyi hangi DLSS sinir modelinin yaptığı. Transformer model ince ayrıntıyı harekette eski evrişimsel modelden daha iyi tutar ve kare hızının %3'üne kadarına mal olur.",
+      "Yükseltmeyi hangi DLSS sinir modelinin yaptığı. Transformer model ince ayrıntıyı harekette eski evrişimsel modelden daha iyi tutar ve kare hızının küçük bir payına mal olur.",
   },
   "game_config:mw4:texture_quality": {
     name: "MW4 doku kalitesi",

@@ -103,8 +103,9 @@ class TestOneSettingPerMonitor:
         rows = self._register([primary, side])
         assert rows["Primary Panel"].scope is SettingScope.RECOMMENDED
         assert rows["Side Panel"].scope is SettingScope.COMPLETE
-        # The claim is the panel's own frame interval: 16.7 ms at 60 Hz, 6.9 at 144.
-        assert rows["Side Panel"].impact_scores["latency_ms"] == pytest.approx(-9.7)
+        # A guard (native is the panel's own default): it keeps the mode and claims no
+        # latency saved, whatever the panel's current refresh is.
+        assert rows["Side Panel"].impact_scores["latency_ms"] == 0.0
 
     def test_a_monitor_whose_native_mode_is_unknown_gets_no_setting(self) -> None:
         unknown = _monitor(native_width=0, native_height=0)

@@ -34,8 +34,6 @@ def test_payload_key_is_the_one_in_the_monitor_setting_id() -> None:
         monitor_key(monitors[1], monitors),
         "Example 27Q",
         primary=False,
-        refresh_hz=60,
-        max_refresh_hz=165,
     )
 
     assert setting.id.startswith(f"display:{payloads[1].setting_key}:")

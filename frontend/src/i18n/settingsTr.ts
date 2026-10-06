@@ -144,12 +144,12 @@ export const settingsTr: Record<
   "power:wlan_power_saving": {
     name: "Wi-Fi güç tasarrufu",
     description:
-      "Wi-Fi bağdaştırıcısını paketler arasında uyutur. Oyun sırasında 20-100 ms ping sıçramalarına yol açar.",
+      "Wi-Fi bağdaştırıcısını paketler arasında uyutur. Oyun sırasında ping sıçramalarına yol açar.",
   },
   "power:hibernation": {
     name: "Hazırda beklet",
     description:
-      "Tüm RAM içeriğini kapalıyken hızlı uyanmak için diske (hiberfil.sys) yazar. Kapatmak 4-16 GB SSD alanı boşaltır.",
+      "Tüm RAM içeriğini kapalıyken hızlı uyanmak için diske (hiberfil.sys) yazar. Kapatmak hiberfil.sys'nin tuttuğu SSD alanını boşaltır.",
   },
   "power:ryzen_balanced_plan": {
     name: "AMD Ryzen güç planı",
@@ -318,7 +318,7 @@ export const settingsTr: Record<
   "network:tcp_timestamps": {
     name: "TCP zaman damgaları",
     description:
-      "Her TCP paketine zaman damgası ekler; tekrar saldırısına karşı koruma ve kullanılabilir bir gidiş-dönüş süresi tahmini sağlar. Windows bunu açık getirir, kapatmak oyunun kullanabileceği hiçbir şey kazandırmaz.",
+      "Her TCP paketine zaman damgası ekler; tekrar saldırısına karşı koruma ve kullanılabilir bir gidiş-dönüş süresi tahmini sağlar. Windows bunu açık getirir; kapatmak oyuna bir şey kazandırmaz.",
   },
   "network:tcp_ecn": {
     name: "Tıkanıklık erken uyarısı (ECN)",
@@ -434,7 +434,7 @@ export const settingsTr: Record<
   "gpu-amd:radeon_boost": {
     name: "Radeon Boost",
     description:
-      "Kamera hızlı hareket ederken render çözünürlüğünü düşürür, görüntü durulunca geri yükler; %5-15 kare kazandırır. Netlik tam hedef takibi sırasında kaybedilir.",
+      "Kamera hızlı hareket ederken render çözünürlüğünü düşürür, görüntü durulunca geri yükler; daha çok kare kazandırır. Netlik tam hedef takibi sırasında kaybedilir.",
   },
   "gpu-amd:enhanced_sync": {
     name: "Enhanced Sync",
@@ -575,7 +575,7 @@ export const settingsTr: Record<
   "services:UCPD": {
     name: "Tarayıcı seçimi koruma sürücüsü",
     description:
-      "Microsoft dışı programların varsayılan tarayıcı ve uygulama seçimlerinizi ile Widgets gibi kısa bir sistem anahtarı listesini değiştirmesini engelleyen bir Microsoft sürücüsü. fpstune onu açık tutar, başka bir araç kapattıysa yeniden açar.",
+      "Microsoft dışı programların varsayılan tarayıcı ve uygulama seçimlerinizi ile birkaç sistem anahtarını değiştirmesini engelleyen sürücü. fpstune onu açık tutar, kapatıldıysa yeniden açar.",
   },
   "system:large_system_cache": {
     name: "Uygulama-önbellek bellek dengesi",
@@ -774,7 +774,7 @@ export const settingsTr: Record<
   "perf:svchost_split_threshold": {
     name: "Hizmet süreci gruplama",
     description:
-      "Windows hizmetlerini daha az sürece toplar. Yaklaşık 100-300 MB RAM kazandırır.",
+      "Windows hizmetlerini ayrı svchost.exe süreçlerinde çalıştırır. Birleştirmek bellek kazandırır, ama bir çökme birçok hizmeti birden düşürür.",
   },
   "perf:startup_delay": {
     name: "Başlangıç uygulaması gecikmesi",
@@ -794,12 +794,12 @@ export const settingsTr: Record<
   "system:vbs_core_isolation": {
     name: "Çekirdek yalıtımı (VBS)",
     description:
-      "Sanallaştırma tabanlı güvenlik (Bellek Bütünlüğü). Açık tutun: kapatmak ~%5 kare kazandırır ve Windows Güvenliği uyarısı tetikler.",
+      "Sanallaştırma tabanlı güvenlik (Bellek Bütünlüğü). Açık tutun: kapatmak kare kazandırabilir ve Windows Güvenliği uyarısı tetikler.",
   },
   "cleanup:dism_cleanup": {
     name: "Windows bileşen temizliği",
     description:
-      "Windows bileşen deposunu temizler. 1-10 GB boşaltabilir. 5-15 dakika sürer. Tam alan kazanımı için yeniden başlatma gerekebilir.",
+      "Windows bileşen deposunu temizler ve disk alanı boşaltır; birkaç dakika sürebilir. Tam alan kazanımı için yeniden başlatma gerekebilir.",
   },
   "cleanup:temp_files": {
     name: "Geçici dosyalar",

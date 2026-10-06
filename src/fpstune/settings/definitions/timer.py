@@ -64,12 +64,12 @@ GLOBAL_TIMER_RESOLUTION = SettingExecutor(
     evidence_level="proven",
     sources=["https://forums.blurbusters.com/viewtopic.php?t=13842"],
     current_impact="Disabled: Timer resolution is per-process (15.6ms default for others)",
-    recommended_impact="Enabled: All processes benefit from lowest requested resolution (0.5-1ms)",
+    recommended_impact="Enabled: All processes benefit from lowest requested resolution",
     scope=SettingScope.ESSENTIAL,  # High impact on system-wide timing
     category_order=2,  # Second most important timer setting
     # The registry key is honoured on Windows 11 only.
     applicable_conditions={"is_windows_11": True},
-    effect="Enables system-wide 0.5-1ms timer resolution for smoother gameplay",
+    effect="Enables system-wide timer resolution for smoother gameplay",
     impact_scores={"latency_ms": -0.5, "power_watts": "+1-3", "stability": "high"},
     # Detection - Registry based
     detect_type=DetectType.REGISTRY,

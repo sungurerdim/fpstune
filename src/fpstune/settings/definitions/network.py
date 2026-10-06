@@ -289,7 +289,7 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Enabled: Interrupts batched → less CPU but 1-5ms extra latency",
+        current_impact="Enabled: Interrupts batched → less CPU but extra per-packet latency",
         recommended_impact="Disabled: Every packet processed immediately → lowest network latency",
         scope=SettingScope.RECOMMENDED,  # Noticeable benefit for network latency
         category_order=10,  # Per-adapter setting
@@ -469,7 +469,7 @@ def create_eee_setting(interface_index: int, display_name: str) -> SettingExecut
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Enabled: Adapter sleeps during idle → 1-5ms wake-up latency on first packet",
+        current_impact="Enabled: Adapter sleeps during idle → wake-up latency on first packet",
         recommended_impact="Disabled: Adapter always active → no wake-up latency, instant response",
         scope=SettingScope.RECOMMENDED,  # Noticeable benefit for network latency
         category_order=12,  # Per-adapter setting
@@ -590,7 +590,7 @@ def create_power_management_setting(interface_index: int, display_name: str) -> 
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Enabled: Windows may disconnect adapter during idle → connection drops, 100-200ms resume delay",
+        current_impact="Enabled: Windows may disconnect adapter during idle → connection drops, a resume delay",
         recommended_impact="Disabled: Adapter always on → stable connection, no resume latency",
         scope=SettingScope.RECOMMENDED,  # Noticeable benefit for connection stability
         category_order=13,  # Per-adapter setting
@@ -1121,7 +1121,7 @@ NAGLE_ALGORITHM = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=2,  # Right after auto-tuning
     effect="Removes the TcpNoDelay values so Nagle's algorithm batches small TCP writes again",
-    impact_scores={"latency_ms": "0 to -5 (TCP titles only)", "download_throughput": "reduced"},
+    impact_scores={"latency_ms": 0.0, "download_throughput": "restored"},
     # Detection - Check TcpNoDelay on interfaces with gateway (static or DHCP)
     detect_type=DetectType.POWERSHELL,
     detect_command=(
@@ -1694,7 +1694,7 @@ def create_roaming_aggressiveness_setting(
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Higher values: Frequent AP scanning → periodic ping spikes (50-200ms)",
+        current_impact="Higher values: Frequent AP scanning → periodic ping spikes",
         recommended_impact="Lowest: Minimal scanning → stable connection, no ping spikes",
         scope=SettingScope.RECOMMENDED,
         category_order=14,  # Per-adapter WiFi setting
@@ -2924,7 +2924,7 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
         sources=[
             "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics"
         ],
-        current_impact="Enabled: Packets buffered for power-save delivery → 1-10ms WiFi latency and jitter",
+        current_impact="Enabled: Packets buffered for power-save delivery → WiFi latency and jitter",
         recommended_impact="Disabled: Immediate packet delivery → lower, more consistent WiFi latency",
         scope=SettingScope.RECOMMENDED,
         category_order=23,

@@ -37,8 +37,8 @@ NVIDIA_LOW_LATENCY = SettingExecutor(
         "https://www.nvidia.com/en-us/geforce/news/reflex-low-latency-platform/",
         "https://www.pcworld.com/article/393646/tested-how-nvidia-reflex-can-make-you-a-better-esports-gamer.html",
     ],
-    current_impact="Off: GPU pre-renders 2-3 frames → 33-50ms input delay",
-    recommended_impact="On: 1 frame buffer → 15-20% lower input lag, safe for all games",
+    current_impact="Off: GPU pre-renders 2-3 frames → added input delay",
+    recommended_impact="On: 1 frame buffer → lower input lag, safe for all games",
     # The one anti-cheat fact this product knows, carried where the user
     # reads it rather than in a checker nothing called (H8): 'ultra' hooks
     # deeper into the driver than some anti-cheat likes; 'on' — the
@@ -196,7 +196,7 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
         default_value="app",
         recommended_value="off",
         requires_reboot=False,
-        current_impact="Application-controlled or On: A game with V-Sync on holds frames for the next refresh → 8-16 ms extra input lag",
+        current_impact="Application-controlled or On: A game with V-Sync on holds frames for the next refresh → extra input lag",
         recommended_impact="Off: Frames presented as soon as they are ready → minimum input lag",
         scope=SettingScope.ESSENTIAL,
         category_order=2,
@@ -487,7 +487,7 @@ NVIDIA_ANISO_SAMPLE_OPT = SettingExecutor(
     recommended_value="on",
     requires_reboot=False,
     current_impact="Off: Full anisotropic filtering samples",
-    recommended_impact="On: Optimized samples → 1-2% FPS gain, minimal visual difference",
+    recommended_impact="On: Optimized samples → fewer filtering samples per pixel, minimal visual difference",
     scope=SettingScope.COMPLETE,  # Minor improvement
     category_order=10,
     perceptible_cost=(
@@ -732,7 +732,7 @@ GPU_RESIZABLE_BAR = SettingExecutor(
     ],
     current_impact="Disabled: CPU limited to 256MB GPU VRAM "
     "window, causing asset streaming bottleneck",
-    recommended_impact="Enabled: Full VRAM access, 5-21% FPS gain in streaming-heavy titles",
+    recommended_impact="Enabled: Full VRAM access → less asset-streaming stall in streaming-heavy titles",
     scope=SettingScope.RECOMMENDED,
     category_order=18,
     effect="In BIOS, under Advanced > PCI, set Resizable BAR and Above 4G Decoding to Enabled",
@@ -908,7 +908,7 @@ AMD_ANTI_LAG = SettingExecutor(
     requires_reboot=False,
     evidence_level="proven",
     sources=["https://www.amd.com/en/products/software/adrenalin/anti-lag-2.html"],
-    current_impact="Disabled: Normal render queue → 20-40ms input delay",
+    current_impact="Disabled: Normal render queue → added input delay",
     recommended_impact="Enabled: Synchronized CPU/GPU → reduced input latency",
     # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
     # which AMD Software also uses for its own UI state, and no AMD machine has
@@ -988,7 +988,7 @@ AMD_VSYNC = SettingExecutor(
     default_value="on",
     recommended_value="off",
     requires_reboot=False,
-    current_impact="On: Frames sync to monitor → 8-16ms extra input lag",
+    current_impact="On: Frames sync to monitor → extra input lag",
     recommended_impact="Off: Free frame rendering → minimum input lag",
     # COMPLETE until verified on AMD hardware: every AMD row writes HKCU\SOFTWARE\AMD\CN,
     # which AMD Software also uses for its own UI state, and no AMD machine has
@@ -1033,14 +1033,14 @@ AMD_RADEON_BOOST = SettingExecutor(
     display_name="Radeon Boost",
     short_name="Radeon Boost",
     description="Lowers render resolution while the camera moves fast and restores it when the view settles, "
-    "for 5-15% more frames. The sharpness is lost exactly while tracking a target.",
+    "for more frames. The sharpness is lost exactly while tracking a target.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="disabled",
     recommended_value="enabled",
     requires_reboot=False,
     current_impact="Disabled: Full resolution at all times, including while tracking a target",
-    recommended_impact="Enabled: 5-15% more frames during motion, at the cost of a softer image while you track a target",
+    recommended_impact="Enabled: More frames during motion, at the cost of a softer image while you track a target",
     scope=SettingScope.COMPLETE,  # Perceptible cost during tracking: offered, never assumed
     category_order=4,  # After Anti-Lag and Shader Cache
     effect="Enables dynamic resolution scaling during motion for higher FPS",

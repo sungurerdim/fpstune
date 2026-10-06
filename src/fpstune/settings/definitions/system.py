@@ -223,8 +223,8 @@ SERVICE_NVIDIA_TELEMETRY = SettingExecutor(
     sources=[
         "https://www.xda-developers.com/i-disabled-these-5-windows-11-background-services-and-saw-zero-downsides/"
     ],
-    current_impact="Enabled: Collects and sends NVIDIA usage data → ~50MB RAM usage",
-    recommended_impact="Disabled: No telemetry → ~50MB RAM saved",
+    current_impact="Enabled: Collects and sends NVIDIA usage data → keeps a process resident",
+    recommended_impact="Disabled: No telemetry → that process's RAM freed",
     scope=SettingScope.COMPLETE,  # Minor improvement
     category_order=6,  # NVIDIA telemetry
     effect="Stops NVIDIA telemetry data collection to save RAM and CPU",
@@ -306,8 +306,8 @@ SERVICE_FAX = SettingExecutor(
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
-    current_impact="Enabled: Fax service running in background → ~5MB RAM usage",
-    recommended_impact="Disabled: Service stopped → ~5MB RAM saved",
+    current_impact="Enabled: Fax service running in background → keeps a process resident",
+    recommended_impact="Disabled: Service stopped → its RAM freed",
     scope=SettingScope.COMPLETE,  # Minor improvement
     category_order=8,  # Legacy service
     effect="Stops unused legacy fax service to save RAM",
@@ -343,8 +343,8 @@ SERVICE_ERROR_REPORTING = SettingExecutor(
     default_value="enabled",
     recommended_value="disabled",
     requires_reboot=False,
-    current_impact="Enabled: Sends crash data to Microsoft → ~10MB RAM usage",
-    recommended_impact="Disabled: No crash reporting → ~10MB RAM saved",
+    current_impact="Enabled: Sends crash data to Microsoft → keeps a process resident",
+    recommended_impact="Disabled: No crash reporting → its RAM freed",
     scope=SettingScope.COMPLETE,  # Minor improvement
     category_order=9,  # Error reporting
     effect="Stops Windows error reporting to save RAM and improve privacy",
@@ -474,7 +474,7 @@ SERVICE_XBOX_AUTH = SettingExecutor(
     requires_reboot=False,
     current_impact="Enabled: Required for Xbox Live sign-in and Game Pass",
     recommended_impact="Enabled: Xbox sign-in and Game Pass keep working "
-    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
+    "(stopping it frees its RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=11,  # Xbox service
     effect="Controls Xbox Live authentication service (required for Game Pass)",
@@ -513,7 +513,7 @@ SERVICE_XBOX_GAME_SAVE = SettingExecutor(
     requires_reboot=False,
     current_impact="Enabled: Syncs game saves to Xbox Live cloud",
     recommended_impact="Enabled: Game saves keep syncing to Xbox Live "
-    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
+    "(stopping it frees its RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=12,  # Xbox cloud saves
     effect="Controls Xbox cloud save sync (required for Game Pass saves)",
@@ -552,7 +552,7 @@ SERVICE_XBOX_NETWORKING = SettingExecutor(
     requires_reboot=False,
     current_impact="Enabled: Handles Xbox Live multiplayer connections",
     recommended_impact="Enabled: Xbox multiplayer connections keep working "
-    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
+    "(stopping it frees its RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=13,  # Xbox networking
     effect="Controls Xbox multiplayer networking (required for Xbox online)",
@@ -591,7 +591,7 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
     requires_reboot=False,
     current_impact="Enabled: Manages Xbox controllers and accessories",
     recommended_impact="Enabled: Xbox controllers keep working "
-    "(stopping it saves ~5MB RAM, only if you never use one)",
+    "(stopping it frees its RAM, only if you never use one)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox controller users
     category_order=14,  # Xbox controller
     effect="Controls Xbox controller management (required for Xbox controllers)",
@@ -1267,7 +1267,7 @@ PERF_SVCHOST_SPLIT = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="SvcHost Split Threshold",
     short_name="Service process grouping",
-    description="Combines Windows services into fewer processes. Saves ~100-300MB RAM.",
+    description="Windows runs its services in separate svchost.exe processes. Combining them saves memory, but one crash then takes many services down.",
     value_type=SettingValueType.CHOICE,
     choices=("split", "combined"),
     default_value="split",
@@ -1277,7 +1277,7 @@ PERF_SVCHOST_SPLIT = SettingExecutor(
     recommended_value="split",
     requires_reboot=True,
     current_impact="Split: Services in many svchost.exe processes",
-    recommended_impact="Combined: Services merged → ~100-300MB RAM saved, fewer context switches",
+    recommended_impact="Split: Windows' own sizing → a crash takes down one service, not many",
     scope=SettingScope.RECOMMENDED,
     category_order=36,
     effect="Combines Windows services into fewer processes to save RAM and reduce overhead",
@@ -1641,8 +1641,8 @@ SYSTEM_WIDGETS = SettingExecutor(
     recommended_value="disabled",
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Enabled: Background WebView2 process always running → ~50-150MB RAM",
-    recommended_impact="Disabled: No widgets process → ~100MB RAM freed",
+    current_impact="Enabled: Background WebView2 process always running → resident RAM",
+    recommended_impact="Disabled: No widgets process → its RAM freed",
     scope=SettingScope.RECOMMENDED,
     category_order=34,
     applicable_conditions={"is_windows_11": True},
@@ -1730,7 +1730,7 @@ SYSTEM_HYPER_V = SettingExecutor(
     sources=[
         "https://www.howtogeek.com/these-windows-settings-are-hurting-your-game-fps/",
     ],
-    current_impact="Enabled: Windows runs under hypervisor with 5-15% FPS overhead from SLAT",
+    current_impact="Enabled: Windows runs under hypervisor, which adds second-level address translation overhead",
     recommended_impact="Disabled: Native hardware access, no hypervisor overhead",
     scope=SettingScope.RECOMMENDED,
     category_order=51,
@@ -1832,7 +1832,7 @@ SYSTEM_XMP_EXPO = SettingExecutor(
     ],
     current_impact="XMP inactive: RAM running at JEDEC default "
     "(2133-4800 MHz) instead of rated speed",
-    recommended_impact="XMP active: RAM at full rated speed for 10-20 FPS gain in CPU-bound titles",
+    recommended_impact="XMP active: RAM at full rated speed → higher frame rate in CPU-bound titles",
     scope=SettingScope.RECOMMENDED,
     category_order=52,
     effect="In BIOS, under Advanced > DRAM Configuration, set the XMP/EXPO profile to Profile 1 or the "
@@ -2279,7 +2279,7 @@ CLEANUP_DISM = SettingExecutor(
     category=SettingCategory.MAINTENANCE,
     display_name="DISM Cleanup",
     short_name="Windows component cleanup",
-    description="Cleans the Windows component store, freeing 1-10 GB in 5-15 minutes. A reboot may be needed "
+    description="Cleans the Windows component store, freeing disk space; it can take several minutes. A reboot may be needed "
     "to reclaim all of it.",
     value_type=SettingValueType.BOOL,
     choices=(),

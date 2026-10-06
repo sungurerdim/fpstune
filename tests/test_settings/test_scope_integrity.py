@@ -82,11 +82,15 @@ def test_tcp_tweaks_are_not_written_at_all(registry: SettingsRegistry, setting_i
 @pytest.mark.parametrize("setting_id", DEMOTED_TCP_TWEAKS)
 def test_tcp_tweaks_do_not_promise_udp_gains(registry: SettingsRegistry, setting_id: str) -> None:
     # The old impact_scores claimed a flat latency win with no qualifier, which
-    # read as universal. The benefit is TCP-only and must say so.
+    # read as universal. A claimed benefit is TCP-only and must say so; a row that
+    # claims none (0.0: it keeps or restores the stock state) has nothing to qualify.
     setting = registry.get(setting_id)
     assert setting is not None
-    latency = str(setting.impact_scores.get("latency_ms", ""))
-    assert "TCP" in latency, f"{setting_id} still advertises an unqualified latency gain"
+    latency = setting.impact_scores.get("latency_ms", "")
+    if isinstance(latency, int | float):
+        assert latency == 0, f"{setting_id} advertises an unqualified latency gain"
+    else:
+        assert "TCP" in latency, f"{setting_id} still advertises an unqualified latency gain"
 
 
 def test_essential_stays_small(registry: SettingsRegistry) -> None:

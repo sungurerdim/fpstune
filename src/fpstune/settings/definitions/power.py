@@ -53,7 +53,7 @@ USB_SELECTIVE_SUSPEND = SettingExecutor(
     requires_reboot=False,
     evidence_level="proven",
     sources=["https://forums.blurbusters.com/viewtopic.php?t=11801"],
-    current_impact="Enabled: USB devices enter sleep → mouse/keyboard wake delay (1-5ms)",
+    current_impact="Enabled: USB devices enter sleep → mouse/keyboard wake delay",
     recommended_impact="Disabled: USB devices always active → no input lag, instant response",
     scope=SettingScope.ESSENTIAL,  # High impact on input lag
     category_order=1,  # Primary power setting for input latency
@@ -191,7 +191,7 @@ POWER_HIBERNATION = SettingExecutor(
     display_name="Hibernation",
     short_name="Hibernation",
     description="Saves full RAM contents to disk (hiberfil.sys) for fast wake from "
-    "power-off. Disabling frees 4-16GB SSD space.",
+    "power-off. Disabling frees the SSD space hiberfil.sys holds.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
@@ -201,8 +201,8 @@ POWER_HIBERNATION = SettingExecutor(
     applicable_conditions={"feature_absent": "mobile"},
     requires_reboot=False,
     evidence_level="likely",
-    current_impact="Enabled: hiberfil.sys occupies 4-16GB of SSD space constantly",
-    recommended_impact="Disabled: 4-16GB SSD space freed, faster shutdown, "
+    current_impact="Enabled: hiberfil.sys occupies SSD space constantly",
+    recommended_impact="Disabled: hiberfil.sys SSD space freed, faster shutdown, "
     "no hibernate-related stutter",
     scope=SettingScope.RECOMMENDED,
     category_order=4,

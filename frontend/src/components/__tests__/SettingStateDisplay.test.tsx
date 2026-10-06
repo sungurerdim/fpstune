@@ -90,6 +90,27 @@ describe("SettingValueState", () => {
     );
   });
 
+  it("shows the name the backend gave a tier, not its id or a hint", () => {
+    render(
+      <SettingValueState
+        setting={makeSetting({
+          choices: ["off", "on"],
+          currentValue: "off",
+          recommendedValue: "on",
+          defaultValue: "off",
+          isOptimized: false,
+          choiceLabels: { off: "tier.off", on: "tier.ultra" },
+          valueHints: { on: "1" },
+        })}
+      />,
+    );
+    // The one-queued-frame tier is "Ultra" where the vendor's app calls it that.
+    const el = screen.getByTestId("setting-value-state");
+    expect(el).toHaveTextContent("Off");
+    expect(el).toHaveTextContent("Ultra");
+    expect(el).not.toHaveTextContent("on (1)");
+  });
+
   it("renders nothing for action settings", () => {
     // Cleanup actions have no current-vs-ideal; an arrow between two booleans
     // would be noise on every maintenance row.

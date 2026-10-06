@@ -276,6 +276,9 @@ export interface Setting {
 
   // === Value Hints ===
   valueHints?: Record<string, string>; // Raw value hints per choice label, e.g. { "enabled": "1" }
+  // What each choice is called on this machine: choice id → i18n key, chosen by
+  // the backend from what the hardware can do. A choice without one shows its id.
+  choiceLabels?: Record<string, string>;
 
   // === Grouping (static) ===
   // Whose setting this is inside the list that owns it: which game, which kind of
@@ -351,6 +354,8 @@ export interface SettingDefinition {
   is_readonly?: boolean;
   // UI value hints: choice label → raw value string
   value_hints?: Record<string, string>;
+  // choice id → i18n key naming it on this machine
+  choice_labels?: Record<string, string>;
   // Group heading this setting renders under, resolved by the backend
   group_id?: string | null;
   group_label?: string | null;
@@ -523,6 +528,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     applicableConditions: def.applicable_conditions || {},
     isReadonly: def.is_readonly ?? false,
     valueHints: def.value_hints,
+    choiceLabels: def.choice_labels,
     groupId: def.group_id ?? undefined,
     groupLabel: def.group_label ?? undefined,
     groupOrder: def.group_order ?? undefined,

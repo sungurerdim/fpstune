@@ -320,6 +320,8 @@ class SettingDefinitionResponse(BaseModel):
     is_readonly: bool = False
     # UI hints showing raw values next to choice labels (e.g. "enabled" -> "1")
     value_hints: dict[str, str] = {}
+    # What each choice is called on this machine, as frontend i18n keys.
+    choice_labels: dict[str, str] = {}
     # Which group heads this setting inside the list that owns it (the game it
     # belongs to, the kind of cleanup it is). Null for a list with no groups.
     # The label ships from the backend so no screen has to spell a game's name.

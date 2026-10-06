@@ -232,6 +232,11 @@ export const en = {
   "choice.throttling": "Throttling",
   "choice.none_at_startup": "None at startup",
   "choice.apps_at_startup": "Apps at startup",
+  // What a tier is called, chosen by the backend from what this machine's driver
+  // can do (the same effect carries a different vendor name per driver generation)
+  "tier.off": "Off",
+  "tier.on": "On",
+  "tier.ultra": "Ultra",
   "badge.risk": "RISK",
   "badge.note": "NOTE",
 

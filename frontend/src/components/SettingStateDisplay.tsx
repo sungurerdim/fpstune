@@ -1,6 +1,11 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
-import { advisoryChoiceLabel, describeFinding, explainsWithFinding } from "../lib/finding";
+import {
+  advisoryChoiceLabel,
+  choiceLabel,
+  describeFinding,
+  explainsWithFinding,
+} from "../lib/finding";
 import { cn } from "../lib/utils";
 import {
   IMPACT_CATEGORY_META,
@@ -57,6 +62,9 @@ export function SettingValueState({
   }
 
   const label = (value: unknown) => {
+    // The name this machine's backend gave the choice outranks every other form.
+    const named = choiceLabel(setting, value);
+    if (named) return named;
     // An advisory's value is a state name for the comparison code; the user
     // reads "Below the adapter's maximum", never `below_capability`.
     if (explainsWithFinding(setting)) {

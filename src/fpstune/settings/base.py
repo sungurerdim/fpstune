@@ -619,6 +619,14 @@ class SettingExecutor:
     # If empty, hints are auto-derived from apply_value_map when raw != display label
     value_hints: dict[str, str] = field(default_factory=dict)
 
+    # What each choice is *called* on this machine, as frontend i18n keys. A
+    # choice's id names its effect and never changes; the word a vendor prints on
+    # it can (Low Latency's one-queued-frame tier is "On" in one driver
+    # generation and "Ultra" in the next). A discoverer sets this from what the
+    # machine can do; the frontend translates the key (C4). A choice with no
+    # entry is shown by its id.
+    choice_labels: dict[str, str] = field(default_factory=dict)
+
     # === States detect can read but apply never writes ===
     # A guard's "changed" or "mismatched" is something another tool did; its
     # command only ever puts the harmless state back. Where the apply map does
@@ -783,6 +791,7 @@ class SettingExecutor:
             "impact_scores": self.impact_scores,
             "is_readonly": self.is_readonly,
             "value_hints": self._derive_value_hints(),
+            "choice_labels": self.choice_labels,
         }
 
 

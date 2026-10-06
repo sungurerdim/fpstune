@@ -69,6 +69,7 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         progress_pattern=s.progress_pattern,
         is_readonly=s.is_readonly,
         value_hints=s._derive_value_hints(),
+        choice_labels=s.choice_labels,
         group_id=group.id if group else None,
         group_label=group.label if group else None,
         group_order=group.order if group else None,

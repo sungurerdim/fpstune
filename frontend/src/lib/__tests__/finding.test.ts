@@ -13,8 +13,10 @@ import { setLocale } from "../../i18n";
 import {
   advisoryChoiceLabel,
   cableFor,
+  choiceLabel,
   describeFinding,
   formatMbps,
+  valueLabel,
 } from "../finding";
 import type { Setting } from "../../types/setting";
 
@@ -310,5 +312,36 @@ describe("a power setting whose battery rail drifted", () => {
     expect(describeFinding(drifted)?.summary).toBe(
       "Pilde bu değer 100; Windows'un kendi pil değeri 10.",
     );
+  });
+});
+
+describe("a choice the backend named for this machine", () => {
+  // The vendor's app calls the one-queued-frame tier "Ultra"; its older control
+  // panel calls the same tier "On". The backend picks from what the driver can
+  // do and sends a key, so the words follow the machine, in both languages.
+  const lowLatency = advisory({
+    valueType: "choice",
+    isReadonly: false,
+    choices: ["off", "on"],
+    choiceLabels: { off: "tier.off", on: "tier.ultra" },
+  });
+
+  it("prints the named tier instead of the choice id", () => {
+    expect(valueLabel(lowLatency, "on")).toBe("Ultra");
+    expect(valueLabel(lowLatency, "off")).toBe("Off");
+  });
+
+  it("translates the key, so Turkish never comes from the backend", () => {
+    setLocale("tr");
+    expect(valueLabel(lowLatency, "off")).toBe("Kapalı");
+    expect(choiceLabel(lowLatency, "on")).toBe("Ultra");
+  });
+
+  it("falls back to the id for a choice with no name or a key this build lacks", () => {
+    const unknownKey = { ...lowLatency, choiceLabels: { on: "tier.does_not_exist" } };
+    expect(choiceLabel(unknownKey, "on")).toBeNull();
+    expect(valueLabel(unknownKey, "on")).toBe("on");
+    expect(choiceLabel(lowLatency, null)).toBeNull();
+    expect(valueLabel({ ...lowLatency, choiceLabels: undefined }, "off")).toBe("off");
   });
 });

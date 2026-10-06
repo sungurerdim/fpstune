@@ -56,6 +56,16 @@ class EnumKey:
     Ultra Low Latency "CPL state" only tells NVIDIA Control Panel which radio
     button to show, so a profile tool that never set it must still read as the
     tier the driver actually runs.
+
+    A tier is identified by its effect (the ids in ``values``), never by the
+    word a vendor prints on it, and the vendor's words change with the driver
+    generation: the same one-queued-frame tier is "On" in NVIDIA Control Panel
+    next to an "Ultra" that needs ``ULL_ENABLED``, and "Ultra" in the NVIDIA App,
+    whose driver has no such key. ``labels`` names each tier (as an i18n key the
+    frontend translates, C4) when the driver defines every key;
+    ``labels_without`` replaces those names for a key the driver lacks. Which
+    names apply is read from the driver's own key table, never from a version.
+    A key whose absence cannot move a tier's name says why in ``label_reason``.
     """
 
     key: str
@@ -63,6 +73,9 @@ class EnumKey:
     stock: str
     published: bool = True
     write_only: frozenset[int] = field(default_factory=frozenset)
+    labels: Mapping[str, str] = field(default_factory=dict)
+    labels_without: Mapping[int, Mapping[str, str]] = field(default_factory=dict)
+    label_reason: str = ""
 
     @property
     def ids(self) -> tuple[int, ...]:
@@ -101,6 +114,18 @@ class EnumKey:
     def supports(self, missing: Collection[int] = ()) -> bool:
         """False when no choice but the stock one survives: nothing to change here."""
         return len(self.choices(missing)) > 1
+
+    def choice_labels(self, missing: Collection[int] = ()) -> dict[str, str]:
+        """The i18n label key of each choice this driver can hold, by capability.
+
+        Empty for a key that names its tiers by their own ids.
+        """
+        named = dict(self.labels)
+        for key_id, replacement in self.labels_without.items():
+            if key_id in missing:
+                named.update(replacement)
+        held = self.choices(missing)
+        return {choice: label for choice, label in named.items() if choice in held}
 
     def changes_for(self, choice: str, missing: Collection[int] = ()) -> dict[int, int | None]:
         if choice not in self.values:
@@ -178,11 +203,19 @@ _KEYS: tuple[DrsKey, ...] = (
     EnumKey(
         "low_latency",
         {
-            # NVIDIA Control Panel's Low Latency Mode is three keys: the
-            # pre-render limit, the Ultra switch, and the panel's own record of
-            # which tier it shows. PRERENDERLIMIT_APP_CONTROLLED is 0. The Ultra
-            # pair is not published by NVIDIA; `fpstune nvidia-dump` before and
-            # after choosing each tier in NVIDIA Control Panel confirms it.
+            # Low Latency Mode is up to three keys: the pre-render limit, the
+            # Ultra switch, and the panel's own record of which tier it shows.
+            # PRERENDERLIMIT_APP_CONTROLLED is 0. The Ultra pair is not
+            # published by NVIDIA; the table follows `fpstune nvidia-dump`
+            # before and after each choice, measured on two driver generations:
+            #   NVIDIA Control Panel, legacy driver: Off writes PRERENDERLIMIT 0,
+            #     On writes PRERENDERLIMIT 1 (+ ULL_CPL_STATE 1), Ultra writes
+            #     PRERENDERLIMIT 1 + ULL_ENABLED 1 (+ ULL_CPL_STATE 2).
+            #   NVIDIA App, driver 617.14 (neither ULL key defined): offers only
+            #     Off and Ultra; Ultra writes PRERENDERLIMIT 1 and nothing else,
+            #     Off writes PRERENDERLIMIT 0. The App's "Ultra" is therefore this
+            #     table's "on" tier — one queued frame — under the vendor's newer
+            #     name, which is why `labels_without` renames it.
             "off": {PRERENDERLIMIT: 0, ULL_ENABLED: 0, ULL_CPL_STATE: 0},
             "on": {PRERENDERLIMIT: 1, ULL_ENABLED: 0, ULL_CPL_STATE: 1},
             "ultra": {PRERENDERLIMIT: 1, ULL_ENABLED: 1, ULL_CPL_STATE: 2},
@@ -190,6 +223,8 @@ _KEYS: tuple[DrsKey, ...] = (
         stock="off",
         published=False,
         write_only=frozenset({ULL_CPL_STATE}),
+        labels={"off": "tier.off", "on": "tier.on", "ultra": "tier.ultra"},
+        labels_without={ULL_ENABLED: {"off": "tier.off", "on": "tier.ultra"}},
     ),
     EnumKey(
         # NVIDIA Control Panel's "Threaded optimization". The key is named OGL_
@@ -275,6 +310,10 @@ _KEYS: tuple[DrsKey, ...] = (
         {"on": {CUDA_FORCE_P2: 0x1}, "off": {CUDA_FORCE_P2: 0x0}},
         stock="on",
         published=False,
+        label_reason=(
+            "one key and two tiers: a driver without it does not support the setting at "
+            "all, so no tier can be renamed by what the driver lacks"
+        ),
     ),
     NumberKey("fps_limit", FRL_FPS, stock=0, maximum=FRL_MAX),
     NumberKey("bg_app_fps", FRL_BACKGROUND, stock=0, maximum=FRL_MAX, published=False),
@@ -285,3 +324,8 @@ KEYS: dict[str, DrsKey] = {k.key: k for k in _KEYS}
 
 def lookup(key: str) -> DrsKey | None:
     return KEYS.get(key)
+
+
+def mapped_ids() -> frozenset[int]:
+    """Every DRS setting id this table reads or writes."""
+    return frozenset(i for key in KEYS.values() for i in key.ids)

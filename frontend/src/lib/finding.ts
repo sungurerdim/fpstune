@@ -1,5 +1,5 @@
 import { t, getLocale } from "../i18n";
-import type { MessageKey } from "../i18n/en";
+import { en, type MessageKey } from "../i18n/en";
 import { formatSettingValue, type Setting } from "../types/setting";
 
 /**
@@ -274,10 +274,26 @@ export function advisoryChoiceLabel(value: unknown): string | null {
 }
 
 /**
- * The one way a row prints a setting's value: an advisory's state name in
- * words, else the raw-value hint the definition carries, else the value.
+ * The name the backend gave a choice on this machine, in the current language.
+ *
+ * The backend sends an i18n key, never a sentence (C4); a key this build does
+ * not have is ignored rather than printed, so a newer backend cannot put a raw
+ * key on screen.
+ */
+export function choiceLabel(setting: Setting, value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  const key = setting.choiceLabels?.[String(value)];
+  return key && key in en ? t(key as MessageKey) : null;
+}
+
+/**
+ * The one way a row prints a setting's value: the name this machine's backend
+ * gave the choice, else an advisory's state name in words, else the raw-value
+ * hint the definition carries, else the value.
  */
 export function valueLabel(setting: Setting, value: unknown): string {
+  const named = choiceLabel(setting, value);
+  if (named) return named;
   if (explainsWithFinding(setting)) {
     const words = advisoryChoiceLabel(value);
     if (words) return words;

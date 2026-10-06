@@ -222,6 +222,9 @@ export const tr: Record<keyof typeof en, string> = {
   "choice.throttling": "Kısılıyor",
   "choice.none_at_startup": "Başlangıçta yok",
   "choice.apps_at_startup": "Başlangıçta uygulama var",
+  "tier.off": "Kapalı",
+  "tier.on": "Açık",
+  "tier.ultra": "Ultra",
   "badge.risk": "RİSK",
   "badge.note": "NOT",
 

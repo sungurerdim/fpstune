@@ -449,7 +449,8 @@ SERVICE_XBOX_AUTH = SettingExecutor(
     recommended_value="enabled",  # Keep enabled by default due to Xbox Game Pass popularity
     requires_reboot=False,
     current_impact="Enabled: Required for Xbox Live sign-in and Game Pass",
-    recommended_impact="Disabled: Service stopped → ~10MB RAM saved (only if not using Xbox)",
+    recommended_impact="Enabled: Xbox sign-in and Game Pass keep working "
+    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=11,  # Xbox service
     effect="Controls Xbox Live authentication service (required for Game Pass)",
@@ -487,7 +488,8 @@ SERVICE_XBOX_GAME_SAVE = SettingExecutor(
     recommended_value="enabled",
     requires_reboot=False,
     current_impact="Enabled: Syncs game saves to Xbox Live cloud",
-    recommended_impact="Disabled: Service stopped → ~10MB RAM saved (only if not using Xbox)",
+    recommended_impact="Enabled: Game saves keep syncing to Xbox Live "
+    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=12,  # Xbox cloud saves
     effect="Controls Xbox cloud save sync (required for Game Pass saves)",
@@ -525,7 +527,8 @@ SERVICE_XBOX_NETWORKING = SettingExecutor(
     recommended_value="enabled",
     requires_reboot=False,
     current_impact="Enabled: Handles Xbox Live multiplayer connections",
-    recommended_impact="Disabled: Service stopped → ~10MB RAM saved (only if not using Xbox)",
+    recommended_impact="Enabled: Xbox multiplayer connections keep working "
+    "(stopping it saves ~10MB RAM, only if you never use Xbox)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=13,  # Xbox networking
     effect="Controls Xbox multiplayer networking (required for Xbox online)",
@@ -563,8 +566,8 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
     recommended_value="enabled",
     requires_reboot=False,
     current_impact="Enabled: Manages Xbox controllers and accessories",
-    recommended_impact="Disabled: Service stopped → ~5MB RAM saved "
-    "(only if not using Xbox controllers)",
+    recommended_impact="Enabled: Xbox controllers keep working "
+    "(stopping it saves ~5MB RAM, only if you never use one)",
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox controller users
     category_order=14,  # Xbox controller
     effect="Controls Xbox controller management (required for Xbox controllers)",
@@ -654,21 +657,22 @@ SERVICE_UCPD = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="User Choice Protection Driver (UCPD)",
     short_name="Browser-choice protection driver",
-    description="A hidden driver that silently blocks changes to default app associations, so a change "
-    "appears to apply and is quietly reverted. Off, the settings a user makes actually hold.",
+    description="Stops non-Microsoft programs rewriting your default browser and app choices and a "
+    "few system keys such as Widgets. fpstune keeps it on and turns it back on if a tool disabled it.",
     value_type=SettingValueType.CHOICE,
     choices=("enabled", "disabled"),
     default_value="enabled",
-    # A Microsoft protection driver with no performance cost: a guard.
+    # A Microsoft protection driver with no performance cost: a guard. Turning it off
+    # costs security, so it stays retired and the row only ever restores it.
     recommended_value="enabled",
     requires_reboot=True,  # Kernel driver - change requires reboot to take effect
-    current_impact="Enabled: Blocks registry changes to default browser/app settings",
-    recommended_impact="Disabled: Full control over default app associations "
-    "(takes effect after reboot)",
+    current_impact="Enabled: Blocks other programs from rewriting default browser/app settings",
+    recommended_impact="Enabled: Default browser/app choices stay yours, protected from "
+    "non-Microsoft changes (takes effect after reboot)",
     scope=SettingScope.COMPLETE,
     category_order=16,
-    effect="Disables UCPD kernel driver startup to allow full control "
-    "over default app settings after reboot",
+    effect="Keeps the UCPD driver on, and turns it back on after reboot if another tool "
+    "disabled it",
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     applicable_conditions={"is_windows_11": True},
     # Kernel drivers can't be stopped via service_toggle - use registry StartType directly

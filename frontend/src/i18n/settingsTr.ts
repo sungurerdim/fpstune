@@ -575,7 +575,7 @@ export const settingsTr: Record<
   "services:UCPD": {
     name: "Tarayıcı seçimi koruma sürücüsü",
     description:
-      "Varsayılan uygulama eşleşmelerini sessizce engelleyen gizli bir sürücü; değişiklik uygulanmış görünüp geri alınır. Kapalıyken kullanıcının yaptığı ayarlar gerçekten kalır.",
+      "Microsoft dışı programların varsayılan tarayıcı ve uygulama seçimlerinizi ile Widgets gibi kısa bir sistem anahtarı listesini değiştirmesini engelleyen bir Microsoft sürücüsü. fpstune onu açık tutar, başka bir araç kapattıysa yeniden açar.",
   },
   "system:large_system_cache": {
     name: "Uygulama-önbellek bellek dengesi",

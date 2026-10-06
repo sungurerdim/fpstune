@@ -172,6 +172,23 @@ def wired_logger(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[_Wi
     use_colors = bool(getattr(request, "param", False))
     logger = logging.getLogger(logger_module.LOGGER_NAME)
     saved = (list(logger.handlers), logger.level, logger.propagate, logger.disabled)
+    # The sources are loggers of their own, and another test in the same process
+    # leaves them configured: `api.main._get_logger` pins `fpstune.api` to WARNING
+    # with a stdout handler of its own the first time a route test imports it, so
+    # a debug/info record from that source never reached the file (13 of 15
+    # lines, only when a worker ran a route test first). Each source starts from
+    # "inherit everything from `fpstune`" and is put back as it was found.
+    children = {
+        name: (list(child.handlers), child.level, child.propagate, child.disabled)
+        for name in _SOURCES
+        if (child := logging.getLogger(name)) is not logger
+    }
+    for name in children:
+        child = logging.getLogger(name)
+        child.handlers = []
+        child.setLevel(logging.NOTSET)
+        child.propagate = True
+        child.disabled = False
     previous_disable = logging.root.manager.disable
     logging.disable(logging.NOTSET)
     logger.disabled = False
@@ -191,6 +208,12 @@ def wired_logger(tmp_path: Path, request: pytest.FixtureRequest) -> Iterator[_Wi
         logger.setLevel(saved[1])
         logger.propagate = saved[2]
         logger.disabled = saved[3]
+        for name, (handlers, level, propagate, disabled) in children.items():
+            child = logging.getLogger(name)
+            child.handlers = handlers
+            child.setLevel(level)
+            child.propagate = propagate
+            child.disabled = disabled
         logging.disable(previous_disable)
 
 

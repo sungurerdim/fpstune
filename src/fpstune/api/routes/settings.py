@@ -568,11 +568,31 @@ def _apply_single_setting(
     )
 
 
+def _no_default_refusal(setting: SettingExecutor) -> ApplyResponse | None:
+    """A reset for a row whose default could not be derived (C6): refused, never a None write.
+
+    The UI already hides the button (`DefaultSource.NONE`); this is the same rule
+    where the write happens, so no client can reach it.
+    """
+    if setting.default_value is not None:
+        return None
+    return ApplyResponse(
+        setting_id=setting.id,
+        success=False,
+        error=f"{setting.display_name} has no default fpstune could derive, so it cannot be reset.",
+        new_value=None,
+        requires_reboot=False,
+    )
+
+
 def _reset_single_setting(
     setting: SettingExecutor,
     hardware_context: HardwareContext | None = None,
 ) -> tuple[str, ApplyResponse]:
     """Reset a single setting to its default value. Returns (setting_id, ApplyResponse)."""
+    refused = _no_default_refusal(setting)
+    if refused is not None:
+        return setting.id, refused
     return _apply_one(
         setting, setting.default_value, hardware_context, "Reset", skip_when_inapplicable=False
     )
@@ -834,6 +854,10 @@ async def reset_setting(setting_id: str) -> ApplyResponse:
 
     if not setting:
         raise HTTPException(404, f"Unknown setting: {setting_id}")
+
+    refused = _no_default_refusal(setting)
+    if refused is not None:
+        return refused
 
     hardware_context, is_applicable, reason = await _context_and_applicability(setting)
     if not is_applicable:

@@ -114,3 +114,39 @@ class TestResetCreatesRestorePoint:
 
         assert result.status_code == 200
         mock_rp.assert_not_called()
+
+
+class TestResetWithoutADerivedDefault:
+    """A row with no derivable default (DefaultSource.NONE) used to reach the write with None."""
+
+    def test_single_reset_is_refused_and_nothing_is_written(self, client: TestClient) -> None:
+        setting = _fake_setting()
+        setting.default_value = None
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = setting
+
+        with (
+            patch("fpstune.api.routes.settings._get_registry", return_value=mock_registry),
+            patch("fpstune.api.routes.settings.apply_and_finalize") as write,
+            patch("fpstune.api.routes.settings._ensure_restore_point") as restore_point,
+        ):
+            response = client.post(f"/api/settings/{setting.id}/reset")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["success"] is False
+        assert "cannot be reset" in body["error"]
+        write.assert_not_called()
+        restore_point.assert_not_called()
+
+    def test_bulk_reset_refuses_the_row_without_writing(self) -> None:
+        from fpstune.api.routes.settings import _reset_single_setting
+
+        setting = _fake_setting()
+        setting.default_value = None
+        with patch("fpstune.api.routes.settings._apply_one") as write:
+            setting_id, response = _reset_single_setting(setting, neutral_hardware_context())
+
+        assert setting_id == setting.id
+        assert response.success is False
+        write.assert_not_called()

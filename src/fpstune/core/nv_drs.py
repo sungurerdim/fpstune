@@ -9,11 +9,17 @@ otherwise; a key NVIDIA does not publish is taken from nvidiaProfileInspector's
 Stock is never written. Choosing a setting's stock value deletes its keys from
 the global profile, so the driver's own default applies on this driver version.
 Reading treats an absent key as that stock value.
+
+A key the installed driver does not define is a capability fact, not a failure
+(``missing`` below, from ``nvapi.known_setting_ids``). Each key type answers
+``supports(missing)`` — whether the setting means anything on this driver — and
+``changes_for`` leaves a missing key out of what it writes, refusing a choice
+whose meaning lived in that key.
 """
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
 
 # NvApiDriverSettings.h setting IDs.
@@ -69,13 +75,47 @@ class EnumKey:
     def read_ids(self) -> tuple[int, ...]:
         return tuple(i for i in self.ids if i not in self.write_only)
 
-    def changes_for(self, choice: str) -> dict[int, int | None]:
+    def expressible(self, choice: str, missing: Collection[int] = ()) -> bool:
+        """Whether this driver can hold ``choice`` with the keys it defines.
+
+        A key the driver lacks reads as that key's stock value, so it costs a
+        choice nothing when the choice wants exactly that value (Low Latency
+        "on" wants ULL_ENABLED=0, which an absent ULL_ENABLED already is) or
+        when the key is write-only, a record for NVIDIA Control Panel's radio
+        button that the driver never acts on (ULL_CPL_STATE). Any other missing
+        key carries the choice's meaning: "ultra" without ULL_ENABLED would run
+        exactly as "on", so it is not offered.
+        """
+        stock = self.values[self.stock]
+        target = self.values[choice]
+        return all(
+            i in self.write_only or target.get(i, 0) == stock.get(i, 0)
+            for i in self.ids
+            if i in missing
+        )
+
+    def choices(self, missing: Collection[int] = ()) -> tuple[str, ...]:
+        """The choices this driver can hold, in table order."""
+        return tuple(c for c in self.values if self.expressible(c, missing))
+
+    def supports(self, missing: Collection[int] = ()) -> bool:
+        """False when no choice but the stock one survives: nothing to change here."""
+        return len(self.choices(missing)) > 1
+
+    def changes_for(self, choice: str, missing: Collection[int] = ()) -> dict[int, int | None]:
         if choice not in self.values:
             raise ValueError(f"{choice!r} is not one of {tuple(self.values)}")
+        if not self.expressible(choice, missing):
+            lacking = ", ".join(f"{i:#010x}" for i in self.ids if i in missing)
+            raise ValueError(
+                f"{choice!r} is not available on this driver: it does not have the "
+                f"NVIDIA setting {lacking} that {self.key} {choice!r} needs"
+            )
+        live = [i for i in self.ids if i not in missing]
         if choice == self.stock:
-            return dict.fromkeys(self.ids)
+            return dict.fromkeys(live)
         target = self.values[choice]
-        return {setting_id: target.get(setting_id) for setting_id in self.ids}
+        return {setting_id: target.get(setting_id) for setting_id in live}
 
     def decode(self, raw: Mapping[int, int]) -> str | None:
         """The choice the driver is in, or None for a state no choice describes."""
@@ -105,9 +145,17 @@ class NumberKey:
     def read_ids(self) -> tuple[int, ...]:
         return self.ids
 
-    def changes_for(self, value: int) -> dict[int, int | None]:
+    def supports(self, missing: Collection[int] = ()) -> bool:
+        return self.setting_id not in missing
+
+    def changes_for(self, value: int, missing: Collection[int] = ()) -> dict[int, int | None]:
         if not 0 <= value <= self.maximum:
             raise ValueError(f"{value} is outside 0-{self.maximum}")
+        if self.setting_id in missing:
+            raise ValueError(
+                f"this driver does not have the NVIDIA setting {self.setting_id:#010x} "
+                f"that {self.key} needs"
+            )
         return {self.setting_id: None if value == self.stock else value}
 
     def decode(self, raw: Mapping[int, int]) -> int:

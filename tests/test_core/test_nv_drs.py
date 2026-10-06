@@ -157,3 +157,80 @@ class TestDefinitionsMatchTheTable:
             assert setting.default_value == drs.stock, setting.id
             if isinstance(drs, EnumKey):
                 assert set(setting.choices) == set(drs.values), setting.id
+
+
+class TestKeysTheDriverLacks:
+    """The pure rules: which choices survive when the driver lacks a key."""
+
+    def _low_latency(self) -> EnumKey:
+        key = KEYS["low_latency"]
+        assert isinstance(key, EnumKey)
+        return key
+
+    def test_ultra_needs_the_key_whose_value_is_what_makes_it_ultra(self) -> None:
+        key = self._low_latency()
+
+        assert key.choices({nv_drs.ULL_ENABLED}) == ("off", "on")
+
+    def test_on_and_off_want_zero_from_a_key_that_absent_already_reads_as(self) -> None:
+        key = self._low_latency()
+
+        assert key.expressible("on", {nv_drs.ULL_ENABLED})
+        assert key.expressible("off", {nv_drs.ULL_ENABLED})
+
+    def test_a_write_only_key_is_never_what_a_choice_means(self) -> None:
+        key = self._low_latency()
+
+        assert key.choices({nv_drs.ULL_CPL_STATE}) == ("off", "on", "ultra")
+        assert key.changes_for("ultra", {nv_drs.ULL_CPL_STATE}) == {
+            nv_drs.PRERENDERLIMIT: 1,
+            nv_drs.ULL_ENABLED: 1,
+        }
+
+    def test_missing_keys_are_left_out_of_the_write_not_written_anyway(self) -> None:
+        key = self._low_latency()
+
+        assert key.changes_for("on", {nv_drs.ULL_ENABLED}) == {
+            nv_drs.PRERENDERLIMIT: 1,
+            nv_drs.ULL_CPL_STATE: 1,
+        }
+        assert key.changes_for("off", {nv_drs.ULL_ENABLED}) == {
+            nv_drs.PRERENDERLIMIT: None,
+            nv_drs.ULL_CPL_STATE: None,
+        }
+
+    def test_a_choice_that_lived_in_the_missing_key_raises_in_words(self) -> None:
+        with pytest.raises(ValueError, match="not available on this driver"):
+            self._low_latency().changes_for("ultra", {nv_drs.ULL_ENABLED})
+
+    def test_nothing_missing_changes_nothing(self) -> None:
+        key = self._low_latency()
+
+        assert key.choices() == ("off", "on", "ultra")
+        assert key.changes_for("ultra") == {
+            nv_drs.PRERENDERLIMIT: 1,
+            nv_drs.ULL_ENABLED: 1,
+            nv_drs.ULL_CPL_STATE: 2,
+        }
+
+    def test_a_setting_with_only_its_stock_choice_left_is_not_supported(self) -> None:
+        key = self._low_latency()
+
+        assert key.supports()
+        assert key.supports({nv_drs.ULL_ENABLED})
+        assert not key.supports({nv_drs.PRERENDERLIMIT})
+
+    def test_a_number_setting_is_supported_only_with_its_key(self) -> None:
+        fps = KEYS["fps_limit"]
+        assert isinstance(fps, NumberKey)
+
+        assert fps.supports()
+        assert not fps.supports({nv_drs.FRL_FPS})
+        with pytest.raises(ValueError, match="does not have the NVIDIA setting"):
+            fps.changes_for(141, {nv_drs.FRL_FPS})
+
+    @pytest.mark.parametrize("name", sorted(KEYS))
+    def test_every_setting_without_any_of_its_keys_is_not_supported(self, name: str) -> None:
+        key = KEYS[name]
+
+        assert not key.supports(set(key.ids))

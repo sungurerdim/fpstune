@@ -12,7 +12,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from fpstune.core.nv_drs import EnumKey, NumberKey, lookup
-from fpstune.settings.applicability import NOT_AVAILABLE
+from fpstune.settings.applicability import NOT_AVAILABLE, NOT_SUPPORTED
 from fpstune.settings.executors import BaseExecutor
 from fpstune.settings.performance_headroom import frame_cap_for_refresh
 from fpstune.utils.logger import get_logger
@@ -21,6 +21,18 @@ if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
 
 logger = get_logger()
+
+
+def missing_driver_ids(drs: EnumKey | NumberKey) -> frozenset[int]:
+    """The setting's DRS keys the installed driver does not define.
+
+    Empty when the driver could not be asked: absence is only ever reported from
+    the driver's own answer, never inferred from a failed probe.
+    """
+    from fpstune.core.nvapi import known_setting_ids
+
+    known = known_setting_ids(drs.ids)
+    return frozenset() if known is None else frozenset(drs.ids) - known
 
 
 def read_setting_from_driver(setting_key: str) -> Any | None:
@@ -111,6 +123,11 @@ class NvProfileExecutor(BaseExecutor):
             # No NVIDIA driver answering here: the setting does not apply.
             return NOT_AVAILABLE, None
 
+        if not drs.supports(missing_driver_ids(drs)):
+            # The driver does not define the keys this setting lives in (C10:
+            # not-applicable is an answer, not an apply failure waiting to happen).
+            return NOT_SUPPORTED, None
+
         value = drs.decode(raw)
         if value is None:
             readings = ", ".join(f"{i:#010x}={raw.get(i, 'default')}" for i in drs.read_ids)
@@ -129,12 +146,13 @@ class NvProfileExecutor(BaseExecutor):
         if drs is None:
             return False, f"No NVIDIA driver key is defined for '{setting_key}'"
 
+        missing = missing_driver_ids(drs)
         try:
             if isinstance(drs, NumberKey):
-                changes = drs.changes_for(int(value))
+                changes = drs.changes_for(int(value), missing)
             else:
                 assert isinstance(drs, EnumKey)
-                changes = drs.changes_for(str(value))
+                changes = drs.changes_for(str(value), missing)
         except (TypeError, ValueError) as exc:
             return False, f"Invalid value for {setting.id}: {exc}"
 

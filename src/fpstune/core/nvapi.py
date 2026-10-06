@@ -30,7 +30,7 @@ from __future__ import annotations
 import ctypes
 import sys
 import threading
-from collections.abc import Callable, Iterator, Mapping
+from collections.abc import Callable, Iterable, Iterator, Mapping
 from contextlib import contextmanager
 from ctypes import POINTER, Structure, byref, c_uint8, c_uint16, c_uint32, c_void_p
 from dataclasses import dataclass
@@ -40,14 +40,24 @@ from fpstune.utils.logger import get_logger
 
 logger = get_logger()
 
-# Status codes (nvapi_lite_common.h, NvAPI_Status).
+# Status codes (nvapi_lite_common.h, NvAPI_Status). Every non-OK constant here
+# has its words in _STATUS_MESSAGES; tests/test_core/test_nvapi.py fails when a
+# constant is added without them, so a status can never again surface as a
+# generic "refused" (NVAPI_SETTING_NOT_FOUND did, on a driver that lacked a key).
 NVAPI_OK = 0
+NVAPI_ERROR = -1
+NVAPI_LIBRARY_NOT_FOUND = -2
+NVAPI_NO_IMPLEMENTATION = -3
+NVAPI_API_NOT_INITIALIZED = -4
+NVAPI_INVALID_ARGUMENT = -5
 NVAPI_NVIDIA_DEVICE_NOT_FOUND = -6
 NVAPI_END_ENUMERATION = -7
+NVAPI_INVALID_HANDLE = -8
 NVAPI_INCOMPATIBLE_STRUCT_VERSION = -9
 NVAPI_INVALID_USER_PRIVILEGE = -137
 NVAPI_SETTING_NOT_FOUND = -160
 NVAPI_PROFILE_NOT_FOUND = -163
+NVAPI_ACCESS_DENIED = -175
 
 # nvapi64.dll exports one symbol, nvapi_QueryInterface, which maps these IDs
 # (nvapi_interface.h) to the real entry points.
@@ -63,6 +73,7 @@ _FN_DRS_DELETE_PROFILE_SETTING = 0xE4A26362
 _FN_DRS_ENUM_SETTINGS = 0xAE3039DA
 _FN_DRS_FIND_PROFILE_BY_NAME = 0x7E4A9A0B
 _FN_DRS_DELETE_PROFILE = 0x17093206
+_FN_DRS_GET_SETTING_NAME_FROM_ID = 0xD61CBE6E
 
 # From nvapi.h.
 _NVAPI_UNICODE_STRING_MAX = 2048
@@ -133,14 +144,29 @@ class NvapiError(Exception):
         super().__init__(f"{call} failed: {_describe(status)} (NVAPI status {status})")
 
 
+_STATUS_MESSAGES: dict[int, str] = {
+    NVAPI_ERROR: "the NVIDIA driver reported an unspecified error",
+    NVAPI_LIBRARY_NOT_FOUND: "the NVIDIA settings library could not be loaded",
+    NVAPI_NO_IMPLEMENTATION: "this driver does not implement that call",
+    NVAPI_API_NOT_INITIALIZED: "the NVIDIA settings interface is not initialised",
+    NVAPI_INVALID_ARGUMENT: "the NVIDIA driver rejected an argument as invalid",
+    NVAPI_NVIDIA_DEVICE_NOT_FOUND: "no NVIDIA display driver is active",
+    NVAPI_END_ENUMERATION: "there are no more entries to list",
+    NVAPI_INVALID_HANDLE: "the NVIDIA driver no longer recognises this session handle",
+    NVAPI_INCOMPATIBLE_STRUCT_VERSION: "this driver rejected the settings structure layout",
+    NVAPI_INVALID_USER_PRIVILEGE: (
+        "administrator rights are required to change NVIDIA driver settings"
+    ),
+    NVAPI_SETTING_NOT_FOUND: "this driver does not have this setting",
+    NVAPI_PROFILE_NOT_FOUND: "this driver has no such profile",
+    NVAPI_ACCESS_DENIED: "the NVIDIA driver denied access to this caller",
+}
+
+
 def _describe(status: int) -> str:
-    if status == NVAPI_INVALID_USER_PRIVILEGE:
-        return "administrator rights are required to change NVIDIA driver settings"
-    if status == NVAPI_NVIDIA_DEVICE_NOT_FOUND:
-        return "no NVIDIA display driver is active"
-    if status == NVAPI_INCOMPATIBLE_STRUCT_VERSION:
-        return "this driver rejected the settings structure layout"
-    return "the NVIDIA driver refused the request"
+    return _STATUS_MESSAGES.get(
+        status, "the NVIDIA driver returned a status this version of fpstune does not name"
+    )
 
 
 @dataclass(frozen=True)
@@ -214,6 +240,17 @@ class _Nvapi:
             POINTER(c_void_p),
         )
         self.delete_profile = resolve(_FN_DRS_DELETE_PROFILE, c_void_p, c_void_p)
+
+        # The capability probe is optional: a driver that does not export it
+        # leaves every key's presence unknown, never absent.
+        probe_address = query(_FN_DRS_GET_SETTING_NAME_FROM_ID)
+        self.get_setting_name_from_id: Callable[..., int] | None = (
+            ctypes.CFUNCTYPE(ctypes.c_int, c_uint32, POINTER(c_uint16 * _NVAPI_UNICODE_STRING_MAX))(
+                probe_address
+            )
+            if probe_address
+            else None
+        )
 
         status = self.initialize()
         if status != NVAPI_OK:
@@ -361,6 +398,54 @@ def read_driver_settings(setting_ids: list[int]) -> dict[int, int] | None:
         return None
     except (NvapiError, OSError) as exc:
         logger.warning("NVAPI read failed: %s", exc)
+        return None
+
+
+def known_setting_ids(setting_ids: Iterable[int]) -> frozenset[int] | None:
+    """The given IDs this driver has a definition for.
+
+    A key an older or newer driver does not define (nvidiaProfileInspector's
+    "Ultra Low Latency - Enabled" on driver 617.14) is a fact about this machine,
+    not a failure. Absence needs the driver's word twice: naming the ID
+    (NvAPI_DRS_GetSettingNameFromId) answers NVAPI_SETTING_NOT_FOUND, *and* a
+    write of it, in a session that is never saved, does too. The second check
+    exists because the naming table is not the whole story — measured on 617.14,
+    CUDA "Force P2 State" is unnamed yet the driver answers its write with
+    NVAPI_INVALID_USER_PRIVILEGE, so it knows the key — and a key wrongly called
+    absent would hide a setting that works.
+
+    None means the driver could not be asked — NVAPI is missing, refused, or does
+    not export the probe — which callers must not read as "all absent".
+    """
+    try:
+        probe = _Nvapi.get().get_setting_name_from_id
+        if probe is None:
+            return None
+        known: set[int] = set()
+        unnamed: list[int] = []
+        for setting_id in setting_ids:
+            name = (c_uint16 * _NVAPI_UNICODE_STRING_MAX)()
+            status = probe(c_uint32(setting_id), byref(name))
+            if status == NVAPI_OK:
+                known.add(setting_id)
+            elif status == NVAPI_SETTING_NOT_FOUND:
+                unnamed.append(setting_id)
+            else:
+                raise NvapiError(f"NvAPI_DRS_GetSettingNameFromId({setting_id:#010x})", status)
+        if unnamed:
+            with _session() as session:  # destroyed without a save: nothing persists
+                for setting_id in unnamed:
+                    try:
+                        session.write(setting_id, 0)
+                    except NvapiError as exc:
+                        if exc.status != NVAPI_SETTING_NOT_FOUND:
+                            known.add(setting_id)
+        return frozenset(known)
+    except NvapiUnavailable as exc:
+        logger.debug("NVAPI capability probe unavailable: %s", exc)
+        return None
+    except (NvapiError, OSError) as exc:
+        logger.warning("NVAPI capability probe failed: %s", exc)
         return None
 
 

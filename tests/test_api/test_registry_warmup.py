@@ -38,16 +38,37 @@ from fastapi.testclient import TestClient
 import fpstune.settings.registry_cache as registry_cache
 
 
+def _settle_warm_ups() -> None:
+    """Wait for every in-flight ``registry-warmup`` thread, from any test, to finish.
+
+    Any earlier test that opens the app (``with TestClient(create_app())``) starts
+    the real warm-up in a daemon thread that outlives that test: it holds the
+    registry lock for the whole hardware discovery and then writes the module
+    global. A test here that cleared the global and patched the builder while one
+    was in flight saw 0 builds instead of 1 (the stray thread took the lock first),
+    or a registry it had not built. Which test ran earlier on the same worker
+    decided it, so the failure came and went with ``-n``.
+    """
+    for thread in threading.enumerate():
+        if thread.name == "registry-warmup" and thread is not threading.current_thread():
+            thread.join(timeout=120)
+            assert not thread.is_alive(), "a registry warm-up from an earlier test never finished"
+
+
 @pytest.fixture(autouse=True)
 def cold_registry():
     """Every test here starts from an unbuilt registry and leaves one behind.
 
     The cache is a module global, so a test that forgot this would measure
-    whatever an earlier test built and pass without exercising anything.
+    whatever an earlier test built and pass without exercising anything. A warm-up
+    thread left running by an earlier test is part of that state: it is waited for
+    before the cache is cleared, and again before it is put back.
     """
+    _settle_warm_ups()
     original = registry_cache._registry
     registry_cache._registry = None
     yield
+    _settle_warm_ups()
     registry_cache._registry = original
 
 

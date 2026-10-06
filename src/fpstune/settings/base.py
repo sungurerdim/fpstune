@@ -413,6 +413,22 @@ class SettingValueType(StrEnum):
     STRING = "string"  # Free text
 
 
+class DefaultSource(StrEnum):
+    """Whose stock a setting's ``default_value`` is (C6, "one way back").
+
+    Reset writes ``default_value`` and nothing else, so the value has to be a
+    domain's own stock and never a remembered constant or a previous reading.
+    The source names which domain speaks, and the UI's "Windows default" /
+    "Driver default" / "Game default" wording follows the same split.
+    """
+
+    WINDOWS_STOCK = "windows_stock"  # what a clean Windows 11 install holds
+    DRIVER = "driver"  # the driver's own default: DefaultRegistryValue, INF, profile default
+    SCHEME = "scheme"  # the Balanced plan's `DefaultPowerSchemeValues` entry
+    GAME = "game"  # the game's own shipped value
+    NONE = "none"  # no default can be derived: `default_value` is None, reset not offered
+
+
 class DetectType(StrEnum):
     """Detection/Apply command types."""
 
@@ -589,6 +605,15 @@ class SettingExecutor:
     # (e.g., fan curves requiring NVIDIA Control Panel, BIOS-level features)
     is_readonly: bool = False
 
+    # === Where default_value comes from ===
+    # Left None in a definition, it is resolved in `__post_init__` from what the
+    # row already declares: a powercfg row is `SCHEME`, a game-config row `GAME`,
+    # a hardware component's row `DRIVER`, anything else `WINDOWS_STOCK`. A row
+    # whose default cannot be derived says `NONE` itself and keeps
+    # `default_value=None`, which is how the UI knows not to offer the reset.
+    # `tests/test_settings/test_default_source.py` holds every row to this.
+    default_source: DefaultSource | None = None
+
     # === Value Hints ===
     # Optional display hints shown next to choice labels in the UI (e.g. "enabled (1)")
     # If empty, hints are auto-derived from apply_value_map when raw != display label
@@ -630,6 +655,8 @@ class SettingExecutor:
                 self.component = "network_adapter"
             else:
                 self.component = _MODULE_COMPONENTS.get(self.module)
+        if self.default_source is None:
+            self.default_source = self._derive_default_source()
 
     @property
     def module(self) -> str:
@@ -655,6 +682,16 @@ class SettingExecutor:
         """Extract setting name from ID (e.g., 'usb_selective_suspend')."""
         parts = self.id.split(":")
         return ":".join(parts[1:])  # Handle "network:eth0:interrupt_moderation"
+
+    def _derive_default_source(self) -> DefaultSource:
+        """The source a definition that names none gets, from markers it already carries."""
+        if self.detect_type is DetectType.POWERCFG:
+            return DefaultSource.SCHEME
+        if self.module == "game_config":
+            return DefaultSource.GAME
+        if self.component is not None:
+            return DefaultSource.DRIVER
+        return DefaultSource.WINDOWS_STOCK
 
     @property
     def domain(self) -> Domain:

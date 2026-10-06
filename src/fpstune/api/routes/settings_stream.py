@@ -1,7 +1,9 @@
 """Server-Sent Events (SSE) streaming endpoints for bulk apply/reset.
 
-Split out of routes/settings.py: this module owns the sequential SSE bulk
-operations (``/bulk/stream-apply`` and ``/bulk/stream-reset``). It reuses the
+Split out of routes/settings.py: this module owns the SSE bulk operations
+(``/bulk/stream-apply`` and ``/bulk/stream-reset``), which run up to four settings
+at a time, planned by ``settings.bulk_plan`` so settings that share a resource or
+declare an order never overlap. It reuses the
 single-setting apply/reset helpers from routes/settings.py — the dependency is
 one-way (settings_stream imports settings, never the reverse) so there is no
 import cycle. Registered under the same ``/api/settings`` prefix.
@@ -31,6 +33,7 @@ from fpstune.api.schemas import ApplyResponse, BulkStreamRequest
 from fpstune.settings import SettingsRegistry
 from fpstune.settings.applicability import HardwareContext
 from fpstune.settings.base import SettingExecutor
+from fpstune.settings.bulk_plan import plan_lanes
 
 router = APIRouter()
 
@@ -202,7 +205,12 @@ async def _stream_each(
     hardware_context: HardwareContext | None,
     tally: _Tally,
 ) -> AsyncIterator[str]:
-    """Every other setting, four at a time, each reporting as it goes.
+    """Every setting, four at a time, each reporting as it goes.
+
+    `plan_lanes` decides what may overlap: settings that share a resource (one
+    adapter, the DNS resolver list) or are declared `apply_after` another run one
+    after another inside their lane, in dependency order; lanes run side by side
+    under the same four-at-a-time cap as before.
 
     An apply is handed a line pump so a command that takes minutes can say what
     it is doing while it does it; a reset is not, because resets are registry and
@@ -237,11 +245,19 @@ async def _stream_each(
                 event_queue.put_nowait(
                     _sse({"event": "failed", "id": setting.id, "error": str(exc)})
                 )
-            finally:
-                event_queue.put_nowait(None)  # per-task sentinel
 
-    tasks = [asyncio.create_task(_process_one(s)) for s in settings]
-    remaining = len(settings)
+    async def _run_lane(lane: list[SettingExecutor]) -> None:
+        # A failed setting does not stop its lane: the stream reports every id,
+        # and a dependent that cannot work says so itself.
+        try:
+            for setting in lane:
+                await _process_one(setting)
+        finally:
+            event_queue.put_nowait(None)  # per-lane sentinel
+
+    lanes = plan_lanes(settings)
+    tasks = [asyncio.create_task(_run_lane(lane)) for lane in lanes]
+    remaining = len(lanes)
 
     try:
         while remaining > 0:
@@ -309,7 +325,7 @@ async def _stream_grouped(
 
 @router.post("/bulk/stream-apply")
 async def bulk_stream_apply(request: BulkStreamRequest) -> StreamingResponse:
-    """Sequential SSE bulk apply — uses recommended_value for each setting.
+    """SSE bulk apply — uses recommended_value for each setting.
 
     Streams per-setting events: started → applied → verified → (failed | done).
     Failures do not abort the stream; all IDs are processed.
@@ -334,7 +350,7 @@ async def bulk_stream_reset(request: BulkStreamRequest) -> StreamingResponse:
     """SSE bulk reset — resets each setting to its default_value.
 
     Streams per-setting events: started → applied → verified → (failed | done).
-    Settings run four at a time.
+    Settings run four at a time, except that ones sharing a resource run in turn.
     Failures do not abort the stream; all IDs are processed.
     """
     registry = await asyncio.to_thread(_get_registry)

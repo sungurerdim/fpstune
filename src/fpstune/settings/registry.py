@@ -14,6 +14,7 @@ import logging
 from typing import TYPE_CHECKING
 
 from fpstune.settings.base import SettingCategory
+from fpstune.settings.bulk_plan import validate_declarations
 from fpstune.settings.discovery.probes import (
     HardwareProbes,
 )
@@ -46,6 +47,8 @@ class SettingsRegistry:
         self._load_static_settings()
         if discover_dynamic:
             self.discover_dynamic_settings()
+        else:
+            validate_declarations(self._settings.values())
 
     def _load_static_settings(self) -> None:
         """Load all statically defined settings."""
@@ -71,6 +74,9 @@ class SettingsRegistry:
         count = 0
         for discover in all_discoverers():
             count += discover(self, self._probes)
+        # Every discoverer has registered: an `apply_after` that names a setting
+        # none of them produced is a typo, and a bulk run would skip the wait.
+        validate_declarations(self._settings.values())
         return count
 
     def get(self, setting_id: str) -> SettingExecutor | None:

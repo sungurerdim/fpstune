@@ -57,6 +57,7 @@ from fpstune.settings.base import (
     get_all_categories_metadata,
     get_all_modules_metadata,
 )
+from fpstune.settings.bulk_plan import plan_lanes, run_lanes
 from fpstune.settings.hardware_context import build_hardware_context
 from fpstune.utils.logger import log_activity, tweak_label
 
@@ -590,8 +591,6 @@ async def bulk_apply_settings(request: BulkApplyRequest) -> BulkApplyResponse:
 
 def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
     """Synchronous core of ``/bulk/apply``; runs on a worker thread."""
-    from concurrent.futures import ThreadPoolExecutor, as_completed
-
     registry = _get_registry()
     hardware_context = _get_hardware_context()
     results: dict[str, ApplyResponse] = {}
@@ -621,46 +620,38 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
     if valid_settings and sys.platform == "win32":
         _ensure_restore_point()
 
-    # Apply all settings in parallel
-    if valid_settings:
-        with ThreadPoolExecutor(max_workers=16) as executor:
-            futures = {
-                executor.submit(_apply_single_setting, setting, value, hardware_context): setting.id
-                for setting, value in valid_settings
-            }
-
-            # No deadline over the set: each apply runs under its own stall rule
-            # (utils.process_watch), so one that is working is waited for and one
-            # that is stuck ends itself and says so. A set-wide cap answered
-            # "timed out" for applies that went on to succeed — cancel() cannot
-            # stop a running thread, and leaving this block waited for them anyway.
-            for future in as_completed(futures):
-                try:
-                    setting_id, response = future.result()
-                    results[setting_id] = response
-
-                    if response.success:
-                        success_count += 1
-                        if response.requires_reboot:
-                            any_requires_reboot = True
-                    else:
-                        error_count += 1
-                        if response.error:
-                            log_activity(
-                                f"APPLY FAILED {setting_id}: {response.error}",
-                                "error",
-                            )
-                except Exception as e:
-                    setting_id = futures[future]
-                    results[setting_id] = ApplyResponse(
-                        setting_id=setting_id,
-                        success=False,
-                        error=str(e),
-                        new_value=None,
-                        requires_reboot=False,
-                    )
-                    error_count += 1
-                    log_activity(f"APPLY ERROR {setting_id}: {e}", "error")
+    # Apply in parallel, except that settings sharing a resource (one adapter, the
+    # DNS resolver list) or declared `apply_after` another run in turn inside one
+    # lane (settings/bulk_plan.py); unrelated lanes overlap up to the pool size.
+    # No deadline over the set: each apply runs under its own stall rule
+    # (utils.process_watch), so one that is working is waited for and one that is
+    # stuck ends itself and says so.
+    values = {setting.id: value for setting, value in valid_settings}
+    finished = run_lanes(
+        plan_lanes([setting for setting, _ in valid_settings]),
+        lambda setting: _apply_single_setting(setting, values[setting.id], hardware_context),
+        max_workers=16,
+    )
+    for setting, outcome in finished:
+        if isinstance(outcome, Exception):
+            response = ApplyResponse(
+                setting_id=setting.id,
+                success=False,
+                error=str(outcome),
+                new_value=None,
+                requires_reboot=False,
+            )
+            log_activity(f"APPLY ERROR {setting.id}: {outcome}", "error")
+        else:
+            response = outcome[1]
+        results[setting.id] = response
+        if response.success:
+            success_count += 1
+            any_requires_reboot = any_requires_reboot or response.requires_reboot
+        else:
+            error_count += 1
+            if response.error:
+                log_activity(f"APPLY FAILED {setting.id}: {response.error}", "error")
 
     # Log summary
     if success_count > 0:

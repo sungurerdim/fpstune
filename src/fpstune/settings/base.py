@@ -601,6 +601,18 @@ class SettingExecutor:
     # refuses it), the setting names those states here, so no path asks it to write one.
     unwritable_values: tuple[str, ...] = ()
 
+    # === Bulk scheduling (read by settings/bulk_plan.py, nothing else) ===
+    # Ids that must finish before this one starts, when both are in the same bulk
+    # run; one that is not in the run is not waited for. Use it where this setting
+    # reads what the other one wrote (DNS over HTTPS needs the resolvers
+    # dns_security switches to). Unknown ids and cycles fail at registry build.
+    apply_after: tuple[str, ...] = ()
+    # A shared thing this setting writes that two writers must not hold at once,
+    # named when it cannot be read off `apply_args`. A per-adapter setting names
+    # its adapter there already (`ifindex`) and needs no declaration; see
+    # `resource_key`.
+    resource: str | None = None
+
     def __post_init__(self) -> None:
         """Validate setting definition."""
         if not self.id:
@@ -611,6 +623,8 @@ class SettingExecutor:
             raise ValueError(f"Setting display_name must not be empty: {self.id}")
         if self.value_type == SettingValueType.CHOICE and not self.choices:
             raise ValueError(f"CHOICE type requires non-empty choices tuple: {self.id}")
+        if self.id in self.apply_after:
+            raise ValueError(f"A setting cannot apply after itself: {self.id}")
         if self.component is None:
             if self.module == "network" and self.id.count(":") >= 2:
                 self.component = "network_adapter"
@@ -621,6 +635,20 @@ class SettingExecutor:
     def module(self) -> str:
         """Extract module name from ID (e.g., 'power' from 'power:usb_selective_suspend')."""
         return self.id.split(":")[0]
+
+    @property
+    def resource_key(self) -> str | None:
+        """What this setting holds while it writes; two with one key never overlap.
+
+        The declared `resource` when there is one, otherwise the adapter named by
+        `apply_args["ifindex"]` — every per-adapter write restarts or reconfigures
+        that one NIC, so a second write (or a verify) on it mid-way reads a link
+        that is down. None for a setting that shares nothing.
+        """
+        if self.resource:
+            return self.resource
+        ifindex = self.apply_args.get("ifindex")
+        return None if ifindex is None else f"adapter:{ifindex}"
 
     @property
     def name(self) -> str:

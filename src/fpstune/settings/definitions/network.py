@@ -703,6 +703,7 @@ DNS_SECURITY = SettingExecutor(
     recommended_impact="Quad9 9.9.9.9: Blocks malware and phishing domains before they resolve",
     scope=SettingScope.RECOMMENDED,  # Security benefit
     category_order=7,  # DNS security
+    resource="dns",  # The resolver list; DNS over HTTPS reads what this writes
     effect="Blocks malware and phishing domains at the resolver",
     # latency_ms is deliberately 0.0, not the -12.0 this used to claim. That figure
     # was the deterministic cap applied by the impact_scores sweep, not a
@@ -934,6 +935,8 @@ DNS_OVER_HTTPS = SettingExecutor(
     "stripped on the path",
     scope=SettingScope.RECOMMENDED,
     category_order=8,  # Immediately after dns_security, which it completes
+    resource="dns",
+    apply_after=("network:dns_security",),  # needs the resolvers that one switches to
     effect="Encrypts DNS queries so they cannot be read or rewritten in transit",
     # No FPS or ping claim: resolution happens at connect time and match traffic
     # goes straight to an IP, so this cannot move in-game latency. The measurable

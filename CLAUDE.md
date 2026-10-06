@@ -134,7 +134,7 @@ Single-setting endpoints:
 - `POST /settings/{id}/reset` — write `default_value`, detect, verify
 - `POST /settings/{id}/verify` — detect only → `VerifyResponse{matches, current_value, expected_value, target}`;
   `target` ∈ `recommended` (default) | `default` names which question was asked
-- `POST /settings/bulk/stream-{apply,reset}` — sequential SSE, events started/applied/verified/failed/done
+- `POST /settings/bulk/stream-{apply,reset}` — SSE, four settings at a time, in turn when they share a resource or declare an order (`settings/bulk_plan.py`); events started/applied/verified/failed/done
 
 **One way back: reset to default** (owner decision 2026-10-06, #103). `default_value` is
 each domain's own stock, derived like every value: Windows stock for software settings,
@@ -398,7 +398,7 @@ and PID file.
 Data flow: UI → api.ts `POST /settings/{id}/apply` → settings route → `executor.apply()` →
 subprocess → `_finalize_apply_response()` → detect → verify → response → Zustand → UI.
 SSE bulk: SelectionToolbar → bulkStreamApply/Reset → `/bulk/stream-{apply,reset}` →
-`_stream_sequential()` → `asyncio.to_thread(apply)` per ID → events streamed → UI badges.
+`_stream_each()` (`plan_lanes`, four at a time) → `asyncio.to_thread(apply)` per ID → events streamed → UI badges.
 
 Module contracts — what the tree does not tell you:
 
@@ -439,6 +439,7 @@ Module contracts — what the tree does not tell you:
   BOM, atomic replace; only keys the client is on record reading.
 - `settings/base.py` — `SettingExecutor` dataclass: risk_level, risk_warning, evidence_level,
   impact_scores. `module` is the first segment of the id.
+- `settings/bulk_plan.py` — the one scheduling SSOT for both bulk paths (`/bulk/apply` and the two SSE streams): `plan_lanes()` turns settings into lanes (serial inside, concurrent between) from `SettingExecutor.apply_after` and `resource_key`; `validate_declarations()` fails registry build on an unknown id or a cycle; `run_lanes()` is the thread-pool runner `/bulk/apply` uses. The planner is pure; the callers keep their own concurrency caps.
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
   alike; `mobile` is derived from GetSystemPowerStatus, never from a model list.
 - `settings/impact_categories.py` — metric key → kind of gain; thermal ranks with performance.
@@ -485,7 +486,7 @@ Module contracts — what the tree does not tell you:
   one into `is_applicable=False`. Never re-spell a sentinel locally; never list one in `choices`.
 - HardwareManager is a singleton; always use the `hardware_manager` global.
   `start_hotplug_polling()` runs a 15s daemon thread
-- SSE bulk: each ID runs in `asyncio.to_thread`; the event loop stays free between IDs
+- SSE bulk: each ID runs in `asyncio.to_thread`, four at a time, and `plan_lanes` keeps settings that share a resource (`SettingExecutor.resource_key`: the `ifindex` in `apply_args`, or a declared `resource`) or an `apply_after` order in one lane, run in turn; the event loop stays free between IDs
 - **A setting that rewrites a whole shared file holds one lock for the entire
   read-modify-write.** Bulk apply runs in parallel (`api/routes/settings.py`, 16 workers);
   leave the read outside the lock and two writers both load the pre-change copy, the second

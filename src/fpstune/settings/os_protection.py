@@ -10,8 +10,9 @@ that is a capability fact — ``is_applicable=False`` (C10), decided in detectio
 a refusal reported after the apply. Turning the driver off to get past it would be
 tampering with an OS protection, which stays a red line.
 
-``ProtectedKey`` is the one list and ``blocked_write(setting)`` is the one question the
-``ApplicabilityChecker`` asks, so every path that detects or applies a setting
+``ProtectedKey`` is the one list and ``blocked_write(setting, guard_up=...)`` is the one
+question the ``ApplicabilityChecker`` asks (the state is read once into
+``HardwareContext.ucpd_guard_up`` by ``build_hardware_context()``), so every path that detects or applies a setting
 (detection, single apply, bulk apply) gets the same answer and a new definition that
 writes a listed key is covered without being named anywhere.
 
@@ -249,14 +250,17 @@ def protected_write_targets(setting: SettingExecutor) -> tuple[str, ...]:
     return ()
 
 
-def blocked_write(setting: SettingExecutor) -> str:
+def blocked_write(setting: SettingExecutor, *, guard_up: bool) -> str:
     """Why this setting cannot be written on this machine, or "" when it can.
 
     The one question the ``ApplicabilityChecker`` asks: the setting writes a key UCPD
-    guards *and* UCPD is up.
+    guards *and* UCPD is up. Whether it is up is a parameter — the checker hands in
+    ``HardwareContext.ucpd_guard_up``, which ``build_hardware_context()`` filled from
+    ``ucpd_active()`` — so this answer depends on its arguments and not on the machine
+    the code happens to run on.
     """
     targets = protected_write_targets(setting)
-    if not targets or not ucpd_active():
+    if not targets or not guard_up:
         return ""
     return (
         "Windows protects this setting against other programs (the User Choice "

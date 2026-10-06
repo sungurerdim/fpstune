@@ -38,12 +38,6 @@ def _fresh_ucpd_cache() -> Iterator[None]:
     ucpd_active.cache_clear()
 
 
-def _guard(monkeypatch: pytest.MonkeyPatch, *, up: bool) -> None:
-    monkeypatch.setattr(os_protection, "_read_start", lambda: 2 if up else None)
-    monkeypatch.setattr(os_protection, "_read_state", lambda: _RUNNING if up else None)
-    ucpd_active.cache_clear()
-
-
 @pytest.fixture(scope="module")
 def settings() -> list[SettingExecutor]:
     return SettingsRegistry(discover_dynamic=False).get_all()
@@ -184,11 +178,12 @@ class TestProtectedList:
 
 
 class TestNotApplicable:
+    """The checker reads the guard's state from the context and from nowhere else."""
+
     def test_widgets_is_not_applicable_while_ucpd_guards_its_key(
-        self, monkeypatch: pytest.MonkeyPatch, settings: list[SettingExecutor]
+        self, settings: list[SettingExecutor]
     ) -> None:
-        _guard(monkeypatch, up=True)
-        ctx = HardwareContext(is_windows_11=True, windows_build=26200)
+        ctx = HardwareContext(is_windows_11=True, windows_build=26200, ucpd_guard_up=True)
 
         ok, reason = ApplicabilityChecker(ctx).is_applicable(_widgets(settings))
 
@@ -197,28 +192,92 @@ class TestNotApplicable:
         assert r"HKLM\SOFTWARE\Policies\Microsoft\Dsh" in reason
 
     def test_widgets_stays_applicable_when_the_driver_is_not_running(
-        self, monkeypatch: pytest.MonkeyPatch, settings: list[SettingExecutor]
+        self, settings: list[SettingExecutor]
     ) -> None:
-        _guard(monkeypatch, up=False)
-        ctx = HardwareContext(is_windows_11=True, windows_build=26200)
+        ctx = HardwareContext(is_windows_11=True, windows_build=26200, ucpd_guard_up=False)
 
         assert ApplicabilityChecker(ctx).is_applicable(_widgets(settings)) == (True, "")
 
-    def test_check_does_not_depend_on_declared_conditions(
+    def test_a_context_built_without_the_field_means_not_active(
+        self, settings: list[SettingExecutor]
+    ) -> None:
+        # The default of a hand-built context: no protection nobody observed.
+        ctx = HardwareContext(is_windows_11=True, windows_build=26200)
+
+        assert ctx.ucpd_guard_up is False
+        assert ApplicabilityChecker(ctx).is_applicable(_widgets(settings)) == (True, "")
+
+    def test_the_outcome_follows_the_context_whatever_this_machine_runs(
+        self, monkeypatch: pytest.MonkeyPatch, settings: list[SettingExecutor]
+    ) -> None:
+        """Guards against #104's regression: a live probe inside the check.
+
+        Whatever the machine running the tests reports, the same widgets row gives
+        the same answer for the same context — with the live probe forced both ways.
+        """
+        for machine_guard_up in (True, False):
+            monkeypatch.setattr(
+                os_protection, "_read_start", lambda up=machine_guard_up: 2 if up else None
+            )
+            monkeypatch.setattr(
+                os_protection, "_read_state", lambda up=machine_guard_up: _RUNNING if up else None
+            )
+            ucpd_active.cache_clear()
+            row = _widgets(settings)
+            blocked = ApplicabilityChecker(
+                HardwareContext(is_windows_11=True, windows_build=26200, ucpd_guard_up=True)
+            ).is_applicable(row)
+            offered = ApplicabilityChecker(
+                HardwareContext(is_windows_11=True, windows_build=26200, ucpd_guard_up=False)
+            ).is_applicable(row)
+
+            assert blocked[0] is False
+            assert offered == (True, "")
+
+    def test_applicability_module_holds_no_live_probe(self) -> None:
+        """``applicability.py`` neither imports nor calls ``ucpd_active`` (or the readers under it)."""
+        import ast
+        import inspect
+
+        from fpstune.settings import applicability
+
+        tree = ast.parse(inspect.getsource(applicability))
+        probes = {"ucpd_active", "_read_start", "_read_state", "guard_is_up"}
+        imported = {
+            alias.name
+            for node in ast.walk(tree)
+            if isinstance(node, ast.ImportFrom)
+            for alias in node.names
+        }
+        called = {
+            (node.func.id if isinstance(node.func, ast.Name) else node.func.attr)
+            for node in ast.walk(tree)
+            if isinstance(node, ast.Call) and isinstance(node.func, (ast.Name, ast.Attribute))
+        }
+
+        assert (imported | called) & probes == set()
+
+    def test_the_builder_fills_the_field_from_the_live_probe(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        _guard(monkeypatch, up=True)
+        from fpstune.settings import hardware_context
+
+        for probed in (True, False):
+            monkeypatch.setattr(hardware_context, "ucpd_active", lambda value=probed: value)
+
+            assert hardware_context.build_hardware_context().ucpd_guard_up is probed
+
+    def test_check_does_not_depend_on_declared_conditions(self) -> None:
         row = _registry_write("HKLM", r"SOFTWARE\Policies\Microsoft\Dsh", "AllowNewsAndInterests")
         assert row.applicable_conditions == {}
 
-        assert ApplicabilityChecker(HardwareContext()).is_applicable(row)[0] is False
+        assert (
+            ApplicabilityChecker(HardwareContext(ucpd_guard_up=True)).is_applicable(row)[0] is False
+        )
 
-    def test_unrelated_write_is_untouched_while_the_guard_is_up(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        _guard(monkeypatch, up=True)
+    def test_unrelated_write_is_untouched_while_the_guard_is_up(self) -> None:
         row = _registry_write("HKLM", r"SOFTWARE\Policies\Microsoft\Windows\AppPrivacy", "x")
-        assert blocked_write(row) == ""
+        assert blocked_write(row, guard_up=True) == ""
 
 
 def _flatten(setting: SettingExecutor) -> str:
@@ -240,7 +299,7 @@ _TAILS = (
 
 class TestEveryProtectedWriteGoesThroughTheCheck:
     def test_every_definition_naming_a_guarded_key_is_blocked_while_the_guard_is_up(
-        self, monkeypatch: pytest.MonkeyPatch, settings: list[SettingExecutor]
+        self, settings: list[SettingExecutor]
     ) -> None:
         """A new row that writes a guarded key must be caught, or this fails by id.
 
@@ -248,8 +307,7 @@ class TestEveryProtectedWriteGoesThroughTheCheck:
         rows by structure. A row that names a guarded tail but is not blocked is a write
         that would ship as an apply that Windows refuses.
         """
-        _guard(monkeypatch, up=True)
-        ctx = HardwareContext(is_windows_11=True, windows_build=26200)
+        ctx = HardwareContext(is_windows_11=True, windows_build=26200, ucpd_guard_up=True)
         checker = ApplicabilityChecker(ctx)
 
         escaped = [

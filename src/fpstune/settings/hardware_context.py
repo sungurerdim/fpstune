@@ -24,6 +24,7 @@ import logging
 import sys
 
 from fpstune.settings.applicability import HardwareContext
+from fpstune.settings.os_protection import ucpd_active
 from fpstune.settings.virtualization import virtualization_features
 from fpstune.utils.admin import is_admin
 from fpstune.utils.detect import get_gpu_info
@@ -151,6 +152,7 @@ def build_hardware_context() -> HardwareContext:
         is_windows_11=os_info.is_windows_11 if os_info else False,
         is_admin=is_admin(),
         has_vrr_monitor=has_vrr,
+        ucpd_guard_up=ucpd_active(),
         features=features,
         feature_labels=feature_labels,
     )

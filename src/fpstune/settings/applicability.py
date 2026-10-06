@@ -118,6 +118,14 @@ class HardwareContext:
     # different applicability reasons.
     has_vrr_monitor: bool | None = None
 
+    # Whether Windows' User Choice Protection Driver is filtering registry writes on
+    # this machine. A machine fact like every other field here: filled once by
+    # `build_hardware_context()` from the live probe, and the only thing the
+    # applicability check reads — the check itself never probes. A context built
+    # without it (a test's own, a machine nobody probed) means "not active", because
+    # claiming a protection nobody observed would hide a setting that works.
+    ucpd_guard_up: bool = False
+
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for API response."""
         return {
@@ -174,7 +182,8 @@ class ApplicabilityChecker:
         # write is refused for every process, elevated or not, so the setting is
         # not on offer here (C10) rather than offered and then "refused".
         # Before the conditions shortcut: a setting need not declare anything.
-        protected = blocked_write(setting)
+        # The guard's state comes from the context, never from a probe here.
+        protected = blocked_write(setting, guard_up=self.context.ucpd_guard_up)
         if protected:
             return False, protected
 

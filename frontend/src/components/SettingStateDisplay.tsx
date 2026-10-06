@@ -1,17 +1,8 @@
 import { Check } from "lucide-react";
 import { useT } from "../i18n";
-import {
-  advisoryChoiceLabel,
-  choiceLabel,
-  describeFinding,
-  explainsWithFinding,
-} from "../lib/finding";
+import { describeFinding, explainsWithFinding, valueLabel } from "../lib/finding";
 import { cn } from "../lib/utils";
-import {
-  IMPACT_CATEGORY_META,
-  formatSettingValue,
-  type Setting,
-} from "../types/setting";
+import { IMPACT_CATEGORY_META, type Setting } from "../types/setting";
 
 /**
  * Shows where a setting actually sits relative to its ideal.
@@ -61,20 +52,10 @@ export function SettingValueState({
     );
   }
 
-  const label = (value: unknown) => {
-    // The name this machine's backend gave the choice outranks every other form.
-    const named = choiceLabel(setting, value);
-    if (named) return named;
-    // An advisory's value is a state name for the comparison code; the user
-    // reads "Below the adapter's maximum", never `below_capability`.
-    if (explainsWithFinding(setting)) {
-      const words = advisoryChoiceLabel(value);
-      if (words) return words;
-    }
-    const formatted = formatSettingValue(value);
-    const hint = setting.valueHints?.[String(value)];
-    return hint && hint !== formatted ? `${formatted} (${hint})` : formatted;
-  };
+  // The one value formatter (`valueLabel`): the backend's name for the choice,
+  // an advisory's state in words, and — for a game's own label — the raw value
+  // it stands for.
+  const label = (value: unknown) => valueLabel(setting, value, { withRawValue: true });
 
   if (setting.isOptimized) {
     return (

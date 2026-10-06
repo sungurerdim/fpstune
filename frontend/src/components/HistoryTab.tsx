@@ -5,8 +5,9 @@ import { useT, getLocale } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import { errorMessage, historyApi, type HistorySetting } from "../lib/api";
 import { useBulkStream } from "../hooks/useBulkStream";
+import { valueLabel } from "../lib/finding";
 import { useStore } from "../store";
-import type { Setting, SettingId } from "../types/setting";
+import { formatSettingValue, type Setting, type SettingId } from "../types/setting";
 import { ScopeActions } from "./ScopeActions";
 import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
 import { defaultKindKey } from "../lib/tweakDomain";
@@ -49,6 +50,14 @@ export function HistoryTab() {
   const nameOf = (id: string): string => {
     const setting = settings.get(id as SettingId);
     return setting ? localizedName(setting) : id;
+  };
+
+  // The value a history entry records is a stored value; the row names it the
+  // way every other surface does. An entry whose setting is not loaded keeps
+  // the stored text, the only form it has.
+  const valueOf = (row: HistorySetting): string => {
+    const setting = settings.get(row.setting_id as SettingId);
+    return setting ? valueLabel(setting, row.value) : formatSettingValue(row.value);
   };
 
   const kindOf = (id: string): string | undefined => {
@@ -151,6 +160,7 @@ export function HistoryTab() {
                   key={row.setting_id}
                   row={row}
                   name={nameOf(row.setting_id)}
+                  valueText={valueOf(row)}
                   selectable
                   selected={selected.has(row.setting_id)}
                   onToggle={() => toggle(row.setting_id)}
@@ -181,6 +191,7 @@ export function HistoryTab() {
                     key={row.setting_id}
                     row={row}
                     name={nameOf(row.setting_id)}
+                    valueText={valueOf(row)}
                     busy={isRunning}
                     status={operationStatus[row.setting_id]}
                     statusError={operationError[row.setting_id]}
@@ -198,6 +209,8 @@ export function HistoryTab() {
 interface HistoryRowProps {
   row: HistorySetting;
   name: string;
+  /** The recorded value, named by `valueLabel` where the setting is known. */
+  valueText: string;
   selectable?: boolean;
   selected?: boolean;
   onToggle?: () => void;
@@ -212,6 +225,7 @@ interface HistoryRowProps {
 function HistoryRow({
   row,
   name,
+  valueText,
   selectable = false,
   selected = false,
   onToggle,
@@ -244,7 +258,7 @@ function HistoryRow({
           {name}
         </div>
         <div className="text-xs text-muted-foreground wrap-break-word">
-          {actionLabel} · {t("history.value", { value: String(row.value) })} · {when}
+          {actionLabel} · {t("history.value", { value: valueText })} · {when}
         </div>
         {status === "failed" && statusError && (
           <div role="status" className="text-xs text-destructive wrap-break-word">

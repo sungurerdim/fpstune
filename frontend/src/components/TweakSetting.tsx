@@ -450,7 +450,6 @@ function InlineControl({
 
   // CHOICE with exactly 2 options → ToggleSwitch
   if (setting.valueType === "choice" && userChoices.length === 2) {
-    const targetStr = String(profileTarget);
     const isAtTarget = isOptimal;
 
     return (
@@ -476,8 +475,8 @@ function InlineControl({
           </TooltipTrigger>
           <TooltipContent side="top">
             {isAtTarget
-              ? t("row.resetChoice", { value: String(setting.choices[0]) })
-              : t("row.setTo", { value: targetStr })}
+              ? t("row.resetChoice", { value: valueLabel(setting, setting.defaultValue) })
+              : t("row.setTo", { value: valueLabel(setting, profileTarget) })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -494,7 +493,7 @@ function InlineControl({
         onChange={(val) => onApplyValue(val)}
         disabled={disabled}
         isPending={isPending}
-        valueHints={setting.valueHints}
+        labelFor={(option) => valueLabel(setting, option)}
       />
     );
   }
@@ -524,8 +523,8 @@ function InlineControl({
           </TooltipTrigger>
           <TooltipContent side="top">
             {isOptimal
-              ? t("row.resetTo", { value: String(setting.defaultValue) })
-              : t("row.setTo", { value: String(profileTarget) })}
+              ? t("row.resetTo", { value: valueLabel(setting, setting.defaultValue) })
+              : t("row.setTo", { value: valueLabel(setting, profileTarget) })}
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>

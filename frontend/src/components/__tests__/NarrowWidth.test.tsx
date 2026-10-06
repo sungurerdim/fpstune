@@ -32,7 +32,7 @@ import {
   narrowReport,
   narrowSetting,
 } from "../../test/narrow";
-import { discoverSurfaces } from "../../test/surfaces";
+import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
 import { TweakListRow } from "../TweakListRow";
@@ -387,53 +387,6 @@ const BESPOKE = new Set([
   "HomeTab",
   "SettingInfoTooltip",
 ]);
-
-const Icon = () => <svg aria-hidden />;
-
-/**
- * Every prop name any surface takes, filled with the long text. A component
- * reads the ones it declares and ignores the rest; one that needs a prop this
- * bag does not carry fails to render and lands in `NOT_GENERIC` by name.
- */
-function genericProps(settings: Setting[], long: string): Record<string, unknown> {
-  return {
-    setting: settings[0],
-    settings,
-    rows: settings.map((setting) => ({ setting })),
-    runner: makeRunner(),
-    name: long,
-    title: long,
-    subtitle: long,
-    summary: long,
-    kind: long,
-    deviceKey: "narrow-probe",
-    icon: Icon,
-    accent: "software",
-    detecting: false,
-    categoryLabel: () => long,
-    initialCollapsed: false,
-    match: () => true,
-    categoriesWithSettings: [
-      {
-        category: {
-          id: "network",
-          displayName: long,
-          description: long,
-          icon: "Wifi",
-          color: "text-blue-500",
-          isActionOnly: false,
-          order: 1,
-        },
-        settings,
-      },
-    ],
-    moduleMetaMap: new Map(),
-    definitionsLoading: false,
-    gpuCategoryStatus: "success",
-    hasGpuSettings: false,
-    getIconByName: () => Icon,
-  };
-}
 
 /** One setting per way a surface may meet it: plain, game, maintenance, and unreadable. */
 function genericSettings(kind: Kind): Setting[] {

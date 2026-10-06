@@ -1,4 +1,5 @@
 import { Loader2 } from "lucide-react";
+import { useT } from "../../i18n";
 import { cn } from "../../lib/utils";
 import {
   Tooltip,
@@ -14,7 +15,8 @@ interface PillSelectorProps {
   onChange: (value: string) => void;
   disabled?: boolean;
   isPending?: boolean;
-  valueHints?: Record<string, string>;
+  /** The text of an option: the caller's one value formatter (`valueLabel`). */
+  labelFor: (option: string) => string;
 }
 
 export function PillSelector({
@@ -24,8 +26,9 @@ export function PillSelector({
   onChange,
   disabled = false,
   isPending = false,
-  valueHints,
+  labelFor,
 }: PillSelectorProps) {
+  const { t } = useT();
   if (isPending) {
     return <Loader2 className="w-4 h-4 animate-spin text-muted-foreground" />;
   }
@@ -39,7 +42,7 @@ export function PillSelector({
         const isTarget =
           String(targetValue).toLowerCase() === option.toLowerCase();
 
-        const label = valueHints?.[option] ?? option;
+        const label = labelFor(option);
         const btn = (
           <button
             key={option}
@@ -64,7 +67,7 @@ export function PillSelector({
             <TooltipProvider key={option}>
               <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>{btn}</TooltipTrigger>
-                <TooltipContent side="top">Target: {option}</TooltipContent>
+                <TooltipContent side="top">{t("row.target")}: {label}</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           );

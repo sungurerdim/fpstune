@@ -287,17 +287,31 @@ export function choiceLabel(setting: Setting, value: unknown): string | null {
 }
 
 /**
- * The one way a row prints a setting's value: the name this machine's backend
+ * The one way anything on screen prints a setting's value — a state, a pill, a
+ * tooltip, a reset button, a history entry: the name this machine's backend
  * gave the choice, else an advisory's state name in words, else the raw-value
  * hint the definition carries, else the value.
+ *
+ * `withRawValue` is for a state line that must show which stored value a game's
+ * own label stands for ("full (Maximal)"); it changes only the last two steps.
+ * No component prints `setting.choices[...]`, `currentValue`, `recommendedValue`
+ * or `defaultValue` itself: `valueLabelSingleSource.test.ts` fails one that does.
  */
-export function valueLabel(setting: Setting, value: unknown): string {
+export function valueLabel(
+  setting: Setting,
+  value: unknown,
+  options: { withRawValue?: boolean } = {},
+): string {
   const named = choiceLabel(setting, value);
   if (named) return named;
   if (explainsWithFinding(setting)) {
     const words = advisoryChoiceLabel(value);
     if (words) return words;
   }
+  const formatted = formatSettingValue(value);
   const hint = value !== null ? setting.valueHints?.[String(value)] : undefined;
-  return hint ?? formatSettingValue(value);
+  if (options.withRawValue) {
+    return hint && hint !== formatted ? `${formatted} (${hint})` : formatted;
+  }
+  return hint ?? formatted;
 }

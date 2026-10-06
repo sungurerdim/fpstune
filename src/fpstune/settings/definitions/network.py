@@ -2184,18 +2184,20 @@ def create_wake_on_lan_setting(interface_index: int, display_name: str) -> Setti
         # in different ones. Discovery fills ``keyword_defaults`` ("keyword=raw,...")
         # and ``stock_state`` only for such a driver; writing the stock value then puts
         # each keyword back to its own default instead of one raw value in both.
+        # PowerShell hashtables compare keys case-insensitively, so the lowercase
+        # keywords discovery hands over match the cmdlet spelling without folding.
         apply_command=(
             "$regVal = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
             "$own = @{}; "
             "foreach ($pair in '%keyword_defaults%' -split ',') { "
             "$kv = $pair -split '='; "
-            "if ($kv.Count -eq 2) { $own[$kv[0].ToLower()] = [int]$kv[1] } "
+            "if ($kv.Count -eq 2) { $own[$kv[0]] = [int]$kv[1] } "
             "}; "
             "$restore = '%stock_state%' -ne '' -and '%value%' -eq '%stock_state%'; "
             "$changed = $false; "
             "foreach ($kw in @('*WakeOnMagicPacket', '*WakeOnPattern')) { "
-            "$write = if ($restore -and $own.ContainsKey($kw.ToLower())) "
-            "{ $own[$kw.ToLower()] } else { $regVal }; "
+            "$write = if ($restore -and $own.ContainsKey($kw)) "
+            "{ $own[$kw] } else { $regVal }; "
             "try { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
             "-RegistryKeyword $kw -RegistryValue $write -ErrorAction Stop; "

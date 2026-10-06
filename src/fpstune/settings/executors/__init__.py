@@ -151,6 +151,16 @@ def map_raw_to_display(value_map: dict[Any, Any], raw: Any) -> Any:
     return unmapped(raw)
 
 
+def describe_refusal(exc: BaseException) -> str:
+    """What a write the system refused says: its own words, never an empty line.
+
+    Some exceptions carry no text (``OSError()``, a bare ``ValueError``), and an
+    error built as ``f"could not write: {exc}"`` then ends in a colon with nothing
+    after it. The type's name is the least a person can be told.
+    """
+    return str(exc).strip() or type(exc).__name__
+
+
 class BaseExecutor(ABC):
     """Base class for command executors."""
 
@@ -317,4 +327,10 @@ class CommandExecutor:
         return cls._executors.get(exec_type)
 
 
-__all__ = ["BaseExecutor", "CommandExecutor", "coerce_value_type", "map_raw_to_display"]
+__all__ = [
+    "BaseExecutor",
+    "CommandExecutor",
+    "coerce_value_type",
+    "describe_refusal",
+    "map_raw_to_display",
+]

@@ -106,8 +106,8 @@ GAME_BAR = SettingExecutor(
         "$v = if ('%value%' -eq 'enabled') { 1 } else { 0 }; "
         "foreach ($t in @(@('HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\GameDVR', "
         "'AppCaptureEnabled'), @('HKCU:\\System\\GameConfigStore', 'GameDVR_Enabled'))) { "
-        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force | Out-Null }; "
-        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $v -Type DWord -Force }"
+        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force -ErrorAction Stop | Out-Null }; "
+        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $v -Type DWord -Force -ErrorAction Stop }"
     ),
     apply_args={},
     apply_value_map={},

@@ -19,6 +19,7 @@ from typing import Any
 
 from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.base import Reading
+from fpstune.settings.executors import describe_refusal
 from fpstune.settings.executors.bnet_config import bnet_config_read, bnet_config_write
 from fpstune.settings.executors.game_ini import game_ini_read, game_ini_write
 from fpstune.settings.executors.msi_mode import msi_mode_status, msi_mode_write
@@ -76,7 +77,7 @@ def _user_input_action(
     try:
         write(disable)
     except OSError as exc:
-        return False, f"Could not write the user's setting: {exc}"
+        return False, f"Could not write the user's setting: {describe_refusal(exc)}"
     return True, None if live(disable) else _SIGN_IN_ONLY
 
 

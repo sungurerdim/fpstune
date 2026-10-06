@@ -831,25 +831,39 @@ ACTION_COMMANDS: dict[str, str] = {
             '\\Microsoft\\Windows\\Device Information\\Device'
         )
         $action = '%value%'
+        $failed = @()
         foreach ($task in $tasks) {
             try {
                 if ($action -eq 'disable') {
-                    Disable-ScheduledTask -TaskPath ($task -replace '\\\\[^\\\\]*$','') -TaskName ($task -split '\\\\')[-1] -ErrorAction SilentlyContinue | Out-Null
+                    Disable-ScheduledTask -TaskPath ($task -replace '\\\\[^\\\\]*$','') -TaskName ($task -split '\\\\')[-1] -ErrorAction Stop | Out-Null
                 } else {
-                    Enable-ScheduledTask -TaskPath ($task -replace '\\\\[^\\\\]*$','') -TaskName ($task -split '\\\\')[-1] -ErrorAction SilentlyContinue | Out-Null
+                    Enable-ScheduledTask -TaskPath ($task -replace '\\\\[^\\\\]*$','') -TaskName ($task -split '\\\\')[-1] -ErrorAction Stop | Out-Null
                 }
-            } catch { }
+            } catch {
+                # A task this edition does not ship has nothing to change; any other
+                # refusal is a task that kept its state, and is named.
+                if ($_.CategoryInfo.Category -ne 'ObjectNotFound') {
+                    $failed += "$task ($($_.Exception.Message))"
+                }
+            }
         }
         # Also set registry for tailored experiences
-        if ($action -eq 'disable') {
-            Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy' -Name 'TailoredExperiencesWithDiagnosticDataEnabled' -Value 0 -Type DWord -Force
-        } else {
-            Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy' -Name 'TailoredExperiencesWithDiagnosticDataEnabled' -Value 1 -Type DWord -Force
+        try {
+            $tailored = if ($action -eq 'disable') { 0 } else { 1 }
+            Set-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Privacy' -Name 'TailoredExperiencesWithDiagnosticDataEnabled' -Value $tailored -Type DWord -Force -ErrorAction Stop
+        } catch {
+            $failed += "TailoredExperiencesWithDiagnosticDataEnabled ($($_.Exception.Message))"
         }
-        Write-Output "Telemetry tasks $action completed"
+        if ($failed.Count -gt 0) {
+            Write-Output ('error:' + ($failed -join '; '))
+        } else {
+            Write-Output "Telemetry tasks $action completed"
+        }
     """,
     # Windows Ads & Suggestions toggle (ContentDeliveryManager bundle)
     "windows_ads_toggle": """
+        # A value that was not written ends the script with the reason, not "completed".
+        $ErrorActionPreference = 'Stop'
         $cdmPath = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\ContentDeliveryManager'
         $explorerPath = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Advanced'
         $profilePath = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\UserProfileEngagement'
@@ -892,6 +906,7 @@ ACTION_COMMANDS: dict[str, str] = {
     # Accessibility popups disable (Sticky/Filter/Toggle Keys)
     # Fast Startup toggle
     "fast_startup_toggle": """
+        $ErrorActionPreference = 'Stop'
         $powerPath = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Power'
         $action = '%value%'
         if ($action -eq 'disable') {
@@ -903,6 +918,7 @@ ACTION_COMMANDS: dict[str, str] = {
     """,
     # AFD Winsock socket buffer sizes - reduces UDP packet drops on fast connections
     "afd_buffers_toggle": r"""
+        $ErrorActionPreference = 'Stop'
         $afdPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\AFD\Parameters'
         $action = '%value%'
         if ($action -eq 'optimized') {
@@ -911,32 +927,45 @@ ACTION_COMMANDS: dict[str, str] = {
             Set-ItemProperty -Path $afdPath -Name 'DefaultSendWindow' -Value 131072 -Type DWord -Force
             Write-Output 'ok'
         } else {
-            Remove-ItemProperty -Path $afdPath -Name 'DefaultReceiveWindow' -ErrorAction SilentlyContinue
-            Remove-ItemProperty -Path $afdPath -Name 'DefaultSendWindow' -ErrorAction SilentlyContinue
+            # Stock Windows has neither value, so a value that is not there is the goal.
+            foreach ($n in 'DefaultReceiveWindow', 'DefaultSendWindow') {
+                if (Get-ItemProperty -Path $afdPath -Name $n -ErrorAction SilentlyContinue) {
+                    Remove-ItemProperty -Path $afdPath -Name $n
+                }
+            }
             Write-Output 'ok'
         }
     """,
     # DSCP QoS - enables DSCP marking and creates policies for FPS game executables
     "dscp_qos_toggle": r"""
+        $ErrorActionPreference = 'Stop'
         $qosPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\Tcpip\QoS'
         $action = '%value%'
         $games = @('cs2.exe', 'ModernWarfare3.exe', 'cod.exe', 'Warzone.exe')
+        # A policy that is not there is the goal of a removal; any other refusal is
+        # a policy that stays in force, and ends the script with its reason.
+        function Remove-FpsQosPolicy($name) {
+            try { Remove-NetQosPolicy -Name $name -Confirm:$false -ErrorAction Stop }
+            catch { if ($_.CategoryInfo.Category -ne 'ObjectNotFound') { throw } }
+        }
         if ($action -eq 'enabled') {
             if (-not (Test-Path $qosPath)) { New-Item -Path $qosPath -Force | Out-Null }
             # REG_SZ "1", as Microsoft documents it; a DWORD is not honoured.
             Set-ItemProperty -Path $qosPath -Name 'Do not use NLA' -Value '1' -Type String -Force
             foreach ($exe in $games) {
                 $name = "fpstune-$exe"
-                Remove-NetQosPolicy -Name $name -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-FpsQosPolicy $name
                 New-NetQosPolicy -Name $name -AppPathNameMatchCondition $exe `
-                    -IPProtocolMatchCondition UDP -DSCPAction 46 -ErrorAction SilentlyContinue | Out-Null
+                    -IPProtocolMatchCondition UDP -DSCPAction 46 -ErrorAction Stop | Out-Null
             }
             Write-Output 'enabled'
         } else {
             foreach ($exe in $games) {
-                Remove-NetQosPolicy -Name "fpstune-$exe" -Confirm:$false -ErrorAction SilentlyContinue
+                Remove-FpsQosPolicy "fpstune-$exe"
             }
-            Remove-ItemProperty -Path $qosPath -Name 'Do not use NLA' -ErrorAction SilentlyContinue
+            if (Get-ItemProperty -Path $qosPath -Name 'Do not use NLA' -ErrorAction SilentlyContinue) {
+                Remove-ItemProperty -Path $qosPath -Name 'Do not use NLA'
+            }
             Write-Output 'disabled'
         }
     """,
@@ -1102,7 +1131,7 @@ ACTION_COMMANDS: dict[str, str] = {
         # so every in-game change silently reverted on the next launch.
         $attr = (Get-Item $cfgFile).Attributes
         if ($attr -band [System.IO.FileAttributes]::ReadOnly) {
-            Set-ItemProperty -Path $cfgFile -Name Attributes -Value ($attr -band (-bnot [System.IO.FileAttributes]::ReadOnly))
+            Set-ItemProperty -Path $cfgFile -Name Attributes -Value ($attr -band (-bnot [System.IO.FileAttributes]::ReadOnly)) -ErrorAction Stop
         }
         $c = Read-ConfigText $cfgFile
         # MW3 writes gamerprofile in TWO shapes, and which one a machine has
@@ -1136,20 +1165,22 @@ ACTION_COMMANDS: dict[str, str] = {
         $ruleName = 'fpstune-MW3-NAT'
         $action = '%value%'
         # Always clean up existing rules first
-        Get-NetFirewallRule -DisplayName "$ruleName*" -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+        # The lookup may find nothing (silent: no rule is the goal); the removal and
+        # every creation below end the script with their reason when refused.
+        Get-NetFirewallRule -DisplayName "$ruleName*" -ErrorAction SilentlyContinue | Remove-NetFirewallRule -ErrorAction Stop
         if ($action -eq 'open_nat') {
             New-NetFirewallRule -DisplayName "$ruleName-UDP-In" -Direction Inbound `
                 -Protocol UDP -LocalPort @('3074','4380','27000-27036','28950') `
-                -Action Allow -Profile Any -EA SilentlyContinue | Out-Null
+                -Action Allow -Profile Any -ErrorAction Stop | Out-Null
             New-NetFirewallRule -DisplayName "$ruleName-UDP-Out" -Direction Outbound `
                 -Protocol UDP -RemotePort @('3074','4380','27000-27036','28950') `
-                -Action Allow -Profile Any -EA SilentlyContinue | Out-Null
+                -Action Allow -Profile Any -ErrorAction Stop | Out-Null
             New-NetFirewallRule -DisplayName "$ruleName-TCP-In" -Direction Inbound `
                 -Protocol TCP -LocalPort @('3074','3075','27015-27030','27036-27037') `
-                -Action Allow -Profile Any -EA SilentlyContinue | Out-Null
+                -Action Allow -Profile Any -ErrorAction Stop | Out-Null
             New-NetFirewallRule -DisplayName "$ruleName-TCP-Out" -Direction Outbound `
                 -Protocol TCP -RemotePort @('3074','3075','27015-27030','27036-27037') `
-                -Action Allow -Profile Any -EA SilentlyContinue | Out-Null
+                -Action Allow -Profile Any -ErrorAction Stop | Out-Null
             Write-Output 'open_nat'
         } else {
             Write-Output 'default'
@@ -1186,7 +1217,7 @@ ACTION_COMMANDS: dict[str, str] = {
         # reported "already optimal". Locking the file lowers the ceiling.
         $startAttrs = (Get-Item $optPath).Attributes
         if ($startAttrs -band [System.IO.FileAttributes]::ReadOnly) {
-            Set-ItemProperty -Path $optPath -Name Attributes -Value ($startAttrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
+            Set-ItemProperty -Path $optPath -Name Attributes -Value ($startAttrs -band (-bnot [System.IO.FileAttributes]::ReadOnly)) -ErrorAction Stop
         }
 
         $c = Read-ConfigText $optPath
@@ -1236,7 +1267,7 @@ ACTION_COMMANDS: dict[str, str] = {
         # Clear a read-only flag if anything left one; never set one.
         $attrs = (Get-Item $varPath).Attributes
         if ($attrs -band [System.IO.FileAttributes]::ReadOnly) {
-            Set-ItemProperty -Path $varPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
+            Set-ItemProperty -Path $varPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly)) -ErrorAction Stop
         }
 
         $c = Read-ConfigText $varPath
@@ -1272,7 +1303,7 @@ ACTION_COMMANDS: dict[str, str] = {
         # Clear a read-only lock left by an earlier fpstune release; never set one.
         $attrs = (Get-Item $optPath).Attributes
         if ($attrs -band [System.IO.FileAttributes]::ReadOnly) {
-            Set-ItemProperty -Path $optPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly))
+            Set-ItemProperty -Path $optPath -Name Attributes -Value ($attrs -band (-bnot [System.IO.FileAttributes]::ReadOnly)) -ErrorAction Stop
         }
 
         $c = Read-ConfigText $optPath
@@ -1338,12 +1369,13 @@ ACTION_COMMANDS: dict[str, str] = {
     # Hibernation toggle - uses powercfg to also delete/create hiberfil.sys
     "hibernation_toggle": """
         $action = '%value%'
-        if ($action -eq 'disable') {
-            powercfg /h off 2>$null
-            Write-Output 'Hibernation disabled'
+        if ($action -eq 'disable') { $out = powercfg /h off 2>&1; $word = 'disabled' }
+        else { $out = powercfg /h on 2>&1; $word = 'enabled' }
+        # powercfg is a program, not a cmdlet: only its exit code says it refused.
+        if ($LASTEXITCODE -ne 0) {
+            Write-Output ('error:powercfg /h ' + $action + ' failed: ' + (($out | Out-String).Trim()))
         } else {
-            powercfg /h on 2>$null
-            Write-Output 'Hibernation enabled'
+            Write-Output "Hibernation $word"
         }
     """,
     # Steam CEF (browser) GPU compositing toggle - disables GPU in Steam UI for lower overhead
@@ -1352,9 +1384,9 @@ ACTION_COMMANDS: dict[str, str] = {
         if ($action -eq 'not_installed') { Write-Output 'not_installed'; exit 0 }
         $regPath = 'HKCU:\Software\Valve\Steam'
         if ($action -eq 'disabled') {
-            Set-ItemProperty -Path $regPath -Name 'BrowserFlags' -Value '-cef-disable-gpu-compositing -cef-disable-webgl -cef-disable-webgl2' -Type String -Force
-        } else {
-            Remove-ItemProperty -Path $regPath -Name 'BrowserFlags' -ErrorAction SilentlyContinue
+            Set-ItemProperty -Path $regPath -Name 'BrowserFlags' -Value '-cef-disable-gpu-compositing -cef-disable-webgl -cef-disable-webgl2' -Type String -Force -ErrorAction Stop
+        } elseif (Get-ItemProperty -Path $regPath -Name 'BrowserFlags' -ErrorAction SilentlyContinue) {
+            Remove-ItemProperty -Path $regPath -Name 'BrowserFlags' -ErrorAction Stop
         }
         Write-Output 'ok'
     """,
@@ -1380,13 +1412,13 @@ ACTION_COMMANDS: dict[str, str] = {
             if ($hv -and $hv.State -eq 'Enabled') {
                 Disable-WindowsOptionalFeature -Online `
                     -FeatureName Microsoft-Hyper-V `
-                    -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    -NoRestart -ErrorAction Stop | Out-Null
             }
             Write-Output 'disabled'
         } else {
             Enable-WindowsOptionalFeature -Online `
                 -FeatureName Microsoft-Hyper-V -All `
-                -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                -NoRestart -ErrorAction Stop | Out-Null
             Write-Output 'enabled'
         }
     """,
@@ -1398,18 +1430,19 @@ ACTION_COMMANDS: dict[str, str] = {
             if ($vmp -and $vmp.State -eq 'Enabled') {
                 Disable-WindowsOptionalFeature -Online `
                     -FeatureName VirtualMachinePlatform `
-                    -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                    -NoRestart -ErrorAction Stop | Out-Null
             }
             Write-Output 'disabled'
         } else {
             Enable-WindowsOptionalFeature -Online `
                 -FeatureName VirtualMachinePlatform -All `
-                -NoRestart -ErrorAction SilentlyContinue | Out-Null
+                -NoRestart -ErrorAction Stop | Out-Null
             Write-Output 'enabled'
         }
     """,
     # Input personalization toggle (both text + ink collection)
     "input_personalization_toggle": """
+        $ErrorActionPreference = 'Stop'
         $path = 'HKCU:\\SOFTWARE\\Microsoft\\InputPersonalization'
         $action = '%value%'
         if ($action -eq 'disable') {
@@ -1423,6 +1456,7 @@ ACTION_COMMANDS: dict[str, str] = {
     """,
     # Feedback reminders toggle (SIUF + Group Policy DoNotShowFeedbackNotifications)
     "feedback_reminders_toggle": """
+        $ErrorActionPreference = 'Stop'
         $siufPath = 'HKCU:\\SOFTWARE\\Microsoft\\Siuf\\Rules'
         $gpPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\DataCollection'
         $action = '%value%'
@@ -1433,14 +1467,18 @@ ACTION_COMMANDS: dict[str, str] = {
             Set-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -Value 0 -Type DWord -Force
             Set-ItemProperty -Path $gpPath -Name 'DoNotShowFeedbackNotifications' -Value 1 -Type DWord -Force
         } else {
-            Remove-ItemProperty -Path $siufPath -Name 'NumberOfSIUFInPeriod' -ErrorAction SilentlyContinue
-            Remove-ItemProperty -Path $siufPath -Name 'PeriodInNanoSeconds' -ErrorAction SilentlyContinue
-            Remove-ItemProperty -Path $gpPath -Name 'DoNotShowFeedbackNotifications' -ErrorAction SilentlyContinue
+            # Stock Windows has none of these values, so one that is not there is the goal.
+            foreach ($target in @(@($siufPath, 'NumberOfSIUFInPeriod'), @($siufPath, 'PeriodInNanoSeconds'), @($gpPath, 'DoNotShowFeedbackNotifications'))) {
+                if (Get-ItemProperty -Path $target[0] -Name $target[1] -ErrorAction SilentlyContinue) {
+                    Remove-ItemProperty -Path $target[0] -Name $target[1]
+                }
+            }
         }
         Write-Output "Feedback reminders $action completed"
     """,
     # Application telemetry toggle (AITEnable + DisableUAR + DisableInventory)
     "app_telemetry_toggle": """
+        $ErrorActionPreference = 'Stop'
         $appCompatPath = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\AppCompat'
         $action = '%value%'
         if ($action -eq 'disable') {
@@ -1452,7 +1490,9 @@ ACTION_COMMANDS: dict[str, str] = {
             # Stock Windows has no AppCompat policy values; reset removes them
             # rather than leaving a policy in force.
             foreach ($n in 'AITEnable', 'DisableUAR', 'DisableInventory') {
-                Remove-ItemProperty -Path $appCompatPath -Name $n -ErrorAction SilentlyContinue
+                if (Get-ItemProperty -Path $appCompatPath -Name $n -ErrorAction SilentlyContinue) {
+                    Remove-ItemProperty -Path $appCompatPath -Name $n
+                }
             }
         }
         Write-Output "App telemetry $action completed"

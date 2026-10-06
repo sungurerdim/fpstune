@@ -881,7 +881,8 @@ GPU_LAPTOP_ASSIGNMENT = SettingExecutor(
         # Reset removes the entry rather than writing GpuPreference=0. No entry is
         # Windows' own state for an app nobody has configured; a 0 would leave
         # fpstune's fingerprint behind and read as a deliberate choice.
-        "else { Remove-ItemProperty -Path $fpsKey -Name $exe -Force -EA SilentlyContinue }; "
+        "elseif (Get-ItemProperty -Path $fpsKey -Name $exe -EA SilentlyContinue) { "
+        "Remove-ItemProperty -Path $fpsKey -Name $exe -Force -EA Stop }; "
         "$changed++ } catch { $failed++ } }; "
         "if ($failed -gt 0) { 'error: ' + $failed + ' game(s) could not be written' } "
         "else { 'ok:' + $changed }"

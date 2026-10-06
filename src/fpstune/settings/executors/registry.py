@@ -5,7 +5,7 @@ from __future__ import annotations
 import sys
 from typing import TYPE_CHECKING, Any
 
-from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.settings.executors import BaseExecutor, describe_refusal, map_raw_to_display
 from fpstune.utils.admin import registry_denied
 from fpstune.utils.winapi.session import registry_root
 
@@ -163,7 +163,7 @@ class RegistryExecutor(BaseExecutor):
             return False, registry_denied("writing", f"{hive}\\{path}\\{name}")
         except Exception as e:
             debug_log("registry", f"APPLY {setting.id}: Error: {e}")
-            return False, f"Registry write error: {e}"
+            return False, f"Registry write error: {describe_refusal(e)}"
 
     def _delete_value(self, hive: str, path: str, name: str) -> tuple[bool, str | None]:
         """Delete a registry value."""
@@ -183,4 +183,4 @@ class RegistryExecutor(BaseExecutor):
         except PermissionError:
             return False, registry_denied("deleting", f"{hive}\\{path}\\{name}")
         except Exception as e:
-            return False, str(e)
+            return False, f"Registry delete error: {describe_refusal(e)}"

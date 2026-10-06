@@ -22,6 +22,7 @@ from fpstune.settings.applicability import (
     NOT_AVAILABLE,
     NOT_SUPPORTED,
 )
+from fpstune.settings.executors import describe_refusal
 from fpstune.settings.inf_defaults import interrupt_defaults
 from fpstune.utils.logger import get_logger
 
@@ -113,7 +114,10 @@ def _failure(instance_id: str, exc: OSError) -> tuple[bool, str]:
 
     if isinstance(exc, PermissionError):
         return False, registry_denied("writing", f"the interrupt key of {instance_id}")
-    return False, f"Windows error {exc.winerror} writing the interrupt key of {instance_id}"
+    # `winerror` is None for an OSError that did not come from a Windows call, and
+    # "Windows error None" tells the user nothing; the exception's own text does.
+    code = f"Windows error {exc.winerror}" if exc.winerror is not None else describe_refusal(exc)
+    return False, f"{code} writing the interrupt key of {instance_id}"
 
 
 def msi_mode_write(args: dict[str, Any]) -> tuple[bool, str | None]:

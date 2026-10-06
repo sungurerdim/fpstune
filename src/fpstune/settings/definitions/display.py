@@ -43,13 +43,13 @@ def directx_flag_scripts(flag: str) -> tuple[str, str]:
         "if ($t -and ($t -split '=', 2)[1].Trim() -eq '1') { 'enabled' } else { 'disabled' }"
     )
     apply = (
-        f"if (-not (Test-Path '{_DX_PATH}')) {{ New-Item -Path '{_DX_PATH}' -Force | Out-Null }}; "
+        f"if (-not (Test-Path '{_DX_PATH}')) {{ New-Item -Path '{_DX_PATH}' -Force -ErrorAction Stop | Out-Null }}; "
         + read
         + f"$keep = @(\"$cur\" -split ';' | Where-Object {{ $_.Trim() -and $_ -notmatch {token} }}); "
         "$bit = if ('%value%' -eq 'enabled') { '1' } else { '0' }; "
         f"$updated = ((@($keep) + \"{flag}=$bit\") -join ';') + ';'; "
         f"Set-ItemProperty -Path '{_DX_PATH}' -Name 'DirectXUserGlobalSettings' "
-        "-Value $updated -Type String"
+        "-Value $updated -Type String -ErrorAction Stop"
     )
     return detect, apply
 
@@ -129,9 +129,11 @@ def _mpo_scripts(values: tuple[tuple[str, str, int], ...]) -> tuple[str, str]:
     apply = (
         targets + "foreach ($t in $targets) { "
         "if ('%value%' -eq 'disabled') { "
-        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force | Out-Null }; "
-        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $t[2] -Type DWord -Force "
-        "} else { Remove-ItemProperty -Path $t[0] -Name $t[1] -ErrorAction SilentlyContinue } }"
+        "if (-not (Test-Path $t[0])) { New-Item -Path $t[0] -Force -ErrorAction Stop | Out-Null }; "
+        "Set-ItemProperty -Path $t[0] -Name $t[1] -Value $t[2] -Type DWord -Force -ErrorAction Stop "
+        # A value that is not there is the goal; one that refuses to go is named.
+        "} elseif (Get-ItemProperty -Path $t[0] -Name $t[1] -ErrorAction SilentlyContinue) { "
+        "Remove-ItemProperty -Path $t[0] -Name $t[1] -ErrorAction Stop } }"
     )
     return detect, apply
 

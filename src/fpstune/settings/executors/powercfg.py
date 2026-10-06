@@ -277,7 +277,9 @@ class PowerCfgExecutor(BaseExecutor):
                 cmd = f"{flag} {scheme} {subgroup} {setting_guid} {index}"
                 success, output = self._run(cmd)
                 if not success:
-                    failures.append(f"{scheme} {flag}: {output.strip()}")
+                    failures.append(
+                        f"{scheme} {flag}: {output.strip() or 'powercfg exited with an error'}"
+                    )
 
         # The active plan is first in the list, so its failure is the one that
         # means the user's machine did not change. A plan they are not on failing

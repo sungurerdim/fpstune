@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.base import Reading
 from fpstune.settings.cleanup_measure import store_cleanup_reading
-from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.settings.executors import BaseExecutor, describe_refusal, map_raw_to_display
 from fpstune.settings.executors.powershell_actions import (
     ACTION_COMMANDS,
     SERVICE_CLEANUPS,
@@ -532,6 +532,66 @@ def _finish_apply(setting: SettingExecutor, output: str | None) -> tuple[bool, s
     return True, None
 
 
+def _apply_line_config(
+    setting: SettingExecutor, line_config: str, raw_value: Any
+) -> tuple[bool, str | None]:
+    """Write one MW4 or MW3-gamerprofile setting through the line rewriter.
+
+    Every way this can end is an answer: a value the file's own range refuses, a
+    file the OS would not let go of, a file that is not there. None of them is an
+    exception for the route to turn into an unreadable server error.
+    """
+    from fpstune.settings.applicability import NOT_INSTALLED
+    from fpstune.settings.executors.game_config_writer import ConfigValueRejected
+    from fpstune.utils.debug import debug_log
+
+    batch_key = setting.apply_args["batch_key"]
+    # A list is a named-compound: several keys that are one setting, so
+    # every one of them gets the value or none of them does.
+    compound = isinstance(batch_key, (list, tuple))
+    keys = [str(k) for k in batch_key] if compound else [str(batch_key)]
+    try:
+        if line_config == "mw4":
+            from fpstune.settings.executors.mw4_config import set_mw4_option, set_mw4_options
+
+            # MW4 keeps two files and a key can appear in both, so the
+            # setting names which one it writes. Defaulting to the global
+            # file matches where all but a handful of keys live.
+            source = str(setting.apply_args.get("batch_source", "global"))
+            written = (
+                set_mw4_options(keys, str(raw_value), source)
+                if compound
+                else set_mw4_option(keys[0], str(raw_value), source)
+            )
+            absent = "Modern Warfare IV config file not found"
+        else:
+            from fpstune.settings.executors.mw3_profile import (
+                set_mw3_profile_option,
+                set_mw3_profile_options,
+            )
+
+            written = (
+                set_mw3_profile_options(keys, str(raw_value))
+                if compound
+                else set_mw3_profile_option(keys[0], str(raw_value))
+            )
+            absent = "Modern Warfare III profile config file not found"
+    except ConfigValueRejected as exc:
+        # The file's own range said no. Reported rather than written,
+        # because MW4 answers a value it dislikes by resetting the key.
+        debug_log("powershell", f"APPLY REJECTED {setting.id}: {exc}")
+        return False, str(exc)
+    except OSError as exc:
+        # The OS refused the write itself: a holder that outlasted the
+        # retries, a lock another writer kept, a read-only volume.
+        debug_log("powershell", f"APPLY REFUSED {setting.id}: {exc!r}")
+        return False, describe_refusal(exc)
+    if written == NOT_INSTALLED:
+        return False, absent
+    debug_log("powershell", f"APPLY {line_config} {setting.id}: wrote {written!r}")
+    return True, None
+
+
 class PowerShellExecutor(BaseExecutor):
     """Execute PowerShell commands for network adapter and other settings.
 
@@ -711,52 +771,7 @@ class PowerShellExecutor(BaseExecutor):
         # a second implementation is a second thing to get wrong about `@scope`.
         line_config = setting.apply_args.get("batch_config")
         if line_config in ("mw4", "mw3_profile"):
-            from fpstune.settings.applicability import NOT_INSTALLED
-            from fpstune.settings.executors.game_config_writer import ConfigValueRejected
-
-            batch_key = setting.apply_args["batch_key"]
-            # A list is a named-compound: several keys that are one setting, so
-            # every one of them gets the value or none of them does.
-            compound = isinstance(batch_key, (list, tuple))
-            keys = [str(k) for k in batch_key] if compound else [str(batch_key)]
-            try:
-                if line_config == "mw4":
-                    from fpstune.settings.executors.mw4_config import (
-                        set_mw4_option,
-                        set_mw4_options,
-                    )
-
-                    # MW4 keeps two files and a key can appear in both, so the
-                    # setting names which one it writes. Defaulting to the global
-                    # file matches where all but a handful of keys live.
-                    source = str(setting.apply_args.get("batch_source", "global"))
-                    written = (
-                        set_mw4_options(keys, str(raw_value), source)
-                        if compound
-                        else set_mw4_option(keys[0], str(raw_value), source)
-                    )
-                    absent = "Modern Warfare IV config file not found"
-                else:
-                    from fpstune.settings.executors.mw3_profile import (
-                        set_mw3_profile_option,
-                        set_mw3_profile_options,
-                    )
-
-                    written = (
-                        set_mw3_profile_options(keys, str(raw_value))
-                        if compound
-                        else set_mw3_profile_option(keys[0], str(raw_value))
-                    )
-                    absent = "Modern Warfare III profile config file not found"
-            except ConfigValueRejected as exc:
-                # The file's own range said no. Reported rather than written,
-                # because MW4 answers a value it dislikes by resetting the key.
-                debug_log("powershell", f"APPLY REJECTED {setting.id}: {exc}")
-                return False, str(exc)
-            if written == NOT_INSTALLED:
-                return False, absent
-            debug_log("powershell", f"APPLY {line_config} {setting.id}: wrote {written!r}")
-            return True, None
+            return _apply_line_config(setting, line_config, raw_value)
 
         # Check for special action commands
         cmd_key = setting.apply_command.strip()
@@ -768,7 +783,13 @@ class PowerShellExecutor(BaseExecutor):
         from fpstune.settings.executors.python_actions import PYTHON_ACTIONS
 
         if cmd_key in PYTHON_ACTIONS:
-            ok, message = PYTHON_ACTIONS[cmd_key](args)
+            try:
+                ok, message = PYTHON_ACTIONS[cmd_key](args)
+            except OSError as exc:
+                # An action answers (ok, message); one that lets the OS's refusal
+                # escape would reach the route as an unreadable server error.
+                debug_log("powershell", f"APPLY REFUSED {setting.id}: {exc!r}")
+                return False, describe_refusal(exc)
             debug_log("powershell", f"APPLY PYTHON {setting.id}: {cmd_key} ok={ok}")
             return ok, message
         cmd, rejection = _apply_command(setting, cmd_key, args)

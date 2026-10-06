@@ -116,6 +116,13 @@ addopts = "-v --tb=short"
 # runner (where a cancelled run's log is lost) names itself.
 faulthandler_timeout = 300
 pythonpath = ["src"]
+# A test whose verdict is a wall-clock reading. Beside eight workers and the
+# frontend block the scheduler takes the core away mid-measurement (measured:
+# a 20 ms wait landing 60 ms late), so scripts/quality.sh runs these on their
+# own once the parallel blocks are done, instead of loosening their bounds.
+markers = [
+    "timing: asserts on wall-clock behaviour; run on a quiet machine, not beside parallel load",
+]
 filterwarnings = [
     "ignore::DeprecationWarning",
 ]

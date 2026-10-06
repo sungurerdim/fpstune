@@ -26,6 +26,10 @@ from typing import Any
 # failure is loud, and assert the clause they rewrite still exists.
 HARNESS_ERROR = "HARNESS_ERROR"
 
+# What `failed_read` prints in place of an answer. A detect that could not read raises
+# (#104): the row then reads "unknown" with the reason, never a value or a sentinel.
+FAILED_READ = "FAILED_READ"
+
 
 def run_shipped_script(script: str, payload: dict[str, Any], *, expect_exit: int = 0) -> str:
     """Run `script` with `payload` exposed as JSON via $env:FPSTUNE_FAKE_HOST.
@@ -89,6 +93,16 @@ def loud_catch(command: str, shipped_catch: str) -> str:
         "broken harness reads as a legitimate result again."
     )
     return command.replace(shipped_catch, f"catch {{ '{HARNESS_ERROR}: ' + $_.Exception.Message }}")
+
+
+def failed_read(command: str) -> str:
+    """Wrap a detect that must raise on a failed read so a test can see the raise.
+
+    The shipped command is left untouched inside the wrapper. A script that threw at
+    top level would end with exit 1 and no stdout, which `run_shipped_command` rejects
+    as a harness failure; here the raise is the expected result and is named by prefix.
+    """
+    return f"try {{ {command} }} catch {{ '{FAILED_READ}: ' + $_.Exception.Message }}"
 
 
 def fake_adapters(*adapters: dict[str, Any]) -> list[dict[str, Any]]:

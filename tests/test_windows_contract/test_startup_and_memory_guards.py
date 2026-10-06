@@ -4,7 +4,8 @@ Both read state a fake cannot get wrong by accident: the startup advisory walks
 three Run keys, their StartupApproved flags and two Startup folders, and must
 leave out security software without a vendor list; the memory-compression read
 must not turn a property it cannot see into "disabled", which would have the
-guard write over a state nobody read.
+guard write over a state nobody read, nor a failed read into "not_available",
+which would hide the row as if the feature were not on the machine.
 """
 
 from __future__ import annotations
@@ -13,7 +14,12 @@ import json
 import sys
 
 import pytest
-from tests.test_windows_contract.conftest import run_shipped_command, run_shipped_script
+from tests.test_windows_contract.conftest import (
+    FAILED_READ,
+    failed_read,
+    run_shipped_command,
+    run_shipped_script,
+)
 
 from fpstune.settings.definitions.system import MEMORY_COMPRESSION, SYSTEM_STARTUP_APPS
 
@@ -136,10 +142,23 @@ function Get-MMAgent {
         ({"has_property": True, "on": False}, "disabled"),
         # A property the build does not return is unknown, never "disabled".
         ({"has_property": False}, "not_available"),
-        ({"throws": True}, "not_available"),
     ],
 )
 def test_memory_compression_reads_only_what_mmagent_states(host: dict, expected: str) -> None:
     assert (
         run_shipped_command(_MMAGENT_PRELUDE + MEMORY_COMPRESSION.detect_command, host) == expected
     )
+
+
+def test_memory_compression_read_that_fails_raises_instead_of_reading_as_absent() -> None:
+    """`Get-MMAgent` raising (no elevation, the service down) is a failed read.
+
+    The fixture's own error, "The service cannot be started", says the query could not
+    run; it says nothing about whether the feature exists. #104 (33263ed) therefore
+    makes the detect raise -- the row reads "unknown" with the reason -- and keeps
+    `not_available` for the proven case above, a build that answers without the property.
+    """
+    answer = run_shipped_command(
+        _MMAGENT_PRELUDE + failed_read(MEMORY_COMPRESSION.detect_command), {"throws": True}
+    )
+    assert answer == f"{FAILED_READ}: The service cannot be started"

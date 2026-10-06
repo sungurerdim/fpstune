@@ -36,10 +36,15 @@ pytestmark = pytest.mark.skipif(
     sys.platform != "win32", reason="Runs the shipped PowerShell detect command"
 )
 
-_SHIPPED_CATCH = "catch { 'disabled' }"
+# A failed read raises since #104 (the row then reads "unknown"), so the shipped catch
+# only rethrows. The tests swap it for the loud one so a broken harness cannot pass
+# as an answer.
+_SHIPPED_CATCH = "catch { throw }"
 
-# Shadows the four cmdlets the detect command uses. Test-Path and Get-ItemProperty
-# are answered from the fake registry so no real key is read or written.
+# Shadows the cmdlets the detect command uses. Test-Path and Get-ItemProperty are
+# answered from the fake registry so no real key is read or written. Windows' own
+# template table (Get-DnsClientDohServerAddress) is empty here, so every template
+# comes from fpstune's fallback table -- the filtered Cloudflare pair is in it.
 _HARNESS = """
 $ErrorActionPreference = 'Stop'
 $fake = Get-Content -LiteralPath $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
@@ -54,6 +59,11 @@ function Get-DnsClientServerAddress {
     $servers = $fake.dns."$InterfaceIndex"
     if ($null -eq $servers) { $servers = @() }
     [pscustomobject]@{ ServerAddresses = @($servers) }
+}
+
+function Get-DnsClientDohServerAddress {
+    param([Parameter(ValueFromRemainingArguments = $true)] $Ignored)
+    $null
 }
 
 function Test-Path {
@@ -83,6 +93,11 @@ def _doh_key(guid: str, server: str) -> str:
     )
 
 
+def _flagged(guid: str, *servers: str) -> dict[str, dict[str, int]]:
+    """Registry entries Windows would hold once DoH is on for `servers` of one adapter."""
+    return {_doh_key(guid, server): {"DohFlags": 2} for server in servers}
+
+
 def _detect(
     adapters: list[dict[str, object]],
     dns: dict[str, list[str]],
@@ -97,14 +112,29 @@ def _detect(
     return run_shipped_command(_HARNESS + command, payload)
 
 
-def test_flag_on_the_primary_resolver_reads_as_enabled() -> None:
-    """What Windows itself writes: one entry, for the primary address only."""
+def test_every_templated_resolver_flagged_reads_as_enabled() -> None:
+    """Both resolvers of the pair have a template, so both carry the flag."""
     answer = _detect(
         [ETHERNET],
         {"19": SECURITY_PAIR},
-        {_doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 2}},
+        _flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
     )
     assert answer == "enabled"
+
+
+def test_flag_on_the_primary_resolver_alone_reads_as_disabled() -> None:
+    """What Windows' own Settings UI writes: one entry, for the primary address only.
+
+    #104 decided detect asks apply's question -- every resolver with a known template
+    must carry its flag -- so a UI-enabled setup reads `disabled` and apply completes
+    it. The secondary left without its flag is a plaintext path.
+    """
+    answer = _detect(
+        [ETHERNET],
+        {"19": SECURITY_PAIR},
+        _flagged("{eth-guid}", "1.1.1.2"),
+    )
+    assert answer == "disabled"
 
 
 def test_registered_template_without_an_interface_entry_reads_as_disabled() -> None:
@@ -121,7 +151,7 @@ def test_one_adapter_without_the_flag_reads_as_disabled() -> None:
     answer = _detect(
         [ETHERNET, WIFI],
         {"19": SECURITY_PAIR, "4": SECURITY_PAIR},
-        {_doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 2}},
+        _flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
     )
     assert answer == "disabled"
 
@@ -131,8 +161,8 @@ def test_every_adapter_flagged_reads_as_enabled() -> None:
         [ETHERNET, WIFI],
         {"19": SECURITY_PAIR, "4": SECURITY_PAIR},
         {
-            _doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 2},
-            _doh_key("{wifi-guid}", "1.1.1.2"): {"DohFlags": 2},
+            **_flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
+            **_flagged("{wifi-guid}", "1.1.1.2", "1.0.0.2"),
         },
     )
     assert answer == "enabled"
@@ -141,14 +171,13 @@ def test_every_adapter_flagged_reads_as_enabled() -> None:
 def test_a_flag_on_the_secondary_only_is_not_enough() -> None:
     """Documents the rule rather than leaving it implicit.
 
-    Windows attaches the flag to the primary resolver, so the primary is what
-    decides. An entry for the secondary alone means the address actually queried
-    first is still unencrypted.
+    Every templated resolver must carry its flag. An entry for the secondary alone
+    leaves the address queried first unencrypted, so it is not enough.
     """
     answer = _detect(
         [ETHERNET],
         {"19": SECURITY_PAIR},
-        {_doh_key("{eth-guid}", "1.0.0.2"): {"DohFlags": 2}},
+        _flagged("{eth-guid}", "1.0.0.2"),
     )
     assert answer == "disabled"
 
@@ -157,12 +186,15 @@ def test_a_zero_flag_reads_as_disabled() -> None:
     """A present key with a falsy flag is off, not on.
 
     The key can survive after DoH is turned off, so its mere existence must not
-    count as enabled.
+    count as enabled. The secondary is flagged properly, so only the zero decides.
     """
     answer = _detect(
         [ETHERNET],
         {"19": SECURITY_PAIR},
-        {_doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 0}},
+        {
+            _doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 0},
+            _doh_key("{eth-guid}", "1.0.0.2"): {"DohFlags": 2},
+        },
     )
     assert answer == "disabled"
 
@@ -171,14 +203,27 @@ def test_an_adapter_with_no_dns_configured_reads_as_disabled() -> None:
     assert _detect([ETHERNET], {}, {}) == "disabled"
 
 
-def test_no_matching_adapter_reads_as_disabled() -> None:
-    """An adapter apply would skip must not be able to decide the answer."""
+def test_a_router_only_resolver_reads_as_disabled_not_unsupported() -> None:
+    """No resolver has a template: still applicable, because dns_security supplies one.
+
+    #104 (85704c6) kept the row actionable so "apply all" runs it after dns_security
+    instead of hiding it and leaving a second click.
+    """
+    assert _detect([ETHERNET], {"19": ["192.168.1.1"]}, {}) == "disabled"
+
+
+def test_no_matching_adapter_reads_as_not_supported() -> None:
+    """An adapter apply would skip must not be able to decide the answer.
+
+    With no physical adapter left there is nothing DoH could attach to, which is the
+    one case #104 kept as `not_supported` (an ABSENT_READINGS spelling).
+    """
     answer = _detect(
         [{**ETHERNET, "status": 2}],
         {"19": SECURITY_PAIR},
-        {_doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 2}},
+        _flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
     )
-    assert answer == "disabled"
+    assert answer == "not_supported"
 
 
 def test_virtual_adapters_do_not_decide_the_verdict() -> None:
@@ -186,7 +231,7 @@ def test_virtual_adapters_do_not_decide_the_verdict() -> None:
     answer = _detect(
         [ETHERNET, {"ifIndex": 7, "guid": "{hv}", "description": "Hyper-V Virtual Switch"}],
         {"19": SECURITY_PAIR, "7": ["192.168.1.1"]},
-        {_doh_key("{eth-guid}", "1.1.1.2"): {"DohFlags": 2}},
+        _flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
     )
     assert answer == "enabled"
 
@@ -222,7 +267,6 @@ def test_the_two_dns_settings_share_one_adapter_filter() -> None:
 _APPLY_HARNESS = (
     _HARNESS
     + """
-function Get-DnsClientDohServerAddress { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) $null }
 function Add-DnsClientDohServerAddress { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
 function New-Item { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }
 function New-ItemProperty { param([Parameter(ValueFromRemainingArguments = $true)] $Ignored) }

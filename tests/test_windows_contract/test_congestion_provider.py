@@ -1,11 +1,13 @@
-"""The congestion provider is read from the API; a failed read is a sentinel, not CUBIC.
+"""The congestion provider is read from the API; a failed read raises, it is not CUBIC.
 
 The defect: when ``Get-NetTCPSetting`` threw, the detect command fell back to
 ``netsh int tcp show global | Select-String 'Congestion'`` and answered CUBIC
 whenever nothing matched — on a non-English Windows, always, because netsh's
-labels are localized. A read failure was reported as a value (A11). The shipped
-command now answers ``not_available``, which the detection engine turns into
-"not applicable" rather than into a setting that claims to know.
+labels are localized. A read failure was reported as a value (A11). The first fix
+answered ``not_available``, which the detection engine turns into "not applicable":
+the Internet template exists on every Windows 11, so a failed read of it was reported
+as "this feature is not on the machine". Issue #104 (33263ed) made it raise, so the
+row reads "unknown" with the reason.
 """
 
 from __future__ import annotations
@@ -13,7 +15,12 @@ from __future__ import annotations
 import sys
 
 import pytest
-from tests.test_windows_contract.conftest import HARNESS_ERROR, run_shipped_command
+from tests.test_windows_contract.conftest import (
+    FAILED_READ,
+    HARNESS_ERROR,
+    failed_read,
+    run_shipped_command,
+)
 
 from fpstune.settings.registry import SettingsRegistry
 
@@ -50,10 +57,12 @@ def test_the_api_answer_is_passed_through(detect_command: str) -> None:
     )
 
 
-def test_a_failed_read_is_the_sentinel_not_a_value(detect_command: str) -> None:
-    """The gate: the old fallback printed CUBIC here."""
-    answer = run_shipped_command(_PRELUDE + detect_command, {"throws": True, "provider": ""})
-    assert answer == "not_available"
+def test_a_failed_read_raises_and_is_neither_a_value_nor_a_sentinel(detect_command: str) -> None:
+    """The gate: the old fallback printed CUBIC here, the first fix `not_available`."""
+    answer = run_shipped_command(
+        _PRELUDE + failed_read(detect_command), {"throws": True, "provider": ""}
+    )
+    assert answer == f"{FAILED_READ}: the cmdlet is not available on this host"
     assert not answer.startswith(HARNESS_ERROR)
 
 

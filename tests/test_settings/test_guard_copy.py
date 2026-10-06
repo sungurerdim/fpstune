@@ -24,13 +24,6 @@ from fpstune.settings.definitions import get_all_static_settings
 # word -> True when it names the "on" side
 _POLARITY = {"enabled": True, "on": True, "disabled": False, "off": False}
 
-# Rows whose copy still argues the other way, held out only because their file is
-# being edited elsewhere (#104). Each entry must still be violating: the stale
-# check below fails the moment one is fixed, so this list can only shrink.
-_PENDING_COPY_FIX = frozenset(
-    {"network:nagle_algorithm", "network:tcp_timestamps", "network:tcp_ecn"}
-)
-
 
 def _lead_state(impact: str) -> str:
     """The state word of a C3 ``State: consequence`` string, lower-cased; ``""`` when none."""
@@ -54,24 +47,12 @@ def _guards() -> list[SettingExecutor]:
 
 
 def test_no_guard_row_recommends_one_state_and_argues_for_the_other() -> None:
-    offenders = sorted(
-        s.id for s in _guards() if _contradicts_recommendation(s) and s.id not in _PENDING_COPY_FIX
-    )
+    offenders = sorted(s.id for s in _guards() if _contradicts_recommendation(s))
 
     assert not offenders, (
         "recommended_impact names the opposite state to recommended_value on a guard row: "
         f"{offenders}"
     )
-
-
-def test_the_pending_list_holds_only_rows_that_still_violate() -> None:
-    by_id = {s.id: s for s in _guards()}
-
-    stale = sorted(
-        i for i in _PENDING_COPY_FIX if i not in by_id or not _contradicts_recommendation(by_id[i])
-    )
-
-    assert not stale, f"fixed (or gone) — remove from _PENDING_COPY_FIX: {stale}"
 
 
 @pytest.mark.parametrize(

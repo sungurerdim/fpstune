@@ -318,12 +318,12 @@ export const settingsTr: Record<
   "network:tcp_timestamps": {
     name: "TCP zaman damgaları",
     description:
-      "Her TCP paketine zaman damgası ekler. Kapatmak oyun için başlık yükünü azaltır.",
+      "Her TCP paketine zaman damgası ekler; tekrar saldırısına karşı koruma ve kullanılabilir bir gidiş-dönüş süresi tahmini sağlar. Windows bunu açık getirir, kapatmak oyunun kullanabileceği hiçbir şey kazandırmaz.",
   },
   "network:tcp_ecn": {
     name: "Tıkanıklık erken uyarısı (ECN)",
     description:
-      "Ağ tıkanıklığı sinyali. Bazı yönlendiricilerle gecikme sıçramalarına yol açabilir.",
+      "Tıkanmış bir yönlendiricinin paketleri düşürmek yerine işaretleyerek uyarı vermesini sağlar. Windows bunu açık getirir ve kapatmanın oyun için bir kazanç sağladığını gösteren bir ölçüm yoktur.",
   },
   "network:default_ttl": {
     name: "Paket yaşam süresi (TTL)",

@@ -332,6 +332,29 @@ class TestApplyNoneDeletesBeforeCoercing:
         assert (ok, error) == (True, None)
         delete.assert_called_once_with("HKLM", _HAGS_PATH, _HAGS_NAME)
 
+    def test_power_throttling_reset_deletes_rather_than_writing_zero(self) -> None:
+        """Stock Windows carries no `PowerThrottlingOff`; the ADMX_Power policy only
+        writes it when configured. Reset wrote 0 — same behaviour, not stock."""
+        from fpstune.settings.registry import SettingsRegistry
+
+        winreg = pytest.importorskip("winreg")
+        setting = SettingsRegistry(discover_dynamic=False).get("power:power_throttling")
+        assert setting is not None
+        # The write path is stubbed too: a regression must fail here, never reach
+        # the real HKLM of the machine running the suite.
+        with (
+            patch("sys.platform", "win32"),
+            patch.object(RegistryExecutor, "_delete_value", return_value=(True, None)) as delete,
+            patch.object(winreg, "CreateKeyEx", MagicMock()),
+            patch.object(winreg, "SetValueEx") as write,
+        ):
+            ok, error = RegistryExecutor().apply(setting, setting.default_value)
+        write.assert_not_called()
+        assert (ok, error) == (True, None)
+        delete.assert_called_once_with(
+            "HKLM", r"SYSTEM\CurrentControlSet\Control\Power\PowerThrottling", "PowerThrottlingOff"
+        )
+
     def test_every_registered_delete_target_reaches_the_delete(self) -> None:
         from fpstune.settings.registry import SettingsRegistry
 

@@ -812,7 +812,9 @@ POWER_THROTTLING = SettingExecutor(
         "hive": "HKLM",
         "type": "REG_DWORD",
     },
-    apply_value_map={"enabled": 0, "disabled": 1},
+    # Stock Windows carries no PowerThrottlingOff (ADMX_Power writes it only when
+    # the policy is configured), so "enabled" is restored by deleting the value.
+    apply_value_map={"enabled": None, "disabled": 1},
 )
 
 

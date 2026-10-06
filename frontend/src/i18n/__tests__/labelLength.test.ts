@@ -11,10 +11,10 @@
  *    longest 27 in English and 29 in Turkish once the 37-character outlier was
  *    shortened. 30 holds all of them and refuses a label that is a phrase.
  *
- * Not capped here: `finding.*`. Those are sentences with placeholders, whose
- * measured distribution is wide (a summary runs 40-167 characters, an advice
- * line up to 144) and which are meant to wrap; their frame is held by the
- * narrow-width rules, not by a length.
+ *  - `finding.*` (a sentence a measured advisory becomes): they are meant to
+ *    wrap, but a sentence needs a ceiling too. It mirrors C3's cap on a
+ *    description, 200 characters (`tests/test_quality_gates.py::TestC3TooltipCopy`),
+ *    and is counted on the catalogue text, placeholders unexpanded.
  */
 
 import { describe, expect, it } from "vitest";
@@ -22,6 +22,7 @@ import { en } from "../en";
 import { tr } from "../tr";
 
 const STATE_LABEL_MAX_CHARS = 30;
+const FINDING_SENTENCE_MAX_CHARS = 200;
 
 function over(
   catalogue: Record<string, string>,
@@ -46,5 +47,11 @@ describe.each([
 
   it(`keeps a state or tier name within ${STATE_LABEL_MAX_CHARS} characters`, () => {
     expect(over(catalogue, ["choice.", "tier."], STATE_LABEL_MAX_CHARS)).toEqual([]);
+  });
+
+  it(`keeps a finding sentence within ${FINDING_SENTENCE_MAX_CHARS} characters`, () => {
+    // A prefix that matches nothing would pass forever.
+    expect(Object.keys(catalogue).filter((k) => k.startsWith("finding.")).length).toBeGreaterThan(20);
+    expect(over(catalogue, ["finding."], FINDING_SENTENCE_MAX_CHARS)).toEqual([]);
   });
 });

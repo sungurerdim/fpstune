@@ -8,7 +8,11 @@ from __future__ import annotations
 
 import re
 import threading
+from collections.abc import Callable, Iterator
+from typing import Any
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from fpstune.settings.definitions import network
 from fpstune.settings.executors import adapter_restart
@@ -19,21 +23,68 @@ _WRITERS = re.compile(
 )
 
 
+@pytest.fixture(autouse=True)
+def _no_restart_state_leaks() -> Iterator[None]:
+    """Cancel pending timers and clear the marks, before and after every test.
+
+    ``_pending`` and ``_restarting`` are module-level, so a timer one test left
+    waiting would fire into the next one.
+    """
+
+    def clear() -> None:
+        with adapter_restart._lock:
+            timers = list(adapter_restart._pending.values())
+            adapter_restart._pending.clear()
+            adapter_restart._restarting.clear()
+        for timer in timers:
+            timer.cancel()
+
+    clear()
+    yield
+    clear()
+
+
+class _FakeTimer:
+    """A timer fired by the test, never by the wall clock.
+
+    The debounce is a promise about *which* timers are cancelled when the next
+    write arrives; a real 0.2 s window only tests it while the machine never
+    stalls between two writes (a parallel pytest run does, and the adapter then
+    restarted twice, as it should for a write after the quiet period).
+    """
+
+    made: list[_FakeTimer] = []
+
+    def __init__(self, interval: float, function: Callable[..., None], args: tuple[int, ...]):
+        self.interval = interval
+        self.function = function
+        self.args = args
+        self.daemon = False
+        self.cancelled = False
+        self.started = False
+        _FakeTimer.made.append(self)
+
+    def start(self) -> None:
+        self.started = True
+
+    def cancel(self) -> None:
+        self.cancelled = True
+
+    def fire(self) -> None:
+        if self.started and not self.cancelled:
+            self.function(*self.args)
+
+
 def _restarts(writes: int, adapters: tuple[int, ...] = (7,)) -> list[int]:
+    """Schedule ``writes`` rounds inside one quiet window, then let the window end."""
     done: list[int] = []
-    finished = threading.Event()
-
-    def restart(index: int) -> None:
-        done.append(index)
-        if len(done) == len(adapters):
-            finished.set()
-
-    for _ in range(writes):
-        for index in adapters:
-            assert schedule_adapter_restart(index, quiet_seconds=0.2, restart=restart)
-    finished.wait(2.0)
-    # Give a wrongly-uncancelled extra timer the chance to fire too.
-    threading.Event().wait(0.3)
+    _FakeTimer.made = []
+    with patch.object(adapter_restart.threading, "Timer", _FakeTimer):
+        for _ in range(writes):
+            for index in adapters:
+                assert schedule_adapter_restart(index, quiet_seconds=4.0, restart=done.append)
+    for timer in _FakeTimer.made:
+        timer.fire()
     return done
 
 
@@ -45,12 +96,39 @@ def test_each_adapter_gets_its_own_single_restart() -> None:
     assert sorted(_restarts(5, adapters=(7, 12))) == [7, 12]
 
 
+def test_a_write_after_the_quiet_period_restarts_the_adapter_again() -> None:
+    """The sequence behind a once-red ``[7, 12, 12]``: the window ended between two
+    writes of one burst, so the second write needs its own restart to be loaded."""
+    done: list[int] = []
+    _FakeTimer.made = []
+    with patch.object(adapter_restart.threading, "Timer", _FakeTimer):
+        assert schedule_adapter_restart(12, quiet_seconds=4.0, restart=done.append)
+        _FakeTimer.made[0].fire()  # quiet period over, restart runs
+        assert schedule_adapter_restart(12, quiet_seconds=4.0, restart=done.append)
+        _FakeTimer.made[1].fire()
+    assert done == [12, 12]
+
+
+def test_a_real_timer_fires_a_single_schedule_once() -> None:
+    """The real ``threading.Timer`` path, with no burst for a stalled machine to split."""
+    done: list[int] = []
+    finished = threading.Event()
+
+    def restart(index: int) -> None:
+        done.append(index)
+        finished.set()
+
+    assert schedule_adapter_restart(7, quiet_seconds=0.05, restart=restart)
+    assert finished.wait(5.0)
+    assert done == [7]
+
+
 def test_a_non_index_is_refused() -> None:
     for bad in (None, "", "abc", 0, -3):
         assert schedule_adapter_restart(bad, restart=lambda _i: None) is False
 
 
-def _factories() -> list:
+def _factories() -> list[Any]:
     names = [n for n in dir(network) if n.startswith("create_") and n.endswith("_setting")]
     built = []
     for name in names:
@@ -119,7 +197,6 @@ def test_shutdown_runs_a_restart_still_waiting_and_only_once() -> None:
     """A change made seconds before exit would otherwise never reach the driver."""
     from fpstune.settings.executors.adapter_restart import flush_pending
 
-    flush_pending(restart=lambda _index: None)  # timers earlier tests left behind
     late: list[int] = []
     flushed: list[int] = []
     assert schedule_adapter_restart(9, quiet_seconds=30.0, restart=late.append)

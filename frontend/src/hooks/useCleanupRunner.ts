@@ -233,8 +233,7 @@ export function useCleanupSizePolling(): void {
   // Routed through the DetectionManager rather than posting /detect here: this
   // was the fourth hand-written copy of the detect-response-to-store mapping,
   // and it carried four of the six fields — which is how the copy before it
-  // came to blank `recommended_value` and `original_value` on everything it
-  // touched. There is one mapping and every caller uses it.
+  // came to blank `recommended_value` on everything it touched. There is one mapping and every caller uses it.
   useEffect(() => {
     if (detectTriggered || sizeBearingIds.length === 0) return;
     detectTriggered = true;

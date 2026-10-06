@@ -28,7 +28,7 @@ vi.mock("../../hooks/useBulkApply", () => ({
 vi.mock("../../hooks/useApplySingle", () => ({
   useApplySingle: () => ({
     applySingle: vi.fn(),
-    undoSingle: vi.fn(),
+    resetSingle: vi.fn(),
     isPending: () => false,
   }),
 }));

@@ -14,8 +14,8 @@ export type TabId =
   | "cleanup"
   | "benchmarks"
   | "history";
-/** What a streamed bulk run does to each row: apply, Windows default, or undo. */
-export type BulkAction = "apply" | "reset" | "undo";
+/** What a streamed bulk run does to each row: apply, or reset to its default. */
+export type BulkAction = "apply" | "reset";
 export type OperationStatus =
   | "queued"
   | "running"
@@ -23,7 +23,7 @@ export type OperationStatus =
   | "failed"
   | "skipped";
 
-/** The bulk apply/reset/undo in flight, kept here so a tab switch cannot lose it. */
+/** The bulk apply/reset in flight, kept here so a tab switch cannot lose it. */
 interface BulkRun {
   action: BulkAction;
   cancel: () => void;

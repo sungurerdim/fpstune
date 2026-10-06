@@ -355,7 +355,7 @@ frontend/src/
 UI surfaces: Home = what still needs optimizing plus reclaimable disk, one bulk action per
 domain group · SettingsTab = Software Tweaks, flat list + filter bar · GameTweaksTab = one
 section per game · CleanupPanel = rows grouped by `groupLabel` · TweakSetting = row with
-checkbox, Radix tooltips, Verify/Revert, operationStatus badge · SelectionToolbar = sticky
+checkbox, Radix tooltips, Verify/Reset to default, operationStatus badge · SelectionToolbar = sticky
 bottom bar, bulk apply/reset via SSE, advanced-warning modal · HardwarePanel =
 CPU/GPU/monitor/network/audio/storage · SettingInfoTooltip variants (info/hint/warning) ·
 SuitePanel = Benchmarks > Measure, one button (baseline, then measure-and-compare) ·

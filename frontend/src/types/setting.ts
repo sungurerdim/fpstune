@@ -291,7 +291,6 @@ export interface Setting {
   // The measured facts behind an advisory's value — "linked at 100 Mbps, the
   // adapter does 2500" — keyed by `kind`. Absent for an ordinary setting.
   finding?: Finding;
-  originalValue?: unknown; // Value before any changes (for revert)
   status: SettingStatus; // Computed from current vs recommended
   executionStatus: ExecutionStatus; // For UI feedback during apply/revert
   lastError?: string; // Error message if operation failed
@@ -385,22 +384,24 @@ function parseSettingId(id: SettingId): {
 }
 
 /**
- * Whether there is genuinely something of fpstune's to undo on this setting.
+ * Whether "Reset to default" has something to do on this setting: it is
+ * writable, was read, has a default of its own, and is not already there.
  *
- * Undo and reset are different promises: reset writes the Windows stock value,
- * undo writes what *this machine* held the first time fpstune saw it. Offering
- * undo without a recorded original would either do nothing or fall through to a
- * reset, which is the wrong promise silently kept.
- *
- * Lives here rather than inside a row because two rows ask it — the full
- * settings row and the compact one on Home — and the rule that decides whether
- * a destructive-looking control appears is not a thing to have two copies of.
+ * Lives here rather than inside a row because every surface asks it — the full
+ * settings row, the compact one on Home and every scope's bulk button — and the
+ * rule that decides whether a value-rewriting control appears is not a thing to
+ * have several copies of.
  */
-export function canUndoSetting(setting: Setting): boolean {
+export function canResetSetting(setting: Setting): boolean {
   return (
-    setting.originalValue !== undefined &&
-    setting.originalValue !== null &&
-    !valuesEqual(setting.currentValue, setting.originalValue)
+    setting.isApplicable &&
+    !setting.isAction &&
+    !setting.isReadonly &&
+    setting.currentValue !== null &&
+    setting.currentValue !== undefined &&
+    setting.defaultValue !== null &&
+    setting.defaultValue !== undefined &&
+    !valuesEqual(setting.currentValue, setting.defaultValue)
   );
 }
 

@@ -40,7 +40,7 @@ interface CategoryGroup {
  * One filter bar: a search and one row of category chips. The impact of a row
  * (latency, fps, heat) is a label on the row itself rather than a second filter,
  * so there is one way to narrow the page and the headings still say where a row
- * belongs. Each heading carries its own Apply / Undo / Windows default; the page
+ * belongs. Each heading carries its own Apply / Reset to default; the page
  * header carries the same three over exactly the rows the filters leave on screen.
  *
  * Advisory (`is_readonly`) settings live in the same list. They are the settings

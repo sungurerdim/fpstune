@@ -33,7 +33,7 @@ type Tone = "attention" | "ok" | "none";
 
 /**
  * One piece of hardware: its icon and name, a one-line state, a coloured edge,
- * the device's own Apply / Undo / Windows default, then its tweaks.
+ * the device's own Apply / Reset to default, then its tweaks.
  *
  * The edge is never the only signal (amber = something to do, green = ideal,
  * grey = nothing to tune here): the status line says the same thing in words

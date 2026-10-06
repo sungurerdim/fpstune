@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Loader2, RotateCcw, Undo2 } from "lucide-react";
+import { Loader2, RotateCcw } from "lucide-react";
 import { useT, getLocale } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import { errorMessage, historyApi, type HistorySetting } from "../lib/api";
@@ -9,19 +9,16 @@ import { useStore } from "../store";
 import type { Setting, SettingId } from "../types/setting";
 import { ScopeActions } from "./ScopeActions";
 import { Metric, MetricList, ScopeHeader } from "./ui/ScopeHeader";
-import { cn } from "../lib/utils";
+import { defaultKindKey } from "../lib/tweakDomain";
 import { Card } from "./ui/Card";
 
 /**
- * What fpstune changed on this machine — this run and every earlier one — and
- * the way back from each change.
- *
- * Two ways back, never merged (C6): Undo writes what this machine held before
- * fpstune first touched the setting; Windows default writes the stock value.
- * They agree on a stock machine and disagree on one the user had configured
- * themselves, which is exactly when the difference matters. Both run through
- * the same streamed bulk path as every other surface, so one row or fifty
- * report the same way and Stop works.
+ * What fpstune changed on this machine during this session, and the one way
+ * back from each change: Reset to default, which writes the setting's own
+ * default (Windows', the driver's or the game's). Nothing here is stored — the
+ * list is the backend's memory of this run and goes with it. Resets run through
+ * the same streamed bulk path as every other surface, so one row or fifty report
+ * the same way and Stop works.
  */
 export function HistoryTab() {
   const { t } = useT();
@@ -54,6 +51,11 @@ export function HistoryTab() {
     return setting ? localizedName(setting) : id;
   };
 
+  const kindOf = (id: string): string | undefined => {
+    const setting = settings.get(id as SettingId);
+    return setting ? t(defaultKindKey(setting)) : undefined;
+  };
+
   const toggle = (id: string) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -63,11 +65,8 @@ export function HistoryTab() {
     });
 
   const selectedIds = active.map((r) => r.setting_id).filter((id) => selected.has(id));
-  const undoable = selectedIds.filter(
-    (id) => active.find((r) => r.setting_id === id)?.can_undo,
-  );
-  const start = (action: "undo" | "reset", ids: string[]) => {
-    run(action, ids);
+  const startReset = (ids: string[]) => {
+    run("reset", ids);
     setSelected(new Set());
   };
 
@@ -93,12 +92,12 @@ export function HistoryTab() {
           level={2}
           title={t("history.title")}
           /* Page scope: every setting fpstune still has applied, with the
-              same Undo and Windows default every other page offers. */
+              same Reset to default every other page offers. */
           actions={
             <ScopeActions
               settings={activeSettings}
               name={t("tab.history")}
-              only={["undo", "reset"]}
+              only={["reset"]}
             />
           }
         />
@@ -136,18 +135,9 @@ export function HistoryTab() {
                   </button>
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-1.5 text-xs text-primary-foreground disabled:opacity-50"
-                    disabled={isRunning || undoable.length === 0}
-                    onClick={() => start("undo", undoable)}
-                  >
-                    <Undo2 className="h-3 w-3" />
-                    {t("history.undoSelected", { count: undoable.length })}
-                  </button>
-                  <button
-                    type="button"
                     className="flex items-center gap-1.5 rounded-md bg-muted px-3 py-1.5 text-xs hover:bg-muted/80 disabled:opacity-50"
                     disabled={isRunning || selectedIds.length === 0}
-                    onClick={() => start("reset", selectedIds)}
+                    onClick={() => startReset(selectedIds)}
                   >
                     <RotateCcw className="h-3 w-3" />
                     {t("history.resetSelected", { count: selectedIds.length })}
@@ -167,8 +157,8 @@ export function HistoryTab() {
                   busy={isRunning}
                   status={operationStatus[row.setting_id]}
                   statusError={operationError[row.setting_id]}
-                  onUndo={() => start("undo", [row.setting_id])}
-                  onReset={() => start("reset", [row.setting_id])}
+                  kindLabel={kindOf(row.setting_id)}
+                  onReset={() => startReset([row.setting_id])}
                 />
               ))}
             </ul>
@@ -214,7 +204,8 @@ interface HistoryRowProps {
   busy: boolean;
   status?: string;
   statusError?: string;
-  onUndo?: () => void;
+  /** Which default a reset writes ("Windows default"), when the setting is known. */
+  kindLabel?: string;
   onReset?: () => void;
 }
 
@@ -227,7 +218,7 @@ function HistoryRow({
   busy,
   status,
   statusError,
-  onUndo,
+  kindLabel,
   onReset,
 }: HistoryRowProps) {
   const { t } = useT();
@@ -235,7 +226,7 @@ function HistoryRow({
   const actionLabel = {
     apply: t("history.action.apply"),
     reset: t("history.action.reset"),
-    undo: t("history.action.undo"),
+    revert: t("history.action.revert"),
   }[row.last_action];
 
   return (
@@ -252,8 +243,6 @@ function HistoryRow({
         <div className="text-sm font-medium truncate">{name}</div>
         <div className="text-xs text-muted-foreground">
           {actionLabel} · {t("history.value", { value: String(row.value) })} · {when}
-          {row.can_undo &&
-            ` · ${t("history.was", { value: String(row.original_value) })}`}
         </div>
         {status === "failed" && statusError && (
           <div role="status" className="text-xs text-destructive">
@@ -266,29 +255,17 @@ function HistoryRow({
           </div>
         )}
       </div>
-      {onUndo && onReset && (
+      {onReset && (
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className={cn(
-              "px-2.5 py-1 text-xs rounded-md flex items-center gap-1",
-              row.can_undo ? "bg-primary/90 text-primary-foreground" : "bg-muted text-muted-foreground",
-            )}
-            disabled={busy || !row.can_undo}
-            title={row.can_undo ? undefined : t("history.noOriginal")}
-            aria-label={t("history.undoNamed", { name })}
-            onClick={onUndo}
-          >
-            <Undo2 className="w-3 h-3" /> {t("history.undo")}
-          </button>
           <button
             type="button"
             className="px-2.5 py-1 text-xs rounded-md bg-muted hover:bg-muted/80 flex items-center gap-1"
             disabled={busy}
+            title={kindLabel}
             aria-label={t("history.resetNamed", { name })}
             onClick={onReset}
           >
-            <RotateCcw className="w-3 h-3" /> {t("history.reset")}
+            <RotateCcw className="w-3 h-3" /> {t("action.reset")}
           </button>
         </div>
       )}

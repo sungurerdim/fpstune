@@ -193,7 +193,7 @@ export function GameTweaksTab() {
 }
 
 /**
- * One game: its heading and count, Apply / Undo / Windows default scoped to that
+ * One game: its heading and count, Apply / Reset to default scoped to that
  * game alone — a press never writes two games' files — then its rows.
  */
 function GameSectionCard({ section }: { section: GameSection }) {

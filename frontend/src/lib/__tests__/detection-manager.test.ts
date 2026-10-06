@@ -2,12 +2,11 @@
  * The manager's job is to put a detect response into the store without losing
  * any of it. It had two ways of doing that and they disagreed.
  *
- * `detectCategory` finalised through `finalizeDetection`, which carries all six
- * fields and bumps `_settingsVersion`. The post-apply re-detect went through a
- * second path that mapped four fields and bumped nothing — so applying a
- * setting blanked its `recommendedValue` and `originalValue` (taking the undo
- * action with them) and left eleven subscribed components rendering the values
- * from before the apply. Both of those are checked here, because both were
+ * `detectCategory` finalised through `finalizeDetection`, which carries every
+ * field and bumps `_settingsVersion`. The post-apply re-detect went through a
+ * second path that mapped some of them and bumped nothing — so applying a
+ * setting blanked its `recommendedValue` and left eleven subscribed components
+ * rendering the values from before the apply. Both of those are checked here, because both were
  * invisible: the store held the right value and the screen showed the old one.
  *
  * The suite this replaced asserted that each method was `typeof "function"` and
@@ -49,13 +48,12 @@ const HPET: SettingDefinition = {
   applicable_conditions: {},
 };
 
-/** One result in the backend's own field spelling, all six fields present. */
+/** One result in the backend's own field spelling, every field present. */
 function detectResponse(
   overrides: Partial<{
     value: unknown;
     is_optimized: boolean;
     recommended_value: unknown;
-    original_value: unknown;
   }> = {},
 ): DetectResponse {
   return {
@@ -70,7 +68,6 @@ function detectResponse(
         is_applicable: true,
         applicable_reason: "",
         recommended_value: "disabled",
-        original_value: "enabled",
         ...overrides,
       },
     },
@@ -91,7 +88,7 @@ beforeEach(() => {
 });
 
 describe("redetectSettings", () => {
-  it("carries the recommended value and the recorded original through", async () => {
+  it("carries the recommended value through", async () => {
     mockedDetect.mockResolvedValue(detectResponse());
 
     await detectionManager.redetectSettings(["timer:hpet"]);
@@ -99,9 +96,6 @@ describe("redetectSettings", () => {
     const setting = useStore.getState().settings.get("timer:hpet");
     expect(setting?.currentValue).toBe("disabled");
     expect(setting?.recommendedValue).toBe("disabled");
-    // Present and different from the current value is what makes the undo
-    // action offerable; the lossy path dropped it and the action vanished.
-    expect(setting?.originalValue).toBe("enabled");
   });
 
   it("bumps the version the subscribed components render on", async () => {
@@ -161,7 +155,6 @@ describe("detectCategory", () => {
     expect(useStore.getState().categoryDetectionStatus.timer).toBe("done");
     const setting = useStore.getState().settings.get("timer:hpet");
     expect(setting?.recommendedValue).toBe("disabled");
-    expect(setting?.originalValue).toBe("enabled");
   });
 
   it("marks the category errored rather than done when detection fails", async () => {

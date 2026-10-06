@@ -25,7 +25,7 @@ import { describeDevices, type DeviceDescriptor } from "./hardware/devices";
  *
  * Each network adapter, monitor and drive is its own card, so Wi-Fi and
  * Ethernet — or two monitors — never share a list. A card carries the device's
- * information, its state in one line, its own Apply / Undo / Windows default
+ * information, its state in one line, its own Apply / Reset to default
  * and its tweaks; a component's machine-wide tweaks (TRIM, MPO, USB and PCIe
  * power saving) sit in a card of their own. Two columns where the window has
  * room, one where it does not; the reading order is the column order.

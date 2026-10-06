@@ -1,14 +1,15 @@
 /**
- * The history page: what fpstune changed, and both ways back.
+ * The history page: what fpstune changed this session, and the one way back.
  *
- * Guards the two promises C6 keeps apart — Undo writes what this machine held,
- * Windows default writes the stock value — and that a setting with no earlier
- * value on record cannot be "undone" into a reset.
+ * Guards that every row offers Reset to default and nothing else — no earlier
+ * value is shown or restored, because fpstune keeps none — and that a row whose
+ * setting is known names the default it writes by domain.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { fireEvent, metricChip, render, screen, waitFor } from "../../test/utils";
+import { fireEvent, metricChip, render, screen, waitFor, within } from "../../test/utils";
 import { HistoryTab } from "../HistoryTab";
+import { useStore } from "../../store";
 import type { HistoryResponse } from "../../lib/api";
 
 const run = vi.fn();
@@ -24,24 +25,18 @@ const history: HistoryResponse = {
       last_action: "apply",
       value: "disabled",
       at: 1_759_650_000,
-      can_undo: true,
-      original_value: "enabled",
     },
     {
       setting_id: "system:game_mode",
       last_action: "apply",
       value: "enabled",
       at: 1_759_640_000,
-      can_undo: false,
-      original_value: null,
     },
     {
       setting_id: "power:hibernation",
-      last_action: "undo",
+      last_action: "revert",
       value: "on",
       at: 1_759_630_000,
-      can_undo: false,
-      original_value: null,
     },
   ],
   entries: [],
@@ -52,7 +47,10 @@ vi.mock("../../lib/api", async (importOriginal) => {
   return { ...actual, historyApi: { get: () => Promise.resolve(history) } };
 });
 
-beforeEach(() => run.mockReset());
+beforeEach(() => {
+  run.mockReset();
+  useStore.setState({ settings: new Map() } as never);
+});
 
 describe("HistoryTab", () => {
   it("splits what is still changed from what was already put back", async () => {
@@ -62,40 +60,51 @@ describe("HistoryTab", () => {
     // The count is its own chip beside the title, not text run into it.
     expect(metricChip("2 settings", active.closest("section")!)).toBeInTheDocument();
     expect(metricChip("1 settings", reverted.closest("section")!)).toBeInTheDocument();
-    expect(screen.getByText(/was enabled before/)).toBeInTheDocument();
+    // The row says what happened to it, and nothing about an earlier value.
+    expect(screen.getByText(/Reverted/)).toBeInTheDocument();
+    expect(screen.queryByText(/before/)).not.toBeInTheDocument();
   });
 
-  it("undoes one row to what the machine held", async () => {
+  it("gives each row exactly one way back: Reset to default", async () => {
+    render(<HistoryTab />);
+    const reset = await screen.findByRole("button", {
+      name: "Reset network:nagle_algorithm to its default",
+    });
+    const row = reset.closest("li") as HTMLElement;
+    expect(within(row).getAllByRole("button")).toEqual([reset]);
+    expect(reset).toHaveTextContent("Reset to default");
+  });
+
+  it("resets one row to its default", async () => {
     render(<HistoryTab />);
     fireEvent.click(
       await screen.findByRole("button", {
-        name: "Undo fpstune's change to network:nagle_algorithm",
+        name: "Reset network:nagle_algorithm to its default",
       }),
     );
-    expect(run).toHaveBeenCalledWith("undo", ["network:nagle_algorithm"]);
+    expect(run).toHaveBeenCalledWith("reset", ["network:nagle_algorithm"]);
   });
 
-  it("offers no undo where nothing was recorded, only the Windows default", async () => {
+  it("names the default a row's reset writes, by the setting's domain", async () => {
+    useStore.setState({
+      settings: new Map([
+        [
+          "system:game_mode",
+          { id: "system:game_mode", name: "game_mode", displayName: "Game Mode", domain: "software" },
+        ],
+      ]),
+    } as never);
     render(<HistoryTab />);
-    const undo = await screen.findByRole("button", {
-      name: "Undo fpstune's change to system:game_mode",
+    const reset = await screen.findByRole("button", {
+      name: "Reset Game Mode to its default",
     });
-    expect(undo).toBeDisabled();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Restore the Windows default for system:game_mode" }),
-    );
-    expect(run).toHaveBeenCalledWith("reset", ["system:game_mode"]);
+    expect(reset).toHaveAttribute("title", "Windows default");
   });
 
-  it("bulk undo skips the rows that have no original, bulk reset takes them all", async () => {
+  it("bulk reset takes every selected row", async () => {
     render(<HistoryTab />);
     fireEvent.click(await screen.findByRole("button", { name: "Select all" }));
-
-    fireEvent.click(screen.getByRole("button", { name: /Undo selected \(1\)/ }));
-    expect(run).toHaveBeenLastCalledWith("undo", ["network:nagle_algorithm"]);
-
-    fireEvent.click(screen.getByRole("button", { name: "Select all" }));
-    fireEvent.click(screen.getByRole("button", { name: /Windows default for selected \(2\)/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Reset selected to default \(2\)/ }));
     await waitFor(() =>
       expect(run).toHaveBeenLastCalledWith("reset", [
         "network:nagle_algorithm",

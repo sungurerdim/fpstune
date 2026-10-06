@@ -85,64 +85,13 @@ export function useApplySingle() {
   );
 
   /**
-   * Put one setting back to what this machine held before fpstune touched it.
-   *
-   * Goes through the dedicated endpoint rather than applying `originalValue`
-   * itself, because the backend does two things beyond the write that a plain
-   * apply would skip: it creates a restore point, and it drops the recorded
-   * original once the machine is actually back, so the next scan is free to
-   * record a fresh one. A 409 means nothing was recorded — the UI should not
-   * have offered the action, so the row is re-detected to resync.
-   */
-  const undoSingle = useCallback(
-    async (setting: Setting): Promise<ApplyResponse | null> => {
-      setPendingIds((prev) => new Set(prev).add(setting.id));
-      useStore.getState().beginOperation();
-      try {
-        const response = await settingsApi.undoSetting(setting.id);
-        const name = localizedName(setting);
-        if (response.success) {
-          addNotification(t("apply.undone", { name }), "success");
-        } else {
-          addNotification(
-            t("apply.undoFailed", { name, reason: response.error ?? t("apply.unknownError") }),
-            "error",
-          );
-        }
-        // Always re-detect: the value changed and the original is now gone, and
-        // both of those live in the detection result the row renders from.
-        await detectionManager.redetectSettings([setting.id]);
-        if (response.success && isDisplaySetting(setting.id)) {
-          hardwareManager.refreshMonitors();
-        }
-        return response;
-      } catch (error) {
-        addNotification(
-          t("apply.undoFailed", { name: localizedName(setting), reason: errorMessage(error) }),
-          "error",
-        );
-        await detectionManager.redetectSettings([setting.id]);
-        return null;
-      } finally {
-        useStore.getState().endOperation();
-        setPendingIds((prev) => {
-          const n = new Set(prev);
-          n.delete(setting.id);
-          return n;
-        });
-        queryClient.invalidateQueries({ queryKey: ["activity"] });
-      }
-    },
-    [addNotification, queryClient, t],
-  );
-
-  /**
-   * Write the curated Windows-stock value through the dedicated endpoint.
+   * Write the setting's own default (Windows stock, the driver's default or the
+   * game's default, by domain) through the dedicated endpoint.
    *
    * Not `applySingle(setting, setting.defaultValue)`: the write is the same,
    * but through /apply the backend never knew it was a reset — the activity
    * log recorded an apply, and the /reset route (which detects, writes the
-   * stock value, and verifies against it) sat uncalled.
+   * default, and verifies against it) sat uncalled.
    */
   const resetSingle = useCallback(
     async (setting: Setting): Promise<ApplyResponse> => {
@@ -194,7 +143,6 @@ export function useApplySingle() {
   return {
     applySingle,
     resetSingle,
-    undoSingle,
     pendingIds,
     isPending: (id: string) => pendingIds.has(id),
   };

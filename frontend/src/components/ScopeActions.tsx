@@ -1,40 +1,33 @@
 import { useState, type ReactNode } from "react";
-import { History, Loader2, RotateCcw, Square, Zap } from "lucide-react";
+import { Loader2, RotateCcw, Square, Zap } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { useScopedActions } from "../hooks/useScopedActions";
+import { scopeDomain } from "../lib/tweakDomain";
 import type { BulkAction } from "../store";
 import type { Setting } from "../types/setting";
 import { ConfirmDialog } from "./ui/ConfirmDialog";
-import { OverflowMenu } from "./ui/OverflowMenu";
 
 /**
- * Apply, Undo and Windows default for one scope — a device, a category, a game,
- * a page or a selection — with the same labels, counts and confirmation
+ * Apply and Reset to default for one scope — a device, a category, a game, a
+ * page or a selection — with the same labels, counts and confirmation
  * everywhere.
  *
  * Anything wider than one row asks first and names the count, because a
- * page-wide Windows default is not a thing to press by accident. Undo appears
- * only when something in the scope has a recorded original: offering it without
- * one would either do nothing or quietly become a reset, which is the wrong
- * promise kept (C6).
+ * page-wide reset is not a thing to press by accident.
  *
- * Three tiers, by how often and how far each reaches. Apply is the primary
- * action and is always drawn, so the group sits in the same spot on every page
- * and a scope with nothing to do does not shift the layout: with nothing to act
- * on it is disabled and says why in its accessible name and tooltip. Undo — put
- * back what this machine held before fpstune — is the one visible way back, and
- * is drawn only when there is something recorded to put back. Windows default
- * writes the curated stock value, a different promise from Undo (C6) and the
- * rarer one, so it lives in the "⋯" menu: always there, behind the same
- * confirmation, never merged with Undo.
+ * Two buttons, both always drawn so the group sits in the same spot on every
+ * page and a scope with nothing to do does not shift the layout: with nothing to
+ * act on a button is disabled and says why in its accessible name and tooltip.
+ * Reset to default is the one way back, and it names the default by domain —
+ * the Windows default, the driver default or the game default — in its tooltip,
+ * accessible name and confirmation.
  */
 export function ScopeActions({
   settings,
   name,
   only,
   className,
-  menuSide,
 }: {
   settings: readonly Setting[];
   /** Limit the group to these actions (Home's compact device card shows Apply only). */
@@ -42,12 +35,11 @@ export function ScopeActions({
   /** The scope in words ("Wi-Fi", "Network", "Software Tweaks"), read by screen readers. */
   name: string;
   className?: string;
-  /** Which way the overflow menu opens; a bar fixed to the window's bottom opens upward. */
-  menuSide?: "bottom" | "top";
 }) {
   const { t } = useT();
   const { targets, start, stop, isRunning } = useScopedActions(settings);
   const [pending, setPending] = useState<BulkAction | null>(null);
+  const resetDomain = scopeDomain(targets.reset);
 
   if (isRunning) {
     return (
@@ -68,7 +60,6 @@ export function ScopeActions({
   const shown = (action: BulkAction) => !only || only.includes(action);
   const counts = {
     apply: shown("apply") ? targets.apply.length : 0,
-    undo: shown("undo") ? targets.undo.length : 0,
     reset: shown("reset") ? targets.reset.length : 0,
   };
 
@@ -84,7 +75,9 @@ export function ScopeActions({
   const body = advancedGate
     ? t("toolbar.advancedBody")
     : pending
-      ? t(`actions.confirmBody.${pending}`)
+      ? pending === "reset"
+        ? t(`actions.confirmBody.reset.${resetDomain}`)
+        : t("actions.confirmBody.apply")
       : "";
   const confirmLabel = advancedGate
     ? t("toolbar.applyAnyway")
@@ -110,42 +103,22 @@ export function ScopeActions({
         <ActionButton
           action="apply"
           count={counts.apply}
-          name={name}
+          label={t("actions.aria.apply", { count: counts.apply, name })}
           idleLabel={t("actions.none.apply", { name })}
           icon={<Zap className="h-3.5 w-3.5" aria-hidden />}
           className="bg-warning/15 text-warning hover:bg-warning/25"
           onPress={() => setPending("apply")}
         />
       )}
-      {counts.undo > 0 && (
-        <ActionButton
-          action="undo"
-          count={counts.undo}
-          name={name}
-          icon={<History className="h-3.5 w-3.5" aria-hidden />}
-          className="border border-border text-foreground hover:bg-muted"
-          onPress={() => setPending("undo")}
-        />
-      )}
-      {/* Windows default is the rarer, wider promise, so it sits one step back in
-          the overflow menu — still on every scope, behind the same confirmation. */}
       {shown("reset") && (
-        <OverflowMenu
-          label={t("actions.more", { name })}
-          side={menuSide}
-          items={[
-            {
-              id: "reset",
-              label: t("actions.reset", { count: counts.reset }),
-              icon: <RotateCcw className="h-3.5 w-3.5" aria-hidden />,
-              disabled: counts.reset === 0,
-              ariaLabel:
-                counts.reset === 0
-                  ? t("actions.none.reset", { name })
-                  : t("actions.aria.reset", { count: counts.reset, name }),
-              onSelect: () => setPending("reset"),
-            },
-          ]}
+        <ActionButton
+          action="reset"
+          count={counts.reset}
+          idleLabel={t("actions.none.reset", { name })}
+          label={t(`actions.aria.reset.${resetDomain}`, { count: counts.reset, name })}
+          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+          className="border border-border text-foreground hover:bg-muted"
+          onPress={() => setPending("reset")}
         />
       )}
     </div>
@@ -159,7 +132,7 @@ const BUTTON_BASE =
 function ActionButton({
   action,
   count,
-  name,
+  label,
   idleLabel,
   icon,
   className,
@@ -167,23 +140,24 @@ function ActionButton({
 }: {
   action: BulkAction;
   count: number;
-  name: string;
-  /** Why the button is disabled; absent for an action that is hidden when it has nothing to do. */
-  idleLabel?: string;
+  /** The accessible name and tooltip of a live button. */
+  label: string;
+  /** Why the button is disabled. */
+  idleLabel: string;
   icon: ReactNode;
   className: string;
   onPress: () => void;
 }) {
   const { t } = useT();
   const idle = count === 0;
-  const label = idle && idleLabel ? idleLabel : t(`actions.aria.${action}`, { count, name });
+  const name = idle ? idleLabel : label;
   return (
     <button
       type="button"
       disabled={idle}
       onClick={onPress}
-      aria-label={label}
-      title={idle ? label : undefined}
+      aria-label={name}
+      title={name}
       className={cn(BUTTON_BASE, className)}
     >
       {icon}

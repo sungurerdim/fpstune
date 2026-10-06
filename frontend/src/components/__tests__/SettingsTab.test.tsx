@@ -240,11 +240,10 @@ describe("SettingsTab flat list", () => {
       { category: SYSTEM, settings: [sys] },
     ]);
 
-    await userEvent.click(screen.getByRole("button", { name: "More actions: System Tuning" }));
     await userEvent.click(
-      screen.getByRole("menuitem", { name: "Return 1 settings to the Windows default: System Tuning" }),
+      screen.getByRole("button", { name: "Reset 1 settings to the Windows default: System Tuning" }),
     );
-    await userEvent.click(screen.getByRole("button", { name: "Windows default" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reset to default" }));
     expect(runMock).toHaveBeenCalledWith("reset", ["system:gamedvr"]);
   });
 

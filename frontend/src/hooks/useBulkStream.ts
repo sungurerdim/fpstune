@@ -7,7 +7,7 @@ import { useStore, type BulkAction } from "../store";
 import { valuesEqual, type SettingId } from "../types/setting";
 
 /**
- * One streamed bulk apply, reset or undo at a time, shared by every surface that
+ * One streamed bulk apply or reset at a time, shared by every surface that
  * starts one. The run lives in the store, so switching tabs neither loses its
  * Stop nor lets a second run start over it; every row shows how far it got and,
  * when it failed, why; and however the run ends, every row is read again.
@@ -48,7 +48,6 @@ export function useBulkStream() {
       const stream = {
         apply: settingsApi.bulkStreamApply,
         reset: settingsApi.bulkStreamReset,
-        undo: settingsApi.bulkStreamUndo,
       }[action];
       const cancel = stream(
         ids,

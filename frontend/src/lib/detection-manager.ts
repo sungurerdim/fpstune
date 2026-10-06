@@ -41,7 +41,7 @@ class DetectionManager {
    *
    * Every caller finalises through here, because the copy that did not — the
    * post-apply re-detect — mapped four of the six fields and skipped the
-   * version bump, so `recommended_value` and `original_value` were blanked and
+   * version bump, so `recommended_value` was blanked and
    * eleven subscribers kept rendering the values from before the apply.
    */
   private static finalize(
@@ -57,7 +57,6 @@ class DetectionManager {
         applicable_reason: result.applicable_reason,
         error: result.error,
         recommended_value: result.recommended_value,
-        original_value: result.original_value,
       };
     }
     useStore.getState().finalizeDetection(results, doneCategories);

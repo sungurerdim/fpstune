@@ -20,7 +20,6 @@ interface TweakRowItemProps extends TweakRow {
   operationStatus?: OperationStatus;
   applySingle: (setting: Setting, value: unknown) => void;
   resetSingle: (setting: Setting) => void;
-  undoSingle: (setting: Setting) => void;
   verify: (setting: Setting) => void;
   toggleSelectedSetting: (id: Setting["id"]) => void;
 }
@@ -30,8 +29,8 @@ interface TweakRowItemProps extends TweakRow {
  *
  * The list re-renders on every `_settingsVersion` bump — once per category
  * during a scan, once per apply — and the bump replaces only the settings that
- * actually changed. Building `onApplyValue`, `onReset`, `onUndo`, `onVerify`
- * and `onSelect` in the parent handed all eighty rows five new props each time,
+ * actually changed. Building `onApplyValue`, `onReset`, `onVerify` and
+ * `onSelect` in the parent handed all eighty rows four new props each time,
  * which is exactly the comparison a memo would fail on. Built here, they are
  * recreated only when this row's own props move.
  */
@@ -45,7 +44,6 @@ const TweakRowItem = memo(
     operationStatus,
     applySingle,
     resetSingle,
-    undoSingle,
     verify,
     toggleSelectedSetting,
   }: TweakRowItemProps) {
@@ -55,10 +53,9 @@ const TweakRowItem = memo(
         isPending={isPending}
         isModuleLoading={false}
         onApplyValue={(value) => applySingle(setting, value)}
-        // The dedicated endpoint, not apply-with-defaultValue: reset is its
-        // own promise (C6), and the backend logs and verifies it as one.
+        // The dedicated endpoint, not apply-with-defaultValue: the backend
+        // logs and verifies a reset as one.
         onReset={() => resetSingle(setting)}
-        onUndo={() => undoSingle(setting)}
         onVerify={() => verify(setting)}
         isSelected={isSelected}
         onSelect={() => toggleSelectedSetting(setting.id)}
@@ -76,7 +73,6 @@ const TweakRowItem = memo(
     previous.operationStatus === next.operationStatus &&
     previous.applySingle === next.applySingle &&
     previous.resetSingle === next.resetSingle &&
-    previous.undoSingle === next.undoSingle &&
     previous.verify === next.verify &&
     previous.toggleSelectedSetting === next.toggleSelectedSetting,
   // `contextIcon` is deliberately absent from that list. It is a fresh element
@@ -90,8 +86,8 @@ const TweakRowItem = memo(
  * The rows themselves — one setting per line, no card and nothing to expand.
  *
  * Lifted out of `SettingsTab` when the Game Tweaks tab needed the same list: apply,
- * reset, undo and verify are one behaviour, and a second copy of it is a second
- * place for undo to fall through to reset.
+ * reset and verify are one behaviour, and a second copy of it is a second place
+ * for them to drift apart.
  */
 export function TweakRows({ rows }: { rows: TweakRow[] }) {
   const selectedSettingIds = useStore((state) => state.selectedSettingIds);
@@ -99,7 +95,7 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
     (state) => state.toggleSelectedSetting,
   );
   const operationStatus = useStore((state) => state.operationStatus);
-  const { applySingle, resetSingle, undoSingle, isPending } = useApplySingle();
+  const { applySingle, resetSingle, isPending } = useApplySingle();
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
 
   const verify = useCallback(async (setting: Setting) => {
@@ -155,7 +151,6 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
           operationStatus={operationStatus[setting.id]}
           applySingle={applySingle}
           resetSingle={resetSingle}
-          undoSingle={undoSingle}
           verify={verify}
           toggleSelectedSetting={toggleSelectedSetting}
         />

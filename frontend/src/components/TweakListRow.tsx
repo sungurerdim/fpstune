@@ -1,5 +1,5 @@
 import { Button } from "./ui/Button";
-import { Zap, Undo2 } from "lucide-react";
+import { RotateCcw, Zap } from "lucide-react";
 import { useT } from "../i18n";
 import { localizedDescription, localizedName } from "../i18n/settings";
 import { cn } from "../lib/utils";
@@ -12,7 +12,9 @@ import {
   SettingValueState,
 } from "./SettingStateDisplay";
 import type { Setting } from "../types/setting";
-import { canUndoSetting } from "../types/setting";
+import { canResetSetting } from "../types/setting";
+import { valueLabel } from "../lib/finding";
+import { defaultKindKey } from "../lib/tweakDomain";
 
 /**
  * Compact one-line tweak row for the Home "needs optimization" list: name,
@@ -27,15 +29,16 @@ export function TweakListRow({
   categoryLabel?: string;
 }) {
   const { t } = useT();
-  const { applySingle, undoSingle, isPending } = useApplySingle();
+  const { applySingle, resetSingle, isPending } = useApplySingle();
   const pending = isPending(setting.id);
   const benefit = formatBenefit(setting);
-  // Undo was reachable only from the Settings tab, so a change made from Home
-  // could not be taken back from Home — the one screen a new user stays on. The
-  // predicate is shared rather than copied: it decides whether a control that
-  // rewrites a value appears at all, and two versions of that rule is one too
-  // many.
-  const canUndo = canUndoSetting(setting);
+  // A change made from Home must be reversible from Home — the one screen a
+  // new user stays on. The predicate is shared rather than copied: it decides
+  // whether a control that rewrites a value appears at all, and two versions of
+  // that rule is one too many.
+  const canReset = canResetSetting(setting);
+  const kind = t(defaultKindKey(setting));
+  const resetValue = valueLabel(setting, setting.defaultValue);
 
   return (
     <div
@@ -75,20 +78,25 @@ export function TweakListRow({
           <p className="text-xs text-primary mt-1 font-medium">{benefit}</p>
         )}
       </div>
-      {canUndo && (
+      {canReset && (
         <button
-          onClick={() => undoSingle(setting)}
+          type="button"
+          onClick={() => resetSingle(setting)}
           disabled={pending}
-          aria-label={t("row.undoNamed", { name: setting.displayName, value: String(setting.originalValue) })}
-          title={t("row.undoTooltip", { value: String(setting.originalValue) })}
+          aria-label={t("row.resetNamedValue", {
+            name: setting.displayName,
+            kind,
+            value: resetValue,
+          })}
+          title={t("row.resetKindValue", { kind, value: resetValue })}
           className={cn(
             "shrink-0 flex items-center gap-1.5 px-2 py-1.5 text-xs rounded-md font-medium transition-colors",
             "border border-border text-muted-foreground hover:text-foreground hover:bg-muted/50",
             "disabled:opacity-50",
           )}
         >
-          <Undo2 className="w-3.5 h-3.5" aria-hidden />
-          {t("action.undo")}
+          <RotateCcw className="w-3.5 h-3.5" aria-hidden />
+          {t("action.reset")}
         </button>
       )}
       {/* Home renders one of these per setting that needs changing — thirty on

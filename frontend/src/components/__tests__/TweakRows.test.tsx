@@ -3,7 +3,7 @@
  *
  * `_settingsVersion` bumps once per category during a detection pass and once
  * per apply, and every list on screen rebuilds its rows from it. Each row was
- * handed five freshly-created closures — `onApplyValue`, `onReset`, `onUndo`,
+ * handed four freshly-created closures — `onApplyValue`, `onReset`,
  * `onVerify`, `onSelect` — so no memo could ever hold: the props differed by
  * identity on every single bump, for all eighty rows, while the settings behind
  * seventy-nine of them had not moved.

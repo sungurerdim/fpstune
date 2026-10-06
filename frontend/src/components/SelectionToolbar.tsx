@@ -1,7 +1,7 @@
 /**
  * SelectionToolbar — sticky bottom bar for the selection scope.
  * Appears when ≥1 setting is selected; its actions are the same `ScopeActions`
- * every other scope uses, so Apply, Undo and Windows default read and confirm
+ * every other scope uses, so Apply and Reset to default read and confirm
  * the same way here as on a device card or a page header.
  */
 
@@ -53,7 +53,7 @@ export function SelectionToolbar() {
         {t("toolbar.clear")}
       </button>
 
-      <ScopeActions settings={selected} name={label} className="ml-auto" menuSide="top" />
+      <ScopeActions settings={selected} name={label} className="ml-auto" />
     </div>
   );
 }

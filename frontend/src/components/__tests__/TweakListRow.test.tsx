@@ -1,16 +1,11 @@
 /**
  * Home's compact row: apply from here, and take it back from here.
  *
- * Undo used to live only on the Settings tab, so a change made from Home could
- * not be undone from Home — the one screen a new user stays on. Whatever the
- * screen, the way back has to be on it.
- *
- * "Undo" and "Reset" are different promises and this row must not blur them.
- * Reset writes the Windows stock value. Undo writes what *this machine* held
- * the first time fpstune saw it, which is only knowable if it was recorded. So
- * the button appears when there is genuinely something to undo and not
- * otherwise: shown without a recorded original it would either do nothing or
- * fall through to a reset, quietly keeping the wrong promise.
+ * A change made from Home must be reversible from Home — the one screen a new
+ * user stays on. The way back is the same one every row has: Reset to default,
+ * which writes the setting's own default (Windows', the driver's or the game's)
+ * and names which. It appears when there is something to write and not
+ * otherwise.
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -20,12 +15,12 @@ import { TweakListRow } from "../TweakListRow";
 import type { Setting } from "../../types/setting";
 
 const applySingle = vi.fn();
-const undoSingle = vi.fn();
+const resetSingle = vi.fn();
 
 vi.mock("../../hooks/useApplySingle", () => ({
   useApplySingle: () => ({
     applySingle: (...args: unknown[]) => applySingle(...args),
-    undoSingle: (...args: unknown[]) => undoSingle(...args),
+    resetSingle: (...args: unknown[]) => resetSingle(...args),
     isPending: () => false,
   }),
 }));
@@ -66,59 +61,61 @@ function makeSetting(overrides: Partial<Setting> = {}): Setting {
 
 beforeEach(() => {
   applySingle.mockClear();
-  undoSingle.mockClear();
+  resetSingle.mockClear();
 });
 
-const undoButton = () => screen.queryByRole("button", { name: /^Undo fpstune's change/i });
+const resetButton = () => screen.queryByRole("button", { name: /^Reset .* to default/i });
 
 describe("the way back is on the screen you changed it from", () => {
-  it("offers undo once fpstune has moved the value away from the original", () => {
-    render(<TweakListRow setting={makeSetting({ originalValue: 100, currentValue: 5 })} />);
+  it("offers Reset to default once the value is away from the default", () => {
+    render(<TweakListRow setting={makeSetting({ defaultValue: 100, currentValue: 5 })} />);
 
-    expect(undoButton()).toBeInTheDocument();
+    expect(resetButton()).toBeInTheDocument();
+    expect(resetButton()).toHaveTextContent("Reset to default");
   });
 
-  it("says in the control's name what undoing would restore", () => {
-    render(<TweakListRow setting={makeSetting({ originalValue: 100, currentValue: 5 })} />);
+  it("says in the control's name which default it writes, and the value", () => {
+    render(<TweakListRow setting={makeSetting({ defaultValue: 100, currentValue: 5 })} />);
 
-    expect(undoButton()).toHaveAccessibleName(
-      "Undo fpstune's change to Minimum Processor State, back to 100",
+    expect(resetButton()).toHaveAccessibleName(
+      "Reset Minimum Processor State to default: Windows default (100)",
     );
   });
 
-  it("undoes the setting it is attached to", async () => {
-    const setting = makeSetting({ originalValue: 100, currentValue: 5 });
+  it("names the driver default for a hardware setting", () => {
+    render(
+      <TweakListRow
+        setting={makeSetting({ domain: "hardware", defaultValue: 100, currentValue: 5 })}
+      />,
+    );
+
+    expect(resetButton()).toHaveAccessibleName(
+      "Reset Minimum Processor State to default: Driver default (100)",
+    );
+  });
+
+  it("resets the setting it is attached to", async () => {
+    const setting = makeSetting({ defaultValue: 100, currentValue: 5 });
     render(<TweakListRow setting={setting} />);
 
-    await userEvent.click(undoButton()!);
+    await userEvent.click(resetButton()!);
 
-    expect(undoSingle).toHaveBeenCalledWith(setting);
+    expect(resetSingle).toHaveBeenCalledWith(setting);
     expect(applySingle).not.toHaveBeenCalled();
   });
 });
 
-describe("it never offers an undo it cannot honour", () => {
-  it("stays hidden when nothing was recorded before fpstune ran", () => {
-    // Without an original, undo would fall through to a reset — which writes
-    // the Windows stock value, a different promise than "put it back".
-    render(<TweakListRow setting={makeSetting({ originalValue: undefined })} />);
+describe("it never offers a reset that would write nothing", () => {
+  it("stays hidden when the value already is the default", () => {
+    render(<TweakListRow setting={makeSetting({ defaultValue: 5, currentValue: 5 })} />);
 
-    expect(undoButton()).not.toBeInTheDocument();
+    expect(resetButton()).not.toBeInTheDocument();
   });
 
-  it("stays hidden when the value is already what it was", () => {
-    render(<TweakListRow setting={makeSetting({ originalValue: 5, currentValue: 5 })} />);
+  it("stays hidden when the setting has no default of its own", () => {
+    render(<TweakListRow setting={makeSetting({ defaultValue: null, currentValue: 5 })} />);
 
-    expect(undoButton()).not.toBeInTheDocument();
-  });
-
-  it("treats a recorded null as nothing recorded", () => {
-    // The API returns null for a setting seen before the originals store
-    // existed, and `null !== undefined` is exactly the kind of difference that
-    // renders a button which then cannot do anything.
-    render(<TweakListRow setting={makeSetting({ originalValue: null })} />);
-
-    expect(undoButton()).not.toBeInTheDocument();
+    expect(resetButton()).not.toBeInTheDocument();
   });
 });
 

@@ -125,11 +125,31 @@ describe("SelectionToolbar's advanced gate", () => {
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
   });
 
-  it("offers Undo for a selection only when a row has a recorded original", () => {
-    select({ ...makeSetting("system:ordinary", "low"), originalValue: "disabled" } as Setting);
+  it("offers one Reset to default for a selection, names the Windows default, and resets after asking", () => {
+    select({ ...makeSetting("system:ordinary", "low"), currentValue: "disabled" } as Setting);
     render(<SelectionToolbar />);
 
-    expect(screen.getByRole("button", { name: /^Undo 1 tweaks/ })).toBeTruthy();
+    // No overflow menu and no second way back: one button, named by the domain.
+    expect(screen.queryByRole("button", { name: /^More actions/ })).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Reset 1 settings to the Windows default: 1 selected" }),
+    );
+    expect(bulkStreamReset).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
+    expect(bulkStreamReset).toHaveBeenCalledTimes(1);
+    expect(bulkStreamReset.mock.calls[0][0]).toEqual(["system:ordinary"]);
+  });
+
+  it("disables Reset to default, saying why, when the selection is already at its defaults", () => {
+    select(makeSetting("system:ordinary", "low"));
+    render(<SelectionToolbar />);
+
+    expect(
+      screen.getByRole("button", {
+        name: "Reset to default: everything in 1 selected is already at its default",
+      }),
+    ).toBeDisabled();
   });
 });
 

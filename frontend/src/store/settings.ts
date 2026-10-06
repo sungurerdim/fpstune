@@ -44,7 +44,7 @@ function computeStatusFromResult(
  *
  * Named rather than inlined because the detect route, the re-detect path and the
  * cleanup sizer all build it: three inline copies is how one of them came to omit
- * `recommended_value` and `original_value` and silently blank both.
+ * `recommended_value` and silently blank it.
  */
 export interface DetectionResultUpdate {
   value: unknown;
@@ -55,7 +55,6 @@ export interface DetectionResultUpdate {
   // it (a post-apply single update), null = detection ran clean.
   error?: string | null;
   recommended_value?: unknown;
-  original_value?: unknown;
   // The numbers behind an advisory's word; absent = no news, null = none.
   finding?: Record<string, unknown> | null;
 }
@@ -223,18 +222,7 @@ export const createSettingsSlice: StateCreator<
           ...(result.recommended_value !== undefined && {
             recommendedValue: result.recommended_value,
           }),
-          // What the machine held when fpstune first saw this setting. The
-          // backend owns it — it is persisted across runs, so a value recorded
-          // in an earlier session survives a restart, which a store-local copy
-          // never could. null means nothing was recorded, i.e. nothing to undo.
-          //
-          // Absent is not null: a caller that does not carry the field (a
-          // post-apply single-setting update) must leave the recorded original
-          // standing rather than erase what only a full scan records.
-          ...(result.original_value !== undefined && {
-            originalValue: result.original_value ?? undefined,
-          }),
-          // Same shape as the original: absent leaves the last finding standing,
+          // Absent leaves the last finding standing,
           // null (a detect that measured nothing this time) clears it.
           ...(result.finding !== undefined && {
             finding: isFinding(result.finding) ? result.finding : undefined,

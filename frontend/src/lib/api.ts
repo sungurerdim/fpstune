@@ -508,13 +508,6 @@ interface DetectionResultResponse {
   applicable_reason: string;
   recommended_value?: unknown;
   /**
-   * What this machine held when fpstune first saw the setting, or null/absent
-   * when nothing was recorded. Null means there is nothing to undo, which is a
-   * different state from "the original equals the current value" — offer the
-   * undo action only when this is present and differs from `value`.
-   */
-  original_value?: unknown;
-  /**
    * The numbers behind an advisory's value, keyed by a `kind` the frontend has
    * a sentence for (lib/finding.ts). Read on this machine during this detect.
    */
@@ -575,7 +568,7 @@ export interface VerifyResponse {
   expected_value: unknown;
   // Which question was answered — echoed so a caller that assumed a different
   // target cannot read a correct machine as a failed operation.
-  target: "recommended" | "default" | "original";
+  target: "recommended" | "default";
   error?: string | null;
 }
 
@@ -610,26 +603,11 @@ export const settingsApi = {
     }),
 
   /**
-   * Put a setting back to what this machine held when fpstune first saw it.
-   *
-   * Fails with 409 when nothing was recorded, rather than falling back to the
-   * stock value: quietly doing a reset under the name "undo" is the conflation
-   * this exists to end. Callers should offer it only when a detection result
-   * carries an original_value.
-   */
-  undoSetting: (settingId: string) =>
-    fetchJson<ApplyResponse>(`/settings/${settingId}/undo`, {
-      method: "POST",
-    }),
-
-  /**
    * Write the curated Windows-stock value (C6's other promise).
    *
-   * A different endpoint from undo on purpose: reset writes what stock
-   * Windows holds, undo writes what this machine held. The row used to fake
-   * this by posting `/apply` with `defaultValue` — same write, but the
-   * backend never knew it was a reset, so the activity log called it an
-   * apply and the dedicated route sat uncalled.
+   * Its own endpoint rather than `/apply` with `defaultValue`: same write, but
+   * the backend then knows it was a reset, logs it as one and verifies against
+   * the default. This is the one way back — fpstune keeps no previous value.
    */
   resetSetting: (settingId: string) =>
     fetchJson<ApplyResponse>(`/settings/${settingId}/reset`, {
@@ -687,25 +665,6 @@ export const settingsApi = {
       "/settings/bulk/stream-reset",
       { ids },
       "bulkStreamReset",
-      onEvent,
-      onDone,
-      onError,
-    ),
-
-  /**
-   * Sequential SSE bulk undo — each setting back to what this machine held.
-   * A setting with nothing recorded fails with that reason; it is never reset.
-   */
-  bulkStreamUndo: (
-    ids: string[],
-    onEvent: (event: Record<string, unknown>) => void,
-    onDone?: () => void,
-    onError?: (error: unknown) => void,
-  ): (() => void) =>
-    postEventStream(
-      "/settings/bulk/stream-undo",
-      { ids },
-      "bulkStreamUndo",
       onEvent,
       onDone,
       onError,
@@ -1242,20 +1201,18 @@ export const updateApi = {
     fetchJson<UpdateInstallResult>("/update/install", { method: "POST" }),
 };
 
-/** One setting fpstune changed: its latest change and whether undo is possible. */
+/** One setting fpstune changed this session: its latest change. */
 export interface HistorySetting {
   setting_id: string;
-  last_action: "apply" | "reset" | "undo";
+  last_action: "apply" | "reset" | "revert";
   value: unknown;
   /** Unix seconds. */
   at: number;
-  can_undo: boolean;
-  original_value: unknown;
 }
 
 export interface HistoryEntry {
   setting_id: string;
-  action: "apply" | "reset" | "undo";
+  action: "apply" | "reset" | "revert";
   value: unknown;
   at: number;
 }

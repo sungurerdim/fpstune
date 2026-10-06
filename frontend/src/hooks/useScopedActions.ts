@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { canUndoSetting, valuesEqual, type Setting } from "../types/setting";
+import { canResetSetting, type Setting } from "../types/setting";
 import { isTweakSuboptimal } from "../lib/tweakStatus";
 import { useBulkStream } from "./useBulkStream";
 import type { BulkAction } from "../store";
@@ -8,9 +8,7 @@ import type { BulkAction } from "../store";
 export interface ScopeTargets {
   /** Not at the recommended value, and writable. */
   apply: Setting[];
-  /** A recorded original that differs from what the machine holds now. */
-  undo: Setting[];
-  /** Writable and not already at the Windows default. */
+  /** Writable, has a default of its own, and is not already at it. */
   reset: Setting[];
 }
 
@@ -24,19 +22,17 @@ export interface ScopeTargets {
  */
 export function scopeTargets(settings: Iterable<Setting>): ScopeTargets {
   const apply: Setting[] = [];
-  const undo: Setting[] = [];
   const reset: Setting[] = [];
   for (const s of settings) {
     if (!s.isApplicable || s.isAction || s.isReadonly || s.currentValue === null) continue;
     if (isTweakSuboptimal(s)) apply.push(s);
-    if (canUndoSetting(s)) undo.push(s);
-    if (!valuesEqual(s.currentValue, s.defaultValue)) reset.push(s);
+    if (canResetSetting(s)) reset.push(s);
   }
-  return { apply, undo, reset };
+  return { apply, reset };
 }
 
 /**
- * Apply, undo and Windows-default over one scope, through the one streamed run.
+ * Apply and Reset to default over one scope, through the one streamed run.
  *
  * Every scope — row, group, page, selection — starts the same `useBulkStream`
  * run, so each row shows its own outcome and Stop works wherever it was started.

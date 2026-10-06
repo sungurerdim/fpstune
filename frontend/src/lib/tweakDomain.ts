@@ -1,4 +1,5 @@
-import type { HardwareComponent, Setting } from "../types/setting";
+import type { MessageKey } from "../i18n/en";
+import type { HardwareComponent, Setting, TweakDomain } from "../types/setting";
 
 /**
  * Which page owns a tweak.
@@ -28,4 +29,27 @@ export function isSoftwareTweak(setting: Setting): boolean {
 /** True when a tweak acts on the named physical component. */
 export function isComponentTweak(setting: Setting, component: HardwareComponent): boolean {
   return setting.component === component;
+}
+
+/**
+ * The name of the default a domain's "Reset to default" writes back: Windows'
+ * own value for a software tweak, the driver's for a component, the game's for
+ * a line in its config file. One way back everywhere; only the word differs.
+ */
+export const DEFAULT_KIND_KEY = {
+  software: "reset.kind.software",
+  hardware: "reset.kind.hardware",
+  game: "reset.kind.game",
+} as const satisfies Record<TweakDomain, MessageKey>;
+
+/** The default-kind word for one setting's domain. */
+export function defaultKindKey(setting: Setting): MessageKey {
+  return DEFAULT_KIND_KEY[setting.domain];
+}
+
+/** The one domain every setting in a scope shares, or "mixed" when they differ. */
+export function scopeDomain(settings: readonly Setting[]): TweakDomain | "mixed" {
+  const first = settings[0]?.domain;
+  if (first === undefined) return "mixed";
+  return settings.every((s) => s.domain === first) ? first : "mixed";
 }

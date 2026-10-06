@@ -69,6 +69,7 @@ function setting(overrides: Partial<Setting> & { id: string }): Setting {
     executionStatus: "idle",
     isOptimized: false,
     isApplicable: true,
+    domain: "hardware",
     effect: "",
     ...overrides,
   } as Setting;
@@ -166,32 +167,32 @@ describe("DeviceCard", () => {
       expect(bulkRun).toHaveBeenCalledWith("apply", ["gpu-hardware:msi_mode"]);
     });
 
-    it("asks before a device-wide Windows default, and names the count", () => {
+    it("asks before a device-wide Reset to default, and names the count and the default", () => {
       setStore([FIXABLE, ADVISORY]);
       render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
-      fireEvent.click(screen.getByRole("button", { name: "More actions: GPU" }));
+      // One visible button, no overflow menu; a hardware scope names the driver default.
+      expect(screen.queryByRole("button", { name: /^More actions/ })).not.toBeInTheDocument();
       fireEvent.click(
-        screen.getByRole("menuitem", { name: "Return 1 settings to the Windows default: GPU" }),
+        screen.getByRole("button", { name: "Reset 1 settings to the driver default: GPU" }),
       );
 
       expect(bulkRun).not.toHaveBeenCalled();
       expect(screen.getByRole("dialog")).toHaveTextContent(
-        "1 settings will return to Windows defaults.",
+        "1 settings will return to their defaults.",
       );
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Reset to default" }));
+      expect(bulkRun).toHaveBeenCalledWith("reset", ["gpu-hardware:msi_mode"]);
     });
 
-    it("offers Undo only when the device has a recorded original", () => {
-      setStore([FIXABLE]);
-      const { unmount } = render(
-        <DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />,
-      );
-      expect(screen.queryByRole("button", { name: /^Undo/ })).not.toBeInTheDocument();
-      unmount();
-
-      setStore([setting({ ...FIXABLE, originalValue: "enabled" })]);
+    it("disables Reset to default, and says why, when the device is already at its defaults", () => {
+      setStore([setting({ ...FIXABLE, currentValue: "off", defaultValue: "off" })]);
       render(<DeviceCard deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
-      expect(screen.getByRole("button", { name: "Undo 1 tweaks: GPU" })).toBeInTheDocument();
+
+      const reset = screen.getByRole("button", {
+        name: "Reset to default: everything in GPU is already at its default",
+      });
+      expect(reset).toBeDisabled();
     });
 
     it("does not count an advisory that is already at its recommended value", () => {
@@ -366,11 +367,11 @@ describe("DeviceCard", () => {
     });
 
     it("offers one Apply for the device and nothing else", () => {
-      setStore([setting({ ...FIXABLE, originalValue: "enabled" })]);
+      setStore([FIXABLE]);
       render(<DeviceCardCompact deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       expect(screen.getByRole("button", { name: "Apply 1 tweaks: GPU" })).toBeInTheDocument();
-      expect(screen.queryByRole("button", { name: /^Undo/ })).not.toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /^Reset/ })).not.toBeInTheDocument();
       expect(screen.getByRole("button", { name: "Open GPU on the Hardware page" })).toBeInTheDocument();
     });
 

@@ -1,5 +1,5 @@
 /**
- * The Hardware page has a scope of its own: Apply, Undo and Windows default for
+ * The Hardware page has a scope of its own: Apply and Reset to default for
  * every hardware tweak its cards draw, at the top, where Software Tweaks keeps
  * its own. Before this the page had one set of buttons per card and nothing
  * for the page, so "apply everything on this machine's hardware" took one press
@@ -137,12 +137,11 @@ describe("the Hardware page's own scope", () => {
     expect(
       pageActions().getByRole("button", { name: "Apply: nothing to apply in Hardware Tweaks" }),
     ).toBeDisabled();
-    // Windows default is one step back, in the overflow menu, and says why it is idle.
-    fireEvent.click(pageActions().getByRole("button", { name: "More actions: Hardware Tweaks" }));
+    // Reset to default is drawn beside it, and says why it is idle.
     expect(
-      screen.getByRole("menuitem", {
-        name: "Windows default: already at the Windows default in Hardware Tweaks",
+      pageActions().getByRole("button", {
+        name: "Reset to default: everything in Hardware Tweaks is already at its default",
       }),
-    ).toHaveAttribute("aria-disabled", "true");
+    ).toBeDisabled();
   });
 });

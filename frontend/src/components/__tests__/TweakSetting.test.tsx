@@ -94,55 +94,6 @@ describe("TweakSetting", () => {
     expect(screen.getByText("N/A")).toBeInTheDocument();
   });
 
-  it("keeps the Windows default in the row's overflow menu when setting is suboptimal", async () => {
-    const user = userEvent.setup();
-    const setting = makeSetting({
-      isOptimized: false,
-      currentValue: "enabled",
-    });
-    render(<TweakSetting setting={setting} {...defaultProps} />);
-
-    // Not a button of its own on the row: one step back, behind "More actions".
-    expect(
-      screen.queryByRole("button", { name: /restore the windows default/i }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    expect(
-      screen.getByRole("menuitem", { name: /restore the windows default/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("does not show the Windows-default button when setting is already optimal", () => {
-    const setting = makeSetting({
-      isOptimized: true,
-      currentValue: "disabled",
-      status: "optimal",
-    });
-    render(<TweakSetting setting={setting} {...defaultProps} />);
-    expect(
-      screen.queryByRole("button", { name: /restore the windows default/i }),
-    ).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
-  });
-
-  it("calls onReset when the Windows-default menu item is chosen", async () => {
-    const user = userEvent.setup();
-    const onReset = vi.fn();
-    const setting = makeSetting({
-      isOptimized: false,
-      currentValue: "enabled",
-    });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onReset={onReset} />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "More actions" }));
-    await user.click(
-      screen.getByRole("menuitem", { name: /restore the windows default/i }),
-    );
-    expect(onReset).toHaveBeenCalledTimes(1);
-  });
-
   it("shows Verify button when onVerify prop is provided", () => {
     const setting = makeSetting({ currentValue: "enabled" });
     render(
@@ -386,121 +337,102 @@ describe("the row's switch carries the row's name", () => {
   });
 });
 
-describe("TweakSetting undo", () => {
+describe("TweakSetting reset to default", () => {
   /**
-   * "Restore the Windows default" and "undo fpstune's change" are different
-   * promises. On a machine that deliberately ran a non-stock value, the first
-   * discards the user's own configuration — which is why the row offers both,
-   * and why undo appears only when there is genuinely something to undo.
+   * One way back on every row: the setting's own default, named by its domain.
+   * It is drawn whenever the value differs from that default — including a row
+   * already at its recommended value, which is exactly the one a user wants to
+   * take back — and never when there is nothing to write.
    */
+  const away = { currentValue: "disabled", defaultValue: "enabled" } as const;
 
-  it("offers undo when the machine held something else before", () => {
-    const setting = makeSetting({
-      currentValue: "disabled",
-      originalValue: "enabled",
+  it("draws one visible button that names the Windows default and the value it writes", () => {
+    render(<TweakSetting setting={makeSetting(away)} {...defaultProps} />);
+
+    const reset = screen.getByRole("button", {
+      name: "Reset HPET to default: Windows default (enabled)",
     });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
-    );
+    expect(reset).toBeEnabled();
+    // No overflow menu behind it: the visible button is the only way back.
+    expect(screen.queryByRole("button", { name: "More actions" })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    ["hardware", "Driver default"],
+    ["game", "Game default"],
+    ["software", "Windows default"],
+  ] as const)("names the %s default as %s", (domain, word) => {
+    render(<TweakSetting setting={makeSetting({ ...away, domain })} {...defaultProps} />);
 
     expect(
-      screen.getByRole("button", { name: /undo fpstune's change/i }),
+      screen.getByRole("button", { name: `Reset HPET to default: ${word} (enabled)` }),
     ).toBeInTheDocument();
   });
 
-  it("names the value it would restore, so the action is not a leap of faith", () => {
-    const setting = makeSetting({
-      currentValue: "disabled",
-      originalValue: "enabled",
-    });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
-    );
-
-    expect(
-      screen.getByRole("button", { name: /back to enabled/i }),
-    ).toBeInTheDocument();
-  });
-
-  it("hides undo when nothing was recorded", () => {
-    // A machine fpstune has not scanned yet has no original for this setting,
-    // and the endpoint answers 409 rather than quietly doing a reset — so the
-    // row must not offer an action that cannot succeed.
-    const setting = makeSetting({ currentValue: "disabled" });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
-    );
-
-    expect(
-      screen.queryByRole("button", { name: /undo fpstune's change/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("hides undo when the setting is already where it started", () => {
-    // Nothing to undo. Offering it would either be a no-op or, worse, read as
-    // "fpstune changed this" about a setting it left alone.
-    const setting = makeSetting({
-      currentValue: "enabled",
-      originalValue: "enabled",
-    });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
-    );
-
-    expect(
-      screen.queryByRole("button", { name: /undo fpstune's change/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("hides undo when the row was given no undo handler", () => {
-    const setting = makeSetting({
-      currentValue: "disabled",
-      originalValue: "enabled",
-    });
-    render(<TweakSetting setting={setting} {...defaultProps} />);
-
-    expect(
-      screen.queryByRole("button", { name: /undo fpstune's change/i }),
-    ).not.toBeInTheDocument();
-  });
-
-  it("calls onUndo when clicked", async () => {
+  it("shows the default it will write in its tooltip", async () => {
     const user = userEvent.setup();
-    const onUndo = vi.fn();
-    const setting = makeSetting({
-      currentValue: "disabled",
-      originalValue: "enabled",
-    });
-    render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={onUndo} />,
-    );
+    render(<TweakSetting setting={makeSetting(away)} {...defaultProps} />);
 
-    await user.click(
-      screen.getByRole("button", { name: /undo fpstune's change/i }),
+    await user.hover(
+      screen.getByRole("button", { name: /^Reset HPET to default/ }),
     );
-    expect(onUndo).toHaveBeenCalledTimes(1);
+    expect(
+      (await screen.findAllByText("Reset to default: Windows default (enabled)")).length,
+    ).toBeGreaterThan(0);
   });
 
-  it("undo and the Windows default are separate actions on the same row", async () => {
-    // The distinction is the whole point: they disagree exactly when the user
-    // had configured something themselves.
-    const setting = makeSetting({
-      currentValue: "disabled",
-      originalValue: "something the user chose",
-      defaultValue: "enabled",
-      isOptimized: false,
-    });
+  it("stays drawn on a row already at its recommended value, when that is not the default", () => {
     render(
-      <TweakSetting setting={setting} {...defaultProps} onUndo={vi.fn()} />,
+      <TweakSetting
+        setting={makeSetting({ ...away, isOptimized: true, status: "optimal" })}
+        {...defaultProps}
+      />,
     );
 
-    // Undo is the one visible way back; the Windows default is behind the menu.
-    expect(
-      screen.getByRole("button", { name: /undo fpstune's change/i }),
-    ).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "More actions" }));
-    expect(
-      screen.getByRole("menuitem", { name: /restore the windows default/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^Reset HPET to default/ })).toBeInTheDocument();
+  });
+
+  it("is hidden when the value already is the default, so it never writes nothing", () => {
+    render(
+      <TweakSetting
+        setting={makeSetting({ currentValue: "enabled", defaultValue: "enabled" })}
+        {...defaultProps}
+      />,
+    );
+
+    expect(screen.queryByRole("button", { name: /^Reset HPET/ })).not.toBeInTheDocument();
+  });
+
+  it("is hidden for an advisory, which fpstune can read and cannot write", () => {
+    render(<TweakSetting setting={makeSetting({ ...away, isReadonly: true })} {...defaultProps} />);
+
+    expect(screen.queryByRole("button", { name: /^Reset HPET/ })).not.toBeInTheDocument();
+  });
+
+  it("calls onReset when pressed, by pointer", async () => {
+    const user = userEvent.setup();
+    const onReset = vi.fn();
+    render(<TweakSetting setting={makeSetting(away)} {...defaultProps} onReset={onReset} />);
+
+    await user.click(screen.getByRole("button", { name: /^Reset HPET to default/ }));
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls onReset when focused and activated with the keyboard", async () => {
+    const user = userEvent.setup();
+    const onReset = vi.fn();
+    render(<TweakSetting setting={makeSetting(away)} {...defaultProps} onReset={onReset} />);
+
+    screen.getByRole("button", { name: /^Reset HPET to default/ }).focus();
+    await user.keyboard("{Enter}");
+
+    expect(onReset).toHaveBeenCalledTimes(1);
+  });
+
+  it("is disabled while the row is busy", () => {
+    render(<TweakSetting setting={makeSetting(away)} {...defaultProps} isPending />);
+
+    expect(screen.getByRole("button", { name: /^Reset HPET to default/ })).toBeDisabled();
   });
 });

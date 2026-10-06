@@ -229,65 +229,6 @@ describe("useStore", () => {
     });
   });
 
-  describe("finalizeDetection and the recorded original", () => {
-    it("keeps the recorded original when an update does not carry one", () => {
-      // Only the full scan records originals, and a post-apply re-detect is not
-      // one. An update that omits the field must leave the recorded value
-      // standing, or the undo action silently disappears after every apply.
-      useStore.getState().initializeFromDefinitions(mockDefinitions);
-      useStore.getState().finalizeDetection(
-        {
-          "timer:hpet": {
-            value: "enabled",
-            is_optimized: false,
-            is_applicable: true,
-            original_value: "enabled",
-          },
-        },
-        [],
-      );
-
-      useStore
-        .getState()
-        .setSettingDetectionResult("timer:hpet", "disabled", true, true);
-
-      expect(useStore.getState().settings.get("timer:hpet")?.originalValue).toBe(
-        "enabled",
-      );
-    });
-
-    it("clears the original when the backend says nothing was recorded", () => {
-      useStore.getState().initializeFromDefinitions(mockDefinitions);
-      useStore.getState().finalizeDetection(
-        {
-          "timer:hpet": {
-            value: "enabled",
-            is_optimized: false,
-            is_applicable: true,
-            original_value: "enabled",
-          },
-        },
-        [],
-      );
-
-      useStore.getState().finalizeDetection(
-        {
-          "timer:hpet": {
-            value: "enabled",
-            is_optimized: false,
-            is_applicable: true,
-            original_value: null,
-          },
-        },
-        [],
-      );
-
-      expect(
-        useStore.getState().settings.get("timer:hpet")?.originalValue,
-      ).toBeUndefined();
-    });
-  });
-
   describe("notifications", () => {
     beforeEach(() => {
       useStore.setState({ notifications: [] });

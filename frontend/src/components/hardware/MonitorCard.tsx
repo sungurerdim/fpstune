@@ -41,7 +41,7 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
 
   // Every real mode write starts a backend revert timer: unless the change is
   // kept, the prior mode comes back — so an unreadable panel can never be
-  // stranded in a mode nobody can see to undo.
+  // stranded in a mode nobody can see to leave.
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [revertS, setRevertS] = useState(15);
 

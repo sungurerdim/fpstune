@@ -19,11 +19,11 @@ import {
   ShieldCheck,
   CheckCircle2,
   XCircle,
-  Undo2,
 } from "lucide-react";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
-import { canUndoSetting, IMPACT_CATEGORY_META } from "../types/setting";
+import { canResetSetting, IMPACT_CATEGORY_META } from "../types/setting";
+import { defaultKindKey } from "../lib/tweakDomain";
 import { valueLabel } from "../lib/finding";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import {
@@ -33,7 +33,6 @@ import {
 } from "./SettingStateDisplay";
 import { ToggleSwitch } from "./ui/ToggleSwitch";
 import { PillSelector } from "./ui/PillSelector";
-import { OverflowMenu } from "./ui/OverflowMenu";
 import {
   Tooltip,
   TooltipContent,
@@ -48,13 +47,8 @@ interface TweakSettingProps {
   isPending: boolean;
   isModuleLoading: boolean;
   onApplyValue: (value: unknown) => void;
-  /** Write the Windows stock value. Not the same as undoing fpstune. */
+  /** Write the setting's own default back: the one way back. */
   onReset: () => void;
-  /** Put the setting back to what this machine held before fpstune touched it.
-   *  Offered only when `setting.originalValue` says there is such a value and it
-   *  differs from the current one — otherwise the action would be a no-op or,
-   *  worse, silently fall through to a reset. */
-  onUndo?: () => void;
   onVerify?: () => void;
   isSelected?: boolean;
   onSelect?: () => void;
@@ -71,7 +65,6 @@ export function TweakSetting({
   isModuleLoading,
   onApplyValue,
   onReset,
-  onUndo,
   onVerify,
   isSelected = false,
   onSelect,
@@ -88,9 +81,17 @@ export function TweakSetting({
   const isDisabled = !setting.isApplicable;
   const profileTarget = setting.recommendedValue;
 
-  // See `canUndoSetting`: undo and reset are different promises, and the rule
-  // that decides whether this control appears is shared with Home's row.
-  const canUndo = onUndo !== undefined && canUndoSetting(setting);
+  // See `canResetSetting`: the rule that decides whether this control appears
+  // is shared with Home's row and every scope's bulk button.
+  const canReset = canResetSetting(setting);
+  const kind = t(defaultKindKey(setting));
+  const resetValue = valueLabel(setting, setting.defaultValue);
+  const resetTooltip = t("row.resetKindValue", { kind, value: resetValue });
+  const resetAria = t("row.resetNamedValue", {
+    name: localizedName(setting),
+    kind,
+    value: resetValue,
+  });
 
   // Tints are deliberately lighter than they were (/15 and /20 -> /8): with an
   // accent bar carrying the state, the fill only has to be enough to group the
@@ -316,50 +317,25 @@ export function TweakSetting({
                   </Tooltip>
                 </TooltipProvider>
               )}
-              {canUndo && (
+              {/* The one way back: the setting's own default — Windows', the
+                  driver's or the game's by domain — and the value it writes. */}
+              {canReset && (
                 <TooltipProvider>
                   <Tooltip delayDuration={300}>
                     <TooltipTrigger asChild>
                       <button
                         type="button"
-                        onClick={onUndo}
+                        onClick={onReset}
                         disabled={isPending || isModuleLoading}
                         className="p-0.5 rounded hover:bg-muted/50 text-muted-foreground hover:text-foreground transition-colors disabled:opacity-40"
-                        aria-label={t("row.undo", {
-                          value: String(setting.originalValue),
-                        })}
+                        aria-label={resetAria}
                       >
-                        <Undo2 className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-3.5 h-3.5" aria-hidden />
                       </button>
                     </TooltipTrigger>
-                    <TooltipContent side="top">
-                      {t("row.undoTooltip", {
-                        value: String(setting.originalValue),
-                      })}
-                    </TooltipContent>
+                    <TooltipContent side="top">{resetTooltip}</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              )}
-              {/* Windows default writes the curated stock value — not what Undo
-                  writes — and is the rarer action, so it sits in the overflow
-                  menu beside the one visible Undo. */}
-              {!isOptimal && (
-                <OverflowMenu
-                  label={t("row.more")}
-                  items={[
-                    {
-                      id: "reset",
-                      label: t("row.resetDefault"),
-                      ariaLabel:
-                        setting.defaultValue !== undefined
-                          ? `${t("row.resetDefault")} (${String(setting.defaultValue)})`
-                          : t("row.resetDefault"),
-                      icon: <RotateCcw className="h-3.5 w-3.5" aria-hidden />,
-                      disabled: isPending || isModuleLoading,
-                      onSelect: onReset,
-                    },
-                  ]}
-                />
               )}
             </>
           )}

@@ -17,7 +17,7 @@ import { StatusChip, type ChipTone } from "./StatusChip";
  *   3. the metrics — labelled chips, one fact each, below the title row.
  *
  * The actions slot is the right edge of the title row, and nothing else ever
- * goes there, so Apply / Undo sit in the same place on every page.
+ * goes there, so Apply / Reset to default sit in the same place on every page.
  */
 export function ScopeHeader({
   title,

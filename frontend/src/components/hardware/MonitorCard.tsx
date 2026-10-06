@@ -391,66 +391,73 @@ export function MonitorCard({
         </div>
       )}
 
-      {/* Resolution row */}
-      <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">{t("monitor.resolution")}</span>
-        <span
-          className={cn(
-            "font-medium",
-            !isResolutionKnown
-              ? "text-muted-foreground"
-              : isResOptimal
-                ? "text-success"
-                : "text-warning",
-          )}
-        >
-          {currentRes}
-        </span>
-        {isResolutionKnown ? (
-          isResOptimal ? (
-            <CheckCircle2 className="w-3 h-3 text-success" />
-          ) : (
-            nativeRes && (
-              <>
-                <span className="text-muted-foreground">→</span>
-                <span className="text-success font-medium">{nativeRes}</span>
-              </>
+      {/* Resolution and refresh rate share one two-column grid: the label column
+          is as wide as its longest label in the active language, so the values
+          line up without a width chosen for English. A fixed `w-14` held
+          "Resolution:" and ran "Çözünürlük:" into the value ("Çözünürlük2560x1440"). */}
+      <div
+        data-testid="monitor-modes"
+        className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-1 gap-y-1 text-xs pl-4"
+      >
+        <span className="text-muted-foreground">{t("monitor.resolution")}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <span
+            className={cn(
+              "font-medium",
+              !isResolutionKnown
+                ? "text-muted-foreground"
+                : isResOptimal
+                  ? "text-success"
+                  : "text-warning",
+            )}
+          >
+            {currentRes}
+          </span>
+          {isResolutionKnown ? (
+            isResOptimal ? (
+              <CheckCircle2 className="w-3 h-3 text-success" />
+            ) : (
+              nativeRes && (
+                <>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="text-success font-medium">{nativeRes}</span>
+                </>
+              )
             )
-          )
-        ) : (
-          <span className="text-xs text-muted-foreground italic">(?)</span>
-        )}
-      </div>
+          ) : (
+            <span className="text-xs text-muted-foreground italic">(?)</span>
+          )}
+        </div>
 
-      {/* Refresh rate row */}
-      <div className="flex items-center gap-1 text-xs pl-4">
-        <span className="text-muted-foreground w-14">{t("monitor.refresh")}</span>
-        <span
-          className={cn(
-            "font-medium",
-            !isRefreshKnown
-              ? "text-muted-foreground"
-              : isRefreshOptimal
-                ? "text-success"
-                : "text-warning",
-          )}
-        >
-          {currentHz}Hz
-        </span>
-        {isRefreshKnown ? (
-          isRefreshOptimal ? (
-            <CheckCircle2 className="w-3 h-3 text-success" />
-          ) : (
-            nativeHz !== null && (
-              <>
-                <span className="text-muted-foreground">→</span>
-                <span className="text-success font-medium">{nativeHz}Hz</span>
-              </>
+        <span className="text-muted-foreground">{t("monitor.refresh")}</span>
+        <div className="flex min-w-0 flex-wrap items-center gap-1">
+          <span
+            className={cn(
+              "font-medium",
+              !isRefreshKnown
+                ? "text-muted-foreground"
+                : isRefreshOptimal
+                  ? "text-success"
+                  : "text-warning",
+            )}
+          >
+            {currentHz}Hz
+          </span>
+          {isRefreshKnown ? (
+            isRefreshOptimal ? (
+              <CheckCircle2 className="w-3 h-3 text-success" />
+            ) : (
+              nativeHz !== null && (
+                <>
+                  <span className="text-muted-foreground">→</span>
+                  <span className="text-success font-medium">{nativeHz}Hz</span>
+                </>
+              )
             )
-          )
-        ) : (
-          <span className="text-xs text-muted-foreground italic">(?)</span>
-        )}
+          ) : (
+            <span className="text-xs text-muted-foreground italic">(?)</span>
+          )}
+        </div>
       </div>
 
       {canOptimize && (

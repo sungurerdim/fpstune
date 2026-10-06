@@ -7,7 +7,8 @@ div [flex-wrap]
   div [flex-wrap]
 div [flex-wrap]
   h2 "Modern Warfare IV"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
@@ -27,7 +28,8 @@ div [flex-wrap]
   div [flex-wrap]
 div [flex-wrap]
   h2 "Modern Warfare IV"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row
@@ -44,31 +46,41 @@ exports[`'Hardware' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
 div [flex-wrap]
   h2 "Hardware"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div#hardware-columns [grid-cols-1]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
+  div#monitor-modes [grid-cols-[max-content_minmax(0,1fr)]]
+    div [flex-wrap]
+    div [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
@@ -78,31 +90,41 @@ exports[`'Hardware' page layout > at a wide window (2560px) 1`] = `
 "viewport 2560px
 div [flex-wrap]
   h2 "Hardware"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div#hardware-columns [grid-cols-2]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
+  div#monitor-modes [grid-cols-[max-content_minmax(0,1fr)]]
+    div [flex-wrap]
+    div [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
@@ -112,10 +134,12 @@ exports[`'History' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
 div [flex-wrap]
   h2 "What fpstune changed"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div [flex-wrap]
   h3 "Still changed by fpstune"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 li [flex-wrap]
 div [flex-wrap]
@@ -128,10 +152,12 @@ exports[`'History' page layout > at a wide window (2560px) 1`] = `
 "viewport 2560px
 div [flex-wrap]
   h2 "What fpstune changed"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div [flex-wrap]
   h3 "Still changed by fpstune"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 li [flex-wrap]
 div [flex-wrap]
@@ -163,12 +189,14 @@ section#home-measured
 section [flex-col]
   div [flex-wrap]
     h2 "Hardware tweaks"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
 section [flex-col]
   div [flex-wrap]
     h2 "Software tweaks"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div#tweak-group-rows [grid-cols-1]
     div#tweak-list-row
@@ -182,11 +210,13 @@ section [flex-col]
 section [flex-col]
   div [flex-wrap]
     h2 "Game tweaks"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
 section [flex-col]
   div [flex-wrap]
     h2 "Available disk cleanup actions"
+    div [max-w-full]
     ul [flex-wrap]
       li#home-cleanup-count
   div#home-cleanup-rows [grid-cols-1]
@@ -194,31 +224,41 @@ section [flex-col]
     div [flex-wrap]
 div [flex-wrap]
   h2 "Hardware"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div#hardware-columns [grid-cols-1]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
+  div#monitor-modes [grid-cols-[max-content_minmax(0,1fr)]]
+    div [flex-wrap]
+    div [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
@@ -248,12 +288,14 @@ div [grid-cols-[2fr_1fr]]
   section [flex-col]
     div [flex-wrap]
       h2 "Hardware tweaks"
-      div [flex-wrap]
+      div [max-w-full]
+        div [flex-wrap]
       ul [flex-wrap]
   section [flex-col]
     div [flex-wrap]
       h2 "Software tweaks"
-      div [flex-wrap]
+      div [max-w-full]
+        div [flex-wrap]
       ul [flex-wrap]
     div#tweak-group-rows [grid-cols-2]
       div#tweak-list-row
@@ -267,11 +309,13 @@ div [grid-cols-[2fr_1fr]]
   section [flex-col]
     div [flex-wrap]
       h2 "Game tweaks"
-      div [flex-wrap]
+      div [max-w-full]
+        div [flex-wrap]
       ul [flex-wrap]
   section [flex-col]
     div [flex-wrap]
       h2 "Available disk cleanup actions"
+      div [max-w-full]
       ul [flex-wrap]
         li#home-cleanup-count
     div#home-cleanup-rows [grid-cols-1]
@@ -279,31 +323,41 @@ div [grid-cols-[2fr_1fr]]
       div [flex-wrap]
 div [flex-wrap]
   h2 "Hardware"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
 div#hardware-columns [grid-cols-2]
   div [flex-wrap]
     h3 "Example CPU 8-Core"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Memory"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example GPU"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Example Monitor"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
+  div#monitor-modes [grid-cols-[max-content_minmax(0,1fr)]]
+    div [flex-wrap]
+    div [flex-wrap]
   div [flex-wrap]
     h3 "Ethernet"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   div [flex-wrap]
     h3 "Audio"
-    div [flex-wrap]
+    div [max-w-full]
+      div [flex-wrap]
     ul [flex-wrap]
   h4 "Audio Output(1)"
   h4 "Audio Input""
@@ -317,7 +371,8 @@ div [flex-wrap]
 div[group] [flex-wrap]
 div [flex-wrap]
   h2 "System"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
@@ -338,7 +393,8 @@ div [flex-wrap]
 div[group] [flex-wrap]
 div [flex-wrap]
   h2 "System"
-  div [flex-wrap]
+  div [max-w-full]
+    div [flex-wrap]
   ul [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row

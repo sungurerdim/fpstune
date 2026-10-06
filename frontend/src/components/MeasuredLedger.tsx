@@ -104,7 +104,12 @@ function VerdictText({ area }: { area: LedgerArea }) {
   );
 }
 
-/** How many readings each side got, when the ledger says. Never invented. */
+/**
+ * How many readings each side got, when the ledger says. Never invented.
+ *
+ * A block of its own: as an inline span after the verdict sentence it ran into
+ * it with no gap ("…not different3 and 3 readings"), two facts read as one word.
+ */
 function SampleCount({ area }: { area: LedgerArea }) {
   const { t } = useT();
   if (
@@ -116,7 +121,10 @@ function SampleCount({ area }: { area: LedgerArea }) {
     return null;
   }
   return (
-    <span className="text-xs text-muted-foreground">
+    <span
+      data-testid="ledger-samples"
+      className="mt-0.5 block text-xs text-muted-foreground"
+    >
       {t("ledger.samples", {
         before: area.samples_before,
         after: area.samples_after,

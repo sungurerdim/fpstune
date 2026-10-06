@@ -163,8 +163,11 @@ function AudioDeviceCard({ device }: { device: AudioDeviceInfo }) {
         />
 
         <span
+          // Truncated on a narrow card, so the full name is one hover (or
+          // long-press) away: "SteelSeries Sonar - Chat …" names nothing.
+          title={device.name}
           className={cn(
-            "text-xs font-medium flex-1 truncate",
+            "text-xs font-medium flex-1 min-w-0 truncate",
             !device.is_enabled && "text-muted-foreground",
           )}
         >

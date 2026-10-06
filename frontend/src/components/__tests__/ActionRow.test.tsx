@@ -86,6 +86,27 @@ describe("what the row says before it is run", () => {
     ).toBeInTheDocument();
   });
 
+  it("lets a long unbroken description wrap inside the row instead of spilling out", () => {
+    // At 390px an English description holding a long path or command overran the
+    // row's border: a flex child cannot shrink below its longest word unless it
+    // may break one (`wrap-break-word`) inside a `min-w-0` parent.
+    const description =
+      "Removes C:\\Windows\\SoftwareDistribution\\Download\\AVeryLongUnbrokenFolderNameThatHasNoSpacesAtAll and its contents.";
+    render(
+      <ActionRow
+        setting={cleanupSetting({ description, effect: "Frees C:\\Windows\\Temp\\Unbroken\\Path\\Name\\Without\\Any\\Spaces" })}
+        runner={makeRunner()}
+      />,
+    );
+
+    const text = screen.getByText(description);
+    expect(text).toHaveClass("wrap-break-word");
+    expect(text.parentElement).toHaveClass("min-w-0");
+    const effect = screen.getByText(/Frees C:/);
+    expect(effect).toHaveClass("wrap-break-word");
+    expect(effect).toHaveClass("min-w-0");
+  });
+
   it("shows the measured size the scan reported", () => {
     render(
       <ActionRow

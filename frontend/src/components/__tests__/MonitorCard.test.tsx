@@ -112,6 +112,24 @@ describe("MonitorCard native-mode affordance", () => {
     expect(nativeButton()).not.toBeInTheDocument();
   });
 
+  it("sizes the label column to its text rather than to a fixed width", () => {
+    // The labels were `w-14` (56px): wide enough for "Resolution:", not for
+    // "Çözünürlük:", which ran into its value ("Çözünürlük2560x1440"). A grid
+    // column of `max-content` fits whichever language is on, and keeps both
+    // rows' values aligned.
+    render(<MonitorCard monitor={monitor()} displayIndex={0} />);
+
+    const modes = screen.getByTestId("monitor-modes");
+    expect(modes).toHaveClass("grid");
+    expect(modes.className).toContain("grid-cols-[max-content_");
+    for (const label of [screen.getByText("Resolution:"), screen.getByText("Refresh:")]) {
+      expect(label.className).not.toMatch(/(^|\s)w-\d/);
+      expect(modes).toContainElement(label);
+    }
+    // The value sits in its own cell, so it can wrap rather than run on.
+    expect(screen.getByText("2560x1440").parentElement).toHaveClass("min-w-0");
+  });
+
   it("stays quiet when the refresh rate could not be read", () => {
     render(
       <MonitorCard

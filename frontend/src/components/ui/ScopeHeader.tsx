@@ -71,7 +71,11 @@ export function ScopeHeader({
         </div>
       </div>
       {actions && (
-        <div data-slot="scope-actions" className="ml-auto shrink-0">
+        // `max-w-full`: `shrink-0` sizes the slot to its widest line, and a
+        // toolbar of three buttons is wider than a phone — the slot ran off the
+        // right edge and took the whole page to 459px (517px in Turkish). Capped
+        // at the header's own width, a `flex-wrap` toolbar inside it wraps.
+        <div data-slot="scope-actions" className="ml-auto max-w-full shrink-0">
           {actions}
         </div>
       )}

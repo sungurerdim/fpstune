@@ -66,6 +66,22 @@ describe("the device switch is named after the device", () => {
   });
 });
 
+describe("a truncated device name stays readable", () => {
+  it("carries the full name as its title, since the visible text is clipped", () => {
+    // 390px clips the row to "SteelSeries Sonar - Chat …" with an ellipsis and
+    // no way to see which of the Sonar mixes it is.
+    const name = "SteelSeries Sonar - Chat (SteelSeries Sonar Virtual Audio Device)";
+    render(<AudioSection devices={[device({ name })]} loading={false} />);
+
+    const label = screen.getAllByText(name).find((el) => el.classList.contains("truncate"));
+    expect(label).toBeDefined();
+    expect(label).toHaveAttribute("title", name);
+    // `min-w-0` is what lets a flex child shrink below its text so that
+    // `truncate` has something to clip; without it the row overflows instead.
+    expect(label).toHaveClass("min-w-0");
+  });
+});
+
 describe("the Loudness EQ switch is named by its visible label", () => {
   it("keeps 'Loudness EQ' as its name while aria-checked flips", () => {
     const { rerender } = render(

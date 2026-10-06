@@ -293,6 +293,30 @@ describe("Benchmarks: the ledger panel", () => {
     expect(fpsRow.textContent ?? "").not.toMatch(/\d/);
   });
 
+  it("sets the reading count apart from the verdict sentence", async () => {
+    // Both were inline spans in one cell, so the verdict's last word and the
+    // count's first digit ran together ("not different3 and 3 readings") in
+    // Turkish at every width and in English on a phone. The count is now a block
+    // of its own: it can never share a line with, and so never touch, the verdict.
+    serveLedger(
+      ledger({ areas: [{ ...TIMING, samples_before: 3, samples_after: 3 }] }),
+    );
+
+    render(<LedgerPanel />);
+
+    await screen.findByTestId("ledger-area-table");
+    const row = screen.getByTestId("ledger-row-timing");
+    const count = within(row).getByTestId("ledger-samples");
+    expect(count).toHaveTextContent("3 and 3 readings");
+    expect(count).toHaveClass("block");
+    // A sibling of the verdict, not inside it, and after it in reading order.
+    const verdict = within(row).getByText(/own variation/);
+    expect(verdict.contains(count)).toBe(false);
+    expect(verdict.compareDocumentPosition(count)).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
+  });
+
   it("names the runs it is comparing, so a reload no longer loses them", async () => {
     serveLedger(
       ledger({

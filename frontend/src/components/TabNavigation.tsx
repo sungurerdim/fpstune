@@ -1,9 +1,11 @@
 import { setLocale, useT } from "../i18n";
 import { en } from "../i18n/en";
 import { tr } from "../i18n/tr";
-import { useMemo, useRef, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
+  ChevronLeft,
+  ChevronRight,
   Home,
   Settings,
   HardDrive,
@@ -46,6 +48,47 @@ const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = 
   { id: "history", labelKey: "tab.history", icon: History },
 ];
 
+/**
+ * Which ends of the tab strip have more tabs past them.
+ *
+ * The strip scrolls rather than wraps (a wrapped label turned a 44px tab into
+ * 84px and cut "Ölçüm" mid-word), and a scroll area with its scrollbar hidden says
+ * nothing about what lies beyond the edge. This is the measurement behind the
+ * fade-and-chevron cue: true on a side only while tabs are actually hidden there.
+ * Read from the element on scroll and on every size change of the strip or of a
+ * tab (a locale switch changes tab widths without changing the strip's own box).
+ */
+function useScrollEdges() {
+  const ref = useRef<HTMLElement | null>(null);
+  const [edges, setEdges] = useState({ start: false, end: false });
+
+  const update = useCallback(() => {
+    const el = ref.current;
+    if (!el) return;
+    const start = el.scrollLeft > 1;
+    const end = el.scrollLeft + el.clientWidth < el.scrollWidth - 1;
+    setEdges((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+  }, []);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    el.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", update);
+    const observer =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
+    observer?.observe(el);
+    for (const child of Array.from(el.children)) observer?.observe(child);
+    return () => {
+      el.removeEventListener("scroll", update);
+      window.removeEventListener("resize", update);
+      observer?.disconnect();
+    };
+  }, [update]);
+
+  return { ref, edges };
+}
+
 export function TabNavigation() {
   const activeTab = useStore((state) => state.activeTab);
   const setActiveTab = useStore((state) => state.setActiveTab);
@@ -60,6 +103,16 @@ export function TabNavigation() {
   });
 
   const tabRefs = useRef(new Map<TabId, HTMLButtonElement | null>());
+  const { ref: stripRef, edges } = useScrollEdges();
+
+  // The selected tab is never left behind the edge of a scrolled strip: a tab
+  // restored from an earlier session, or reached by a shortcut, scrolls into view.
+  useEffect(() => {
+    const el = tabRefs.current.get(activeTab);
+    if (typeof el?.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [activeTab]);
 
   // `role="tab"` is a promise of arrow-key navigation, and the strip made it
   // without keeping it: assistive technology announced "tab 1 of 6" over six
@@ -116,14 +169,28 @@ export function TabNavigation() {
 
   return (
     <div className="sticky top-0 z-10 bg-background border-b border-border">
-      <div className="max-w-7xl 2xl:max-w-[120rem] mx-auto px-6 flex items-center justify-between gap-3">
-        {/* Brand + tabs */}
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="flex items-center gap-1.5 pr-2 shrink-0">
-            <Activity className="w-5 h-5 text-primary" />
-            <span className="text-sm font-bold hidden sm:inline">fpstune</span>
-          </div>
-          <nav className="flex gap-1 overflow-x-auto" role="tablist">
+      {/* Two rows until the window is wide enough for brand, seven labelled tabs
+          and the chrome on one line (about 1920px: the Turkish labels alone are
+          1031px). Squeezed onto one row below that, the tabs were what gave way:
+          their labels wrapped to three lines and the strip outgrew its box. */}
+      <div className="max-w-7xl 2xl:max-w-[120rem] mx-auto px-6 flex flex-wrap items-center justify-between gap-x-3">
+        {/* Brand */}
+        <div className="order-1 flex items-center gap-1.5 pr-2 py-2 3xl:py-0 shrink-0">
+          <Activity className="w-5 h-5 text-primary" />
+          <span className="text-sm font-bold hidden sm:inline">fpstune</span>
+        </div>
+
+        {/* Tabs: a row of their own below 3xl, scrolling (never wrapping) when
+            even that row is too narrow, with a cue at each edge that hides more. */}
+        <div
+          data-testid="tab-strip"
+          className="order-3 basis-full min-w-0 relative 3xl:order-2 3xl:basis-0 3xl:flex-1"
+        >
+          <nav
+            ref={stripRef}
+            className="flex gap-1 min-w-0 overflow-x-auto [scrollbar-width:none]"
+            role="tablist"
+          >
             {tabs.map((tab, index) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
@@ -149,20 +216,25 @@ export function TabNavigation() {
                   tabIndex={isActive ? 0 : -1}
                   onKeyDown={(event) => handleTabKeys(event, index)}
                   onClick={() => setActiveTab(tab.id)}
+                  // The accessible name is the label whether or not it is drawn
+                  // (below lg only the icon is), and the tooltip gives a sighted
+                  // user of the icon-only strip the same name.
+                  title={t(tab.labelKey)}
                   className={cn(
-                    "flex items-center gap-2 px-3 py-3 text-sm font-medium transition-colors relative whitespace-nowrap",
+                    "flex shrink-0 items-center gap-2 px-3 py-3 text-sm font-medium transition-colors relative whitespace-nowrap",
                     "hover:text-foreground",
                     isActive ? "text-primary" : "text-muted-foreground",
                   )}
                 >
                   <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-                  {/* Hidden from the eye below md, never from the reader:
+                  {/* Hidden from the eye below lg, never from the reader:
                       `hidden` is display:none, which took the tab's only
                       accessible name away on a narrow window and left six
-                      unnamed buttons. */}
-                  <span className="sr-only md:not-sr-only md:inline">
-                    {t(tab.labelKey)}
-                  </span>
+                      unnamed buttons. `max-lg:sr-only` rather than
+                      `sr-only lg:not-sr-only`: not-sr-only resets
+                      `white-space` to normal, which let the button's own
+                      nowrap lapse and wrapped every label onto 2-3 lines. */}
+                  <span className="max-lg:sr-only">{t(tab.labelKey)}</span>
                   {badge !== null && (
                     <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-destructive text-destructive-foreground text-xs font-bold flex items-center justify-center">
                       {badge > 99 ? "99+" : badge}
@@ -175,10 +247,28 @@ export function TabNavigation() {
               );
             })}
           </nav>
+          {edges.start && (
+            <span
+              aria-hidden="true"
+              data-testid="tab-strip-more-start"
+              className="pointer-events-none absolute inset-y-0 left-0 flex w-8 items-center bg-linear-to-r from-background to-transparent text-muted-foreground"
+            >
+              <ChevronLeft className="w-4 h-4" />
+            </span>
+          )}
+          {edges.end && (
+            <span
+              aria-hidden="true"
+              data-testid="tab-strip-more-end"
+              className="pointer-events-none absolute inset-y-0 right-0 flex w-8 items-center justify-end bg-linear-to-l from-background to-transparent text-muted-foreground"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </span>
+          )}
         </div>
 
         {/* Chrome: activity, admin, OS */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        <div className="order-2 ml-auto flex items-center gap-2.5 py-2 3xl:order-3 3xl:py-0 shrink-0">
           <UpdateControl />
           <ActivityLog />
           <div

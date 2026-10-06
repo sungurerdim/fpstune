@@ -240,7 +240,9 @@ function HistoryRow({
         />
       )}
       <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium truncate">{name}</div>
+        <div className="text-sm font-medium truncate" title={name}>
+          {name}
+        </div>
         <div className="text-xs text-muted-foreground">
           {actionLabel} · {t("history.value", { value: String(row.value) })} · {when}
         </div>

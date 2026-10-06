@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "../../test/utils";
+import { render, screen, fireEvent, within } from "../../test/utils";
 import { TabNavigation } from "../TabNavigation";
 import { useStore } from "../../store";
 
@@ -105,6 +105,77 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     fireEvent.keyDown(tabButtons()[0], { key: "ArrowDown" });
 
     expect(tabButtons()[0]).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("never wraps a tab label, and scrolls the strip instead of outgrowing it", () => {
+    // The label span was `sr-only md:not-sr-only`, and `not-sr-only` resets
+    // `white-space` to normal: at 768-1280px every label wrapped to 2-3 lines,
+    // tabs grew from 44px to 84px and "Ölçüm" was cut mid-word. jsdom lays nothing
+    // out, so what is pinned is the cause and the mechanism that replaces it.
+    render(<TabNavigation />);
+
+    const strip = screen.getByRole("tablist");
+    expect(strip).toHaveClass("overflow-x-auto");
+    expect(strip).toHaveClass("min-w-0");
+    for (const tab of tabButtons()) {
+      expect(tab).toHaveClass("whitespace-nowrap");
+      // A tab squeezed below its content is how a label ends up cut.
+      expect(tab).toHaveClass("shrink-0");
+      const label = within(tab).getByText(tab.getAttribute("title") ?? "");
+      expect(label).toHaveClass("max-lg:sr-only");
+      expect(label.className).not.toContain("not-sr-only");
+    }
+  });
+
+  it("gives the icon-only strip the same name on hover as for a screen reader", () => {
+    render(<TabNavigation />);
+
+    for (const tab of tabButtons()) {
+      const label = tab.getAttribute("title");
+      expect(label).toBeTruthy();
+      expect(tab).toHaveAccessibleName(new RegExp(label as string));
+    }
+  });
+
+  it("takes a row of its own until the window can hold it beside the chrome", () => {
+    // Below 3xl the seven labels, the brand and the update/admin/theme chrome
+    // cannot share one line; the strip is `basis-full` and wraps under them.
+    render(<TabNavigation />);
+
+    const wrapper = screen.getByTestId("tab-strip");
+    expect(wrapper).toHaveClass("basis-full");
+    expect(wrapper).toHaveClass("min-w-0");
+    expect(wrapper).toHaveClass("3xl:flex-1");
+  });
+
+  it("shows a cue at the edge that hides more tabs, and only there", () => {
+    // A scroll area whose scrollbar is hidden says nothing about what lies past
+    // its edge; at 390px only 135 of 304px of tabs showed with no hint of the rest.
+    render(<TabNavigation />);
+    const strip = screen.getByRole("tablist");
+
+    const geometry = (scrollLeft: number) => {
+      Object.defineProperty(strip, "clientWidth", { configurable: true, value: 135 });
+      Object.defineProperty(strip, "scrollWidth", { configurable: true, value: 304 });
+      Object.defineProperty(strip, "scrollLeft", { configurable: true, value: scrollLeft });
+      fireEvent.scroll(strip);
+    };
+
+    // Everything fits (jsdom measures 0 everywhere): no cue.
+    expect(screen.queryByTestId("tab-strip-more-start")).toBeNull();
+    expect(screen.queryByTestId("tab-strip-more-end")).toBeNull();
+
+    geometry(0);
+    expect(screen.getByTestId("tab-strip-more-end")).toHaveAttribute("aria-hidden", "true");
+    expect(screen.queryByTestId("tab-strip-more-start")).toBeNull();
+
+    geometry(80);
+    expect(screen.getByTestId("tab-strip-more-start")).toBeInTheDocument();
+    expect(screen.getByTestId("tab-strip-more-end")).toBeInTheDocument();
+
+    geometry(169);
+    expect(screen.getByTestId("tab-strip-more-start")).toBeInTheDocument();
+    expect(screen.queryByTestId("tab-strip-more-end")).toBeNull();
   });
 
   it("names a panel only from the tab that actually has one", () => {

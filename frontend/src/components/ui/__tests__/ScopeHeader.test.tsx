@@ -98,6 +98,31 @@ describe("ScopeHeader", () => {
     expect(actions.compareDocumentPosition(metrics) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
+  it("caps the actions slot at the header's width, so a wrapping toolbar can wrap", () => {
+    // `shrink-0` sizes the slot to its widest single line. Without `max-w-full` a
+    // History toolbar (select all + bulk buttons) was wider than a 390px phone,
+    // the slot ran off the right edge and the page grew to 459px (517px in
+    // Turkish). With the cap, the `flex-wrap` toolbar inside has a width to wrap to.
+    render(
+      <ScopeHeader
+        title="Still changed by fpstune"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <button type="button">Select all</button>
+            <button type="button">Reset selected (3)</button>
+          </div>
+        }
+      />,
+    );
+
+    const header = screen.getByRole("heading").closest("[data-slot='scope-header']") as HTMLElement;
+    const actions = header.querySelector("[data-slot='scope-actions']") as HTMLElement;
+    expect(actions).toHaveClass("max-w-full");
+    expect(actions).toHaveClass("shrink-0");
+    expect(header).toHaveClass("flex-wrap");
+    expect(actions.firstElementChild).toHaveClass("flex-wrap");
+  });
+
   it("gives the heading the id it is handed, so a section can be labelled by it", () => {
     render(<ScopeHeader title="Network" headingId="net-title" />);
 

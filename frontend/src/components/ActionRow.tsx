@@ -102,7 +102,9 @@ export function ActionRow({
           )}
         </div>
 
-        <p className="text-sm text-muted-foreground mt-1">
+        {/* `wrap-break-word`: a long unbroken token (a path, a command) must
+            wrap inside the row rather than spill past its border. */}
+        <p className="text-sm text-muted-foreground mt-1 wrap-break-word">
           {localizedDescription(setting)}
         </p>
 
@@ -128,7 +130,7 @@ export function ActionRow({
         {!isRepair && setting.effect && (
           <div className="flex items-start gap-1.5 mt-2 text-xs text-muted-foreground">
             <Info className="w-3.5 h-3.5 mt-0.5 shrink-0" aria-hidden="true" />
-            <span>{setting.effect}</span>
+            <span className="min-w-0 wrap-break-word">{setting.effect}</span>
           </div>
         )}
 

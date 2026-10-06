@@ -18,6 +18,30 @@ from fpstune.settings.base import (
 )
 from fpstune.settings.virtualization import VIRTUALIZATION_IN_USE
 
+
+def _optional_feature_detect(feature: str, preamble: str = "") -> str:
+    """Read one Windows optional feature as enabled / disabled.
+
+    ``Get-WindowsOptionalFeature -Online`` raises when it cannot answer (no
+    elevation, the servicing stack busy) and also when the edition has no such
+    feature (Hyper-V on Home). The two are told apart by asking again for the
+    whole list, which only works when the machine can answer: a readable list
+    without the feature proves it is absent (``not_available``); an unreadable
+    list proves nothing, and the original error is raised so the row reads
+    "unknown" with the reason. Nothing is inferred from the error text, which is
+    localized. The list is only requested on the failure path.
+    """
+    return (
+        f"try {{ {preamble}"
+        f"$f = Get-WindowsOptionalFeature -Online -FeatureName {feature} -ErrorAction Stop; "
+        "if ($f.State -eq 'Enabled') { 'enabled' } else { 'disabled' } "
+        "} catch { "
+        "$all = Get-WindowsOptionalFeature -Online -ErrorAction Stop; "
+        f"if (@($all | Where-Object {{ $_.FeatureName -eq '{feature}' }}).Count -eq 0) "
+        "{ 'not_available' } else { throw } }"
+    )
+
+
 # =============================================================================
 # Memory Settings
 # =============================================================================
@@ -1723,25 +1747,24 @@ SYSTEM_HYPER_V = SettingExecutor(
     # -ErrorAction SilentlyContinue, left $f null, and fell through to
     # 'disabled' — so a machine actually running Hyper-V reported it as off and
     # fpstune called the setting already optimal. "Could not read" is not
-    # "not enabled"; it answers not_available, which detection turns into
-    # is_applicable=False rather than a value.
+    # "not enabled", and it is not "not available" either: the catch raises, the
+    # row reads "unknown" with the reason, and a machine that cannot answer is
+    # never told its virtualization state is something it did not read. Only a
+    # readable feature list that lacks the feature (an edition without it) is
+    # `not_available` -- see `_optional_feature_detect`.
     #
-    # The try/catch is also what lets this share a batched session: a raise
+    # The catch raising is also what lets this share a batched session: a raise
     # inside the group's scriptblock costs the setting its batched result and
-    # sends it back to its own process.
+    # sends it back to its own process, where the failure is reported.
     #
     # The feature can be installed while no hypervisor runs (hypervisorlaunchtype
     # off), and then there is no overhead to remove. Win32_ComputerSystem's
     # HypervisorPresent answers that without elevation, so a machine with no
     # hypervisor reads as already optimal before the feature query is spent.
-    detect_command=(
-        "try { "
+    detect_command=_optional_feature_detect(
+        "Microsoft-Hyper-V",
         "if (-not (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).HypervisorPresent) "
-        "{ 'disabled'; return }; "
-        "$f = Get-WindowsOptionalFeature -Online "
-        "-FeatureName Microsoft-Hyper-V -ErrorAction Stop; "
-        "if ($f.State -eq 'Enabled') { 'enabled' } else { 'disabled' } "
-        "} catch { 'not_available' }"
+        "{ 'disabled'; return }; ",
     ),
     detect_args={},
     value_map={},
@@ -1777,13 +1800,7 @@ SYSTEM_VM_PLATFORM = SettingExecutor(
     detect_type=DetectType.POWERSHELL,
     # Same as Hyper-V above: unelevated this raises, and reporting 'disabled'
     # for "could not read" told the user a platform that was on was off.
-    detect_command=(
-        "try { "
-        "$f = Get-WindowsOptionalFeature -Online "
-        "-FeatureName VirtualMachinePlatform -ErrorAction Stop; "
-        "if ($f.State -eq 'Enabled') { 'enabled' } else { 'disabled' } "
-        "} catch { 'not_available' }"
-    ),
+    detect_command=_optional_feature_detect("VirtualMachinePlatform"),
     detect_args={},
     value_map={},
     apply_type=DetectType.POWERSHELL,
@@ -3182,12 +3199,13 @@ MEMORY_COMPRESSION = SettingExecutor(
     # Microsoft's Get-MMAgent page lists the older features only; the
     # MemoryCompression property is what the cmdlet returns on Windows 10 and
     # 11. A build that returns no such property is not read as "disabled" —
-    # that would have the guard write over a state it cannot see.
+    # that would have the guard write over a state it cannot see. Get-MMAgent
+    # raising (no elevation, the service down) is a failed read and raises too.
     detect_command=(
         "try { $m = Get-MMAgent -ErrorAction Stop; "
         "if ($null -eq $m.MemoryCompression) { 'not_available' } "
         "elseif ($m.MemoryCompression) { 'enabled' } else { 'disabled' } } "
-        "catch { 'not_available' }"
+        "catch { throw }"
     ),
     detect_args={},
     value_map={"enabled": "enabled", "disabled": "disabled"},

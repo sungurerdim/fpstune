@@ -38,6 +38,7 @@ _UNREAD_SERVICES = "Could not read the service list; the start type is unknown."
 _UNREAD_ADAPTER_PROPERTIES = (
     "Could not read the network adapter properties; this setting's state is unknown."
 )
+_UNREAD_TCP_SETTINGS = "Could not read the TCP settings; this setting's state is unknown."
 _UNREAD_ADAPTER_POWER = (
     "Could not read this adapter's power-management state (it may be restarting); "
     "the state is unknown."
@@ -588,6 +589,8 @@ class PowerShellExecutor(BaseExecutor):
 
             raw = get_tcp_property(str(batch_tcp))
             debug_log("powershell", f"DETECT BATCH_TCP {setting.id}: {batch_tcp!r} → {raw!r}")
+            if raw is None:
+                return None, _UNREAD_TCP_SETTINGS
             return map_raw_to_display(setting.value_map, raw), None
 
         # Fast path: game config files are read once per scan in Python.

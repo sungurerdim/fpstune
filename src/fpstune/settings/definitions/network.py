@@ -157,9 +157,11 @@ CONGESTION_PROVIDER = SettingExecutor(
         "$setting = Get-NetTCPSetting -SettingName Internet -ErrorAction Stop; "
         "[string]$setting.CongestionProvider "
         # No netsh fallback: its labels are localized, and answering CUBIC when the
-        # read failed reported a value nothing had read (A11). The sentinel says
-        # "could not answer" and the setting is shown as not applicable.
-        "} catch { 'not_available' }"
+        # read failed reported a value nothing had read (A11). A failed read raises:
+        # the row reads "unknown" with the reason. It is not `not_available` -- the
+        # Internet template exists on every Windows 11, so a failure to read it is
+        # a failed read, not an absent feature.
+        "} catch { throw }"
     ),
     detect_args={},
     # The CongestionProvider enum's own member names.
@@ -533,9 +535,13 @@ _PNP_DRIVER_KEY = (
     "$v = [int](Get-ItemProperty -Path $k -Name 'PnPCapabilities' "
     "-ErrorAction SilentlyContinue).PnPCapabilities; "
 )
+# `not_supported` above is a read answer (the device has no driver key, so it has no
+# PnP power state to set). The catch is a failed read -- the adapter is gone or
+# restarting, the PnP query raised -- and raises: reporting it as `not_supported`
+# hid a Wi-Fi adapter's real state as "feature absent".
 _PNP_POWER_DETECT = (
     "try { " + _PNP_DRIVER_KEY + "if (($v -band 0x18) -eq 0x18) { 'Disabled' } else { 'Enabled' } "
-    "} catch { 'not_supported' }"
+    "} catch { throw }"
 )
 _PNP_POWER_APPLY = (
     "try { "
@@ -1854,6 +1860,25 @@ def create_checksum_offload_setting(interface_index: int, display_name: str) -> 
     )
 
 
+def _tcp_property_detect(prop: str) -> str:
+    """The single-setting read of one Get-NetTCPSetting property.
+
+    A failed read raises, so the row reads "unknown" with the reason. The one
+    thing that does mean "absent" is the cmdlet itself not existing (the NetTCPIP
+    module is missing on some LTSC/IoT images): that is told apart by asking
+    PowerShell whether the command exists, never inferred from the failure.
+    """
+    return (
+        f"try {{ $s = Get-NetTCPSetting -SettingName Internet -EA Stop; "
+        f"$s.{prop}.ToString().ToLower() }} "
+        "catch { "
+        "if (-not (Get-Command Get-NetTCPSetting -EA SilentlyContinue)) { "
+        "Write-Host 'FPSTUNE_WARN: Get-NetTCPSetting does not exist here. "
+        "The NetTCPIP module is unavailable (LTSC/IoT edition).'; "
+        "'not_available' } else { throw } }"
+    )
+
+
 # === TCP Timestamps ===
 # Adds 12 bytes to every TCP packet header. Disabling reduces overhead for gaming.
 TCP_TIMESTAMPS = SettingExecutor(
@@ -1886,13 +1911,7 @@ TCP_TIMESTAMPS = SettingExecutor(
     detect_command=(
         # Kept as the single-setting fallback; a scan answers from the shared
         # snapshot via detect_args below instead of running this.
-        "try { $s = Get-NetTCPSetting -SettingName Internet -EA Stop; "
-        "$s.Timestamps.ToString().ToLower() } "
-        "catch { "
-        "Write-Host 'FPSTUNE_WARN: Get-NetTCPSetting failed. "
-        "The NetTCPIP module may be unavailable (LTSC/IoT edition) or "
-        "PowerShell is running in a constrained environment.'; "
-        "'not_available' }"
+        _tcp_property_detect("Timestamps")
     ),
     detect_args={"batch_tcp": "Timestamps"},
     value_map={"disabled": "disabled", "enabled": "enabled", "allowed": "enabled"},
@@ -1931,15 +1950,7 @@ TCP_ECN = SettingExecutor(
     effect="Disables ECN to prevent router-induced latency spikes during gaming",
     impact_scores={"latency_ms": -0.5, "network_consistency": "improved"},
     detect_type=DetectType.POWERSHELL,
-    detect_command=(
-        "try { $s = Get-NetTCPSetting -SettingName Internet -EA Stop; "
-        "$s.EcnCapability.ToString().ToLower() } "
-        "catch { "
-        "Write-Host 'FPSTUNE_WARN: Get-NetTCPSetting failed. "
-        "The NetTCPIP module may be unavailable (LTSC/IoT edition) or "
-        "PowerShell is running in a constrained environment.'; "
-        "'not_available' }"
-    ),
+    detect_command=(_tcp_property_detect("EcnCapability")),
     detect_args={"batch_tcp": "EcnCapability"},
     value_map={"disabled": "disabled", "enabled": "enabled", "allowed": "enabled"},
     apply_type=DetectType.POWERSHELL,

@@ -76,32 +76,38 @@ _NETSH_TOKEN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:-]*$")
 # The locale argument does not rescue it either: netsh's TCP labels are English
 # even on a localised install (verified on a Turkish Windows 11), so the parse
 # keys are not the fragile part they look like.
-def _fetch_tcp_snapshot() -> dict[str, str]:
+def _fetch_tcp_snapshot() -> dict[str, str] | None:
     """Read every TCP property fpstune needs in one PowerShell call.
 
     Values are interpolated into strings inside PowerShell rather than left to
     ConvertTo-Json: these properties are enums, and JSON would serialise them as
     their numeric value, which no ``value_map`` here expects.
+
+    ``None`` means the read failed (PowerShell failed, the Internet template
+    could not be read, or the answer was not the object asked for). That says
+    nothing about whether a property exists, so it must never reach a setting as
+    ``not_available``; an empty map is a real answer (the object was read, and
+    carried none of the properties).
     """
     if sys.platform != "win32":
-        return {}
+        return None
 
     props = sorted(set(TCP_PARSE_KEY_TO_PROPERTY.values()) | set(EXTRA_TCP_PROPERTIES))
     fields = "; ".join(f'{name} = "$($s.{name})"' for name in props)
     cmd = (
-        "$s = Get-NetTCPSetting -SettingName Internet -ErrorAction SilentlyContinue; "
-        f"if ($s) {{ @{{ {fields} }} | ConvertTo-Json -Compress }}"
+        "$s = Get-NetTCPSetting -SettingName Internet -ErrorAction Stop; "
+        f"@{{ {fields} }} | ConvertTo-Json -Compress"
     )
     success, output = run_powershell(cmd, component="netsh")
     if not (success and output and output.strip()):
-        return {}
+        return None
 
     try:
         data = json.loads(output.strip())
     except (json.JSONDecodeError, TypeError):
-        return {}
+        return None
     if not isinstance(data, dict):
-        return {}
+        return None
 
     snapshot: dict[str, str] = {}
     for name, value in data.items():
@@ -114,8 +120,8 @@ def _fetch_tcp_snapshot() -> dict[str, str]:
     return snapshot
 
 
-def _tcp_snapshot() -> dict[str, str]:
-    """Return the TCP property snapshot, computed once per scan."""
+def _tcp_snapshot() -> dict[str, str] | None:
+    """Return the TCP property snapshot (``None`` = unreadable), computed once per scan."""
     cache = _get_cache()
     if cache is None:
         return _fetch_tcp_snapshot()
@@ -129,13 +135,17 @@ def _tcp_snapshot() -> dict[str, str]:
 TCP_PROPERTY_MISSING = NOT_AVAILABLE
 
 
-def get_tcp_property(name: str) -> str:
+def get_tcp_property(name: str) -> str | None:
     """Read one ``Get-NetTCPSetting`` property from the per-scan snapshot.
 
     Lets a POWERSHELL-type setting share the query the netsh path already makes
-    instead of spawning its own.
+    instead of spawning its own. ``None`` means the snapshot could not be read,
+    which says nothing about whether the property exists; ``TCP_PROPERTY_MISSING``
+    means it was read and the property is not there.
     """
     snapshot = _tcp_snapshot()
+    if snapshot is None:
+        return None
     # Snapshot keys keep the property's own casing (values are lowercased, keys
     # are not), so an exact hit first and a case-insensitive sweep as the
     # fallback rather than assuming either.
@@ -148,7 +158,7 @@ def get_tcp_property(name: str) -> str:
     return TCP_PROPERTY_MISSING
 
 
-def prefetch_tcp_settings() -> dict[str, str]:
+def prefetch_tcp_settings() -> dict[str, str] | None:
     """Populate the scan cache with the TCP snapshot."""
     return _tcp_snapshot()
 
@@ -247,7 +257,10 @@ class NetshExecutor(BaseExecutor):
         if not property_name:
             return None
 
-        return _tcp_snapshot().get(property_name)
+        # An unreadable snapshot has no answer; the caller falls through to netsh's
+        # own output, an independent read of the same state.
+        snapshot = _tcp_snapshot()
+        return None if snapshot is None else snapshot.get(property_name)
 
     def _parse_output(self, output: str, args: dict[str, Any]) -> str | None:
         """The value on the line labelled ``parse_key``, or None when no line is.

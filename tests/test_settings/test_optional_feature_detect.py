@@ -18,12 +18,14 @@ to a process each — two of the twenty-five a cold scan spawned.
 from __future__ import annotations
 
 import re
+import sys
 
 import pytest
 
 from fpstune.settings.applicability import is_absent_reading
 from fpstune.settings.executors.ps_batch import command_is_batchable
 from fpstune.settings.registry import SettingsRegistry
+from fpstune.utils.powershell import run_powershell
 
 FEATURE_SETTINGS = ("system:hyper_v", "system:vm_platform")
 
@@ -42,14 +44,17 @@ class TestItSaysWhenItCouldNotRead:
         assert setting is not None
         command = setting.detect_command
 
-        # The failure path must produce an absent reading, which detection turns
-        # into is_applicable=False, rather than one of the two real states.
-        catch = re.search(r"catch\s*\{\s*'([^']+)'\s*\}", command)
-        assert catch, f"{setting_id} has no catch clause, so a failure becomes a value again"
-        assert is_absent_reading(catch.group(1)), (
-            f"{setting_id} answers {catch.group(1)!r} when it cannot read the feature; "
-            "only an absent reading keeps that distinct from 'disabled'"
+        # The failure path raises: the row reads "unknown" with the reason. It
+        # answers an absent reading only when a readable feature list proves the
+        # feature is not on this edition (see TestAbsentOnlyWhenTheListProvesIt),
+        # never straight from the catch -- that was the same masking again, as
+        # "not applicable" instead of "disabled".
+        catch = command[command.index("catch") :]
+        assert re.search(r"\belse \{ throw \}", catch), (
+            f"{setting_id}: a failed read must end the script, not answer a value"
         )
+        assert not re.search(r"catch\s*\{\s*'[^']+'\s*\}", command)
+        assert "-ErrorAction Stop" in catch  # the list read must not swallow either
 
     def test_it_does_not_swallow_the_error_into_a_null(
         self, registry: SettingsRegistry, setting_id: str
@@ -82,3 +87,87 @@ class TestItSaysWhenItCouldNotRead:
         assert setting is not None
         assert command_is_batchable(setting.detect_command.strip())
         assert not any(key.startswith("batch_") for key in setting.detect_args)
+
+
+# ---------------------------------------------------------------------------
+# the scripts, run for real against stubbed cmdlets
+# ---------------------------------------------------------------------------
+
+
+def _stub(feature_state: str | None, listed: list[str] | None, hypervisor: bool = True) -> str:
+    """Get-WindowsOptionalFeature as a function; ``None`` state = the named read raises.
+
+    ``listed`` is the answer to the whole-list read, ``None`` meaning it raises too
+    (the unelevated case: both reads fail).
+    """
+    named = (
+        f"[pscustomobject]@{{ State = '{feature_state}' }}"
+        if feature_state is not None
+        else "throw 'The requested operation requires elevation.'"
+    )
+    whole = (
+        "throw 'The requested operation requires elevation.'"
+        if listed is None
+        else "@(" + ", ".join(f"[pscustomobject]@{{ FeatureName = '{n}' }}" for n in listed) + ")"
+    )
+    return (
+        "function Get-WindowsOptionalFeature { [CmdletBinding()] "
+        "param([switch]$Online, $FeatureName) "
+        f"if ($FeatureName) {{ {named} }} else {{ {whole} }} }}; "
+        "function Get-CimInstance { [CmdletBinding()] param($ClassName) "
+        f"[pscustomobject]@{{ HypervisorPresent = ${str(hypervisor).lower()} }} }}; "
+    )
+
+
+FEATURE_NAMES = {
+    "system:hyper_v": "Microsoft-Hyper-V",
+    "system:vm_platform": "VirtualMachinePlatform",
+}
+
+windows_only = pytest.mark.skipif(
+    sys.platform != "win32", reason="runs the shipped PowerShell text; there is none elsewhere"
+)
+
+
+@windows_only
+@pytest.mark.parametrize("setting_id", FEATURE_SETTINGS)
+class TestAbsentOnlyWhenTheListProvesIt:
+    def _detect(self, registry: SettingsRegistry, setting_id: str, stub: str) -> tuple[bool, str]:
+        setting = registry.get(setting_id)
+        assert setting is not None
+        return run_powershell(stub + setting.detect_command)
+
+    @pytest.mark.parametrize("state", ["Enabled", "Disabled"])
+    def test_a_readable_feature_is_its_own_state(
+        self, registry: SettingsRegistry, setting_id: str, state: str
+    ) -> None:
+        ok, out = self._detect(registry, setting_id, _stub(state, listed=[]))
+        assert ok, out
+        assert out.strip().splitlines()[-1] == state.lower()
+
+    def test_unreadable_both_ways_is_a_failed_read_not_a_value(
+        self, registry: SettingsRegistry, setting_id: str
+    ) -> None:
+        # Unelevated: the named read and the whole-list read both raise.
+        ok, out = self._detect(registry, setting_id, _stub(None, listed=None))
+        assert not ok, out
+        assert not is_absent_reading(out.strip())
+
+    def test_a_readable_list_that_lacks_the_feature_is_absent(
+        self, registry: SettingsRegistry, setting_id: str
+    ) -> None:
+        # An edition without the feature: the named read raises, the list is
+        # readable and proves it is not there.
+        ok, out = self._detect(registry, setting_id, _stub(None, listed=["SomethingElse"]))
+        assert ok, out
+        assert is_absent_reading(out.strip().splitlines()[-1])
+
+    def test_a_listed_feature_whose_read_failed_is_a_failed_read(
+        self, registry: SettingsRegistry, setting_id: str
+    ) -> None:
+        # The list says the feature exists, so the named read's failure is a real
+        # failure and must not be reported as absence.
+        ok, out = self._detect(
+            registry, setting_id, _stub(None, listed=[FEATURE_NAMES[setting_id]])
+        )
+        assert not ok, out

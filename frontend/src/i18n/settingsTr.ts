@@ -300,6 +300,11 @@ export const settingsTr: Record<
     description:
       "Eşzamanlı TCP bağlantısı üst sınırı. Sınıra ulaşmak yeni bağlantıları doğrudan başarısız kılar; bu da açılmayan bir başlatıcı ya da mağaza sayfası olarak görünür.",
   },
+  "network:time_wait_delay": {
+    name: "TCP TIME_WAIT süresi",
+    description:
+      "Kapanan bir TCP bağlantısının portunu ne kadar tuttuğu. Kısaltmak geç gelen bir paketin yeni bağlantıya düşmesine yol açar; UDP oynayan bir oyuna ise bir şey kazandırmaz.",
+  },
   "network:ipv6_privacy": {
     name: "IPv6 gizlilik adresleri",
     description:

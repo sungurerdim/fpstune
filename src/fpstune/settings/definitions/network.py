@@ -2126,9 +2126,51 @@ TCP_NUM_CONNECTIONS = SettingExecutor(
     value_hints={"default": "not set", "maximum": "65534"},
 )
 
-# === TCP TIME_WAIT Delay ===
-# Reduces the time closed sockets stay in TIME_WAIT state.
-# Default 120s → 30s: freed ports are reusable faster for new connections.
+# === TCP TIME_WAIT Delay — a guard ===
+# TcpTimedWaitDelay is honoured by Windows 11. fpstune 0.1.x recommended writing 30 s
+# against the stock 120 s, which lets a late packet of a closed connection land in a
+# new one and buys a UDP game nothing. That row was retired (retired.py); machines that
+# carry the value keep carrying it, so this guard puts the stock state back: stock is
+# the value absent, and applying "standard" deletes it. An explicit 120 is the same
+# behaviour and reads as standard.
+TCP_TIME_WAIT_DELAY = SettingExecutor(
+    id="network:time_wait_delay",
+    category=SettingCategory.NETWORK,
+    display_name="TCP TIME_WAIT Delay (TcpTimedWaitDelay)",
+    short_name="TIME_WAIT",
+    description="How long a closed TCP connection keeps its port reserved. Shortening it lets a late packet "
+    "land in a new connection, and a game on UDP gains nothing from it.",
+    value_type=SettingValueType.CHOICE,
+    choices=("standard", "changed"),
+    default_value="standard",
+    recommended_value="standard",
+    requires_reboot=True,
+    evidence_level="proven",
+    sources=[
+        "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/tcpip-and-nbt-configuration-parameters",
+    ],
+    current_impact="Changed: closed connections free their port early → a late packet can land in a new connection",
+    recommended_impact="Windows default: closed connections hold their port for the wait Windows chose",
+    scope=SettingScope.RECOMMENDED,
+    category_order=11,
+    effect="Removes the TcpTimedWaitDelay value so Windows manages the TIME_WAIT wait",
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={"path": TCPIP_PARAMS_KEY, "name": "TcpTimedWaitDelay", "hive": "HKLM"},
+    value_map={None: "standard", 120: "standard", "120": "standard", UNMAPPED: "changed"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": TCPIP_PARAMS_KEY,
+        "name": "TcpTimedWaitDelay",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"standard": None},  # None → delete the value (stock)
+    value_hints={"standard": "not set"},
+)
+
 # === Default TTL ===
 # Sets the initial Time-To-Live for outbound packets.
 # 64 is optimal for gaming (Linux/macOS default). Windows default is 128.
@@ -3593,6 +3635,7 @@ NETWORK_SETTINGS: list[SettingExecutor] = [
     TCP_FAST_OPEN,
     MAX_USER_PORT,
     TCP_NUM_CONNECTIONS,
+    TCP_TIME_WAIT_DELAY,
     IPV6_PRIVACY,
     IPV6_RANDOM_IDS,
     TEREDO,

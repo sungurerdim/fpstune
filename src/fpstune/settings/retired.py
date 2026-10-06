@@ -3,7 +3,7 @@
 Product Goal consequence 6: retiring a harmful tweak means guaranteeing its
 harmless value, because machines that already carry it keep carrying it. Deleting
 the row hides the harm. This module is the one record that a removal was *decided*:
-each retired id says which of five things happened to it.
+each retired id says which of four things happened to it.
 
 ``guard``      the id's control lives on as a row whose ``recommended_value`` is
                the harmless state (``== default_value``); ``target`` names it.
@@ -14,9 +14,6 @@ each retired id says which of five things happened to it.
                restore. ``reason`` records the evidence.
 ``mitigation`` limit 2: the switch cost security, so it stays retired and a guard
                restoring the mitigation (``target``) covers it.
-``undecided``  harmful or arguably harmful, honoured by Windows, and no guard row
-               yet. Owner decision pending; ``tests/test_settings/test_retired.py``
-               pins which ids may sit here so the list cannot grow silently.
 
 ``tests/test_settings/test_retired.py`` pins the registered id set in
 ``registered_ids.txt``: an id that leaves the registry without an entry here fails
@@ -33,7 +30,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Literal
 
-Kind = Literal["guard", "replaced", "no_op", "mitigation", "undecided"]
+Kind = Literal["guard", "replaced", "no_op", "mitigation"]
 
 
 @dataclass(frozen=True)
@@ -108,12 +105,12 @@ RETIRED: dict[str, Retired] = {
         "ever restored a state nothing reads.",
     ),
     "network:tcp_timed_wait_delay": Retired(
-        "undecided",
+        "guard",
         "TcpTimedWaitDelay is honoured by Windows 11 and old fpstune wrote 30 s "
-        "(stock is 120 s, key absent). Retired with the placebo sweep (b27a638) but "
-        "no guard row restores the stock value. Harm is a port-reuse reliability "
-        "trade-off, not measured; owner to decide between a guard row and a no-op "
-        "record.",
+        "against the stock 120 s (key absent). Retired with the placebo sweep "
+        "(b27a638); the guard row deletes the value so Windows' own wait applies "
+        "(owner decision 2026-10-06, consequence 6).",
+        "network:time_wait_delay",
     ),
     # --- priority: MMCSS values Microsoft documents as unused ------------------
     "priority:gpu_priority": Retired(

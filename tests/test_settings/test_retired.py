@@ -38,11 +38,6 @@ from fpstune.settings.retired import RETIRED
 SNAPSHOT = Path(__file__).with_name("registered_ids.txt")
 UPDATE_ENV = "FPSTUNE_UPDATE_REGISTERED_IDS"
 
-# Ids retired as harmful-or-arguably-so with no guard row yet. The owner decides
-# each; a new entry here is a decision someone has to defend, so it cannot appear
-# without this line changing in the same diff.
-PENDING_OWNER_DECISION = frozenset({"network:tcp_timed_wait_delay"})
-
 
 @pytest.fixture(scope="module")
 def registered() -> dict[str, SettingExecutor]:
@@ -100,8 +95,8 @@ def test_a_target_is_a_registered_row(kind: str, registered: dict[str, SettingEx
             assert entry.target in registered, f"{retired_id} -> {entry.target} is not registered"
 
 
-def test_a_no_op_and_an_undecided_entry_names_no_target() -> None:
-    wrong = [i for i, r in RETIRED.items() if r.kind in ("no_op", "undecided") and r.target]
+def test_a_no_op_entry_names_no_target() -> None:
+    wrong = [i for i, r in RETIRED.items() if r.kind == "no_op" and r.target]
     assert not wrong, f"{wrong}: a row that does not exist as a guard has no target"
 
 
@@ -118,9 +113,11 @@ def test_a_guard_only_ever_puts_the_harmless_state_back(
             )
 
 
-def test_only_the_pending_ids_are_undecided() -> None:
-    undecided = {i for i, r in RETIRED.items() if r.kind == "undecided"}
-    assert undecided == PENDING_OWNER_DECISION
+def test_a_retired_tweak_that_wrote_a_value_has_a_guard_not_an_open_question() -> None:
+    """TcpTimedWaitDelay (30 s against the stock 120 s) is honoured by Windows 11: the
+    machines old fpstune wrote it to keep carrying it, so its record is a guard."""
+    entry = RETIRED["network:tcp_timed_wait_delay"]
+    assert (entry.kind, entry.target) == ("guard", "network:time_wait_delay")
 
 
 def test_a_security_cost_switch_is_never_a_guard_free_removal() -> None:

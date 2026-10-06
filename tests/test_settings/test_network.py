@@ -235,7 +235,6 @@ class TestRetiredAndGuarded:
         [
             "network:scaling_heuristics",
             "network:qos_nla",
-            "network:tcp_timed_wait_delay",
         ],
     )
     def test_placebos_are_gone(self, retired: str) -> None:

@@ -308,6 +308,7 @@ network:tcp_num_connections
 network:tcp_timestamps
 network:teredo
 network:throttling_index
+network:time_wait_delay
 network:wifi_radio_when_wired
 perf:accessibility_popups
 perf:fast_startup

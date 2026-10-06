@@ -406,7 +406,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply and reset; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 411 `SettingExecutor` instances across 16 category files.
+- `settings/definitions/` — 412 `SettingExecutor` instances across 16 category files.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -535,7 +535,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(16 files, 411 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(16 files, 412 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

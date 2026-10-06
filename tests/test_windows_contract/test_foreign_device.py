@@ -1,11 +1,12 @@
 """A machine fpstune has never seen answers exactly like the one it was written on.
 
 #83 Phase 2, the device host: the same shipped commands, run against hosts whose
-hardware is arranged differently from the developer's — the integrated GPU
-enumerated first, adapter indices that do not start at 1, a disk layout with no
-NVMe or with nothing but NVMe. Each test says what would have gone wrong on that
-host if the command keyed on position, order or a name instead of on the device's
-own identity (C5, C9).
+hardware is arranged differently from the developer's — adapter indices that do
+not start at 1, a disk layout with no NVMe or with nothing but NVMe. Each test says
+what would have gone wrong on that host if the command keyed on position, order or
+a name instead of on the device's own identity (C5, C9). The integrated-GPU-first
+host of the MSI row is in ``tests/test_executors/test_msi_mode.py``, since that row
+is a Python action and no longer a shipped script.
 """
 
 from __future__ import annotations
@@ -18,110 +19,15 @@ from tests.test_windows_contract.conftest import run_shipped_command, run_shippe
 
 from fpstune.api.hardware import storage
 from fpstune.settings.definitions.network import create_interrupt_moderation_setting
-from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils.powershell import substitute_placeholders
 
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="Windows only")
 
-INTEL_IGPU = r"PCI\VEN_8086&DEV_46A6&SUBSYS_11471D05&REV_0C\3&11583659&0&10"
-NVIDIA_DGPU = r"PCI\VEN_10DE&DEV_2560&SUBSYS_11471D05&REV_A1\4&2F8C5A4&0&0008"
-AMD_DGPU = r"PCI\VEN_1002&DEV_73DF&SUBSYS_0E3A1002&REV_C1\4&2F8C5A4&0&0008"
 
 _FAKE = r"""
 $ErrorActionPreference = 'Stop'
 $FpsFake = Get-Content $env:FPSTUNE_FAKE_HOST -Raw | ConvertFrom-Json
 """
-
-
-# --- the discrete GPU on a hybrid machine, whichever device enumerates first ----------
-
-_GPU_PRELUDE = (
-    _FAKE
-    + r"""
-$script:Touched = New-Object System.Collections.Generic.List[string]
-function Get-PnpDevice {
-    [CmdletBinding()] param([string]$Class)
-    foreach ($id in $FpsFake.display) { [pscustomobject]@{ InstanceId = $id; Class = 'Display' } }
-}
-function Get-ItemProperty {
-    [CmdletBinding()] param([Parameter(Position = 0)][string]$Path, [string]$Name)
-    $script:Touched.Add("read:$Path")
-    if ($Path -like '*VEN_10DE*' -or $Path -like '*VEN_1002*') {
-        # fpstune wrote MSISupported=1 over an absent value (-1) when the host says
-        # so; otherwise the driver's own INF shipped it and nothing was recorded.
-        if ($FpsFake.fpstune_applied) {
-            return [pscustomobject]@{ MSISupported = 1; fpstuneOriginalMSISupported = -1 }
-        }
-        return [pscustomobject]@{ MSISupported = 1 }
-    }
-    return $null
-}
-function Test-Path { [CmdletBinding()] param([Parameter(Position = 0)][string]$Path) $true }
-function New-Item { [CmdletBinding()] param([Parameter(Position = 0)][string]$Path, [switch]$Force) }
-function Set-ItemProperty {
-    [CmdletBinding()]
-    param([Parameter(Position = 0)][string]$Path, [string]$Name, $Value, $Type, [switch]$Force)
-    $script:Touched.Add("write:$Path")
-}
-function Remove-ItemProperty {
-    [CmdletBinding()] param([Parameter(Position = 0)][string]$Path, [string]$Name, [switch]$Force)
-    $script:Touched.Add("delete:$Path")
-}
-"""
-)
-_TOUCHED = "\nWrite-Output ('TOUCHED=' + ($script:Touched -join ';'))\n"
-
-
-@pytest.fixture(scope="module")
-def msi_mode():
-    for setting in SettingsRegistry(discover_dynamic=False).get_all():
-        if "MessageSignaledInterruptProperties" in (setting.detect_command or ""):
-            return setting
-    pytest.fail("the MSI-mode setting is no longer shipped")
-
-
-def _touched(script: str, host: dict) -> list[str]:
-    answer = run_shipped_command(_GPU_PRELUDE + script + _TOUCHED, host)
-    assert answer.startswith("TOUCHED=")
-    return [entry for entry in answer[len("TOUCHED=") :].split(";") if entry]
-
-
-class TestMsiModeFindsTheDiscreteGpu:
-    def test_detect_reads_the_dgpu_key_when_the_igpu_enumerates_first(self, msi_mode) -> None:
-        """Keyed on the vendor id, so enumeration order cannot pick the wrong device.
-        A `Select-Object -First 1` over an unfiltered list would read the Intel
-        device's key here — which never carries MSISupported — and answer 'default'
-        on every hybrid laptop."""
-        host = {"display": [INTEL_IGPU, NVIDIA_DGPU], "fpstune_applied": True}
-        assert run_shipped_command(_GPU_PRELUDE + msi_mode.detect_command, host) == "enabled"
-        touched = _touched(msi_mode.detect_command, host)
-        assert touched and all("VEN_10DE" in entry for entry in touched), touched
-        assert not any("VEN_8086" in entry for entry in touched)
-
-    def test_a_driver_that_ships_msi_on_is_not_applicable_not_enabled(self, msi_mode) -> None:
-        """The dGPU key carries MSISupported=1 and fpstune never wrote it: that is the
-        driver's own stock state, so reset (which restores it) could never read back
-        as 'default'. Reporting 'enabled' here would make 'reset all' fail verify."""
-        host = {"display": [INTEL_IGPU, NVIDIA_DGPU]}
-        answer = run_shipped_command(_GPU_PRELUDE + msi_mode.detect_command, host)
-        assert answer == "already_at_hardware_default"
-
-    def test_apply_writes_only_under_the_dgpu(self, msi_mode) -> None:
-        command = substitute_placeholders(msi_mode.apply_command, value="enabled")
-        touched = _touched(command, {"display": [INTEL_IGPU, NVIDIA_DGPU]})
-        writes = [entry for entry in touched if entry.startswith("write:")]
-        assert writes and all("VEN_10DE" in entry for entry in writes), touched
-        assert not any("VEN_8086" in entry for entry in touched)
-
-    def test_an_amd_card_is_found_by_the_same_rule(self, msi_mode) -> None:
-        touched = _touched(msi_mode.detect_command, {"display": [INTEL_IGPU, AMD_DGPU]})
-        assert touched and all("VEN_1002" in entry for entry in touched), touched
-
-    def test_an_intel_only_machine_is_not_supported_and_untouched(self, msi_mode) -> None:
-        """No discrete GPU: the sentinel, and no key of the iGPU is ever opened."""
-        host = {"display": [INTEL_IGPU]}
-        assert run_shipped_command(_GPU_PRELUDE + msi_mode.detect_command, host) == "not_supported"
-        assert _touched(msi_mode.detect_command, host) == []
 
 
 # --- an adapter is addressed by its own index, whatever the order or the numbering ----

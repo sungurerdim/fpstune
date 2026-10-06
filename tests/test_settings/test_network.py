@@ -482,26 +482,21 @@ def test_detect_reads_every_spelling_apply_writes(factory: object, keyword: str)
     assert f"'*{keyword}','{keyword}'" in setting.apply_command.replace("@(", "").replace(")", "")
 
 
-def test_msi_default_restores_what_was_there_instead_of_deleting() -> None:
+def test_msi_default_is_the_drivers_inf_value_not_a_recorded_one() -> None:
     """Many NIC INFs set MSISupported=1 themselves. Reset used to delete the value,
-    which switched message-signalled interrupts *off* on that hardware."""
-    command = create_msi_mode_setting(5, "Ethernet").apply_command
-    branches = command.split("} elseif (", 1)
-    assert len(branches) == 2
-    enable, restore = branches
-    # The first enabling write keeps the prior value (or -1 for "absent")...
-    assert "fpstuneOriginalMSISupported" in enable
-    # ...and default deletes MSISupported only when it was absent before.
-    assert "$null -ne $cur.fpstuneOriginalMSISupported" in restore
-    assert "if ($was -eq -1) { Remove-ItemProperty" in restore
+    which switched message-signalled interrupts *off* on that hardware; then it restored
+    a stashed original. It now writes what the adapter's own INF installs."""
+    setting = create_msi_mode_setting(5, "Ethernet")
+    assert setting.apply_command == "msi_mode_write"
+    assert "Original" not in setting.apply_command + setting.detect_command
 
 
-def test_msi_finds_its_device_by_pnp_id_not_display_name() -> None:
+def test_msi_finds_its_device_by_interface_index_not_display_name() -> None:
     """Two identical NICs share a FriendlyName; the first match was the wrong one."""
     setting = create_msi_mode_setting(5, "Ethernet")
-    for command in (setting.detect_command, setting.apply_command):
-        assert "FriendlyName" not in command
-        assert "$a.PnPDeviceID" in command
+    for args in (setting.detect_args, setting.apply_args):
+        assert args == {"device": "nic", "ifindex": 5}
+    assert "Ethernet" not in repr(setting.apply_args)
 
 
 class TestIpv6ResolversFollowTheChoice:

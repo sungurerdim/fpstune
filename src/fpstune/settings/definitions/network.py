@@ -3083,12 +3083,6 @@ def create_rss_base_processor_setting(
     )
 
 
-_MSI_KEY = (
-    '$rp = "HKLM:\\SYSTEM\\CurrentControlSet\\Enum\\$($a.PnPDeviceID)\\Device Parameters'
-    '\\Interrupt Management\\MessageSignaledInterruptProperties"; '
-)
-
-
 def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingExecutor:
     """Create a Message-Signaled Interrupts (MSI) setting for a specific adapter.
 
@@ -3133,57 +3127,20 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
         category_order=27,
         effect="Enables MSI/MSI-X interrupt delivery for the network adapter",
         impact_scores={"latency_ms": -1.0, "stability": "high"},
+        # Python detector and action, not scripts (executors/msi_mode.py). The device
+        # is the adapter's own PnP instance, found from its interface index (never a
+        # display-name match: two identical NICs share a FriendlyName). "default" is
+        # the value the device's driver INF installs, read at run time
+        # (settings/inf_defaults.py); many NIC INF files set MSISupported=1 themselves,
+        # and on those "default" is "enabled" so the row is not applicable. Nothing is
+        # recorded about what fpstune overwrote (C6).
         detect_type=DetectType.POWERSHELL,
-        # The device is the adapter's own PnP device id, never a display-name
-        # match (two identical NICs share a FriendlyName).
-        detect_command=(
-            "try { "
-            "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            + _MSI_KEY
-            + "$p = Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue; "
-            # The driver's stock value: what fpstune recorded before its first
-            # write (-1 = absent), else what is there now. Many NIC INF files
-            # set MSISupported=1 themselves; on those "default" is "enabled",
-            # so there is nothing to tune and reset can never read 'default'.
-            "$stock = if ($null -ne $p.fpstuneOriginalMSISupported) "
-            "{ [int]$p.fpstuneOriginalMSISupported } elseif ($null -ne $p.MSISupported) "
-            "{ [int]$p.MSISupported } else { -1 }; "
-            "if ($stock -eq 1) { 'already_at_hardware_default' } "
-            "elseif ($p.MSISupported -eq 1) { 'enabled' } else { 'default' } "
-            "} catch { 'not_supported' }"
-        ),
-        detect_args={"ifindex": interface_index},
+        detect_command="msi_mode_status",
+        detect_args={"device": "nic", "ifindex": interface_index},
         value_map={},
         apply_type=DetectType.POWERSHELL,
-        # Many drivers' INF files set MSISupported themselves, so "default" is
-        # not "no value": deleting it switched MSI off on hardware that shipped
-        # with it on. The first enabling write records what was there; default
-        # puts exactly that back, and does nothing on a device fpstune never wrote.
-        apply_command=(
-            "try { "
-            "$a = Get-NetAdapter -InterfaceIndex %ifindex% -ErrorAction Stop; "
-            + _MSI_KEY
-            + "$cur = (Get-ItemProperty -Path $rp -ErrorAction SilentlyContinue); "
-            "if ('%value%' -eq 'enabled') { "
-            # -EA Stop on every write: under Enum\<device> Windows often lets
-            # only SYSTEM write, and a refused write was a non-terminating error
-            # the catch never saw — apply said ok, verify read the old value.
-            "if (-not (Test-Path $rp)) { New-Item -Path $rp -Force -EA Stop | Out-Null }; "
-            "if ($null -eq $cur.fpstuneOriginalMSISupported) { "
-            "$was = if ($null -eq $cur.MSISupported) { -1 } else { [int]$cur.MSISupported }; "
-            "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' -Value $was "
-            "-Type DWord -Force -EA Stop }; "
-            "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value 1 -Type DWord -Force -EA Stop "
-            "} elseif ($null -ne $cur.fpstuneOriginalMSISupported) { "
-            "$was = [int]$cur.fpstuneOriginalMSISupported; "
-            "if ($was -eq -1) { Remove-ItemProperty -Path $rp -Name 'MSISupported' "
-            "-ErrorAction SilentlyContinue } "
-            "else { Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was -Type DWord -Force -EA Stop }; "
-            "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported' "
-            "-ErrorAction SilentlyContinue }; 'ok' "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
-        apply_args={"ifindex": interface_index},
+        apply_command="msi_mode_write",
+        apply_args={"device": "nic", "ifindex": interface_index},
         apply_value_map={},
     )
 

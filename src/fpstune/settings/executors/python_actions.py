@@ -21,6 +21,7 @@ from fpstune.settings.applicability import NOT_AVAILABLE
 from fpstune.settings.base import Reading
 from fpstune.settings.executors.bnet_config import bnet_config_read, bnet_config_write
 from fpstune.settings.executors.game_ini import game_ini_read, game_ini_write
+from fpstune.settings.executors.msi_mode import msi_mode_status, msi_mode_write
 from fpstune.settings.executors.steam_config import steam_vdf_read, steam_vdf_write
 from fpstune.utils.winapi.memory import purge_standby_list
 
@@ -164,6 +165,7 @@ PYTHON_ACTIONS: dict[str, PythonAction] = {
     "bnet_config_write": bnet_config_write,
     "steam_vdf_write": steam_vdf_write,
     "game_ini_write": game_ini_write,
+    "msi_mode_write": msi_mode_write,
 }
 
 
@@ -302,6 +304,7 @@ PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "bnet_config_read": bnet_config_read,
     "steam_vdf_read": steam_vdf_read,
     "game_ini_read": game_ini_read,
+    "msi_mode_status": msi_mode_status,
     "wifi_link_quality": wifi_link_quality,
     "wifi_security": wifi_security,
 }

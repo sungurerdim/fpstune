@@ -1,56 +1,49 @@
-"""MSI mode's apply must report a refused write instead of saying 'ok'.
+"""The MSI rows reset to the driver's INF default and keep no record of what they overwrote.
 
-The failure this guards: New-Item and Set-ItemProperty raise non-terminating
-errors, so a write Windows refused never reached the script's catch, the script
-printed 'ok', and the row failed verify with no reason anyone could act on.
+The failure this guards: the earlier design stashed each device's prior MSISupported in
+the registry as ``fpstuneOriginalMSISupported`` and reset restored it. A stored previous
+value is a second way back (C6); reset now derives the driver's own default from the
+installed INF and writes that. What each reading and write does is proven in
+``tests/test_executors/test_msi_mode.py``; this file pins that the shipped rows are wired
+to those actions and carry no script that could bring the stash back.
 """
 
 from __future__ import annotations
 
-import re
+import pytest
 
+from fpstune.settings.base import SettingExecutor
 from fpstune.settings.definitions.gpu import GPU_HARDWARE_SETTINGS
+from fpstune.settings.definitions.network import create_msi_mode_setting
+from fpstune.settings.executors.python_actions import PYTHON_ACTIONS, PYTHON_DETECTORS
 
-MSI = next(s for s in GPU_HARDWARE_SETTINGS if s.id == "gpu-hardware:msi_mode")
-
-
-def test_every_registry_write_stops_on_error() -> None:
-    script = MSI.apply_command
-    for cmdlet in ("New-Item", "Set-ItemProperty", "Remove-ItemProperty"):
-        for call in re.findall(rf"{cmdlet} [^;{{}}]*", script):
-            assert "-ErrorAction Stop" in call, call
+GPU_MSI = next(s for s in GPU_HARDWARE_SETTINGS if s.id == "gpu-hardware:msi_mode")
+NIC_MSI = create_msi_mode_setting(7, "Ethernet")
 
 
-def test_a_permission_refusal_is_named_by_exception_type_not_message() -> None:
-    script = MSI.apply_command
-    assert (
-        "catch [System.UnauthorizedAccessException], [System.Security.SecurityException]" in script
-    )
-    assert "'error:Windows refused the registry write (access denied)'" in script
+@pytest.mark.parametrize("setting", [GPU_MSI, NIC_MSI], ids=lambda s: s.id)
+def test_the_row_is_a_python_detector_and_action_pair(setting: SettingExecutor) -> None:
+    assert setting.detect_command in PYTHON_DETECTORS
+    assert setting.apply_command in PYTHON_ACTIONS
 
 
-def test_detect_reads_the_drivers_stock_value_not_just_the_current_one() -> None:
-    from fpstune.settings.applicability import ALREADY_AT_HARDWARE_DEFAULT
+@pytest.mark.parametrize("setting", [GPU_MSI, NIC_MSI], ids=lambda s: s.id)
+def test_no_script_remains_that_could_record_or_restore_a_previous_value(
+    setting: SettingExecutor,
+) -> None:
+    for text in (setting.detect_command, setting.apply_command, repr(setting.apply_args)):
+        assert "Original" not in text
+        assert "Set-ItemProperty" not in text
+        assert "Remove-ItemProperty" not in text
 
-    script = MSI.detect_command
-    # Modern GPU INFs set MSISupported=1 themselves: "default" is "enabled" there,
-    # so reset can never read back as 'default' and the row is not applicable.
-    assert "fpstuneOriginalMSISupported" in script
-    assert f"if ($stock -eq 1) {{ '{ALREADY_AT_HARDWARE_DEFAULT}' }}" in script
+
+def test_the_gpu_row_addresses_the_gpu_and_the_nic_row_its_own_interface() -> None:
+    assert GPU_MSI.detect_args == GPU_MSI.apply_args == {"device": "gpu"}
+    assert NIC_MSI.detect_args == NIC_MSI.apply_args == {"device": "nic", "ifindex": 7}
 
 
-def test_apply_records_the_original_and_default_restores_it_instead_of_deleting() -> None:
-    script = MSI.apply_command
-    enable, _, default = script.partition("} elseif ($null -ne $cur.fpstuneOriginalMSISupported)")
-    # Enabling records what was there (-1 = absent) before its first write.
-    assert "Set-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported'" in enable
-    # Default puts the recorded value back; with nothing recorded it writes nothing,
-    # so a driver-shipped MSISupported=1 is never forced to line-based interrupts.
-    assert "$was = [int]$cur.fpstuneOriginalMSISupported" in default
-    assert "Set-ItemProperty -Path $rp -Name 'MSISupported' -Value $was" in default
-    assert "Remove-ItemProperty -Path $rp -Name 'fpstuneOriginalMSISupported'" in default
-    # The unconditional delete is gone: removal only happens when the recorded
-    # original was "absent".
-    assert default.index("$was -eq -1") < default.index(
-        "Remove-ItemProperty -Path $rp -Name 'MSISupported'"
-    )
+def test_reset_is_still_the_only_way_back_to_default() -> None:
+    for setting in (GPU_MSI, NIC_MSI):
+        assert setting.choices == ("default", "enabled")
+        assert setting.default_value == "default"
+        assert setting.recommended_value == "enabled"

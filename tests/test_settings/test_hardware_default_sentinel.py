@@ -34,8 +34,11 @@ def test_receive_buffers_reports_a_driver_default_at_its_maximum() -> None:
     assert f"'{ALREADY_AT_HARDWARE_DEFAULT}'" in script
 
 
-def test_msi_mode_reads_the_drivers_stock_value_not_just_the_current_one() -> None:
-    script = create_msi_mode_setting(7, "Wi-Fi").detect_command
-    # The stock value is fpstune's recorded original when it wrote, else today's.
-    assert "fpstuneOriginalMSISupported" in script
-    assert f"if ($stock -eq 1) {{ '{ALREADY_AT_HARDWARE_DEFAULT}' }}" in script
+def test_msi_mode_reads_the_drivers_stock_value_from_its_inf() -> None:
+    from fpstune.settings.executors.python_actions import PYTHON_DETECTORS
+
+    setting = create_msi_mode_setting(7, "Wi-Fi")
+    # The stock value is what the driver's INF installs; the sentinel itself is
+    # produced (and its conditions proven) in tests/test_executors/test_msi_mode.py.
+    assert setting.detect_command in PYTHON_DETECTORS
+    assert is_absent_reading(ALREADY_AT_HARDWARE_DEFAULT)

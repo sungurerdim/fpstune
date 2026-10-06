@@ -143,6 +143,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     threading.Thread(
         target=registry_cache.warm_registry, daemon=True, name="registry-warmup"
     ).start()
+    # An earlier release stashed each device's prior MSISupported in its registry
+    # key; reset now derives the default from the driver INF, so the leftover is
+    # deleted on every device that still carries it.
+    # Not under pytest: a test that opens the app must never delete a real value.
+    if not _running_under_pytest():
+        from fpstune.settings.executors.msi_mode import remove_retired_stash
+
+        threading.Thread(target=remove_retired_stash, daemon=True, name="msi-stash-cleanup").start()
     # Start monitor hot-plug polling (15s interval, daemon thread)
     from fpstune.utils.hardware_manager import hardware_manager as _hw_mgr
 

@@ -11,7 +11,7 @@ line that dies in debug output.
 
 Runs on demand (the API route) and once before the first apply on a machine
 fpstune has not checked — a wrong detection is worth finding *before* the
-first write derives from it. The report persists next to the originals store,
+first write derives from it. The report persists in the per-user state directory,
 so "was this machine ever checked" survives restarts.
 """
 

@@ -49,8 +49,8 @@ if TYPE_CHECKING:
 
 logger = get_logger()
 
-# Beside originals.json — the same per-user state directory, and the same reason:
-# it describes this machine and must not travel with the install.
+# In the per-user state directory: it describes this machine and must not travel
+# with the install.
 HEADROOM_PATH = Path.home() / ".fpstune" / "headroom.json"
 
 # A measurement older than this is not evidence any more. Drivers change, the

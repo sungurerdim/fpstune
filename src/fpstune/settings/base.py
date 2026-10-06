@@ -598,8 +598,7 @@ class SettingExecutor:
     # A guard's "changed" or "mismatched" is something another tool did; its
     # command only ever puts the harmless state back. Where the apply map does
     # not say so by omission (a command that ignores the value, or one that
-    # refuses it), the setting names those states here, so no path - an undo of a
-    # recorded original above all - asks it to write one.
+    # refuses it), the setting names those states here, so no path asks it to write one.
     unwritable_values: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:

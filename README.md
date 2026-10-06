@@ -199,9 +199,8 @@ uv run ruff check src tests
 | `/api/settings/definitions` | GET | All setting definitions. Includes the per-adapter settings discovered from your hardware, so the registry is built once at startup in the background — the request itself is instant unless it beats that warm-up |
 | `/api/settings/detect` | POST | Parallel detection of all settings (empty body) |
 | `/api/settings/{id}/apply` | POST | Apply a value, detect, verify |
-| `/api/settings/{id}/reset` | POST | Write the Windows stock `default_value`, detect, verify |
-| `/api/settings/{id}/undo` | POST | Write what this machine held when fpstune first saw it; 409 if unrecorded |
-| `/api/settings/{id}/verify` | POST | Detect only — `{matches, current_value, expected_value, target}`; `target` picks `recommended` (default), `default`, or `original` |
+| `/api/settings/{id}/reset` | POST | Write the setting's own default (Windows, driver or game), detect, verify |
+| `/api/settings/{id}/verify` | POST | Detect only — `{matches, current_value, expected_value, target}`; `target` picks `recommended` (default) or `default` |
 | `/api/settings/bulk/apply` | POST | Parallel bulk apply of a `{id: value}` map |
 | `/api/settings/bulk/stream-apply` | POST | Sequential SSE bulk apply (per-setting events) |
 | `/api/settings/bulk/stream-reset` | POST | Sequential SSE bulk reset (per-setting events) |
@@ -309,21 +308,16 @@ silently discarding fifty-six is saying something false with true arithmetic.
 
 ## Safety
 
-1. **System Restore Points** — created before any operation that writes: apply, reset and undo alike
+1. **System Restore Points** — created before any operation that writes: apply and reset alike
 2. **Verify after Apply** — every apply is followed by detection to confirm the change took effect, so a write that silently failed is reported rather than assumed
-3. **Two different ways back**, because they are different promises:
-   - **Restore the Windows default** — writes the curated stock value
-   - **Undo fpstune's change** — writes what *your* machine held when fpstune first saw the setting. On a machine that deliberately ran something non-stock, a reset would discard that choice; this does not.
+3. **One way back: reset to default** — each setting returns to its own domain's default: Windows stock for system settings, the driver's own default for hardware, the game's own default for game settings. The button says which and shows the value; a default that cannot be derived is not invented.
 4. **Protected Services** — critical services cannot be disabled
 5. **Applicability checks** — NVIDIA tweaks hidden on AMD systems; a setting whose feature is absent from your hardware is not offered at all
 6. **Advanced tweaks** show alongside the rest with an inline `risk_warning` badge
 
-Originals are recorded by the first scan that reads a setting, and never
-overwritten, so they survive restarts. The honest limit: if you tweaked a setting
-with an earlier fpstune release and only then ran this one, what it recorded is
-the already-tweaked value — it remembers what it saw, not what was true before
-anything ever ran. Undo is offered only where there is a recorded original that
-differs from the current value.
+fpstune stores no previous values and no history on disk. The History tab lists
+what this session did, from memory; start-up deletes the `originals.json` and
+`history.json` that earlier releases kept.
 
 There is no file-level backup manifest — earlier versions of this README
 described one, and it was never implemented.
@@ -352,7 +346,7 @@ Metrics: avg FPS, 1% low, 0.1% low, frame time std-dev, stutter count.
 ```
 src/fpstune/
   api/              FastAPI backend
-    routes/         settings.py + settings_stream.py (apply/reset/undo/verify, SSE bulk),
+    routes/         settings.py + settings_stream.py (apply/reset/verify, SSE bulk),
                     system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
     definitions/    16 category files producing the 411 settings in 13 categories —
@@ -364,7 +358,7 @@ src/fpstune/
     applicability.py  HardwareContext filtering + values_equal()
     base.py         SettingExecutor schema (risk_level, evidence_level, impact_scores)
   core/             DISM, NVIDIA driver settings (NVAPI), power profiles
-  safety/           System Restore points + per-machine originals (what undo writes back)
+  safety/           System Restore points + this session's history (in memory)
   benchmark/        PresentMon, FurMark, DPC latency, the suite, claim verification
   commands/         the CLI surface (status, gpu, benchmark, fps, cleanup, ...)
   utils/            Hardware detection, admin check, logging, PowerShell runner

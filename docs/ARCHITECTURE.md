@@ -35,10 +35,10 @@ JSON response -> React Query refetch -> UI refresh
 ### `api/` — HTTP surface
 
 - `main.py` — FastAPI app factory, lifespan, CORS, static UI mount, /health
-- `routes/settings.py` — list / detect / apply / reset / undo / verify
+- `routes/settings.py` — list / detect / apply / reset / verify
 - `routes/settings_stream.py` — the SSE bulk apply and bulk reset
 - `routes/settings_apply.py` — no router; the one place a setting's command runs
-  for apply, reset and undo
+  for apply and reset
 - `routes/system.py` plus `system_network.py`, `system_audio.py`,
   `system_power.py`, `system_storage.py`, `system_common.py` — hardware info,
   split by subsystem
@@ -107,10 +107,10 @@ JSON response -> React Query refetch -> UI refresh
 
 ### `safety/` — Reversible state
 
-- `originals.py` — the first value this machine was seen holding, per setting
-  (`~/.fpstune/originals.json`). Recorded by the full scan only, first write
-  wins, and it is what `undo` writes back — a different promise from `reset`,
-  which writes the curated stock value. The two must never collapse into one.
+- `history.py` — this session's journal of what fpstune wrote, in memory only.
+  fpstune stores no previous values and no history on disk; the one way back is
+  reset to each domain's own default (Windows, driver or game). Start-up deletes
+  the retired `~/.fpstune/originals.json` and `~/.fpstune/history.json`.
 - `restore.py` — Windows System Restore Point (PowerShell + WMIC paths)
 
 ### `benchmark/` — what this machine actually did
@@ -166,7 +166,7 @@ stays on the API path so every write is verified.
   - `HomeTab`, `SettingsTab`, `HardwareTab`, `GameTweaksTab`,
     `DiskCleanupTab`, `BenchmarksTab` — one per tab
   - `TweakSetting`, `TweakRows`, `TweakListRow` — the settings list
-  - `ScopeActions` (Apply / Undo / Windows default for any scope) and
+  - `ScopeActions` (Apply / Reset to default for any scope) and
     `TweakBands` (the one needs/ideal drawing), shared by every page
   - `HardwarePanel` plus the `hardware/` package it composes (`DeviceCard`,
     `devices.ts` — one card per device instance, read by Hardware and Home —
@@ -220,7 +220,7 @@ stays on the API path so every write is verified.
 3. Tooltip text standardization
 4. English-only strings
 5. Stable hardware IDs (PNPDeviceID, UniqueId, InstanceId)
-6. Apply/Reset/Verify correctness — reset and undo are different promises
+6. Apply/Reset/Verify correctness — one way back: reset to the domain's own default
 7. Optimal caching per data type
 8. Single-setting tweaks (no compound mutations)
 9. Machine-neutral: nothing about the developer's machine or account

@@ -27,7 +27,7 @@ def adapter_key(instance_id: str) -> str:
 
     Derived from the adapter's PnP device id (C5), which survives a reboot, a
     driver reinstall and a USB replug — the interface index does not, so an
-    index-keyed undo record could be restored onto a different adapter. Hashed
+    index-keyed selection could land on a different adapter. Hashed
     because the raw id carries backslashes and ampersands, and the setting id
     travels in URL paths.
     """
@@ -41,7 +41,7 @@ def keyed_to_adapter(
     """``setting`` with its id moved from the interface index to the adapter key.
 
     The factories address commands by interface index, which is right for this
-    session; the id is what is stored (undo records, selections), so it must not
+    session; the id is what is stored (selections), so it must not
     depend on that index. The adapter's name rides along as ``subject``: two
     adapters register the same setting, and a translated name must still say
     which one a row is.
@@ -1013,8 +1013,8 @@ DNS_OVER_HTTPS = SettingExecutor(
         "Remove-Item -LiteralPath $key -Recurse -Force -ErrorAction SilentlyContinue; $done++ "
         "} } } }; "
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
-        # Turning it off has nothing to do once no entry is left (an undo of this
-        # same setting removed them), and detect reads that state as `disabled`;
+        # Turning it off has nothing to do once no entry is left (an earlier run
+        # removed them), and detect reads that state as `disabled`;
         # only enabling can find "nothing to enable".
         "if ($done -gt 0 -or '%value%' -ne 'enabled') { 'ok' } "
         "elseif ($unknown -gt 0) { 'error:no DoH template known for the configured resolvers' } "
@@ -3204,7 +3204,7 @@ def create_msi_mode_setting(interface_index: int, display_name: str) -> SettingE
 # so the setting now only ever enables. Machines that ran the old tweak keep a
 # disabled radio until something turns it back on; this is that something.
 #
-# The id is kept so originals recorded under it stay attributable.
+# The id is kept so a stored selection under it still resolves.
 #
 # Finding the Wi-Fi adapter, shared by detect and apply so they cannot disagree.
 #
@@ -3268,8 +3268,8 @@ NETWORK_WIFI_RADIO_WHEN_WIRED = SettingExecutor(
     ),
     apply_args={},
     apply_value_map={},
-    # What the command above refuses, so an undo of a recorded "radio_off" is
-    # declined up front instead of by the script after the restore point is made.
+    # What the command above refuses, so a write of "radio_off" is declined up
+    # front instead of by the script after the restore point is made.
     unwritable_values=("radio_off", "not_applicable"),
 )
 

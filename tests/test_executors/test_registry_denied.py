@@ -14,7 +14,6 @@ from unittest.mock import patch
 
 import pytest
 
-from fpstune.safety.raw_state import restore
 from fpstune.settings.definitions import get_all_static_settings
 from fpstune.settings.executors.registry import RegistryExecutor
 
@@ -47,25 +46,12 @@ class TestElevated:
         assert "protects this key" in error
 
     def test_a_refused_delete_names_the_key_too(self, widgets) -> None:
-        """Reset and undo of widgets delete the policy value."""
+        """Reset of widgets deletes the policy value."""
         with (
             patch("fpstune.utils.admin.is_admin", return_value=True),
             patch("winreg.OpenKey", side_effect=_refused),
         ):
             ok, error = RegistryExecutor().apply(widgets, "enabled")
-
-        assert ok is False
-        assert error is not None
-        assert _TARGET in error
-        assert "run as administrator" not in error
-
-    def test_an_undo_restoring_a_recorded_value_says_the_same(self, widgets) -> None:
-        raw = {"kind": "registry", "present": True, "value": 1, "type": 4}
-        with (
-            patch("fpstune.utils.admin.is_admin", return_value=True),
-            patch("winreg.CreateKeyEx", side_effect=_refused),
-        ):
-            ok, error = restore(widgets, raw)
 
         assert ok is False
         assert error is not None

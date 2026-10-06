@@ -22,12 +22,7 @@ from fastapi import APIRouter, HTTPException
 
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
-from fpstune.api.routes.settings_apply import (
-    apply_and_finalize,
-    offered_original,
-    undo_refusal,
-    undo_single_setting,
-)
+from fpstune.api.routes.settings_apply import apply_and_finalize
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -44,7 +39,6 @@ from fpstune.api.schemas import (
 )
 from fpstune.safety import restore
 from fpstune.safety.history import ACTION_FOR_LABEL, get_change_journal
-from fpstune.safety.originals import get_original_values
 from fpstune.settings import (
     DetectionEngine,
     SettingsRegistry,
@@ -212,13 +206,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     total_time_ms = int((time.perf_counter() - start) * 1000)
     settings_map = {s.id: s for s in settings}
 
-    # Remember what the machine held the first time fpstune saw each setting, so
-    # "undo fpstune's change" has something to write. Only the full scan records:
-    # a re-detect of named settings runs right after an apply, and recording
-    # there would capture fpstune's own write as the "original" (C6).
-    if not request.setting_ids and not request.category:
-        await asyncio.to_thread(_record_originals, results, settings_map)
-
     # Convert to response
     response_results: dict[str, DetectionResultResponse] = {}
     success_count = error_count = 0
@@ -235,7 +222,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
             is_applicable=result.is_applicable,
             applicable_reason=result.applicable_reason,
             recommended_value=setting_obj.recommended_value if setting_obj else None,
-            original_value=offered_original(setting_obj) if setting_obj else None,
             finding=result.finding,
         )
         if result.success:
@@ -249,39 +235,6 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
         success_count=success_count,
         error_count=error_count,
     )
-
-
-def _record_originals(results: dict[str, Any], settings: dict[str, SettingExecutor]) -> None:
-    """Store the first reading of each setting, for "undo fpstune's change".
-
-    Skipped: a setting that was not applicable or could not be read (recording
-    None would promise an undo that writes nothing), and actions and advisories,
-    whose reading ("ready|1.2 GB") is a status, not a state an undo could put
-    back. Alongside the display value the stored state itself is captured where
-    it can be (safety/raw_state.py), so undo restores it exactly. Failure here
-    is logged and swallowed: a scan must not fail over the undo record.
-    """
-    from fpstune.safety.raw_state import capture
-
-    try:
-        store = get_original_values()
-        readings = {
-            setting_id: result.value
-            for setting_id, result in results.items()
-            if result.is_applicable
-            and result.value is not None
-            and result.error is None
-            and (setting := settings.get(setting_id)) is not None
-            and not setting.is_action
-            and not setting.is_readonly
-            and store.get(setting_id) is None
-        }
-        raw = {sid: state for sid in readings if (state := capture(settings[sid])) is not None}
-        added = store.record_first_seen(readings, raw)
-        if added:
-            logger.debug("recorded %d setting(s) as first seen", added)
-    except Exception as exc:  # pragma: no cover - a store failure is not a scan failure
-        logger.warning("could not record original values: %s", exc)
 
 
 @dataclass(frozen=True)
@@ -418,7 +371,7 @@ def _verify_setting_applied(
 def _record_change(setting: SettingExecutor, activity_label: str, value: Any) -> None:
     """Put a landed, verified write on the change history (safety/history.py).
 
-    Here because every apply, reset and undo ends in `_finalize_apply_response`,
+    Here because every apply and reset ends in `_finalize_apply_response`,
     so no write can bypass the record. Actions and advisories change nothing
     that can be put back, so they are not history.
     """
@@ -913,54 +866,6 @@ async def reset_setting(setting_id: str) -> ApplyResponse:
     return await asyncio.to_thread(_reset)
 
 
-@router.post("/{setting_id}/undo", response_model=ApplyResponse)
-async def undo_setting(setting_id: str) -> ApplyResponse:
-    """Put a setting back to what this machine held when fpstune first saw it.
-
-    Distinct from ``/reset``, which writes the curated Windows stock value. The
-    two agree on a machine that was stock to begin with and disagree on one that
-    deliberately ran something else — and on that machine a reset silently
-    discards the user's own configuration, which is what this exists to avoid.
-
-    Answers 409 when nothing was recorded, rather than falling back to the
-    default: quietly doing a reset under the name "undo" would be exactly the
-    conflation this endpoint was added to end.
-    """
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    if setting.is_action or setting.is_readonly:
-        raise HTTPException(
-            400,
-            f"{setting_id} is an action or an advisory; there is no earlier state to put back.",
-        )
-
-    refusal = undo_refusal(setting)
-    if refusal is not None:
-        raise HTTPException(409, refusal)
-
-    hardware_context, is_applicable, reason = await _context_and_applicability(setting)
-    if not is_applicable:
-        return ApplyResponse(
-            setting_id=setting_id,
-            success=False,
-            error=reason or "Setting not applicable to this system",
-            new_value=None,
-            requires_reboot=False,
-        )
-
-    # Undo mutates system state exactly like apply and reset, so it gets the
-    # same rollback safety net.
-    if sys.platform == "win32":
-        await asyncio.to_thread(_ensure_restore_point)
-
-    _, response = await asyncio.to_thread(undo_single_setting, setting, hardware_context)
-    return response
-
-
 @router.post("/{setting_id}/verify", response_model=VerifyResponse)
 async def verify_setting(setting_id: str, request: VerifyRequest | None = None) -> VerifyResponse:
     """Read a setting and report whether it holds the value asked about.
@@ -979,7 +884,6 @@ async def verify_setting(setting_id: str, request: VerifyRequest | None = None) 
 
       ``recommended``  is it at the value fpstune advises (default)
       ``default``      is it at the Windows stock value, i.e. did a reset land
-      ``original``     is it back to what fpstune first found, i.e. did an undo land
 
     Does not modify any system state.
     """
@@ -992,14 +896,6 @@ async def verify_setting(setting_id: str, request: VerifyRequest | None = None) 
     target = (request.target if request else None) or "recommended"
     if target == "default":
         expected: Any = setting.default_value
-    elif target == "original":
-        expected = get_original_values().get(setting_id)
-        if expected is None:
-            raise HTTPException(
-                409,
-                f"fpstune has no record of what {setting_id} held before it was changed, "
-                "so there is nothing to verify against.",
-            )
     else:
         expected = setting.recommended_value
 

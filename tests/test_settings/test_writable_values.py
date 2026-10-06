@@ -1,7 +1,8 @@
 """A setting can only be told to write a state fpstune is able to write.
 
-Four real-machine undo failures shared one cause: the recorded original was a
-label the writer could not turn into a stored value.
+Four real-machine write-back failures (from the retired undo, #103) shared one
+cause: the label being written back was one the writer could not turn into a
+stored value.
 
   * `priority:win32_priority_separation` recorded "gaming" and `network:qos_bandwidth`
     recorded "disabled" — labels an earlier release declared and this one does not,

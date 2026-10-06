@@ -3,8 +3,7 @@
 The defect this file exists for: the buffer settings' "default" choice wrote
 ``max(NumericParameterMinValue, 256)`` — a third thing, neither this driver's
 default nor its maximum, so reset put the machine into a state it never held.
-C6's split is reset = curated stock, undo = this machine's own prior value;
-a constant is neither. The shipped command now writes the driver's own
+Reset = the driver's own stock; a constant is not that. The shipped command now writes the driver's own
 ``DefaultRegistryValue`` and fails loudly on a driver that publishes none —
 an invented stock value must not pass as a reset.
 """

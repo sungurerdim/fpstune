@@ -80,7 +80,6 @@ _OPERATION_COLORS: dict[str, str] = {
     "VERIFY": _Colors.BRIGHT_CYAN,
     "DETECT": _Colors.BRIGHT_BLUE,
     "RESET": _Colors.YELLOW,
-    "UNDO": _Colors.BRIGHT_YELLOW,
     "SCAN": _Colors.CYAN,
     "CLEANUP": _Colors.GREEN,
 }

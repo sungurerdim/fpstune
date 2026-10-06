@@ -131,19 +131,20 @@ Exception: `InterfaceIndex` OK for netsh commands (command-only, not ID storage)
 
 Single-setting endpoints:
 - `POST /settings/{id}/apply` — apply, detect, verify
-- `POST /settings/{id}/reset` — write `default_value` (Windows stock), detect, verify
-- `POST /settings/{id}/undo` — write the recorded original, detect, verify, then forget it;
-  409 when nothing was recorded (never falls back to reset)
+- `POST /settings/{id}/reset` — write `default_value`, detect, verify
 - `POST /settings/{id}/verify` — detect only → `VerifyResponse{matches, current_value, expected_value, target}`;
-  `target` ∈ `recommended` (default) | `default` | `original` names which question was asked
+  `target` ∈ `recommended` (default) | `default` names which question was asked
 - `POST /settings/bulk/stream-{apply,reset}` — sequential SSE, events started/applied/verified/failed/done
 
-Reset and undo are different promises and must never collapse into one: reset writes
-the curated stock value, undo writes what this machine held; they agree only on a
-machine that was stock to begin with. Originals are recorded by the **full scan**
-(`POST /settings/detect`) and never by a single re-detect, which runs after an apply
-and would capture fpstune's own write. First write wins; `safety/originals.py`
-persists to `~/.fpstune/originals.json`.
+**One way back: reset to default** (owner decision 2026-10-06, #103). `default_value` is
+each domain's own stock, derived like every value: Windows stock for software settings,
+the driver's own default for hardware (its published `DefaultRegistryValue`, its INF),
+the game's own default for game settings. The UI names which ("Windows default",
+"Driver default", "Game default") and shows the value. There is no undo, and fpstune
+**stores no previous values and no history on disk**: the History tab is this session's
+journal in memory, and start-up deletes the retired `~/.fpstune/originals.json` and
+`~/.fpstune/history.json`. A default that cannot be derived is not invented — the reset is not
+offered for that row.
 
 ### C7 — Optimal Caching
 | Data | Cache | TTL |
@@ -302,7 +303,7 @@ Defender exclusion, a speculative-execution mitigation switch) is never shipped 
 evidence from someone else's machine. It may be offered only after fpstune's own verify
 round (`verify_round.measure_pair()` over `noise_floor()`) has measured a gain on *this*
 machine; it then lands in `complete` with `risk_level="advanced"`, the cost written in
-the copy, and the same undo as any other setting. Red lines stay red under every rule:
+the copy, and the same reset to default as any other setting. Red lines stay red under every rule:
 Secure Boot, HVCI / core isolation, driver signature enforcement, test-signing,
 hardware-ID changes and kernel drivers are never offered, measured or not.
 
@@ -325,7 +326,7 @@ src/fpstune/
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·
             cleanup_targets.py · detection.py · discovery/ · panel.py · virtualization.py
   core/     DISM, NVIDIA driver settings (nvapi.py sessions, nv_drs.py key table), power profiles
-  safety/   restore.py (RestorePointManager) · originals.py
+  safety/   restore.py (RestorePointManager) · history.py (this session's journal, in memory)
   benchmark/  suite.py (Bench/BenchReading/BenchResult/SuiteRun + the per-bench deadline) ·
             benches.py (the registry, and which benches a button may start) · verify_round.py ·
             sources.py (which claim each instrument answers, and why the rest are unanswered) ·
@@ -362,7 +363,7 @@ VerifyPanel = Benchmarks > Verify (coverage, the suite's own pair, verdicts) ·
 `lib/detection-manager.ts` = `redetectSettings()` orchestrator · `lib/hardware-manager.ts` =
 monitor cache invalidation.
 
-Route surface: `settings.py` = CRUD/detect/apply/reset/undo/verify/bulk · `settings_stream.py`
+Route surface: `settings.py` = CRUD/detect/apply/reset/verify/bulk · `settings_stream.py`
 = `/bulk/stream-{apply,reset}` SSE (own router, `/api/settings` prefix) · `benchmark.py` =
 gpu-scene{,/install} + verify/{coverage,sources,sample,round} + headroom{,/measure} ·
 `benchmark_suite.py` = suite{,/run,/compare} · `benchmark_ledger.py` = ledger{,/runs,/run} ·
@@ -379,7 +380,7 @@ SSE bulk: SelectionToolbar → bulkStreamApply/Reset → `/bulk/stream-{apply,re
 Module contracts — what the tree does not tell you:
 
 - `routes/settings_apply.py` — no router. `apply_and_finalize` is the one place a setting's
-  command runs for apply, reset and undo; it measures a cleanup's target either side of the
+  command runs for apply and reset; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
 - `settings/definitions/` — 411 `SettingExecutor` instances across 16 category files.
@@ -443,12 +444,12 @@ Module contracts — what the tree does not tell you:
 - `commands/scan.py` — one detection pass shaped by status/gpu; neither prints.
 - `utils/console.py` — the one Rich Console; the logger writes through it.
 - `utils/runtime.py` — frozen-vs-source packaging facts (sys._MEIPASS, bundled frontend).
-- `TweakRows.tsx` — the one row list (apply/reset/undo/verify), shared by Software and Game.
+- `TweakRows.tsx` — the one row list (apply/reset/verify), shared by Software and Game.
 - `ui/ConfirmDialog.tsx` — the one modal confirmation: role, focus trap, Escape, inert page.
 - `ui/NotificationToasts.tsx` — the one reader of the store's `notifications`; two
   always-mounted live regions (assertive for errors and warnings, polite for the rest),
   keyboard-dismissed, never focus-stealing.
-- `lib/api.ts` — `settingsApi`: applySetting, undoSetting, bulkApply, bulkStreamApply,
+- `lib/api.ts` — `settingsApi`: applySetting, bulkApply, bulkStreamApply,
   bulkStreamReset. No `reset` client method — the row's reset posts `/apply` carrying
   `defaultValue`; no `verify` one has ever existed.
 
@@ -497,10 +498,10 @@ Module contracts — what the tree does not tell you:
 ## Blueprint Profile
 
 Type: desktop | Stack: python-3.12-fastapi + react-18-ts-vite | Target: production
-Mission: On any Windows 11 machine, reach that machine's own measured ceiling — max fps plus IO/network/memory — through risk-free hardware-derived tweaks, holding every competitively informative visual/audio channel at its information-preserving minimum, with before/after measurement and single or bulk undo.
+Mission: On any Windows 11 machine, reach that machine's own measured ceiling — max fps plus IO/network/memory — through risk-free hardware-derived tweaks, holding every competitively informative visual/audio channel at its information-preserving minimum, with before/after measurement and single or bulk reset to each domain's own default.
 Priorities: frame-rate-first, measured-over-claimed, hardware-derived, reversibility, thermal-as-performance
 Constraints: windows-11-primary, local-only-no-telemetry, single-exe-distribution, prefer-existing-deps
-Red lines: no tweak that lowers the ceiling (C1), no number an instrument did not produce (C11), no dev-machine literal (C9), English-only strings (C4), no kernel driver / Defender-off / UAC-off, reset and undo never collapse into one (C6)
+Red lines: no tweak that lowers the ceiling (C1), no number an instrument did not produce (C11), no dev-machine literal (C9), English-only strings (C4), no kernel driver / Defender-off / UAC-off, no stored previous values — one way back, reset to the domain's own default (C6)
 Integrations: none
 Data: local system + hardware inventory, never leaves the machine | Regulations: none
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe

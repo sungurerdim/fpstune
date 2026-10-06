@@ -251,14 +251,14 @@ def _apply(
 
 
 def test_reset_with_no_interface_entry_left_is_already_done() -> None:
-    """An undo that ran moments earlier had removed every `DohFlags` entry, so the
+    """A write that ran moments earlier had removed every `DohFlags` entry, so the
     reset that followed found nothing to remove, counted no work, and answered
     "no applicable adapter found" - for a state detect reads as `disabled`."""
     assert _apply("disabled", [ETHERNET], {"19": SECURITY_PAIR}, {}) == "ok"
 
 
 def test_reset_with_no_adapter_at_all_is_already_done() -> None:
-    """Detect reads `disabled` when no adapter qualifies, so there is nothing to undo."""
+    """Detect reads `disabled` when no adapter qualifies, so there is nothing to remove."""
     assert _apply("disabled", [], {}, {}) == "ok"
 
 

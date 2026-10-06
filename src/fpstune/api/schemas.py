@@ -353,11 +353,6 @@ class DetectionResultResponse(BaseModel):
     # has a sentence for ("linked at 100 Mbps, adapter supports 2500 Mbps").
     # Read on this machine during this detect; None for an ordinary setting.
     finding: dict[str, Any] | None = None
-    # What this machine held when fpstune first saw the setting. None means
-    # nothing was recorded, so there is nothing to undo — which is a different
-    # state from "the original happens to equal the current value", and the UI
-    # has to be able to tell them apart to decide whether to offer the action.
-    original_value: Any | None = None
 
 
 class DetectRequest(BaseModel):
@@ -438,8 +433,7 @@ class VerifyRequest(BaseModel):
 
     # "recommended" — what fpstune advises (the drift check, and the default)
     # "default"     — the Windows stock value, i.e. "did a reset land"
-    # "original"    — what fpstune first found here, i.e. "did an undo land"
-    target: Literal["recommended", "default", "original"] = "recommended"
+    target: Literal["recommended", "default"] = "recommended"
 
 
 class VerifyResponse(BaseModel):
@@ -452,5 +446,5 @@ class VerifyResponse(BaseModel):
     # Which question was answered. Echoed back because this endpoint used to
     # answer only one and never said so, and a caller that assumed a different
     # one read a correct machine as a failed operation.
-    target: Literal["recommended", "default", "original"] = "recommended"
+    target: Literal["recommended", "default"] = "recommended"
     error: str | None = None

@@ -211,7 +211,7 @@ class TestVrrGpuWaitOffload:
 
 
 class TestSettingHardwareContextOffload:
-    """apply/reset/undo/verify built the hardware context on the loop.
+    """apply/reset/verify built the hardware context on the loop.
 
     It is cached, so the warm path was cheap — but the build enumerates adapters
     and reads driver metadata through subprocesses, and the request that pays
@@ -270,24 +270,6 @@ class TestSettingHardwareContextOffload:
             patch("fpstune.api.routes.settings.DetectionEngine", return_value=engine),
         ):
             response = client.post("/api/settings/network:nagle_algorithm/verify")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-    def test_undo_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        originals = MagicMock()
-        originals.get.return_value = "enabled"
-        originals.damaged.return_value = None
-        originals.get_raw.return_value = None
-        ctx, checker, rp = self._patched(record)
-        with (
-            ctx,
-            checker,
-            rp,
-            patch("fpstune.safety.originals._store", originals),
-        ):
-            response = client.post("/api/settings/network:nagle_algorithm/undo")
 
         assert response.status_code == 200
         assert record["on_event_loop"] is False

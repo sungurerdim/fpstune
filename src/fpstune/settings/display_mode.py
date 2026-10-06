@@ -176,7 +176,7 @@ def schedule_revert(
                 # The change history must not claim a mode the machine no longer has.
                 from fpstune.safety.history import get_change_journal
 
-                get_change_journal().record(setting_id, "undo", NOT_NATIVE)
+                get_change_journal().record(setting_id, "revert", NOT_NATIVE)
             hardware_manager.invalidate_cache("monitors")
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Display revert failed for %s: %s", device, exc)

@@ -27,7 +27,6 @@ from fpstune.api.routes.settings import (
     _get_registry,
     _reset_single_setting,
 )
-from fpstune.api.routes.settings_apply import undo_single_setting
 from fpstune.api.schemas import ApplyResponse, BulkStreamRequest
 from fpstune.settings import SettingsRegistry
 from fpstune.settings.applicability import HardwareContext
@@ -226,10 +225,6 @@ async def _stream_each(
                         hardware_context,
                         _output_pump(setting, event_queue, loop),
                     )
-                elif action == "undo":
-                    _, response = await asyncio.to_thread(
-                        undo_single_setting, setting, hardware_context
-                    )
                 else:
                     _, response = await asyncio.to_thread(
                         _reset_single_setting, setting, hardware_context
@@ -272,7 +267,7 @@ async def _stream_each(
 
 async def _stream_grouped(
     ids: list[str],
-    action: str,  # "apply", "reset" or "undo"
+    action: str,  # "apply" or "reset"
     registry: SettingsRegistry,
     hardware_context: HardwareContext | None,
 ) -> AsyncIterator[str]:
@@ -351,27 +346,6 @@ async def bulk_stream_reset(request: BulkStreamRequest) -> StreamingResponse:
 
     return StreamingResponse(
         _stream_grouped(request.ids, "reset", registry, hardware_context),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@router.post("/bulk/stream-undo")
-async def bulk_stream_undo(request: BulkStreamRequest) -> StreamingResponse:
-    """SSE bulk undo — puts each setting back to what this machine held.
-
-    The bulk form of `POST /{id}/undo`, through the same per-setting path. A
-    setting with nothing recorded fails with that reason rather than falling
-    back to a reset: undo and reset stay two different promises (C6).
-    """
-    registry = await asyncio.to_thread(_get_registry)
-    hardware_context = await asyncio.to_thread(_get_hardware_context)
-
-    if request.ids and sys.platform == "win32":
-        await asyncio.to_thread(_ensure_restore_point)
-
-    return StreamingResponse(
-        _stream_grouped(request.ids, "undo", registry, hardware_context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

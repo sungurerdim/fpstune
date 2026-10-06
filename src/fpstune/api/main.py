@@ -122,6 +122,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _ = app  # Reserved for future startup/shutdown hooks
     # Startup
     get_logger().info("fpstune API starting...")
+    # fpstune keeps no previous values and no history on disk (#103): delete what
+    # an earlier release left behind, before anything could read it.
+    try:
+        from fpstune.safety.history import remove_retired_files
+
+        remove_retired_files()
+    except OSError as exc:
+        get_logger().warning("could not clear retired state files: %s", exc)
     # Pre-warm GPU detection cache in background to avoid delay on first request
     start_gpu_detection_async()
     get_logger().info("GPU detection started in background")

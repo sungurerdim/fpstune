@@ -434,7 +434,7 @@ class TestWifiRadioWhenWired:
             assert "Disable-NetAdapter" not in command
 
     def test_asking_for_radio_off_is_refused(self) -> None:
-        """Undo or a manual pick could still ask for it; the command says no."""
+        """A manual pick could still ask for it; the command says no."""
         command = self._setting().apply_command
         refusal = command.index("does not switch the Wi-Fi adapter off")
         assert refusal < command.index("Enable-NetAdapter")

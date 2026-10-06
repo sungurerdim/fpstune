@@ -84,18 +84,17 @@ def _isolated_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest
 
     `utils.config.get_config_dir` resolves the home directory at call time, and
     the suite drives the real apply, scan and bench paths: without this, a run
-    wrote the change history, the undo record, bench results and the self-check
+    wrote bench results and the self-check
     into the developer's own profile — and read them back in the next test.
     The process-wide stores are dropped too, so none carries one test's state
     into another.
     """
-    from fpstune.safety import history, originals
+    from fpstune.safety import history
 
     home = tmp_path_factory.mktemp("home")
     monkeypatch.setenv("HOME", str(home))
     monkeypatch.setenv("USERPROFILE", str(home))
     monkeypatch.setattr(history, "_journal", None)
-    monkeypatch.setattr(originals, "_store", None)
 
 
 @pytest.fixture(autouse=True)

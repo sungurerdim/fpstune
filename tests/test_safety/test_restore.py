@@ -129,8 +129,8 @@ class TestDescriptionInjection:
 class TestSessionRestorePoint:
     """One point per session, finished before the first change.
 
-    It was fire-and-forget: the apply ran beside the snapshot, and every apply,
-    reset and undo started a fresh attempt.
+    It was fire-and-forget: the apply ran beside the snapshot, and every apply
+    and reset started a fresh attempt.
     """
 
     def test_the_session_makes_one_point_not_one_per_change(self) -> None:

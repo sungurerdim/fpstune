@@ -6,7 +6,7 @@ What used to be here was a YAML profile tree — `Config`, ten nested models,
 to a file, so nothing had read `~/.fpstune/config.yaml` for some time.
 
 The directory is the part that stayed live: eight modules put their own file in
-it (`originals.json`, `headroom.json`, benchmark captures, the NVIDIA profile
+it (`headroom.json`, benchmark captures, the NVIDIA profile
 cache), each owning its own format.
 """
 

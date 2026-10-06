@@ -270,7 +270,7 @@ MW4_TEXTURE_QUALITY = _make_mw4_setting(
     evidence_level="likely",
     sources=_MW3_MEASURED,
     value_hints={
-        "0": "Largest set — for a card with VRAM to spare, note the scale is inverted",
+        "0": "Largest set — needs spare VRAM; note the scale is inverted",
         "1": "Recommended — player-model detail intact, budget honoured",
         "3": "Lowest resolution — models start blending into scenery",
     },
@@ -1194,7 +1194,7 @@ MW4_PARTICLE_QUALITY = _make_mw4_setting(
     sources=_MW3_MEASURED,
     value_hints={
         "very low": "Effects start being culled — the announcement goes with them",
-        "low": "Recommended — smoke, flash and tracer still tell themselves apart",
+        "low": "Recommended — smoke, flash and tracer stay distinguishable",
     },
 )
 

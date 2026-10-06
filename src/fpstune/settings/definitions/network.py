@@ -2526,9 +2526,9 @@ def create_green_ethernet_setting(interface_index: int, display_name: str) -> Se
         slug="green_ethernet",
         label="Green Ethernet",
         keyword="EnableGreenEthernet",
-        description="Realtek power saving that lowers PHY transmit power based on estimated cable "
-        "length. On a marginal cable the reduced signal margin shows up as link renegotiation and "
-        "brief stalls rather than as a clean error.",
+        description="Realtek power saving that lowers PHY transmit power by estimated cable "
+        "length. On a marginal cable the lost signal margin shows up as renegotiation and brief "
+        "stalls rather than a clean error.",
         current_impact="Enabled: PHY power reduced → less signal margin, renegotiation on marginal cable",
         recommended_impact="Disabled: Full signal margin → stable link, no renegotiation stalls",
         effect="Disables Realtek Green Ethernet to keep full PHY signal margin",
@@ -2546,9 +2546,9 @@ def create_gigalite_setting(interface_index: int, display_name: str) -> SettingE
         slug="gigalite",
         label="Gigabit Lite",
         keyword="GigaLite",
-        description="Realtek power saving that lets the adapter negotiate a reduced-power link "
-        "mode. It can settle on a lower rate than the cable and switch actually support, which "
-        "shrinks the headroom a background transfer needs before it starts queueing game packets.",
+        description="Realtek power saving that lets the adapter negotiate a reduced-power link. "
+        "It can settle below the rate the cable and switch support, leaving less headroom for "
+        "background transfers.",
         current_impact="Enabled: Adapter may negotiate below the link's real capability",
         recommended_impact="Disabled: Full negotiated rate → more headroom before congestion",
         effect="Disables Realtek Gigabit Lite so the link negotiates its full rate",
@@ -2566,9 +2566,9 @@ def create_nic_power_saving_setting(interface_index: int, display_name: str) -> 
         slug="nic_power_saving",
         label="Adapter Power Saving Mode",
         keyword="PowerSavingMode",
-        description="Realtek aggregate idle power management for the adapter. Entering and leaving "
-        "the low-power state costs wake time on the first packet after an idle gap, which is "
-        "exactly the pattern of a game sending sparse UDP updates.",
+        description="Realtek aggregate idle power management for the adapter. Leaving the "
+        "low-power state costs wake time on the first packet after an idle gap, which is exactly "
+        "how a game sends sparse UDP updates.",
         current_impact="Enabled: Adapter idles down → wake delay on the first packet after a gap",
         recommended_impact="Disabled: Adapter always ready → no wake delay on sparse traffic",
         effect="Disables Realtek adapter power saving to remove wake-up delay",
@@ -3575,9 +3575,8 @@ def create_link_capability_setting(interface_index: int, display_name: str) -> S
         recommended_impact="At capability: the link runs at the fastest rate the adapter supports",
         scope=SettingScope.RECOMMENDED,
         category_order=24,
-        effect="Reports a link running below the adapter's own maximum. Check the cable "
-        "(Cat 5e or better for 1 Gbps, Cat 6 for 2.5 Gbps and above), try another switch port, "
-        "and confirm the far end supports the higher rate",
+        effect="Check the cable (Cat 5e for 1 Gbps, Cat 6 for 2.5 Gbps and up), the switch "
+        "port and the far end",
         impact_scores={"bandwidth": "up to the full gap between negotiated and supported rate"},
         is_readonly=True,
         detect_type=DetectType.POWERSHELL,

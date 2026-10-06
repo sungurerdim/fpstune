@@ -406,6 +406,12 @@ class TestC3TooltipCopy:
     DESCRIPTION_MAX_CHARS = 200
     DESCRIPTION_MAX_SENTENCES = 2
     EFFECT_MAX_CHARS = 120
+    # A value hint is the label printed next to a value in a row ("Recommended —
+    # smoke, flash and tracer stay distinguishable"). Measured 2026-10-06 over
+    # the registry's 319 hints: median 2 characters, p90 10, p99 62, max 71 —
+    # most are a raw value, and the long tail is the per-game cost sentence the
+    # copy rules require. 64 keeps that tail and refuses the 71-character one.
+    VALUE_HINT_MAX_CHARS = 64
 
     @staticmethod
     def _sentences(text: str) -> int:
@@ -448,6 +454,55 @@ class TestC3TooltipCopy:
             f"C3: effects that are empty, end in '.', or exceed {self.EFFECT_MAX_CHARS} characters: "
             + ", ".join(offenders)
         )
+
+    def test_a_value_hint_fits_a_value_label(self) -> None:
+        from fpstune.settings.definitions import get_all_static_settings
+
+        offenders = sorted(
+            f"{s.id}[{key}] ({len(hint)})"
+            for s in get_all_static_settings()
+            for key, hint in s.to_dict()["value_hints"].items()
+            if len(hint) > self.VALUE_HINT_MAX_CHARS
+        )
+        assert not offenders, (
+            f"C3: value hints over {self.VALUE_HINT_MAX_CHARS} characters: " + ", ".join(offenders)
+        )
+
+    def test_a_per_adapter_setting_obeys_the_same_caps(self) -> None:
+        """The static registry never sees a setting built per adapter.
+
+        ``network:<n>:*`` rows come from ``create_*_setting`` factories, so the
+        gates above passed while ``link_capability`` shipped a 206-character
+        effect and three descriptions ran past 200. Every factory taking an
+        interface index and an adapter name is built here and held to the same
+        caps.
+        """
+        import inspect
+
+        from fpstune.settings.definitions import network
+
+        problems: list[str] = []
+        built = 0
+        for name, factory in inspect.getmembers(network, inspect.isfunction):
+            if not (name.startswith("create_") and name.endswith("_setting")):
+                continue
+            params = list(inspect.signature(factory).parameters.values())
+            if [p.name for p in params[:2]] != ["interface_index", "display_name"]:
+                continue
+            if any(p.default is p.empty for p in params[2:]):
+                continue
+            setting = factory(7, "Ethernet")
+            built += 1
+            effect = setting.effect or ""
+            if len(setting.description) > self.DESCRIPTION_MAX_CHARS:
+                problems.append(f"{name}: description {len(setting.description)} chars")
+            if len(effect) > self.EFFECT_MAX_CHARS or effect.rstrip().endswith("."):
+                problems.append(f"{name}: effect {len(effect)} chars or ends in '.'")
+            for key, hint in setting.to_dict()["value_hints"].items():
+                if len(hint) > self.VALUE_HINT_MAX_CHARS:
+                    problems.append(f"{name}: value hint {key!r} {len(hint)} chars")
+        assert built >= 15, f"only {built} per-adapter factories found: the discovery broke"
+        assert not problems, "C3 (per-adapter): " + "; ".join(problems)
 
     def test_impact_fields_open_with_the_state_they_describe(self) -> None:
         form = re.compile(r"^[^:]{1,60}: \S")

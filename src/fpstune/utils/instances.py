@@ -5,7 +5,9 @@ instance is identified **only** by what its ``/health`` answers, never by
 process name, window title or the text a system command prints (the previous
 version matched netstat's English "LISTENING", which a Turkish or German Windows
 never prints). A port that does not answer with fpstune's own health body is left
-completely alone — it is somebody else's server.
+completely alone — it is somebody else's server. An instance that answers nothing
+at all (hung, or its server gone) cannot be found this way; ``instance_reclaim``
+handles that last, after this polite round.
 
 Stopping is a request, not a kill: ``POST /api/system/shutdown`` makes the
 instance run its own graceful shutdown (see ``api/shutdown.py``).

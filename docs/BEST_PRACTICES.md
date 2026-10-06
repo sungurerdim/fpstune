@@ -128,6 +128,7 @@ try {
 ```python
 # Python with winreg - always numeric
 import winreg
+
 with winreg.OpenKey(hkey, path, 0, winreg.KEY_READ) as key:
     value, reg_type = winreg.QueryValueEx(key, name)
     # value is numeric (DWORD) or string (REG_SZ)
@@ -308,10 +309,14 @@ foreach ($kw in $keywords) {
 from ctypes import windll, byref, sizeof
 
 # Get buffer sizes
-windll.user32.GetDisplayConfigBufferSizes(QDC_DATABASE_CURRENT, byref(path_count), byref(mode_count))
+windll.user32.GetDisplayConfigBufferSizes(
+    QDC_DATABASE_CURRENT, byref(path_count), byref(mode_count)
+)
 
 # Query display config
-windll.user32.QueryDisplayConfig(QDC_DATABASE_CURRENT, byref(path_count), paths, byref(mode_count), modes, None)
+windll.user32.QueryDisplayConfig(
+    QDC_DATABASE_CURRENT, byref(path_count), paths, byref(mode_count), modes, None
+)
 
 # Refresh rate from mode info (rational for precision)
 refresh_rate = mode.targetMode.targetVideoSignalInfo.vSyncFreq
@@ -382,6 +387,7 @@ apply_args = {"value": "Manual"}
 
 # Use substitute_placeholders() to replace %key% with values
 from fpstune.utils.powershell import substitute_placeholders
+
 cmd = substitute_placeholders(apply_command, **apply_args)
 # Result: "Set-Service -Name 'SysMain' -StartupType Manual"
 ```
@@ -429,10 +435,16 @@ Get-NetAdapterAdvancedProperty -Name 'Realtek PCIe GbE (TM)' -RegistryKeyword '*
 
 ```python
 # Get both InterfaceIndex (for commands) and Name (for display)
-result = subprocess.run([
-    "powershell", "-NoProfile", "-Command",
-    "Get-NetAdapter | ForEach-Object { \"$($_.InterfaceIndex)|$($_.Name)\" }"
-], capture_output=True, text=True)
+result = subprocess.run(
+    [
+        "powershell",
+        "-NoProfile",
+        "-Command",
+        'Get-NetAdapter | ForEach-Object { "$($_.InterfaceIndex)|$($_.Name)" }',
+    ],
+    capture_output=True,
+    text=True,
+)
 
 # Parse: "12|Ethernet" -> (12, "Ethernet")
 for line in result.stdout.strip().split("\n"):

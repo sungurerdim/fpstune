@@ -26,7 +26,7 @@ from fpstune.commands import (
 )
 from fpstune.commands import presentation as ui
 from fpstune.commands.utils import console, require_admin_or_elevate
-from fpstune.utils import instances
+from fpstune.utils import instance_reclaim, instances
 from fpstune.utils.admin import elevate_if_needed, is_admin
 from fpstune.utils.logger import setup_logging
 from fpstune.utils.runtime import frontend_dist, frontend_source, is_frozen
@@ -69,6 +69,10 @@ def _acquire_instance_lock() -> socket.socket | None:
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 0)
     try:
         sock.bind(("127.0.0.1", _LOCK_PORT))
+        # A socket that is only bound is invisible to the kernel's owner table
+        # (GetExtendedTcpTable); a listening one names its PID, which is how a
+        # later start finds the holder if this instance ever hangs.
+        sock.listen(1)
         return sock
     except OSError:
         sock.close()
@@ -290,6 +294,11 @@ def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) 
 
 
 _TAKEOVER_WAIT_SECONDS = 20.0
+_TAKEOVER_STOP_WAIT_SECONDS = 70.0
+"""How long a stop request that was *accepted* is waited on: ``api/shutdown.py`` lets a
+running apply or bench finish for up to 60 s first, and ending the process under it
+would cut that operation off mid-way."""
+_TAKEOVER_RECLAIM_WAIT_SECONDS = 10.0
 _TAKEOVER_POLL_SECONDS = 0.25
 _TAKEOVER_PROGRESS_SECONDS = 5.0
 
@@ -297,13 +306,17 @@ _TAKEOVER_PROGRESS_SECONDS = 5.0
 def _claim_single_instance(*, preferred_port: int) -> None:
     """Take the single-instance lock, closing the fpstune that holds it if need be.
 
-    A newer start wins: every running fpstune API is asked to stop, then this
-    waits (bounded) for the lock port to come free and carries on starting. The
-    ones asked are found only by what their /health answers — the PID file's
-    port plus the range ``serve`` itself would pick from — so a server that is
-    not fpstune is never touched, and no process is killed, matched by name or
-    read out of a system command's text (the previous version matched netstat's
-    English "LISTENING", which a Turkish or German Windows never prints).
+    A newer start wins, and closes every earlier one, politely first: every
+    running fpstune API is asked to stop (found only by what its /health answers
+    — the PID file's port plus the range ``serve`` itself would pick from), then
+    this waits (bounded) for the lock port to come free. What still holds the
+    lock after that — an instance whose server is gone or hung, answering no
+    /health — is found by the kernel's socket table (``utils/instance_reclaim``),
+    verified as fpstune by its executable and command line, and only then ended
+    with its fpstune tree. A process that is not fpstune is never touched, and
+    nothing is matched by name or read out of a system command's text (the
+    previous version matched netstat's English "LISTENING", which a Turkish or
+    German Windows never prints).
 
     Raises ``SystemExit(1)`` naming what was tried when the lock stays held.
     """
@@ -323,20 +336,34 @@ def _claim_single_instance(*, preferred_port: int) -> None:
             "No fpstune answered on the ports it could be using", "waiting in case it is closing"
         )
 
-    _lock_sock = _wait_for_lock(_TAKEOVER_WAIT_SECONDS)
+    wait = (
+        _TAKEOVER_STOP_WAIT_SECONDS
+        if any(a.accepted for a in attempts)
+        else (_TAKEOVER_WAIT_SECONDS)
+    )
+    _lock_sock = _wait_for_lock(wait)
     if _lock_sock is not None:
         ui.ok("The previous fpstune closed")
         return
 
+    reclaimed = _reclaim_lock_holder()
+    if reclaimed.status == "ended":
+        _lock_sock = _wait_for_lock(_TAKEOVER_RECLAIM_WAIT_SECONDS)
+        if _lock_sock is not None:
+            ui.ok("The previous fpstune was ended", f"{len(reclaimed.ended)} process(es)")
+            return
+
     ui.fail(
         "Another fpstune still holds the instance lock",
-        f"127.0.0.1:{_LOCK_PORT} stayed taken for {_TAKEOVER_WAIT_SECONDS:.0f} s",
+        f"127.0.0.1:{_LOCK_PORT} stayed taken for {wait:.0f} s",
     )
     tried = [f"Looked for fpstune on ports {', '.join(str(p) for p in ports)}"]
     if attempts:
         tried.extend(attempt.describe() for attempt in attempts)
     else:
         tried.append("No fpstune answered /health there, so nothing was asked to stop")
+    tried.append(reclaimed.message)
+    tried.extend(done.describe() for done in reclaimed.ended)
     ui.hint(
         [
             *tried,
@@ -346,6 +373,23 @@ def _claim_single_instance(*, preferred_port: int) -> None:
         title="What was tried",
     )
     raise SystemExit(1)
+
+
+def _reclaim_lock_holder() -> instance_reclaim.Reclaimed:
+    """Last resort once the polite stop did not free the lock: end the fpstune holding it."""
+    ui.warn(
+        "The lock is still held after the stop request",
+        f"looking for the process holding 127.0.0.1:{_LOCK_PORT}",
+    )
+    reclaimed = instance_reclaim.reclaim_lock_holder(_LOCK_PORT)
+    if reclaimed.status == "refused":
+        ui.fail("The lock is held by a program that is not fpstune", reclaimed.message)
+    elif reclaimed.status == "ended":
+        for done in reclaimed.ended:
+            ui.step(done.describe())
+    else:
+        ui.warn(reclaimed.message)
+    return reclaimed
 
 
 def _wait_for_lock(

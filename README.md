@@ -122,7 +122,10 @@ by fpstune itself. `uv run fpstune serve --dev` runs Vite with live reload inste
 
 Starting fpstune while another copy is running closes the running one — a graceful
 stop, asked for over loopback HTTP, that waits for an apply or measurement in progress —
-and takes its place. If the old copy does not let go within 20 seconds, the new start
+and takes its place. A copy that no longer answers (crashed or hung, still holding the
+single-instance lock) is ended after that: only processes whose executable and command line
+show fpstune, with their own fpstune children and supervising parent, and each one is logged;
+any other program is never touched. If the lock still does not come free, the new start
 stops and says what it tried.
 
 ---

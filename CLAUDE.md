@@ -379,9 +379,21 @@ stop hook in `api/serving.py`) answers 202, then stops the API gracefully — th
 path runs, in-flight requests finish — after waiting up to 60 s for the operation lock. It is how a
 newer `fpstune serve` replaces the running one: `cli._claim_single_instance` finds every instance
 by `/health` signature alone (`utils/instances.py`: the PID file's port plus the port range `serve`
-picks from; never by process name or command output), POSTs the stop, waits up to 20 s for the lock
-port, then carries on; if the lock stays held it fails naming what it tried. Under `serve --dev`
-the API child's clean exit makes the parent stop the dev server and release the lock and PID file.
+picks from; never by process name or command output), POSTs the stop, waits for the lock port (20 s;
+70 s when a stop was accepted, because the route lets a running operation finish for up to 60 s),
+then carries on. What still holds the lock (a hung or crashed instance that answers no `/health`) is
+ended last, by `utils/instance_reclaim.py` over `utils/winapi/processes.py` (ctypes, numbers and
+paths only): the owner PID from `GetExtendedTcpTable`, each process judged fpstune by image path +
+command line (`fpstune.exe`, or a Python running `-m fpstune[.x]` / an fpstune script; command line
+via `NtQueryInformationProcess` class 60 — one call with `PROCESS_QUERY_LIMITED_INFORMATION`, no PEB
+read), then its fpstune children and a parent supervising only it are ended, never this process or
+its ancestors, every PID logged with why. A stranger owner is refused by PID and image. A socket
+that is only *bound* is absent from the owner table (measured; `test_winapi_processes.py` pins it)
+and every release before the lock began to `listen()` holds it that way, so with no owner in the
+table the fallback ends every server-shaped fpstune (`serve`, bare `fpstune`, `fpstune.api.serving`;
+`status`/`benchmark` are left alone). If the lock stays held it fails naming what it tried. Under
+`serve --dev` the API child's clean exit makes the parent stop the dev server and release the lock
+and PID file.
 
 Data flow: UI → api.ts `POST /settings/{id}/apply` → settings route → `executor.apply()` →
 subprocess → `_finalize_apply_response()` → detect → verify → response → Zustand → UI.

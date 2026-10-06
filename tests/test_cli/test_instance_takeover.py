@@ -10,6 +10,7 @@ nothing.
 from __future__ import annotations
 
 import json
+import os
 import threading
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
@@ -21,7 +22,9 @@ import pytest
 from click.testing import CliRunner
 
 from fpstune import cli
-from fpstune.utils import instances
+from fpstune.api import shutdown
+from fpstune.utils import instance_reclaim, instances
+from fpstune.utils.winapi import processes
 
 
 def _fpstune_health() -> dict[str, object]:
@@ -186,8 +189,18 @@ class _Machine:
         stoppable: bool = True,
         stray_lock_holder: bool = False,
         lock_frees_at: float | None = None,
+        accepts_but_hangs: bool = False,
+        hung_owner: bool = False,
+        port_stays_taken: bool = False,
+        stranger: str | None = None,
     ) -> None:
         self.fpstune = set(fpstune)
+        self.accepts_but_hangs = accepts_but_hangs
+        self.hung_owner = hung_owner
+        self.port_stays_taken = port_stays_taken
+        self.stranger = stranger
+        self.reclaim_calls: list[int] = []
+        self.reclaim_at: list[float] = []
         self.others = others or {}
         self.stoppable = stoppable
         self.stray_lock_holder = stray_lock_holder
@@ -209,8 +222,30 @@ class _Machine:
             return None
         if not self.stoppable:
             return 404
-        self.fpstune.discard(port)
+        if not self.accepts_but_hangs:
+            self.fpstune.discard(port)
         return 202
+
+    def reclaim(self, port: int) -> instance_reclaim.Reclaimed:
+        """The last resort, on a pretend machine: ends a hung owner, refuses a stranger."""
+        self.reclaim_calls.append(port)
+        self.reclaim_at.append(self.clock.now)
+        if self.stranger is not None:
+            return instance_reclaim.Reclaimed(
+                "refused",
+                f"127.0.0.1:{port} is held by PID 777 ({self.stranger}), which is not an fpstune",
+                holder_pid=777,
+                holder_image=self.stranger,
+            )
+        if self.hung_owner:
+            self.stray_lock_holder = self.port_stays_taken
+            self.fpstune.clear()
+            ended = (
+                instance_reclaim.Ended(200, "python.exe", "owns the lock port", "ended"),
+                instance_reclaim.Ended(100, "python.exe", "the fpstune parent", "ended"),
+            )
+            return instance_reclaim.Reclaimed("ended", "Ended 2 fpstune process(es)", ended=ended)
+        return instance_reclaim.Reclaimed("no_holder", "No fpstune process is serving")
 
     def acquire_lock(self) -> object | None:
         if self.lock_frees_at is not None and self.clock.now >= self.lock_frees_at:
@@ -232,6 +267,7 @@ def machine_with(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> Callable[..
         monkeypatch.setattr(cli, "_get_pid_file", lambda: str(pid_file))
         monkeypatch.setattr(cli.instances, "fetch_health", machine.fetch_health)
         monkeypatch.setattr(cli.instances, "post_stop", machine.post_stop)
+        monkeypatch.setattr(cli.instance_reclaim, "reclaim_lock_holder", machine.reclaim)
         monkeypatch.setattr(cli, "_acquire_instance_lock", machine.acquire_lock)
         monkeypatch.setattr(cli, "time", machine.clock)
         monkeypatch.setattr(cli, "_lock_sock", None)
@@ -349,6 +385,93 @@ class TestTheTakeoverGivesUpClearly:
         assert machine.posted == []
         assert "nothing was asked to stop" in out
         assert str(cli._LOCK_PORT) in out
+
+
+class TestAHungInstanceThatAnswersNothingIsEndedAfterThePoliteRound:
+    def test_a_polite_stop_that_frees_the_lock_never_reaches_the_fallback(
+        self, machine_with
+    ) -> None:
+        machine = machine_with(fpstune={8000})
+
+        cli._claim_single_instance(preferred_port=8000)
+
+        assert machine.posted == [8000]
+        assert machine.reclaim_calls == []
+
+    def test_a_verified_hung_owner_is_ended_after_the_wait_and_the_start_goes_on(
+        self, machine_with, capsys
+    ) -> None:
+        """The observed case: two python.exe, no HTTP, one still holding the lock."""
+        machine = machine_with(stray_lock_holder=True, hung_owner=True)
+
+        cli._claim_single_instance(preferred_port=8000)
+
+        out = capsys.readouterr().out
+        assert machine.posted == [], "nothing answered /health, so nothing was asked politely"
+        assert machine.reclaim_calls == [cli._LOCK_PORT]
+        assert machine.reclaim_at[0] >= cli._TAKEOVER_WAIT_SECONDS, "polite waiting comes first"
+        assert cli._lock_sock is machine.lock
+        assert "PID 200" in out and "PID 100" in out and "was ended" in out
+
+    def test_an_instance_that_accepted_the_stop_but_never_exits_gets_the_operation_wait_first(
+        self, machine_with
+    ) -> None:
+        """api/shutdown.py lets a running apply or bench finish for up to 60 s before it
+        stops; ending the process earlier would cut that operation off mid-way."""
+        machine = machine_with(fpstune={8000}, accepts_but_hangs=True, hung_owner=True)
+
+        cli._claim_single_instance(preferred_port=8000)
+
+        assert machine.posted == [8000]
+        assert machine.reclaim_at[0] >= shutdown.OPERATION_WAIT_SECONDS
+        assert cli._lock_sock is machine.lock
+
+    def test_the_stop_wait_outlasts_the_shutdown_routes_own_operation_wait(self) -> None:
+        assert cli._TAKEOVER_STOP_WAIT_SECONDS > shutdown.OPERATION_WAIT_SECONDS
+
+    def test_a_stranger_holding_the_lock_ends_the_start_naming_its_pid_and_image(
+        self, machine_with, capsys
+    ) -> None:
+        machine = machine_with(stray_lock_holder=True, stranger=r"C:\Tools\other.exe")
+
+        with pytest.raises(SystemExit) as exited:
+            cli._claim_single_instance(preferred_port=8000)
+
+        out = capsys.readouterr().out
+        assert exited.value.code == 1
+        assert cli._lock_sock is None
+        assert machine.reclaim_calls == [cli._LOCK_PORT]
+        assert "PID 777" in out and r"C:\Tools\other.exe" in out
+        assert "not an fpstune" in out
+
+    def test_an_end_that_does_not_free_the_port_fails_after_a_bounded_wait(
+        self, machine_with, capsys
+    ) -> None:
+        machine = machine_with(stray_lock_holder=True, hung_owner=True, port_stays_taken=True)
+
+        with pytest.raises(SystemExit) as exited:
+            cli._claim_single_instance(preferred_port=8000)
+
+        out = capsys.readouterr().out
+        assert exited.value.code == 1
+        assert "still holds the instance lock" in out and "PID 200" in out
+        waited = machine.clock.now - machine.reclaim_at[0]
+        assert cli._TAKEOVER_RECLAIM_WAIT_SECONDS <= waited < cli._TAKEOVER_RECLAIM_WAIT_SECONDS + 1
+
+
+class TestTheInstanceLockIsVisibleToTheOwnerTable:
+    def test_the_lock_socket_listens_so_a_later_start_can_name_its_pid(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(cli, "_LOCK_PORT", 0)  # any free port; the real one may be taken
+        lock = cli._acquire_instance_lock()
+        assert lock is not None
+        try:
+            port = lock.getsockname()[1]
+
+            assert processes.socket_owner_pids(port) == [os.getpid()]
+        finally:
+            lock.close()
 
 
 class TestWaitForLock:

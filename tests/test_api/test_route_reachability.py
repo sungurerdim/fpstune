@@ -17,8 +17,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-from fastapi.routing import APIRoute
-
 from fpstune.api.main import create_app
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -35,6 +33,8 @@ _UNCALLED_BASELINE: set[str] = set()
 _DOCUMENTED_NON_UI = {
     # Supervisors and uptime checks (api/main.py's /health docstring).
     "GET /health",
+    # A newly started fpstune asks every running one to stop (utils/instances.py).
+    "POST /api/system/shutdown",
 }
 
 
@@ -53,14 +53,32 @@ def _frontend_source() -> str:
     return "\n".join(chunks)
 
 
+_HTTP_METHODS = ("get", "post", "put", "patch", "delete")
+
+
+def _registered_operations() -> dict[str, set[str]]:
+    """``{path: {METHOD, ...}}`` for every route the app serves.
+
+    Read from the OpenAPI schema, the public listing of every operation. The
+    earlier walk over ``app.routes`` kept only ``APIRoute`` instances, and from
+    FastAPI 0.142 an included router is one opaque ``_IncludedRouter`` entry:
+    the walk saw ``/`` and ``/health`` and nothing else, so this file checked
+    two routes of fifty-five and passed. No route here opts out of the schema
+    (``include_in_schema``), so the schema is the whole surface.
+    """
+    paths = create_app().openapi()["paths"]
+    return {
+        path: {method.upper() for method in operations if method in _HTTP_METHODS}
+        for path, operations in paths.items()
+    }
+
+
 def _uncalled_routes() -> set[str]:
     frontend = _frontend_source()
     uncalled: set[str] = set()
-    for route in create_app().routes:
-        if not isinstance(route, APIRoute):
-            continue
+    for path, methods in _registered_operations().items():
         # The frontend's fetch helper supplies the /api prefix.
-        short = route.path.removeprefix("/api")
+        short = path.removeprefix("/api")
         # Anchored to string delimiters: the path must open a "..." or `...`
         # literal and run to its close (or a query string / interpolation).
         # Unanchored, "/power-profile/status" counted as a caller of
@@ -68,12 +86,18 @@ def _uncalled_routes() -> set[str]:
         core = re.escape(re.sub(r"\{[^}]+\}", "@@", short)).replace("@@", r"[^\"`]*?")
         pattern = '["`]' + core + '["`?$]'
         if re.search(pattern, frontend) is None:
-            for method in sorted(route.methods - {"HEAD", "OPTIONS"}):
-                uncalled.add(f"{method} {route.path}")
+            for method in sorted(methods):
+                uncalled.add(f"{method} {path}")
     return uncalled
 
 
 class TestEveryRouteHasACallerOrAVerdict:
+    def test_the_listing_sees_the_included_routers(self) -> None:
+        """The walk this replaced saw two routes and every check above it passed."""
+        operations = _registered_operations()
+        assert "POST" in operations.get("/api/settings/{setting_id}/apply", set())
+        assert sum(len(methods) for methods in operations.values()) > 40
+
     def test_no_route_outside_the_frozen_baseline_is_uncalled(self) -> None:
         new_orphans = sorted(_uncalled_routes() - _UNCALLED_BASELINE - _DOCUMENTED_NON_UI)
         assert not new_orphans, (

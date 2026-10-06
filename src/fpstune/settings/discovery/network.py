@@ -23,7 +23,11 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -> SettingExecutor:
+def with_driver_default(
+    setting: SettingExecutor,
+    defaults: Mapping[str, str],
+    display_names: Mapping[str, str] | None = None,
+) -> SettingExecutor:
     """``setting`` whose ``default_value`` is this driver's own default.
 
     The hardcoded default was one vendor's: reset wrote it to every driver, so a
@@ -32,6 +36,10 @@ def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -
     setting's choices it is the stock value. Anything it does not map to — no
     keyword, an unpublished default, a raw value outside the table — leaves the
     declared default in place.
+
+    ``display_names`` is the same adapter's ``{lowercase keyword: DisplayName}``,
+    for the settings whose detect command also finds the property by the name its
+    control panel shows.
     """
     from fpstune.settings.applicability import values_equal
     from fpstune.settings.base import UNMAPPED
@@ -39,7 +47,14 @@ def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -
 
     match = setting.detect_args.get("driver_default_match")
     if match:
-        return _with_switch_default(setting, defaults, str(match))
+        display_match = setting.detect_args.get("driver_default_display_match")
+        return _with_switch_default(
+            setting,
+            defaults,
+            str(match),
+            str(display_match) if display_match else None,
+            display_names or {},
+        )
 
     keywords = setting.detect_args.get("batch_adapter_keyword")
     # A catch-all row ("changed") is a reading, never a stock value.
@@ -57,30 +72,54 @@ def with_driver_default(setting: SettingExecutor, defaults: Mapping[str, str]) -
 
 
 def _with_switch_default(
-    setting: SettingExecutor, defaults: Mapping[str, str], pattern: str
+    setting: SettingExecutor,
+    defaults: Mapping[str, str],
+    pattern: str,
+    display_pattern: str | None = None,
+    display_names: Mapping[str, str] | None = None,
 ) -> SettingExecutor:
     """An Enabled/Disabled ``setting`` whose stock value is read from the driver.
 
     These settings find their property through a cmdlet or a keyword search, so
     ``detect_args["driver_default_match"]`` names the keywords the detect command
-    reads, as a pattern over the property table's keywords. The state is read the
-    way detection reads it: Disabled only when every matching keyword is 0. So the
-    stock value is Disabled only when the driver publishes at least one matching
-    default and every one of them is 0; any other answer — nothing published, a
-    default that is not a number, one keyword still on — leaves the declared
-    ``Enabled`` in place.
+    reads, as a pattern over the property table's keywords; where the command also
+    matches the display name, ``driver_default_display_match`` is that half, looked
+    up through ``display_names``. The state is read the way detection reads it:
+    Disabled only when every matching keyword is 0. So the stock value is Disabled
+    only when the driver publishes at least one matching default and every one of
+    them is 0; any other answer — nothing published, a default that is not a
+    number, one keyword still on — leaves the declared ``Enabled`` in place.
+
+    A setting that spans several keywords and declares ``keyword_defaults`` in its
+    ``apply_args`` also learns each keyword's own default when the driver ships them
+    in different states, so writing the stock value restores each one rather than
+    one raw value in all of them.
     """
     if setting.choices != ("Enabled", "Disabled") or not defaults:
         return setting
     matcher = re.compile(pattern, re.IGNORECASE)
-    published = [raw for keyword, raw in defaults.items() if matcher.search(keyword)]
-    if not published:
+    name_matcher = re.compile(display_pattern, re.IGNORECASE) if display_pattern else None
+    names = display_names or {}
+    matched = {
+        keyword: raw
+        for keyword, raw in defaults.items()
+        if matcher.search(keyword) or (name_matcher and name_matcher.search(names.get(keyword, "")))
+    }
+    if not matched:
         return setting
     try:
-        every_one_off = all(int(raw.strip()) == 0 for raw in published)
+        values = {keyword: int(raw.strip()) for keyword, raw in matched.items()}
     except ValueError:
         return setting
-    return replace(setting, default_value="Disabled") if every_one_off else setting
+    stock = "Disabled" if all(value == 0 for value in values.values()) else setting.default_value
+    adopted = replace(setting, default_value=stock)
+    if "keyword_defaults" in setting.apply_args and len(set(values.values())) > 1:
+        pairs = ",".join(f"{keyword}={value}" for keyword, value in sorted(values.items()))
+        adopted = replace(
+            adopted,
+            apply_args={**setting.apply_args, "keyword_defaults": pairs, "stock_state": stock},
+        )
+    return adopted
 
 
 def filter_valid_adapters(adapters: list[NetworkAdapter]) -> list[NetworkAdapter]:
@@ -117,6 +156,7 @@ def register_adapter_settings(
     *,
     instance_id: str,
     property_defaults: Mapping[str, str] | None = None,
+    property_names: Mapping[str, str] | None = None,
 ) -> int:
     """Register per-adapter network settings, gated by adapter medium.
 
@@ -136,6 +176,8 @@ def register_adapter_settings(
         instance_id: The adapter's PnP device id; the settings are named by it.
         property_defaults: This adapter's ``{lowercase keyword: DefaultRegistryValue}``;
             a setting's default becomes the driver's own wherever it publishes one.
+        property_names: This adapter's ``{lowercase keyword: DisplayName}``, for the
+            settings whose property is also found by the name the driver shows.
         rss_queue_options: This adapter's own ``(queue_counts, driver_default)``
             for ``*NumRssQueues``, or None when its driver does not expose the
             keyword. There is no fallback: a queue count this driver does not
@@ -239,7 +281,7 @@ def register_adapter_settings(
 
     key = adapter_key(instance_id)
     for setting in settings_to_register:
-        setting = with_driver_default(setting, property_defaults or {})
+        setting = with_driver_default(setting, property_defaults or {}, property_names)
         registry.register(keyed_to_adapter(setting, interface_index, key, display_name))
 
     return len(settings_to_register)
@@ -316,6 +358,7 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
     # Step 3: read what each driver says about itself, once for the machine.
     rss_queue_options = probes.rss_queue_options()
     property_defaults = probes.adapter_property_defaults()
+    property_names = probes.adapter_property_names()
 
     # Step 4: Register settings for each adapter using InterfaceIndex.
     # media_type gates medium-exclusive settings (single detection, no per-tweak probe).
@@ -328,6 +371,7 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
             rss_queue_options.get(adapter.interface_index),
             instance_id=adapter.instance_id,
             property_defaults=property_defaults.get(adapter.interface_index),
+            property_names=property_names.get(adapter.interface_index),
         )
 
     # Step 5: the MTU setting, on the one adapter the measurement applies to.

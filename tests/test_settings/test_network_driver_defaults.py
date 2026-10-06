@@ -11,13 +11,17 @@ same table the flow-control and EEE settings already read.
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 from collections.abc import Callable
+from unittest.mock import patch
 
 import pytest
 
 from fpstune.settings.base import SettingExecutor
 from fpstune.settings.definitions.network import (
+    adapter_key,
     create_checksum_offload_setting,
     create_lso_setting,
     create_power_management_setting,
@@ -26,7 +30,12 @@ from fpstune.settings.definitions.network import (
     create_uapsd_setting,
     create_wake_on_lan_setting,
 )
-from fpstune.settings.discovery.network import with_driver_default
+from fpstune.settings.discovery.network import (
+    discover_network_adapter_settings,
+    with_driver_default,
+)
+from fpstune.settings.discovery.probes import NetworkAdapter
+from fpstune.settings.registry import SettingsRegistry
 
 Factory = Callable[[int, str], SettingExecutor]
 
@@ -118,6 +127,99 @@ class TestMatchTracksTheCommand:
         declared = create_checksum_offload_setting(14, "Ethernet")
         siblings = {"*udpchecksumoffloadipv4": "0", "*ipchecksumoffloadipv4": "0"}
         assert with_driver_default(declared, siblings).default_value == "Enabled"
+
+
+class TestFoundOnlyByDisplayName:
+    """U-APSD and Throughput Booster are found by keyword *or* by display name.
+
+    A driver that spells the keyword its own way is matched only through the
+    name its control panel shows, and its default used to be ignored: reset
+    wrote the declared ``Enabled`` to a driver that ships the feature off.
+    """
+
+    @pytest.mark.parametrize(
+        ("factory", "keyword", "display_name"),
+        [
+            (create_uapsd_setting, "vendorpowersavepoll", "WMM U-APSD Support"),
+            (create_throughput_booster_setting, "vendorburstmode", "Throughput Booster"),
+        ],
+    )
+    def test_the_default_of_a_name_matched_property_is_the_stock_value(
+        self, factory: Factory, keyword: str, display_name: str
+    ) -> None:
+        declared = factory(14, "Wi-Fi")
+        adopted = with_driver_default(declared, {keyword: "0"}, {keyword: display_name})
+        assert adopted.default_value == "Disabled"
+
+    def test_a_property_the_name_does_not_match_is_not_borrowed(self) -> None:
+        declared = create_uapsd_setting(14, "Wi-Fi")
+        names = {"vendorfragmentation": "Fragmentation Threshold"}
+        adopted = with_driver_default(declared, {"vendorfragmentation": "0"}, names)
+        assert adopted.default_value == declared.default_value
+
+    def test_no_published_default_writes_no_invented_value(self) -> None:
+        """The keyword path leaves the declared default when the driver names none; so does this."""
+        declared = create_uapsd_setting(14, "Wi-Fi")
+        adopted = with_driver_default(declared, {}, {"vendorpowersavepoll": "WMM U-APSD Support"})
+        assert adopted.default_value == declared.default_value
+
+    def test_a_default_that_is_not_a_number_is_not_a_reading_here_either(self) -> None:
+        declared = create_uapsd_setting(14, "Wi-Fi")
+        adopted = with_driver_default(
+            declared, {"vendorpowersavepoll": "n/a"}, {"vendorpowersavepoll": "WMM U-APSD"}
+        )
+        assert adopted.default_value == declared.default_value
+
+    @pytest.mark.parametrize(
+        ("factory", "ps_pattern"),
+        [
+            (create_uapsd_setting, "U.?APSD"),
+            (create_throughput_booster_setting, "Throughput.?Booster"),
+        ],
+    )
+    def test_the_name_search_is_the_one_the_detect_script_runs(
+        self, factory: Factory, ps_pattern: str
+    ) -> None:
+        setting = factory(14, "Wi-Fi")
+        assert setting.detect_args["driver_default_display_match"] == ps_pattern
+        assert f"$_.DisplayName -match '{ps_pattern}'" in setting.detect_command
+
+    def test_the_probe_reads_every_keywords_display_name(self) -> None:
+        registry = SettingsRegistry(discover_dynamic=False)
+        payload = {
+            "7": {"names": {"*FlowControl": "Flow Control", "Empty": "", "UAPSD": " U-APSD "}}
+        }
+        completed = subprocess.CompletedProcess(
+            args=["powershell"], returncode=0, stdout=json.dumps(payload), stderr=""
+        )
+        with patch("fpstune.utils.process_watch.run", return_value=completed):
+            assert registry._probes.adapter_property_names() == {
+                7: {"*flowcontrol": "Flow Control", "uapsd": "U-APSD"}
+            }
+
+    def test_discovery_hands_the_names_to_the_derivation(self) -> None:
+        """End to end: what the probe reads reaches the registered setting."""
+        registry = SettingsRegistry(discover_dynamic=False)
+        payload = {
+            "7": {
+                "defaults": {"VendorPowerSavePoll": "0"},
+                "names": {"VendorPowerSavePoll": "WMM U-APSD Support"},
+            }
+        }
+        instance_id = "PCI\\VEN_8086&DEV_2725&SUBSYS_00248086&REV_1A\\4&2B0C1E0&0&00E0"
+        probes = registry._probes
+        with (
+            patch.object(
+                probes,
+                "active_adapters",
+                return_value=[NetworkAdapter(7, "Wi-Fi", "Native 802.11", instance_id)],
+            ),
+            patch.object(probes, "adapter_advanced", return_value=payload),
+        ):
+            discover_network_adapter_settings(registry, probes)
+        setting = registry.get(f"network:{adapter_key(instance_id)}:uapsd")
+        assert setting is not None
+        assert setting.default_value == "Disabled"
 
 
 @pytest.mark.parametrize("factory", [create_speed_duplex_setting, create_power_management_setting])

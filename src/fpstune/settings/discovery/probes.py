@@ -208,6 +208,15 @@ class HardwareProbes:
         """
         return self.probe_once("adapter_defaults", self._parse_adapter_property_defaults)
 
+    def adapter_property_names(self) -> dict[int, dict[str, str]]:
+        """``{interface_index: {lowercase keyword: DisplayName}}``.
+
+        The name each property shows in the driver's control panel. Some detect
+        commands find their property by it as well as by keyword, so the default
+        that belongs to such a property is only reachable through this table.
+        """
+        return self.probe_once("adapter_names", self._parse_adapter_property_names)
+
     def default_route_interface_index(self) -> int | None:
         """Memoised; the real query is _query_default_route_interface_index."""
         return self.probe_once("default_route", self._query_default_route_interface_index)
@@ -284,9 +293,9 @@ class HardwareProbes:
     def _query_adapter_advanced(self) -> dict[str, Any]:
         """Every adapter's advanced properties, in one PowerShell for the machine.
 
-        Returns ``{"<interface_index>": {"defaults": {keyword: default}, "rss":
-        {...}}}``; ``rss`` is present only where the driver publishes
-        ``*NumRssQueues``. An empty dict when the query fails.
+        Returns ``{"<interface_index>": {"defaults": {keyword: default}, "names":
+        {keyword: display name}, "rss": {...}}}``; ``rss`` is present only where
+        the driver publishes ``*NumRssQueues``. An empty dict when the query fails.
         """
         try:
             result = process_watch.run(
@@ -306,8 +315,10 @@ class HardwareProbes:
                     "$idx = $map[$_.Name]; "
                     "if ($null -ne $idx -and $_.RegistryKeyword) { "
                     "$k = [string]$idx; "
-                    "if (-not $out.ContainsKey($k)) { $out[$k] = @{ defaults = @{} } }; "
+                    "if (-not $out.ContainsKey($k)) { "
+                    "$out[$k] = @{ defaults = @{}; names = @{} } }; "
                     "$out[$k].defaults[$_.RegistryKeyword] = [string]$_.DefaultRegistryValue; "
+                    "$out[$k].names[$_.RegistryKeyword] = [string]$_.DisplayName; "
                     "if ($_.RegistryKeyword -eq '*NumRssQueues') { $out[$k].rss = @{ "
                     "valid = @($_.ValidRegistryValues); "
                     "default = [string]$_.DefaultRegistryValue; "
@@ -340,6 +351,21 @@ class HardwareProbes:
                 if str(value).strip()
             }
         return defaults
+
+    def _parse_adapter_property_names(self) -> dict[int, dict[str, str]]:
+        names: dict[int, dict[str, str]] = {}
+        for raw_index, entry in self.adapter_advanced().items():
+            if not str(raw_index).isdigit() or not isinstance(entry, dict):
+                continue
+            table = entry.get("names")
+            if not isinstance(table, dict):
+                continue
+            names[int(raw_index)] = {
+                str(keyword).lower(): str(value).strip()
+                for keyword, value in table.items()
+                if str(value).strip()
+            }
+        return names
 
     def _parse_rss_queue_options(self) -> dict[int, tuple[tuple[str, ...], str]]:
         """Read each adapter's own accepted ``*NumRssQueues`` values.

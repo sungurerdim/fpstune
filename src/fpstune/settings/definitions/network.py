@@ -2180,19 +2180,36 @@ def create_wake_on_lan_setting(interface_index: int, display_name: str) -> Setti
         },
         value_map={},
         apply_type=DetectType.POWERSHELL,
+        # The two keywords share one Enabled/Disabled state, but a driver may ship them
+        # in different ones. Discovery fills ``keyword_defaults`` ("keyword=raw,...")
+        # and ``stock_state`` only for such a driver; writing the stock value then puts
+        # each keyword back to its own default instead of one raw value in both.
         apply_command=(
             "$regVal = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
+            "$own = @{}; "
+            "foreach ($pair in '%keyword_defaults%' -split ',') { "
+            "$kv = $pair -split '='; "
+            "if ($kv.Count -eq 2) { $own[$kv[0].ToLower()] = [int]$kv[1] } "
+            "}; "
+            "$restore = '%stock_state%' -ne '' -and '%value%' -eq '%stock_state%'; "
             "$changed = $false; "
             "foreach ($kw in @('*WakeOnMagicPacket', '*WakeOnPattern')) { "
+            "$write = if ($restore -and $own.ContainsKey($kw.ToLower())) "
+            "{ $own[$kw.ToLower()] } else { $regVal }; "
             "try { "
             "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $kw -RegistryValue $regVal -ErrorAction Stop; "
+            "-RegistryKeyword $kw -RegistryValue $write -ErrorAction Stop; "
             "$changed = $true "
             "} catch { } "
             "}; "
             "if ($changed) { 'ok' } else { 'not_supported' }"
         ),
-        apply_args={"ifindex": interface_index, "restart_adapter": True},
+        apply_args={
+            "ifindex": interface_index,
+            "restart_adapter": True,
+            "keyword_defaults": "",
+            "stock_state": "",
+        },
         apply_value_map={},
     )
 
@@ -2856,10 +2873,11 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
         ),
         detect_args={
             "ifindex": interface_index,
-            # The keyword half of the search above. The display-name half cannot be
-            # matched against a table keyed by keyword, so a driver found only that
-            # way keeps the declared default.
+            # Both halves of the search above. A driver found only by the name its
+            # control panel shows is matched through the keyword -> display name
+            # table, so its own default is read the same way.
             "driver_default_match": "UAPSD|APSD",
+            "driver_default_display_match": "U.?APSD",
         },
         value_map={},
         apply_type=DetectType.POWERSHELL,
@@ -2931,8 +2949,9 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
         ),
         detect_args={
             "ifindex": interface_index,
-            # Keyword half of the search above; see the U-APSD setting.
+            # Both halves of the search above; see the U-APSD setting.
             "driver_default_match": "ThroughputBoost",
+            "driver_default_display_match": "Throughput.?Booster",
         },
         value_map={},
         apply_type=DetectType.POWERSHELL,

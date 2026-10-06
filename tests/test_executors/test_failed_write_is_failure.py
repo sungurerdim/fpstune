@@ -512,16 +512,6 @@ CASES: dict[str, Case] = {
     ),
 }
 
-# Known gaps, each a strict xfail: the day the executor is fixed the test turns red,
-# and the entry has to be deleted with the fix. They live here rather than in a fix
-# because the file that owns them is being edited by another change right now.
-KNOWN_UNREADABLE: dict[tuple[str, str], str] = {
-    ("netsh", "non-zero exit, nothing said"): (
-        "netsh.py answers 'netsh failed: ' with nothing after the colon when netsh prints "
-        "nothing; the file is being edited by another change, so the gap is recorded here"
-    ),
-}
-
 
 def _apply(case: Case, registered: list[SettingExecutor]) -> tuple[bool, str | None]:
     setting = case.pick(registered)
@@ -536,9 +526,7 @@ def _refusal_params() -> list[Any]:
     params = []
     for name, case in CASES.items():
         for mode in case.refusals:
-            known = KNOWN_UNREADABLE.get((name, mode))
-            marks = [pytest.mark.xfail(reason=known, strict=True)] if known else []
-            params.append(pytest.param(name, mode, id=f"{name} | {mode}", marks=marks))
+            params.append(pytest.param(name, mode, id=f"{name} | {mode}"))
     return params
 
 
@@ -901,109 +889,13 @@ BEST_EFFORT: tuple[tuple[str, str, str, str], ...] = (
         "The diskpart script is a temp file for a compaction that is measured by the vhdx "
         "size either side of it.",
     ),
-)
-
-# Violations in files another change owns right now, listed by the script they sit in.
-# Shrink-only: ``test_a_fixed_pending_violation_must_leave_the_set`` fails when one is
-# fixed, so the entry must be deleted with the fix, and a new one can never be added
-# here without that being a visible diff. Each is the id of the setting that ships it.
-NETWORK = "definitions/network.py"
-SYSTEM = "definitions/system.py"
-PENDING: tuple[tuple[str, str, str, str], ...] = (
-    # network:dns_security
     (
-        NETWORK,
-        "Set-DnsClientServerAddress",
-        "unstopped",
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAdd",
-    ),
-    # network:dns_security
-    (
-        NETWORK,
-        "Set-DnsClientServerAddress",
-        "unstopped",
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServ",
-    ),
-    # network:dns_security, network:dns_over_https
-    (
-        NETWORK,
-        "Clear-DnsClientCache",
-        "silenced",
-        "Clear-DnsClientCache -ErrorAction SilentlyContinue",
-    ),
-    # network:dns_security
-    (NETWORK, "Register-DnsClient", "silenced", "Register-DnsClient -ErrorAction SilentlyContinue"),
-    # network:nagle_algorithm
-    (
-        NETWORK,
-        "Set-ItemProperty",
-        "unstopped",
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -Value 1 -Type",
-    ),
-    # network:nagle_algorithm
-    (
-        NETWORK,
-        "Remove-ItemProperty",
-        "silenced",
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -ErrorActio",
-    ),
-    # network:tcp_ack_frequency
-    (
-        NETWORK,
-        "Set-ItemProperty",
-        "unstopped",
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -Value 1 ",
-    ),
-    # network:tcp_ack_frequency
-    (
-        NETWORK,
-        "Remove-ItemProperty",
-        "silenced",
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -Error",
-    ),
-    # network:tcp_del_ack_ticks
-    (
-        NETWORK,
-        "Set-ItemProperty",
-        "unstopped",
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -Value 0 -",
-    ),
-    # network:tcp_del_ack_ticks
-    (
-        NETWORK,
-        "Remove-ItemProperty",
-        "silenced",
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -ErrorA",
-    ),
-    # network:dns_over_https
-    (
-        NETWORK,
-        "Remove-Item",
-        "silenced",
-        "Remove-Item -LiteralPath $pair.Key -Recurse -Force -ErrorAction Silent",
-    ),
-    # perf:startup_delay
-    (SYSTEM, "New-Item", "unstopped", "New-Item -Path $p -Force"),
-    # perf:startup_delay
-    (
-        SYSTEM,
-        "Set-ItemProperty",
-        "unstopped",
-        "Set-ItemProperty -Path $p -Name 'StartupDelayInMSec' -",
-    ),
-    # perf:startup_delay
-    (
-        SYSTEM,
-        "Remove-ItemProperty",
-        "silenced",
-        "Remove-ItemProperty -Path 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\Curr",
-    ),
-    # perf:shutdown_app_timeout
-    (
-        SYSTEM,
-        "Remove-ItemProperty",
-        "silenced",
-        "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name $n -",
+        r"^definitions/network\.py$",
+        r"(?:Clear|Register)-DnsClient(?:Cache)?",
+        r".",
+        "A DNS cache flush and a DHCP re-registration run after the resolver list is "
+        "written; the setting is what detect reads back from the adapters, so a flush "
+        "that is refused leaves the state reached and only a stale cache entry to expire.",
     ),
 )
 
@@ -1072,11 +964,8 @@ class TestTheScannerSeesTheShape:
 
 class TestEveryShippedWriteStopsOrIsBestEffortByName:
     def test_no_unlisted_write_swallows_its_failure(self) -> None:
-        pending = set(PENDING)
         unlisted = []
         for source, cmdlet, kind, head in _violations():
-            if (source, cmdlet, kind, head) in pending:
-                continue
             if any(
                 re.search(src, source) and re.fullmatch(cmd, cmdlet) and re.search(stmt, head)
                 for src, cmd, stmt, _reason in BEST_EFFORT
@@ -1102,8 +991,3 @@ class TestEveryShippedWriteStopsOrIsBestEffortByName:
         assert not stale, "BEST_EFFORT entries that no script needs any more:\n  " + "\n  ".join(
             stale
         )
-
-    def test_a_fixed_pending_violation_must_leave_the_set(self) -> None:
-        found = set(_violations())
-        fixed = [entry for entry in PENDING if entry not in found]
-        assert not fixed, "fixed, so delete them from PENDING:\n  " + "\n  ".join(map(str, fixed))

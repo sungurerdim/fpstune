@@ -3595,14 +3595,18 @@ PERF_STARTUP_DELAY = SettingExecutor(
     value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
-        "if ('%value%' -eq 'disabled') { "
+        # A refused write ends the script with its reason; a value that is not there
+        # is the goal of the removal, so only a value that is there is removed.
+        "try { "
         "$p = 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize'; "
-        "if (-not (Test-Path $p)) { New-Item -Path $p -Force | Out-Null }; "
+        "if ('%value%' -eq 'disabled') { "
+        "if (-not (Test-Path $p)) { New-Item -Path $p -Force -ErrorAction Stop | Out-Null }; "
         "Set-ItemProperty -Path $p -Name 'StartupDelayInMSec' -Value 0 -Type DWord "
-        "} else { "
-        "Remove-ItemProperty -Path "
-        "'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\Serialize' "
-        "-Name 'StartupDelayInMSec' -ErrorAction SilentlyContinue }"
+        "-ErrorAction Stop "
+        "} elseif (Get-ItemProperty -Path $p -Name 'StartupDelayInMSec' "
+        "-ErrorAction SilentlyContinue) { "
+        "Remove-ItemProperty -Path $p -Name 'StartupDelayInMSec' -ErrorAction Stop } "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},
@@ -3816,9 +3820,16 @@ SHUTDOWN_APP_TIMEOUT = SettingExecutor(
     value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
+        # Stock Windows has neither value, so a value that is not there is the goal;
+        # one that is there and cannot be removed ends the script with its reason.
+        "try { "
         "foreach ($n in 'WaitToKillAppTimeout', 'HungAppTimeout') { "
-        "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name $n -ErrorAction SilentlyContinue }; "
-        "'ok'"
+        "if (Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name $n "
+        "-ErrorAction SilentlyContinue) { "
+        "Remove-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name $n "
+        "-ErrorAction Stop } }; "
+        "'ok' "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},

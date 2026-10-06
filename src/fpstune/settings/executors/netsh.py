@@ -17,7 +17,7 @@ import sys
 from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.applicability import NOT_AVAILABLE
-from fpstune.settings.executors import BaseExecutor, map_raw_to_display
+from fpstune.settings.executors import BaseExecutor, describe_refusal, map_raw_to_display
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
 from fpstune.utils import process_watch
 from fpstune.utils.powershell import run_powershell, substitute_placeholders
@@ -203,7 +203,7 @@ class NetshExecutor(BaseExecutor):
 
         success, output = self._query(cmd)
         if not success:
-            return None, f"netsh failed: {output}"
+            return None, f"netsh {cmd} failed: {output}"
 
         # Parse output based on command type
         raw_value = self._parse_output(output, setting.detect_args)
@@ -240,7 +240,7 @@ class NetshExecutor(BaseExecutor):
 
         success, output = self._run(cmd)
         if not success:
-            return False, f"netsh failed: {output}"
+            return False, f"netsh {cmd} failed: {output}"
 
         return True, None
 
@@ -301,9 +301,13 @@ class NetshExecutor(BaseExecutor):
             result = process_watch.run(
                 [system_tool("netsh.exe")] + args.split(), process_watch.QUERY
             )
-            output = result.stdout + result.stderr
-            return result.returncode == 0, output.strip()
+            output = (result.stdout + result.stderr).strip()
+            if result.returncode == 0:
+                return True, output
+            # netsh refuses some commands without a word; the exit code is then
+            # the whole reason, and a message ending in a bare colon says nothing.
+            return False, output or f"exit code {result.returncode}, no output"
         except subprocess.TimeoutExpired as e:
-            return False, str(e)
+            return False, describe_refusal(e)
         except Exception as e:
-            return False, str(e)
+            return False, describe_refusal(e)

@@ -799,6 +799,8 @@ DNS_SECURITY = SettingExecutor(
     # After DNS change, flush cache and register with DHCP to ensure immediate effect
     apply_type=DetectType.POWERSHELL,
     apply_command=(
+        # A refused write ends the script with its reason, not with 'ok'.
+        "try { "
         "$adapters = Get-NetAdapter | Where-Object { "
         "[int]$_.InterfaceOperationalStatus -eq 1 -and "
         "-not $_.Virtual -and "
@@ -811,24 +813,29 @@ DNS_SECURITY = SettingExecutor(
         "foreach ($adapter in $adapters) { "
         "$v6 = @(); "
         "if ('%value%' -eq 'cloudflare_security') { "
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.2','1.0.0.2'); "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.2','1.0.0.2') "
+        "-ErrorAction Stop; "
         "$v6 = @('2606:4700:4700::1112','2606:4700:4700::1002'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'cloudflare_family') { "
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.3','1.0.0.3'); "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.3','1.0.0.3') "
+        "-ErrorAction Stop; "
         "$v6 = @('2606:4700:4700::1113','2606:4700:4700::1003'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'cloudflare') { "
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.1','1.0.0.1'); "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('1.1.1.1','1.0.0.1') "
+        "-ErrorAction Stop; "
         "$v6 = @('2606:4700:4700::1111','2606:4700:4700::1001'); "
         "$changed++ "
         "} elseif ('%value%' -eq 'quad9') { "
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('9.9.9.9','149.112.112.112'); "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses ('9.9.9.9','149.112.112.112') "
+        "-ErrorAction Stop; "
         "$v6 = @('2620:fe::fe','2620:fe::9'); "
         "$changed++ "
         "} else { "
         # Reset to DHCP: clear manual DNS, flush cache, register with DHCP
-        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses; "
+        "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ResetServerAddresses "
+        "-ErrorAction Stop; "
         "$v6 = @(); "
         "$changed++ "
         "}; "
@@ -839,10 +846,13 @@ DNS_SECURITY = SettingExecutor(
         "Set-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex -ServerAddresses $v6 "
         "-ErrorAction Stop } "
         "}; "
-        # Flush DNS cache and register with DHCP for immediate effect
+        # Flush DNS cache and register with DHCP for immediate effect. Best-effort on
+        # purpose (see BEST_EFFORT in test_failed_write_is_failure.py): the resolver
+        # list is already written and read back by detect.
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
         "Register-DnsClient -ErrorAction SilentlyContinue; "
-        "if ($changed -gt 0) { 'ok' } else { 'no_adapters_found' }"
+        "if ($changed -gt 0) { 'ok' } else { 'no_adapters_found' } "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},
@@ -1048,9 +1058,10 @@ DNS_OVER_HTTPS = SettingExecutor(
         "$done++ "
         "} else { "
         "if (Test-Path -LiteralPath $pair.Key) { "
-        "Remove-Item -LiteralPath $pair.Key -Recurse -Force -ErrorAction SilentlyContinue; "
+        "Remove-Item -LiteralPath $pair.Key -Recurse -Force -ErrorAction Stop; "
         "$done++ "
         "} } }; "
+        # Best-effort flush, as in dns_security.
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
         # Turning it off has nothing to do once no entry is left (an earlier run
         # removed them), and detect reads that state as `disabled`;
@@ -1131,6 +1142,8 @@ NAGLE_ALGORITHM = SettingExecutor(
     # TcpAckFrequency and TcpDelAckTicks are separate tweaks.
     apply_type=DetectType.POWERSHELL,
     apply_command=(
+        # A refused write ends the script with its reason, not with 'ok'.
+        "try { "
         "$interfaces = Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' -ErrorAction SilentlyContinue; "
         "$changed = 0; "
         "foreach ($iface in $interfaces) { "
@@ -1139,13 +1152,15 @@ NAGLE_ALGORITHM = SettingExecutor(
         "$hasGateway = ($props.DefaultGateway -and $props.DefaultGateway.Count -gt 0) -or "
         "($props.DhcpDefaultGateway -and $props.DhcpDefaultGateway.Length -gt 0); "
         "if ('%value%' -eq 'disabled' -and $hasGateway) { "
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -Value 1 -Type DWord -Force; "
+        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -Value 1 -Type DWord -Force -ErrorAction Stop; "
         "$changed++ "
         "} elseif ('%value%' -eq 'enabled' -and $hasGateway) { "
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -ErrorAction SilentlyContinue; "
+        "if ($props.PSObject.Properties.Name -contains 'TcpNoDelay') { "
+        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpNoDelay' -ErrorAction Stop }; "
         "$changed++ "
         "} }; "
-        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' }"
+        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' } "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},
@@ -1202,6 +1217,8 @@ TCP_ACK_FREQUENCY = SettingExecutor(
     value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
+        # A refused write ends the script with its reason, not with 'ok'.
+        "try { "
         "$interfaces = Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' -ErrorAction SilentlyContinue; "
         "$changed = 0; "
         "foreach ($iface in $interfaces) { "
@@ -1209,13 +1226,15 @@ TCP_ACK_FREQUENCY = SettingExecutor(
         "$hasGateway = ($props.DefaultGateway -and $props.DefaultGateway.Count -gt 0) -or "
         "($props.DhcpDefaultGateway -and $props.DhcpDefaultGateway.Length -gt 0); "
         "if ('%value%' -eq 'immediate' -and $hasGateway) { "
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -Value 1 -Type DWord -Force; "
+        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -Value 1 -Type DWord -Force -ErrorAction Stop; "
         "$changed++ "
         "} elseif ('%value%' -eq 'default' -and $hasGateway) { "
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -ErrorAction SilentlyContinue; "
+        "if ($props.PSObject.Properties.Name -contains 'TcpAckFrequency') { "
+        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpAckFrequency' -ErrorAction Stop }; "
         "$changed++ "
         "} }; "
-        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' }"
+        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' } "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},
@@ -1276,6 +1295,8 @@ TCP_DEL_ACK_TICKS = SettingExecutor(
     value_map={},
     apply_type=DetectType.POWERSHELL,
     apply_command=(
+        # A refused write ends the script with its reason, not with 'ok'.
+        "try { "
         "$interfaces = Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' -ErrorAction SilentlyContinue; "
         "$changed = 0; "
         "foreach ($iface in $interfaces) { "
@@ -1283,13 +1304,15 @@ TCP_DEL_ACK_TICKS = SettingExecutor(
         "$hasGateway = ($props.DefaultGateway -and $props.DefaultGateway.Count -gt 0) -or "
         "($props.DhcpDefaultGateway -and $props.DhcpDefaultGateway.Length -gt 0); "
         "if ('%value%' -eq 'disabled' -and $hasGateway) { "
-        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -Value 0 -Type DWord -Force; "
+        "Set-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -Value 0 -Type DWord -Force -ErrorAction Stop; "
         "$changed++ "
         "} elseif ('%value%' -eq 'default' -and $hasGateway) { "
-        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -ErrorAction SilentlyContinue; "
+        "if ($props.PSObject.Properties.Name -contains 'TcpDelAckTicks') { "
+        "Remove-ItemProperty -Path $iface.PSPath -Name 'TcpDelAckTicks' -ErrorAction Stop }; "
         "$changed++ "
         "} }; "
-        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' }"
+        "if ($changed -gt 0) { 'ok' } else { 'no_interfaces_found' } "
+        "} catch { 'error:' + $_.Exception.Message }"
     ),
     apply_args={},
     apply_value_map={},

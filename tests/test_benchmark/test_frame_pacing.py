@@ -45,11 +45,46 @@ def fine_timer() -> Iterator[None]:
     so the system returns to whatever period its other processes still hold.
     Off Windows there is nothing to request: the bench's fallback path is
     ``time.sleep``, which is already high-resolution there.
+
+    The request alone is not enough on Windows 11: a process that owns no
+    visible window may have it ignored by power throttling. That happened deep
+    in a long run — the median read 15.9 ms, the mean of one ~31 ms and one
+    ~0.5 ms repeat, the 15.625 ms signature above, with this fixture active.
+    So the process first opts out of timer-resolution throttling, as a game
+    that needs its period honoured does.
     """
     if sys.platform != "win32":
         yield
         return
     import ctypes
+    from ctypes import wintypes
+
+    class _PowerThrottlingState(ctypes.Structure):
+        _fields_ = [
+            ("Version", wintypes.ULONG),
+            ("ControlMask", wintypes.ULONG),
+            ("StateMask", wintypes.ULONG),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.GetCurrentProcess.restype = wintypes.HANDLE
+    kernel32.SetProcessInformation.argtypes = [
+        wintypes.HANDLE,
+        ctypes.c_int,
+        ctypes.c_void_p,
+        wintypes.DWORD,
+    ]
+    kernel32.SetProcessInformation.restype = wintypes.BOOL
+    process_power_throttling = 4
+    ignore_timer_resolution = 0x4
+    # Control the flag and leave it clear: timer requests are always honoured.
+    state = _PowerThrottlingState(1, ignore_timer_resolution, 0)
+    assert kernel32.SetProcessInformation(
+        kernel32.GetCurrentProcess(),
+        process_power_throttling,
+        ctypes.byref(state),
+        ctypes.sizeof(state),
+    ), f"timer-resolution throttling opt-out refused (error {ctypes.get_last_error()})"
 
     winmm = ctypes.WinDLL("winmm")
     assert winmm.timeBeginPeriod(1) == 0, "the host refused a 1 ms timer period"

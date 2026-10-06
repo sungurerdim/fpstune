@@ -31,6 +31,8 @@ from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Any
 
+from fpstune.utils.logger import _ANSI_ESCAPE
+
 # Check if debug mode is enabled (for console output)
 DEBUG_ENABLED = os.environ.get("FPSTUNE_DEBUG", "").lower() in ("1", "true", "yes", "on")
 
@@ -190,6 +192,22 @@ def _log_writer(log_dir: Path, filename: str) -> logging.Logger:
     return writer
 
 
+def _plain(value: Any) -> Any:
+    """``value`` with terminal escapes stripped from every string it holds.
+
+    Stripped *before* serialisation, with the one pattern ``utils/logger.py``
+    strips ``fpstune.log`` with: ``json.dumps`` turns a raw ESC into the text
+    ``\\u001b``, which a file-level formatter can no longer recognise.
+    """
+    if isinstance(value, str):
+        return _ANSI_ESCAPE.sub("", value)
+    if isinstance(value, dict):
+        return {_plain(k): _plain(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [_plain(v) for v in value]
+    return value
+
+
 def _write_to_file(component: str, message: str, data: dict[str, Any] | None = None) -> None:
     """Write a log entry to a component-specific file and the main debug.log.
 
@@ -223,6 +241,9 @@ def _write_to_file(component: str, message: str, data: dict[str, Any] | None = N
             "nvprofile": "settings.log",
         }
         log_file = component_map.get(component, "debug.log")
+
+        message = _plain(message)
+        data = _plain(data)
 
         with _file_lock:
             if data:

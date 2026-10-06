@@ -287,6 +287,51 @@ class TestLogFileNeverHoldsAnEscape:
         assert "done" in content
 
 
+@pytest.fixture
+def debug_log_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[Path]:
+    """`utils/debug.py` writing for real, into a temp directory, with FPSTUNE_DEBUG set."""
+    from fpstune.utils import debug as debug_module
+
+    monkeypatch.setattr(debug_module, "DEBUG_ENABLED", True)
+    monkeypatch.setattr(debug_module, "_LOG_DIR", tmp_path)
+    monkeypatch.setattr(debug_module, "_log_writers", {})
+    try:
+        yield tmp_path
+    finally:
+        for writer in list(debug_module._log_writers.values()):
+            for handler in list(writer.handlers):
+                handler.close()
+                writer.removeHandler(handler)
+
+
+class TestDebugFilesNeverHoldAnEscape:
+    """Class guard 3: ``debug.log`` and its component files are plain text too.
+
+    ``utils/debug.py`` wrote its four files through a bare ``Formatter``, so a
+    PowerShell command or a detection line carrying a cursor move or an OSC title
+    reached ``powershell.log`` / ``hardware.log`` / ``debug.log`` verbatim — the
+    same noise 330fdd5 removed from ``fpstune.log``, left standing beside it.
+    """
+
+    @pytest.mark.parametrize("component", ["powershell", "hardware", "settings", "unmapped"])
+    @pytest.mark.parametrize("key", list(_PAYLOADS))
+    def test_every_component_file_and_the_json_log(
+        self, debug_log_dir: Path, component: str, key: str
+    ) -> None:
+        from fpstune.utils.debug import debug_log
+
+        debug_log(component, f"entry {_PAYLOADS[key]}", {"k": "v"})
+
+        written = [p for p in debug_log_dir.glob("*.log") if p.stat().st_size]
+        assert written, "nothing was written, so the guard below proves nothing"
+        for path in written:
+            content = path.read_text(encoding="utf-8")
+            assert "\x1b" not in content, f"an escape sequence reached {path.name}"
+            assert "\x9b" not in content, f"an 8-bit CSI reached {path.name}"
+            assert "\\u001b" not in content, f"{path.name} holds an escape as JSON text"
+            assert _READABLE[key] in content, f"stripping ate the message text in {path.name}"
+
+
 class TestEveryActivityIsWrittenOnce:
     """Class guard 2: one activity → one terminal line and one file line.
 

@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from fpstune.settings.os_protection import blocked_write
+
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
 
@@ -168,6 +170,14 @@ class ApplicabilityChecker:
         Returns:
             Tuple of (is_applicable, reason). Reason is empty if applicable.
         """
+        # A key Windows guards against other programs while its guard is up: the
+        # write is refused for every process, elevated or not, so the setting is
+        # not on offer here (C10) rather than offered and then "refused".
+        # Before the conditions shortcut: a setting need not declare anything.
+        protected = blocked_write(setting)
+        if protected:
+            return False, protected
+
         conditions = setting.applicable_conditions
         if not conditions:
             return True, ""

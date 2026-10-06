@@ -896,7 +896,7 @@ _DOH_TEMPLATES = {
 # settings disagreeing about which adapters count, which is the defect fixed in
 # dns_security's own detect (it read one adapter while apply wrote all of them).
 _PHYSICAL_ADAPTER_FILTER = (
-    "Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { "
+    "Get-NetAdapter -ErrorAction Stop | Where-Object { "
     "[int]$_.InterfaceOperationalStatus -eq 1 -and "
     "-not $_.Virtual -and "
     "$_.InterfaceDescription -notlike '*Virtual*' -and "
@@ -915,6 +915,34 @@ _DOH_INTERFACE_KEY_PS = (
     "'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Dnscache"
     "\\InterfaceSpecificParameters\\' + $guid + '\\DohInterfaceSettings\\' + "
     "$(if ($server -like '*:*') { 'Doh6' } else { 'Doh' }) + '\\' + $server"
+)
+
+# The ONE question detect and apply both ask: which (adapter, resolver) pairs can
+# carry DoH. Every v4 and v6 resolver of every filtered physical adapter is walked,
+# and a resolver counts only when a DoH template is known for it -- Windows' own
+# (Get-DnsClientDohServerAddress, which also covers whatever the user registered
+# through the Settings UI) first, `_DOH_TEMPLATES` as the fallback for the filtered
+# Cloudflare variants Windows does not ship. Measured 2026-10-06: detect read only
+# the primary IPv4 resolver while apply walked all of them and failed with "no DoH
+# template known" when none had one, so a row detect showed as actionable could not
+# be applied. Two copies of this walk is how they drifted; it is one text now.
+# Leaves `$adapters` and `$pairs` (Server, Template, Key) behind. An unreadable
+# adapter or resolver list raises (-ErrorAction Stop) instead of reading as "none".
+_DOH_RESOLVER_SCAN_PS = (
+    f"$templates = @{{ {_DOH_TEMPLATE_TABLE_PS} }}; "
+    f"$adapters = @({_PHYSICAL_ADAPTER_FILTER}); "
+    "$pairs = @(); "
+    "foreach ($adapter in $adapters) { "
+    "$guid = $adapter.InterfaceGuid; "
+    "$servers = @(Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
+    "-ErrorAction Stop | ForEach-Object { $_.ServerAddresses }); "
+    "foreach ($server in $servers) { "
+    "$template = (Get-DnsClientDohServerAddress -ServerAddress $server "
+    "-ErrorAction SilentlyContinue).DohTemplate; "
+    "if (-not $template) { $template = $templates[$server] }; "
+    "if (-not $template) { continue }; "
+    f"$pairs += [pscustomobject]@{{ Server = $server; Template = $template; Key = {_DOH_INTERFACE_KEY_PS} }} "
+    "} }; "
 )
 
 DNS_OVER_HTTPS = SettingExecutor(
@@ -953,74 +981,64 @@ DNS_OVER_HTTPS = SettingExecutor(
     # Reads the per-interface flag, never the template table. A registered template
     # with no interface entry does nothing at all, and reporting on the table would
     # have called the dev machine's dead configuration "enabled".
-    # Windows writes the entry for the PRIMARY resolver only, so requiring one for
-    # every configured address would be stricter than Windows itself and would read
-    # a working setup as unapplied.
+    # Asks apply's own question (_DOH_RESOLVER_SCAN_PS): every resolver that has a
+    # known template must carry its flag. Windows' UI writes the flag for the
+    # primary resolver only, so a UI-enabled setup reads `disabled` here and apply
+    # completes it -- a secondary resolver without its flag is a plaintext path.
+    # No configured resolver has a known template (a router's own DNS): DoH cannot
+    # be applied, so the row is `not_supported` -> not applicable, instead of an
+    # apply that can only fail. It becomes applicable once dns_security has put a
+    # resolver with a template on the adapter. A failed read raises (detect fails,
+    # the row reads "unknown"), it is never `disabled` or `not_supported`.
     detect_command=(
-        "try { "
-        "$result = 'disabled'; "
-        f"$adapters = @({_PHYSICAL_ADAPTER_FILTER}); "
-        "if ($adapters.Count -gt 0) { "
-        "$allOn = $true; "
-        "foreach ($adapter in $adapters) { "
-        "$servers = @((Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
-        "-AddressFamily IPv4 -ErrorAction SilentlyContinue).ServerAddresses); "
-        "if ($servers.Count -eq 0) { $allOn = $false; break } "
-        "$guid = $adapter.InterfaceGuid; $server = $servers[0]; "
-        f"$key = {_DOH_INTERFACE_KEY_PS}; "
+        "try { " + _DOH_RESOLVER_SCAN_PS + "if ($pairs.Count -eq 0) { 'not_supported' } else { "
+        "$result = 'enabled'; "
+        "foreach ($pair in $pairs) { "
         "$flags = $null; "
-        "if (Test-Path -LiteralPath $key) { "
-        "$flags = (Get-ItemProperty -LiteralPath $key -Name DohFlags "
+        "if (Test-Path -LiteralPath $pair.Key) { "
+        "$flags = (Get-ItemProperty -LiteralPath $pair.Key -Name DohFlags "
         "-ErrorAction SilentlyContinue).DohFlags "
-        "} "
-        "if (-not $flags) { $allOn = $false; break } "
         "}; "
-        "if ($allOn) { $result = 'enabled' } "
+        "if (-not $flags) { $result = 'disabled'; break } "
         "}; $result "
-        "} catch { 'disabled' }"
+        "} "
+        "} catch { throw }"
     ),
     detect_args={},
     value_map={},
     apply_type=DetectType.POWERSHELL,
     # Registers the template for every configured resolver it knows, then writes the
-    # interface flag. Resolvers with no known template are counted and reported
-    # rather than skipped silently -- a partial result must not read as success.
+    # interface flag. Resolvers with no known template are not in `$pairs`; when
+    # that leaves nothing to enable the failure says so rather than reading as
+    # success.
     apply_command=(
-        "try { "
-        f"$templates = @{{ {_DOH_TEMPLATE_TABLE_PS} }}; "
-        f"$adapters = @({_PHYSICAL_ADAPTER_FILTER}); "
-        "$done = 0; $unknown = 0; "
-        "foreach ($adapter in $adapters) { "
-        "$guid = $adapter.InterfaceGuid; "
-        # Both families: an IPv6 resolver without its flag is a plaintext path.
-        "$servers = @(Get-DnsClientServerAddress -InterfaceIndex $adapter.ifIndex "
-        "-ErrorAction SilentlyContinue | ForEach-Object { $_.ServerAddresses }); "
-        "foreach ($server in $servers) { "
-        f"$key = {_DOH_INTERFACE_KEY_PS}; "
+        "try { " + _DOH_RESOLVER_SCAN_PS + "$done = 0; "
+        "foreach ($pair in $pairs) { "
         "if ('%value%' -eq 'enabled') { "
-        "$template = $templates[$server]; "
-        "if (-not $template) { $unknown++; continue } "
-        "if (-not (Get-DnsClientDohServerAddress -ServerAddress $server "
+        "if (-not (Get-DnsClientDohServerAddress -ServerAddress $pair.Server "
         "-ErrorAction SilentlyContinue)) { "
-        "Add-DnsClientDohServerAddress -ServerAddress $server -DohTemplate $template "
-        "-AllowFallbackToUdp $false -AutoUpgrade $true -ErrorAction SilentlyContinue | Out-Null "
+        "Add-DnsClientDohServerAddress -ServerAddress $pair.Server "
+        "-DohTemplate $pair.Template -AllowFallbackToUdp $false -AutoUpgrade $true "
+        "-ErrorAction Stop | Out-Null "
         "}; "
-        "New-Item -Path $key -Force -ErrorAction Stop | Out-Null; "
+        "New-Item -Path $pair.Key -Force -ErrorAction Stop | Out-Null; "
         # 2 = the value Windows writes for "known template, no plaintext fallback",
         # measured rather than assumed.
-        "New-ItemProperty -Path $key -Name DohFlags -Value 2 -PropertyType QWord -Force "
-        "-ErrorAction Stop | Out-Null; "
+        "New-ItemProperty -Path $pair.Key -Name DohFlags -Value 2 -PropertyType QWord "
+        "-Force -ErrorAction Stop | Out-Null; "
         "$done++ "
         "} else { "
-        "if (Test-Path -LiteralPath $key) { "
-        "Remove-Item -LiteralPath $key -Recurse -Force -ErrorAction SilentlyContinue; $done++ "
-        "} } } }; "
+        "if (Test-Path -LiteralPath $pair.Key) { "
+        "Remove-Item -LiteralPath $pair.Key -Recurse -Force -ErrorAction SilentlyContinue; "
+        "$done++ "
+        "} } }; "
         "Clear-DnsClientCache -ErrorAction SilentlyContinue; "
         # Turning it off has nothing to do once no entry is left (an earlier run
         # removed them), and detect reads that state as `disabled`;
         # only enabling can find "nothing to enable".
         "if ($done -gt 0 -or '%value%' -ne 'enabled') { 'ok' } "
-        "elseif ($unknown -gt 0) { 'error:no DoH template known for the configured resolvers' } "
+        "elseif ($adapters.Count -gt 0) { "
+        "'error:no DoH template known for the configured resolvers' } "
         "else { 'error:no applicable adapter found' } "
         "} catch { 'error:' + $_.Exception.Message }"
     ),

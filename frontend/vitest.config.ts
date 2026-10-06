@@ -49,6 +49,9 @@ export default defineConfig({
     // vitest and a different failure — phantom test timeouts, not workers that
     // never answer.
     maxWorkers: 4,
+    // 15 s, not the default 5 s, for the same loaded gate: a whole-page render
+    // timed out at 5 s beside pytest, and findBy* above may now wait 5 s itself.
+    testTimeout: 15_000,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'html', 'lcov'],

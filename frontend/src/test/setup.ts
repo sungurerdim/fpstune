@@ -4,9 +4,15 @@
  */
 
 import "@testing-library/jest-dom";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, beforeAll, afterAll, vi } from "vitest";
 import { server } from "./mocks/server";
+
+// findBy*/waitFor give up after 1 s by default. The pre-push gate runs vitest
+// beside an eight-worker pytest, and on that loaded machine a render that
+// settles in 100 ms alone took longer: "Unable to find role=button" with the
+// button on its way. Patience only — every assertion is unchanged.
+configure({ asyncUtilTimeout: 5000 });
 
 // Setup MSW server
 beforeAll(() => {

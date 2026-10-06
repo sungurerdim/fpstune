@@ -442,6 +442,9 @@ Module contracts — what the tree does not tell you:
 - `settings/bulk_plan.py` — the one scheduling SSOT for both bulk paths (`/bulk/apply` and the two SSE streams): `plan_lanes()` turns settings into lanes (serial inside, concurrent between) from `SettingExecutor.apply_after` and `resource_key`; `validate_declarations()` fails registry build on an unknown id or a cycle; `run_lanes()` is the thread-pool runner `/bulk/apply` uses. The planner is pure; the callers keep their own concurrency caps.
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
   alike; `mobile` is derived from GetSystemPowerStatus, never from a model list.
+  `ucpd_guard_up` is filled here from `os_protection.ucpd_active()`; the applicability check
+  reads only that field, so a key UCPD guards (`os_protection.PROTECTED_KEYS`) is not applicable
+  while the driver runs, and a test's own context decides it, never the host.
 - `settings/impact_categories.py` — metric key → kind of gain; thermal ranks with performance.
 - `settings/performance_headroom.py` + `headroom_policy.py` — what `gpu_scene` measured against
   what the panel can show: one machine-wide band (met/near/short/critical) and which side the

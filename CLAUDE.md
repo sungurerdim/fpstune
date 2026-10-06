@@ -316,7 +316,8 @@ hardware-ID changes and kernel drivers are never offered, measured or not.
 
 ```
 src/fpstune/
-  api/      schemas.py (response models) · hardware/ (network_adapters, storage, audio)
+  api/      schemas.py (response models) · shutdown.py + serving.py (stop on request) ·
+            hardware/ (network_adapters, storage, audio)
             routes/  settings.py · settings_apply.py · settings_stream.py · benchmark.py ·
                      benchmark_suite.py · benchmark_ledger.py · system.py ·
                      system_{network,audio,power,storage}.py · system_common.py ·
@@ -341,7 +342,8 @@ src/fpstune/
             frame_pacing · timing_bench · dpc · event_scan · storage_health · gpu_memory ·
             boot_time · pcie_link · process_sampler · furmark (its own panel, verifies nothing)
   commands/ presentation.py (status lines, panels, banner, ASCII fallback) · scan.py
-  utils/    console.py · runtime.py · detect.py · hardware_manager.py · admin.py · powershell.py
+  utils/    console.py · runtime.py · detect.py · hardware_manager.py · admin.py · powershell.py ·
+            instances.py (other fpstune APIs, found by /health and asked to stop)
 frontend/src/
   components/  SettingsTab · GameTweaksTab · CleanupPanel · HomeTab · TweakRows · TweakSetting ·
             SelectionToolbar · HardwarePanel · SettingInfoTooltip · SuitePanel · VerifyPanel ·
@@ -367,10 +369,19 @@ Route surface: `settings.py` = CRUD/detect/apply/reset/verify/bulk · `settings_
 = `/bulk/stream-{apply,reset}` SSE (own router, `/api/settings` prefix) · `benchmark.py` =
 gpu-scene{,/install} + verify/{coverage,sources,sample,round} + headroom{,/measure} ·
 `benchmark_suite.py` = suite{,/run,/compare} · `benchmark_ledger.py` = ledger{,/runs,/run} ·
-`system.py` = system/hardware/activity/self-check, with `system_{network,audio,power,storage}.py`
+`system.py` = system/hardware/activity/self-check/shutdown, with `system_{network,audio,power,storage}.py`
 as sub-routers on `/api` and `system_common.py` = `_run_powershell_async` · `updates.py` =
 update/{check,install}. Detail detection lives in
 `api/hardware/`, which returns schema objects and declares no router.
+
+`POST /api/system/shutdown` (in `system.py`; logic in `api/shutdown.py`, the uvicorn server and its
+stop hook in `api/serving.py`) answers 202, then stops the API gracefully — the lifespan's shutdown
+path runs, in-flight requests finish — after waiting up to 60 s for the operation lock. It is how a
+newer `fpstune serve` replaces the running one: `cli._claim_single_instance` finds every instance
+by `/health` signature alone (`utils/instances.py`: the PID file's port plus the port range `serve`
+picks from; never by process name or command output), POSTs the stop, waits up to 20 s for the lock
+port, then carries on; if the lock stays held it fails naming what it tried. Under `serve --dev`
+the API child's clean exit makes the parent stop the dev server and release the lock and PID file.
 
 Data flow: UI → api.ts `POST /settings/{id}/apply` → settings route → `executor.apply()` →
 subprocess → `_finalize_apply_response()` → detect → verify → response → Zustand → UI.

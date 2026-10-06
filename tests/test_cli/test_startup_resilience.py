@@ -1,8 +1,10 @@
-"""Starting fpstune twice, with no free port, or into a crash."""
+"""Starting fpstune with no free port, or into a crash.
+
+Starting it a second time is ``test_instance_takeover.py``.
+"""
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from unittest.mock import patch
 
@@ -10,47 +12,6 @@ import click
 import pytest
 
 from fpstune import cli
-
-
-class TestASecondStartOpensTheFirst:
-    def test_the_running_instance_is_found_by_asking_its_port(self, tmp_path: Path) -> None:
-        pid_file = tmp_path / "fpstune_serve.pid"
-        pid_file.write_text(json.dumps({"pid": 4242, "port": 8123}), encoding="utf-8")
-
-        class _Health:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, *_a):
-                return False
-
-            def read(self):
-                return json.dumps({"status": "healthy", "subsystems": {}}).encode()
-
-        with (
-            patch.object(cli, "_get_pid_file", return_value=str(pid_file)),
-            patch("urllib.request.urlopen", return_value=_Health()),
-        ):
-            assert cli._running_instance_url() == "http://127.0.0.1:8123/ui"
-
-    def test_something_else_on_the_port_is_not_taken_for_fpstune(self, tmp_path: Path) -> None:
-        pid_file = tmp_path / "fpstune_serve.pid"
-        pid_file.write_text(json.dumps({"pid": 1, "port": 8123}), encoding="utf-8")
-        with (
-            patch.object(cli, "_get_pid_file", return_value=str(pid_file)),
-            patch("urllib.request.urlopen", side_effect=OSError("refused")),
-        ):
-            assert cli._running_instance_url() is None
-
-    def test_a_second_start_hands_over_and_kills_nothing(self) -> None:
-        with (
-            patch.object(cli, "_acquire_instance_lock", return_value=None),
-            patch.object(cli, "_running_instance_url", return_value="http://127.0.0.1:8000/ui"),
-            patch("webbrowser.open") as opened,
-        ):
-            assert cli._claim_single_instance(open_browser=True) is False
-        opened.assert_called_once_with("http://127.0.0.1:8000/ui")
-        assert not hasattr(cli, "_kill_previous_instance")
 
 
 class TestNoFreePort:

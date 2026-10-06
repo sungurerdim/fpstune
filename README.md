@@ -120,6 +120,11 @@ The first start builds the UI once; after that `serve` behaves exactly like the
 executable — one process, the UI served from `frontend/dist`, elevation requested
 by fpstune itself. `uv run fpstune serve --dev` runs Vite with live reload instead.
 
+Starting fpstune while another copy is running closes the running one — a graceful
+stop, asked for over loopback HTTP, that waits for an apply or measurement in progress —
+and takes its place. If the old copy does not let go within 20 seconds, the new start
+stops and says what it tried.
+
 ---
 
 ## Quick Start

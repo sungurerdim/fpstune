@@ -6,8 +6,9 @@ import asyncio
 import logging
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, BackgroundTasks, HTTPException
 
+from fpstune.api import shutdown
 from fpstune.api.hardware import (
     get_audio_devices,
     get_detailed_network_adapters,
@@ -173,6 +174,37 @@ async def get_hardware_info() -> HardwareInfo:
         audio_devices=audio_devices,
         detecting=detecting,
     )
+
+
+@router.post("/system/shutdown", status_code=202)
+async def request_shutdown(background: BackgroundTasks) -> dict[str, Any]:
+    """Stop this API gracefully; the next fpstune start calls this on the one it replaces.
+
+    Answers 202 at once and stops after the response is sent: the lifespan's
+    shutdown path runs and in-flight requests finish. An apply, cleanup or bench
+    holding the machine-wide operation lock is waited for, up to
+    ``OPERATION_WAIT_SECONDS``, rather than cut off. The Host and Origin checks
+    in ``create_app`` guard this like every other write, so a web page cannot
+    stop an instance it does not own.
+
+    501 when this server was not started by fpstune (nothing here can stop it).
+    """
+    if not shutdown.is_stoppable():
+        raise HTTPException(
+            status_code=501,
+            detail="This server was not started by fpstune and cannot be stopped from here",
+        )
+    if shutdown.is_pending():
+        return {"status": "already_requested", "waiting_for_operation": False}
+
+    waiting = await shutdown.operation_in_progress()
+    shutdown.mark_pending()
+    background.add_task(shutdown.stop_when_idle)
+    return {
+        "status": "shutting_down",
+        "waiting_for_operation": waiting,
+        "operation_wait_limit_s": shutdown.OPERATION_WAIT_SECONDS,
+    }
 
 
 @router.get("/self-check")

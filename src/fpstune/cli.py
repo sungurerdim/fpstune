@@ -6,6 +6,7 @@ import contextlib
 import logging
 import socket
 import sys
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, TypedDict
 
@@ -25,6 +26,7 @@ from fpstune.commands import (
 )
 from fpstune.commands import presentation as ui
 from fpstune.commands.utils import console, require_admin_or_elevate
+from fpstune.utils import instances
 from fpstune.utils.admin import elevate_if_needed, is_admin
 from fpstune.utils.logger import setup_logging
 from fpstune.utils.runtime import frontend_dist, frontend_source, is_frozen
@@ -32,6 +34,7 @@ from fpstune.utils.runtime import frontend_dist, frontend_source, is_frozen
 if TYPE_CHECKING:
     import subprocess
     import types
+    from collections.abc import Callable
 
 # ---------------------------------------------------------------------------
 # Re-export names that external code (including tests) patches on fpstune.cli
@@ -90,33 +93,22 @@ def _remove_pid_file() -> None:
         os.unlink(_get_pid_file())
 
 
-def _running_instance_url() -> str | None:
-    """The UI of the fpstune already running here, if one answers.
+def _pid_file_port() -> int | None:
+    """The port the PID file says an earlier instance serves on, if it names one.
 
-    The PID file names the port it serves on; asking that port's /health is the
-    whole check. A stale file, a reused port or another program on it simply
-    does not answer as fpstune, so nothing is ever killed on a guess.
+    Only a lead for where to look: whether anything there is fpstune is decided
+    by its /health answer (``utils.instances``), never by this file.
     """
     import json
-    import urllib.request
 
     try:
         with open(_get_pid_file(), encoding="utf-8") as f:
-            port = int(json.load(f)["port"])
+            return int(json.load(f)["port"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
-    url = f"http://127.0.0.1:{port}"
-    try:
-        with urllib.request.urlopen(f"{url}/health", timeout=2) as response:  # noqa: S310
-            body = json.loads(response.read().decode("utf-8"))
-    except (OSError, ValueError):
-        return None
-    if not isinstance(body, dict) or "subsystems" not in body:
-        return None
-    return f"{url}/ui"
 
 
-def _find_free_port(preferred: int, max_attempts: int = 10) -> int:
+def _find_free_port(preferred: int, max_attempts: int = instances.SCAN_ATTEMPTS) -> int:
     """The first TCP port from ``preferred`` this process can bind."""
     for port in range(preferred, preferred + max_attempts):
         try:
@@ -268,6 +260,9 @@ def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) 
     or, in a source checkout, from frontend/dist (built first if it is missing
     or older than its source). --dev runs Vite with live reload instead.
 
+    Starting while another fpstune is running closes the running one (a graceful
+    stop, asked for over HTTP) and takes its place.
+
     \b
     Examples:
         fpstune serve              # start, open the browser
@@ -278,8 +273,7 @@ def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) 
 
     ui.print_banner()
 
-    if not _claim_single_instance(open_browser=not no_browser):
-        return
+    _claim_single_instance(preferred_port=port)
 
     port = _find_free_port(port)
     _write_pid_file(os.getpid(), port)
@@ -295,31 +289,92 @@ def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) 
     _serve_in_process(port=port, no_browser=no_browser)
 
 
-def _claim_single_instance(*, open_browser: bool) -> bool:
-    """Take the single-instance lock, or hand the user to the instance that has it.
+_TAKEOVER_WAIT_SECONDS = 20.0
+_TAKEOVER_POLL_SECONDS = 0.25
+_TAKEOVER_PROGRESS_SECONDS = 5.0
 
-    A second start never kills the first: it opens the running instance's UI and
-    stops. That is what a user starting fpstune again wants, and it needs no
-    process inspection — the previous version matched netstat's English
-    "LISTENING", which a Turkish or German Windows never prints.
+
+def _claim_single_instance(*, preferred_port: int) -> None:
+    """Take the single-instance lock, closing the fpstune that holds it if need be.
+
+    A newer start wins: every running fpstune API is asked to stop, then this
+    waits (bounded) for the lock port to come free and carries on starting. The
+    ones asked are found only by what their /health answers — the PID file's
+    port plus the range ``serve`` itself would pick from — so a server that is
+    not fpstune is never touched, and no process is killed, matched by name or
+    read out of a system command's text (the previous version matched netstat's
+    English "LISTENING", which a Turkish or German Windows never prints).
+
+    Raises ``SystemExit(1)`` naming what was tried when the lock stays held.
     """
     global _lock_sock
     _lock_sock = _acquire_instance_lock()
     if _lock_sock is not None:
-        return True
+        return
 
-    url = _running_instance_url()
-    if url is not None:
-        ui.ok("fpstune is already running", url)
-        if open_browser:
-            import webbrowser
+    ports = instances.candidate_ports(preferred_port, _pid_file_port())
+    ui.warn("fpstune is already running", "closing it so this start can take over")
+    found = instances.find_instances(ports)
+    attempts = instances.stop_instances(found)
+    for attempt in attempts:
+        (ui.step if attempt.accepted else ui.warn)(attempt.describe())
+    if not found:
+        ui.info(
+            "No fpstune answered on the ports it could be using", "waiting in case it is closing"
+        )
 
-            webbrowser.open(url)
-        return False
+    _lock_sock = _wait_for_lock(_TAKEOVER_WAIT_SECONDS)
+    if _lock_sock is not None:
+        ui.ok("The previous fpstune closed")
+        return
 
-    ui.fail("Another fpstune is starting or shutting down")
-    ui.hint(["Wait a few seconds and start it again"])
+    ui.fail(
+        "Another fpstune still holds the instance lock",
+        f"127.0.0.1:{_LOCK_PORT} stayed taken for {_TAKEOVER_WAIT_SECONDS:.0f} s",
+    )
+    tried = [f"Looked for fpstune on ports {', '.join(str(p) for p in ports)}"]
+    if attempts:
+        tried.extend(attempt.describe() for attempt in attempts)
+    else:
+        tried.append("No fpstune answered /health there, so nothing was asked to stop")
+    ui.hint(
+        [
+            *tried,
+            "Close the other fpstune window or end fpstune.exe in Task Manager, then start again",
+            f"If nothing of fpstune's is running, another program may be using port {_LOCK_PORT}",
+        ],
+        title="What was tried",
+    )
     raise SystemExit(1)
+
+
+def _wait_for_lock(
+    timeout: float,
+    *,
+    poll: float = _TAKEOVER_POLL_SECONDS,
+    sleep: Callable[[float], None] | None = None,
+    clock: Callable[[], float] | None = None,
+) -> socket.socket | None:
+    """Take the instance lock as soon as the port frees up, or None after ``timeout`` seconds.
+
+    ``sleep`` and ``clock`` exist so a test can run the wait without waiting.
+    """
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    started = clock()
+    reported = 0.0
+    ui.step("Waiting for it to close", f"up to {timeout:.0f} s")
+    while True:
+        lock = _acquire_instance_lock()
+        if lock is not None:
+            return lock
+        elapsed = clock() - started
+        if elapsed >= timeout:
+            return None
+        if elapsed - reported >= _TAKEOVER_PROGRESS_SECONDS:
+            reported = elapsed
+            ui.info(f"Still waiting ({elapsed:.0f} s)")
+        sleep(poll)
 
 
 def _ensure_built_ui() -> bool:
@@ -412,9 +467,8 @@ def _serve_in_process(*, port: int, no_browser: bool) -> None:
     import threading
     import webbrowser
 
-    import uvicorn
-
-    from fpstune.api.main import app
+    from fpstune.api import shutdown
+    from fpstune.api.serving import run_api
 
     url = f"http://127.0.0.1:{port}"
 
@@ -441,12 +495,14 @@ def _serve_in_process(*, port: int, no_browser: bool) -> None:
         threading.Timer(1.0, lambda: webbrowser.open(landing)).start()
 
     try:
-        uvicorn.run(app, host="127.0.0.1", port=port, log_level="warning")
+        run_api(host="127.0.0.1", port=port)
     except KeyboardInterrupt:
         pass
     finally:
         _shutdown_cleanup()
         ui.blank()
+        if shutdown.is_pending():
+            ui.info("Stopped on request", "a newer fpstune took over")
         ui.ok("Goodbye")
 
 
@@ -491,7 +547,6 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
     import signal
     import subprocess
     import threading
-    import time
     import webbrowser
 
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
@@ -517,8 +572,7 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
             [
                 sys.executable,
                 "-m",
-                "uvicorn",
-                "fpstune.api.main:app",
+                "fpstune.api.serving",
                 "--host",
                 "127.0.0.1",
                 "--port",
@@ -592,19 +646,9 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
         webbrowser.open(landing)
 
     def shutdown(_signum: int | None = None, _frame: types.FrameType | None = None) -> None:
-        import os
-
         ui.blank()
         ui.step("Shutting down")
-        for name, proc in processes:
-            try:
-                if sys.platform == "win32":
-                    proc.terminate()
-                else:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
-                ui.info(f"Stopped {name}")
-            except (OSError, ProcessLookupError):
-                pass
+        _stop_children(processes)
         _shutdown_cleanup()
         ui.ok("Goodbye")
         sys.exit(0)
@@ -616,27 +660,58 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
     try:
         while True:
             for name, proc in processes:
-                if proc.poll() is not None:
-                    # Reported once and then we stop. The old loop printed this
-                    # every second for as long as the window stayed open, which
-                    # is how a dead child looked like a working app.
-                    ui.fail(f"{name} exited unexpectedly")
+                exit_code = proc.poll()
+                if exit_code is not None:
+                    if name == "API" and exit_code == 0:
+                        # The API child only ever exits 0 after a stop request
+                        # (POST /api/system/shutdown, from a newer fpstune start):
+                        # a crash or a kill is non-zero. Stop the rest and leave
+                        # cleanly, so the lock and the PID file are released.
+                        ui.info("The API stopped on request", "a newer fpstune took over")
+                    else:
+                        # Reported once and then we stop. The old loop printed this
+                        # every second for as long as the window stayed open, which
+                        # is how a dead child looked like a working app.
+                        ui.fail(f"{name} exited unexpectedly")
                     shutdown()
             time.sleep(1)
     except KeyboardInterrupt:
         shutdown()
 
 
+def _stop_children(processes: list[tuple[str, subprocess.Popen[bytes]]]) -> None:
+    """Ask every child that is still running to stop; one that already exited is skipped."""
+    import os
+    import signal
+
+    for name, proc in processes:
+        if proc.poll() is not None:
+            continue
+        try:
+            if sys.platform == "win32":
+                proc.terminate()
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            ui.info(f"Stopped {name}")
+        except (OSError, ProcessLookupError):
+            pass
+
+
 def _shutdown_cleanup() -> None:
-    """Release the single-instance lock and the PID file. Safe to call twice."""
+    """Release the PID file and the single-instance lock. Safe to call twice.
+
+    The PID file goes first. Freeing the lock lets a newer fpstune (the one that
+    asked this instance to stop) start at once and write its own PID file; a
+    file removed after that would be the newer instance's, not this one's.
+    """
     import contextlib
 
     global _lock_sock
+    _remove_pid_file()
     if _lock_sock is not None:
         with contextlib.suppress(OSError):
             _lock_sock.close()
         _lock_sock = None
-    _remove_pid_file()
 
 
 @main.command(name="update")

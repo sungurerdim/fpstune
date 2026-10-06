@@ -86,14 +86,14 @@ class TestPackagedServeSpawnsNothing:
     def test_it_starts_no_subprocess(self) -> None:
         served: dict[str, object] = {}
 
-        def fake_run(_app, **kwargs):
+        def fake_run(**kwargs):
             served.update(kwargs)
 
         with (
             patch.object(
                 subprocess, "Popen", side_effect=AssertionError("packaged serve spawned a process")
             ),
-            patch("uvicorn.run", fake_run),
+            patch("fpstune.api.serving.run_api", fake_run),
         ):
             cli._serve_in_process(port=8123, no_browser=True)
 
@@ -102,7 +102,7 @@ class TestPackagedServeSpawnsNothing:
 
     @pytest.mark.usefixtures("frozen")
     def test_it_serves_the_bundled_ui(self, capsys) -> None:
-        with patch("uvicorn.run"):
+        with patch("fpstune.api.serving.run_api"):
             cli._serve_in_process(port=8123, no_browser=True)
 
         printed = capsys.readouterr().out
@@ -121,7 +121,7 @@ class TestPackagedServeSpawnsNothing:
             patch.object(sys, "frozen", True, create=True),
             patch.object(sys, "_MEIPASS", str(empty), create=True),
             patch.object(runtime, "_SOURCE_ROOT", empty),
-            patch("uvicorn.run"),
+            patch("fpstune.api.serving.run_api"),
         ):
             cli._serve_in_process(port=8123, no_browser=True)
 
@@ -131,11 +131,11 @@ class TestPackagedServeSpawnsNothing:
 
     @pytest.mark.usefixtures("frozen")
     def test_it_releases_the_instance_lock_when_the_server_stops(self) -> None:
-        """uvicorn.run blocks until shutdown, so the release has to be in a
+        """The server call blocks until shutdown, so the release has to be in a
         finally — a packaged build never reaches the source path's signal
         handler."""
         cli._lock_sock = None
-        with patch("uvicorn.run", side_effect=KeyboardInterrupt):
+        with patch("fpstune.api.serving.run_api", side_effect=KeyboardInterrupt):
             cli._serve_in_process(port=8123, no_browser=True)
         assert cli._lock_sock is None
 
@@ -194,7 +194,7 @@ class TestTheSourcePathStillSpawns:
             cli._serve_from_source(port=8123, ui_port=5199, no_browser=True, api_only=True)
 
         assert started, "the source path stopped starting the API"
-        assert "uvicorn" in started[0]
+        assert "fpstune.api.serving" in started[0]
         # Off Windows the shutdown signals the child's process group. Without a
         # session of its own the child shares fpstune's group, and that signal
         # lands on fpstune and on the terminal job it was started from.
@@ -237,3 +237,64 @@ class TestADeadChildIsReportedOnce:
         assert printed.count("exited unexpectedly") == 1, (
             "the dead child was reported more than once; the watchdog is looping again"
         )
+
+
+@pytest.mark.usefixtures("signalled")
+class TestAStopRequestEndsTheWholeDevRun:
+    """`POST /api/system/shutdown` stops the API child; the parent has to follow.
+
+    Without this the parent kept the lock port and the PID file with nothing
+    behind them, and the newer fpstune waiting for the lock timed out.
+    """
+
+    def _run(self, tmp_path: Path, api_exit: int | None, signalled: list[tuple[int, int]]):
+        children: dict[str, object] = {}
+        frontend_dir = tmp_path / "frontend"
+        (frontend_dir / "node_modules").mkdir(parents=True)
+
+        class _Child:
+            def __init__(self, argv, **_kwargs):
+                is_api = "fpstune.api.serving" in argv
+                self.pid = 4242 if is_api else 5151
+                self._exit = api_exit if is_api else None
+                self.terminated = False
+                children["API" if is_api else "Frontend"] = self
+                self.stdout = None
+
+            def poll(self):
+                return self._exit
+
+            def terminate(self):
+                self.terminated = True
+
+        cleanup = []
+        with (
+            patch.object(subprocess, "Popen", _Child),
+            patch.object(cli, "frontend_source", return_value=frontend_dir),
+            patch("shutil.which", return_value="npm"),
+            patch("time.sleep"),
+            patch.object(cli, "_shutdown_cleanup", side_effect=lambda: cleanup.append(True)),
+            pytest.raises(SystemExit) as exited,
+        ):
+            cli._serve_from_source(port=8123, ui_port=5199, no_browser=True, api_only=False)
+        return exited.value.code, children, cleanup, signalled
+
+    def test_a_clean_api_exit_stops_the_dev_server_and_releases_the_lock(
+        self, tmp_path: Path, signalled: list[tuple[int, int]], capsys
+    ) -> None:
+        code, children, cleanup, sent = self._run(tmp_path, api_exit=0, signalled=signalled)
+
+        assert code == 0
+        assert cleanup == [True], "the lock and the PID file were never released"
+        frontend = children["Frontend"]
+        stopped = frontend.terminated if sys.platform == "win32" else (5151, 15) in sent
+        assert stopped, "the dev server was left running"
+        assert "unexpectedly" not in capsys.readouterr().out
+
+    def test_a_crashed_api_is_still_reported_as_a_crash(
+        self, tmp_path: Path, signalled: list[tuple[int, int]], capsys
+    ) -> None:
+        """Only exit code 0 means "asked to stop"; a kill or a crash is not."""
+        self._run(tmp_path, api_exit=1, signalled=signalled)
+
+        assert capsys.readouterr().out.count("exited unexpectedly") == 1

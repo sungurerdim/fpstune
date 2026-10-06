@@ -24,7 +24,7 @@ export const settingsTr: Record<
   "power:cpu_boost": {
     name: "CPU hızlanma davranışı",
     description:
-      "CPU'nun yük altında yüksek frekanslara ne kadar agresif çıkacağını belirler. Efficient Aggressive, daha az güç taşmasıyla neredeyse en yüksek performansı verir.",
+      "İşlemcinin anma saatinin üstünde hangi hızlanma düzeyini seçeceği. Windows'un kendi Aggressive modu korunur; verimli kipler aynı tavana çıkar, o yüzden ondan ayrılmak kare kazandırmaz.",
   },
   "power:cpu_increase_threshold": {
     name: "Hızlanma tetik noktası",
@@ -44,7 +44,7 @@ export const settingsTr: Record<
   "power:cpu_decrease_policy": {
     name: "CPU'nun yavaşlama biçimi",
     description:
-      "CPU saatini nasıl düşürdüğü. Rocket anında iner ve yük dönünce en hızlı geri çıkar; Ideal kademeli iner.",
+      "CPU saatini nasıl düşürdüğü. Windows'un kendi Ideal'i kademeli iner; Rocket en alt kademeye anında iner ve yük dönünce yeniden çıkmak zorunda kalır.",
   },
   "power:cpu_epp": {
     name: "Performans-pil dengesi",
@@ -333,7 +333,7 @@ export const settingsTr: Record<
   "network:default_ttl": {
     name: "Paket yaşam süresi (TTL)",
     description:
-      "Paketlerin başlangıç Time-To-Live değeri. 64 idealdir (Linux/macOS varsayılanı).",
+      "Paketlerin başlangıç Time-To-Live değeri, yani bir atlama sınırı. Windows'un kendi değeri zaten doğrudur; değiştirmek bağlantıyı hızlandırmaz.",
   },
   "gpu-nvidia:low_latency": {
     name: "Düşük gecikme modu",
@@ -759,7 +759,7 @@ export const settingsTr: Record<
   "perf:gpu_tdr_delay": {
     name: "GPU takılma toleransı",
     description:
-      "GPU sürücü zaman aşımını (TDR) Windows'un 2 saniyesinden 10 saniyeye çıkarır. DX12 oyunları GPU'yu daha uzun oyalayabilir ve zorlanan sürücü sıfırlaması Dev Error olarak görünür.",
+      "Windows'un takılan bir GPU için sürücüyü sıfırlamadan önce beklediği süre (TDR); Windows'un kendi 2 saniyesi korunur. Daha uzun bekleme gerçek bir takılmayı yalnız uzatır.",
   },
   "perf:accessibility_popups": {
     name: "Yapışkan tuş uyarıları",

@@ -155,7 +155,7 @@ WLAN_POWER_SAVING = SettingExecutor(
     # the size of the spike stays in the sentence where it is conditional.
     impact_scores={
         "latency_spike_ms": 0.0,
-        "network_consistency": "high",
+        "network_consistency": "preserved",
         "stability": "high",
     },
     # Detection - uses /query SCHEME_CURRENT <subgroup> <setting>
@@ -268,8 +268,8 @@ POWER_CPU_BOOST = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Boost Mode",
     short_name="CPU boost behaviour",
-    description="How the processor picks a boost level above its rated clock. The efficient "
-    "variants reach the same boost while accounting for efficiency, so the frames cost less heat.",
+    description="How the processor picks a boost level above its rated clock. Windows' own Aggressive "
+    "mode is kept; the efficient variants reach the same ceiling, so moving off it buys no frames.",
     value_type=SettingValueType.CHOICE,
     # All seven states Windows publishes here, read off this machine's own
     # catalogue (PowerSettings\<SUB_PROCESSOR>\<PERFBOOSTMODE>\<n>\FriendlyName,
@@ -301,16 +301,16 @@ POWER_CPU_BOOST = SettingExecutor(
         "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning",
         "https://learn.microsoft.com/en-us/windows-hardware/customize/power-settings/options-for-perf-state-engine-perfboostmode",
     ],
-    current_impact="Aggressive: Maximum boost is requested whenever conditions allow it",
-    recommended_impact="Efficient Aggressive: Same boost ceiling, chosen with efficiency in mind",
+    current_impact="Efficient Aggressive: Same boost ceiling as Windows' own mode, so no extra frames, only a different way of reaching it",
+    recommended_impact="Aggressive (Windows' own value): Maximum boost is requested whenever conditions allow it, with no efficiency policy in the way",
     scope=SettingScope.RECOMMENDED,
     category_order=6,
-    effect="Picks the efficiency-aware boost mode, which reaches the same ceiling",
-    # Not frames. Microsoft's own table says index 4 behaves as index 2, and 2 is
-    # what Windows ships here — so the ceiling is unchanged and what the
-    # efficiency-aware pick saves is heat, which consequence 4 counts as
-    # performance. The magnitude is 0.0 because no instrument here has measured
-    # the watts (C11); the claim is the category, not a number.
+    effect="Keeps Windows' own Aggressive boost mode, and puts it back if another tool changed it",
+    # A guard. Microsoft's own table says index 4 behaves as index 2, and 2 is
+    # what Windows ships here — so the ceiling is the same either way and the row
+    # holds the stock mode. The key stays under the thermal category (consequence
+    # 4: an efficiency-aware pick is a heat question), at 0.0 because a guard
+    # claims no gain and no instrument here has measured the watts (C11).
     impact_scores={"power_watts": 0.0, "stability": "high"},
     detect_type=DetectType.POWERCFG,
     detect_command="",
@@ -478,8 +478,8 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     category=SettingCategory.POWER,
     display_name="CPU Scale-Down Policy",
     short_name="How fast the CPU slows down",
-    description="How the CPU steps its clock down. Rocket drops immediately and re-ramps fastest when load "
-    "returns; Ideal steps down gradually.",
+    description="How the CPU steps its clock down. Windows' own Ideal steps down gradually; Rocket drops "
+    "to the lowest state at once and has to ramp up again when load returns.",
     value_type=SettingValueType.CHOICE,
     choices=("ideal", "single", "rocket"),
     default_value="ideal",
@@ -487,11 +487,11 @@ POWER_CPU_DECREASE_POLICY = SettingExecutor(
     recommended_value="ideal",
     requires_reboot=False,
     evidence_level="proven",
-    current_impact="Ideal: CPU steps down frequency gradually",
-    recommended_impact="Rocket: CPU drops to idle frequency immediately → allows faster re-ramp",
+    current_impact="Rocket: CPU drops to its lowest state at once, so the next burst has to ramp up from there",
+    recommended_impact="Ideal (Windows' own value): CPU steps down gradually, so a burst after a lull starts from a higher clock",
     scope=SettingScope.RECOMMENDED,
     category_order=10,
-    effect="Sets CPU frequency scale-down to Rocket policy",
+    effect="Keeps Windows' own Ideal scale-down policy, and puts it back if another tool changed it",
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.POWERCFG,
     detect_command="",

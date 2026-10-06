@@ -144,7 +144,7 @@ FORTNITE_VSYNC = _make(
     current_impact="On: Each frame waits for the next refresh on top of the driver's own sync",
     recommended_impact="Off: The driver alone governs presentation, so no doubled sync wait",
     effect="Leaves frame synchronisation to the driver",
-    impact_scores={"latency_ms": -8, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=40,
     sources=_FORTNITE_SOURCES,
 )
@@ -233,7 +233,7 @@ APEX_VSYNC = _make(
     current_impact="Synced: Each frame waits for a refresh on top of the driver's own sync",
     recommended_impact="Disabled: The driver alone governs presentation, so no doubled sync wait",
     effect="Leaves frame synchronisation to the driver",
-    impact_scores={"latency_ms": -8, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=40,
     sources=_APEX_SOURCES,
 )
@@ -253,7 +253,7 @@ APEX_VOLUMETRIC_LIGHTING = _make(
     current_impact="On: Sunbeams drawn across the scene, at a cost in frames",
     recommended_impact="Off: No light shafts over targets, and the frames back",
     effect="Removes volumetric light shafts",
-    impact_scores={"fps": "+3-7%", "target_visibility": "improved"},
+    impact_scores={"fps": "0%", "target_visibility": "preserved"},
     category_order=41,
     sources=_APEX_SOURCES,
 )
@@ -276,7 +276,7 @@ OVERWATCH_VSYNC = _make(
     current_impact="On: Each frame waits for the next refresh on top of the driver's own sync",
     recommended_impact="Off: The driver alone governs presentation, so no doubled sync wait",
     effect="Leaves frame synchronisation to the driver",
-    impact_scores={"latency_ms": -8, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=40,
     sources=_OVERWATCH_SOURCES,
 )
@@ -302,7 +302,7 @@ SIEGE_VSYNC = _make(
     current_impact="Synced: Frames wait for a refresh, or run at half the panel's rate",
     recommended_impact="Off: The driver alone governs presentation, so no doubled sync wait",
     effect="Leaves frame synchronisation to the driver",
-    impact_scores={"latency_ms": -8, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=40,
     sources=_SIEGE_SOURCES,
     evidence_level="proven",

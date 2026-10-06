@@ -37,7 +37,7 @@ TRIM_ENABLED = SettingExecutor(
     impact_scores={
         "fps": "0%",
         "latency_ms": 0,
-        "ssd_longevity": "high",
+        "ssd_longevity": "preserved",
         "storage_performance": "maintained",
     },
     # Detection - DisableDeleteNotification (0 = TRIM enabled, 1 = disabled)

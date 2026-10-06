@@ -35,10 +35,10 @@ GAME_MODE = SettingExecutor(
     category_order=1,  # Primary game optimization
     effect="Enables Windows Game Mode for automatic game optimization and update blocking",
     impact_scores={
-        "fps": "+1-3%",
-        "fps_1_percent_low": "+2-4%",
-        "fps_cpu_bound": "+2-4%",
-        "latency_ms": -0.5,
+        "fps": "0%",
+        "fps_1_percent_low": "0%",
+        "fps_cpu_bound": "0%",
+        "latency_ms": 0.0,
         "stability": "high",
     },
     # Detection - Registry
@@ -132,11 +132,11 @@ GAME_DVR_BACKGROUND = SettingExecutor(
     category_order=4,  # Recording overhead
     effect="Disables background game recording to free GPU encoding resources and disk I/O",
     impact_scores={
-        "fps": "+1-3%",
-        "fps_cpu_bound": "+3-5%",
-        "latency_ms": -1.5,
-        "ram_saved": "200-600MB",
-        "vram_mb": -50,
+        "fps": "0%",
+        "fps_cpu_bound": "0%",
+        "latency_ms": 0.0,
+        "ram_saved": 0.0,
+        "vram_mb": 0.0,
     },
     # Detection - Registry
     detect_type=DetectType.REGISTRY,

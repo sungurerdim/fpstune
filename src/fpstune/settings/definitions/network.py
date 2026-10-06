@@ -113,7 +113,7 @@ TCP_AUTO_TUNING = SettingExecutor(
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for TCP performance
     category_order=1,  # Primary TCP setting
     effect="Enables dynamic TCP window sizing for optimal throughput",
-    impact_scores={"throughput": "high", "latency_ms": 0, "stability": "high"},
+    impact_scores={"throughput": "preserved", "latency_ms": 0, "stability": "high"},
     # Detection - exact key from netsh output
     detect_type=DetectType.NETSH,
     detect_command="interface tcp show global",
@@ -150,7 +150,7 @@ CONGESTION_PROVIDER = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=3,
     effect="Restores CUBIC congestion control on the Internet TCP template",
-    impact_scores={"throughput": "medium", "latency_ms": 0, "stability": "high"},
+    impact_scores={"throughput": "preserved", "latency_ms": 0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "try { "
@@ -203,7 +203,12 @@ RECEIVE_SIDE_SCALING = SettingExecutor(
     scope=SettingScope.RECOMMENDED,  # Noticeable benefit for multi-core
     category_order=4,  # Multi-core network processing
     effect="Distributes network load across CPU cores for parallel processing",
-    impact_scores={"throughput": "high", "cpu_usage": -2, "latency_ms": -1, "stability": "high"},
+    impact_scores={
+        "throughput": "preserved",
+        "cpu_usage": 0.0,
+        "latency_ms": 0.0,
+        "stability": "high",
+    },
     # Detection - exact key from netsh output (lowercase)
     detect_type=DetectType.NETSH,
     detect_command="interface tcp show global",
@@ -238,7 +243,7 @@ RECEIVE_SEGMENT_COALESCING = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=5,
     effect="Restores Windows' receive coalescing for TCP downloads",
-    impact_scores={"cpu_usage": -2.0, "latency_ms": 0.0, "stability": "high"},
+    impact_scores={"cpu_usage": 0.0, "latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.NETSH,
     detect_command="interface tcp show global",
     detect_args={"parse_key": "receive segment coalescing state"},
@@ -1194,13 +1199,15 @@ TCP_ACK_FREQUENCY = SettingExecutor(
         "https://brooker.co.za/blog/2024/05/09/nagle.html",
         "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/registry-entry-control-tcp-acknowledgment-behavior",
     ],
-    current_impact="Default (2): ACK after 2 segments or timeout — no effect on UDP traffic",
-    recommended_impact="Immediate (1): ACK per segment — faster TCP feedback, less download headroom",
+    current_impact="Immediate (1): Every segment is acknowledged at once — more upstream packets and lower download throughput, nothing gained on UDP games",
+    recommended_impact="Default (2): Windows acknowledges every second segment again — full download throughput, UDP game traffic untouched",
     # Demoted from ESSENTIAL in the 2026-08 audit; see NAGLE_ALGORITHM.
     scope=SettingScope.COMPLETE,
     category_order=2,
-    effect="Sets TcpAckFrequency=1 for per-segment ACK on physical interfaces",
-    impact_scores={"latency_ms": "0 to -2 (TCP titles only)", "download_throughput": "reduced"},
+    effect="Removes the TcpAckFrequency values so Windows acknowledges every second segment again",
+    # A guard: it undoes the per-segment ACK, so it claims no latency gain (the effect of
+    # the opposite action) and says what it gives back.
+    impact_scores={"latency_ms": 0.0, "download_throughput": "restored"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "$interfaces = Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' -ErrorAction SilentlyContinue; "
@@ -1272,13 +1279,14 @@ TCP_DEL_ACK_TICKS = SettingExecutor(
         "https://brooker.co.za/blog/2024/05/09/nagle.html",
         "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/registry-entry-control-tcp-acknowledgment-behavior",
     ],
-    current_impact="Default (2): 200ms delayed ACK timer — no effect on UDP traffic",
-    recommended_impact="Disabled (0): ACK sent on segment receipt — helps TCP titles only",
+    current_impact="Disabled (0): Every segment is acknowledged on receipt — more upstream packets and lower download throughput, nothing gained on UDP games",
+    recommended_impact="Default (2): The 200ms delayed-ACK timer is back — full download throughput, UDP game traffic untouched",
     # Demoted from ESSENTIAL in the 2026-08 audit; see NAGLE_ALGORITHM.
     scope=SettingScope.COMPLETE,
     category_order=2,
-    effect="Sets TcpDelAckTicks=0 to disable delayed ACK timer on physical interfaces",
-    impact_scores={"latency_ms": "0 to -2 (TCP titles only)", "download_throughput": "reduced"},
+    effect="Removes the TcpDelAckTicks values so Windows' own delayed-ACK timer applies again",
+    # A guard: see TCP_ACK_FREQUENCY.
+    impact_scores={"latency_ms": 0.0, "download_throughput": "restored"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "$interfaces = Get-ChildItem 'HKLM:\\SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces' -ErrorAction SilentlyContinue; "
@@ -1794,7 +1802,7 @@ def create_lso_setting(interface_index: int, display_name: str) -> SettingExecut
         scope=SettingScope.RECOMMENDED,
         category_order=15,
         effect="Restores the adapter's large send offload",
-        impact_scores={"cpu_usage": -3.0, "latency_ms": 0.0, "stability": "high"},
+        impact_scores={"cpu_usage": 0.0, "latency_ms": 0.0, "stability": "high"},
         # Detection - Use InterfaceIndex for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
@@ -1859,7 +1867,7 @@ def create_checksum_offload_setting(interface_index: int, display_name: str) -> 
         scope=SettingScope.COMPLETE,  # Low priority, keep default
         category_order=16,
         effect="NIC handles checksums reducing CPU load",
-        impact_scores={"cpu_usage": -2.0, "stability": "high"},
+        impact_scores={"cpu_usage": 0.0, "stability": "high"},
         # Detection - Use InterfaceIndex for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=(
@@ -1941,7 +1949,7 @@ TCP_TIMESTAMPS = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=7,
     effect="Turns TCP timestamps back on if another tool switched them off",
-    impact_scores={"latency_ms": -0.2, "cpu_usage": -0.1},
+    impact_scores={"latency_ms": 0.0, "cpu_usage": 0.0},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         # Kept as the single-setting fallback; a scan answers from the shared
@@ -1983,7 +1991,7 @@ TCP_ECN = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=8,
     effect="Turns ECN back on if another tool switched it off",
-    impact_scores={"latency_ms": -0.5, "network_consistency": "improved"},
+    impact_scores={"latency_ms": 0.0, "network_consistency": "preserved"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(_tcp_property_detect("EcnCapability")),
     detect_args={"batch_tcp": "EcnCapability"},
@@ -2052,12 +2060,12 @@ MAX_USER_PORT = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/connect-tcp-greater-than-5000-error-702-702b",
     ],
-    current_impact="Default: ~5000 ephemeral ports → possible port exhaustion during rapid reconnects",
-    recommended_impact="Maximum (65534): Full port range → no exhaustion, instant reconnect availability",
+    current_impact="Maximum (65534): A legacy cap on the outbound port range that Windows 11 sizes for itself, so it can only lower the ceiling",
+    recommended_impact="Default: Windows sizes the outbound port range itself — no cap to run into",
     scope=SettingScope.RECOMMENDED,
     category_order=10,
-    effect="Sets MaxUserPort=65534 to expand the ephemeral port range",
-    impact_scores={"latency_ms": 0, "stability": "improved"},
+    effect="Removes the MaxUserPort value so Windows sizes the ephemeral port range itself",
+    impact_scores={"latency_ms": 0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -2100,11 +2108,11 @@ TCP_NUM_CONNECTIONS = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/troubleshoot/windows-client/networking/connect-tcp-greater-than-5000-error-702-702b",
     ],
-    current_impact="Default: OS-managed limit → possible bottleneck during burst matchmaking",
-    recommended_impact="Maximum (65534): Explicit high limit → handles burst parallel connections",
+    current_impact="Maximum (65534): A legacy explicit limit on simultaneous connections that Windows 11 manages itself, so it can only lower the ceiling",
+    recommended_impact="Default: Windows manages the simultaneous connection limit itself — no explicit cap to run into",
     scope=SettingScope.RECOMMENDED,
     category_order=10,
-    effect="Sets TcpNumConnections=65534 to raise the simultaneous connection limit",
+    effect="Removes the TcpNumConnections value so Windows manages the connection limit itself",
     impact_scores={"latency_ms": 0, "stability": "neutral"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
@@ -2180,7 +2188,8 @@ DEFAULT_TTL = SettingExecutor(
     category=SettingCategory.NETWORK,
     display_name="Default Packet TTL",
     short_name="TTL",
-    description="Initial Time-To-Live for packets. 64 is optimal (Linux/macOS default).",
+    description="Initial Time-To-Live for packets, a hop limit. Windows' own value is already right; "
+    "changing it cannot speed up a connection.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "optimized"),
     default_value="default",
@@ -2197,11 +2206,11 @@ DEFAULT_TTL = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/troubleshoot/windows-server/networking/tcpip-and-nbt-configuration-parameters",
     ],
-    current_impact="Default: TTL=128 → extra hops before expiry, some ISPs route differently",
-    recommended_impact="Optimized: TTL=64 → matches Linux/macOS, some ISPs prioritize lower TTL traffic",
+    current_impact="Optimized: The hop limit is set to 64 by hand — a packet still arrives the same way, and the change buys nothing on any line",
+    recommended_impact="Default: Windows' own hop limit of 128 — a packet is only discarded when it has no hops left, so no line gains from changing it",
     scope=SettingScope.COMPLETE,
     category_order=23,
-    effect="Sets packet TTL to 64 (cross-platform standard) for optimized routing",
+    effect="Removes the DefaultTTL value so Windows' own hop limit applies",
     impact_scores={"latency_ms": 0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
@@ -2390,7 +2399,7 @@ def create_speed_duplex_setting(interface_index: int, display_name: str) -> Sett
         scope=SettingScope.ESSENTIAL,
         category_order=18,
         effect="Restores standard link negotiation so the adapter runs at its real speed",
-        impact_scores={"packet_loss": "eliminates duplex-mismatch loss", "stability": "high"},
+        impact_scores={"packet_loss": "preserved", "stability": "high"},
         # Values 0-4 and 2500 were read from this driver's own ValidRegistryValues
         # rather than assumed. The command normalises rather than leaving the
         # translation to `value_map`, because the enum is vendor-extended: any

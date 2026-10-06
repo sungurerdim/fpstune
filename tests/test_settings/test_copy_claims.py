@@ -73,7 +73,7 @@ FACTS: dict[tuple[str, str], dict[str, str]] = {
     ("timer:global_timer_resolution", "current_impact"): {
         "15.6ms": "Windows' own default timer period"
     },
-    ("network:tcp_del_ack_ticks", "current_impact"): {
+    ("network:tcp_del_ack_ticks", "recommended_impact"): {
         "200ms": "the stock delayed-ACK timer (2 ticks of 100 ms)"
     },
     ("gpu-nvidia:battery_boost", "description"): {

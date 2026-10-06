@@ -478,7 +478,7 @@ SERVICE_XBOX_AUTH = SettingExecutor(
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=11,  # Xbox service
     effect="Controls Xbox Live authentication service (required for Game Pass)",
-    impact_scores={"ram_saved": "10-20MB", "cpu_usage": 0, "stability": "high"},
+    impact_scores={"ram_saved": 0.0, "cpu_usage": 0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     # Use StartType (2=Automatic, 4=Disabled) instead of Status for reliable verification
     detect_command="$s = Get-Service -Name 'XblAuthManager'"
@@ -517,7 +517,7 @@ SERVICE_XBOX_GAME_SAVE = SettingExecutor(
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=12,  # Xbox cloud saves
     effect="Controls Xbox cloud save sync (required for Game Pass saves)",
-    impact_scores={"ram_saved": "5-15MB", "stability": "high"},
+    impact_scores={"ram_saved": 0.0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     # Use StartType (2=Automatic, 4=Disabled) instead of Status for reliable verification
     detect_command="$s = Get-Service -Name 'XblGameSave'"
@@ -556,7 +556,7 @@ SERVICE_XBOX_NETWORKING = SettingExecutor(
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox users
     category_order=13,  # Xbox networking
     effect="Controls Xbox multiplayer networking (required for Xbox online)",
-    impact_scores={"ram_saved": "5-15MB", "stability": "high"},
+    impact_scores={"ram_saved": 0.0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     # Use StartType (2=Automatic, 4=Disabled) instead of Status for reliable verification
     detect_command="$s = Get-Service -Name 'XboxNetApiSvc'"
@@ -595,7 +595,7 @@ SERVICE_XBOX_ACCESSORY = SettingExecutor(
     scope=SettingScope.COMPLETE,  # Optional for non-Xbox controller users
     category_order=14,  # Xbox controller
     effect="Controls Xbox controller management (required for Xbox controllers)",
-    impact_scores={"ram_saved": "3-8MB", "stability": "high"},
+    impact_scores={"ram_saved": 0.0, "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     # Use StartType (2=Automatic, 4=Disabled) instead of Status for reliable verification
     detect_command="$s = Get-Service -Name 'XboxGipSvc'"
@@ -1735,7 +1735,7 @@ SYSTEM_HYPER_V = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=51,
     effect="Disables Hyper-V hypervisor to remove SLAT overhead from gaming workloads",
-    impact_scores={"fps_cpu_bound": "+3-8%", "fps_1_percent_low": "+2-5%", "latency_ms": -1},
+    impact_scores={"fps_cpu_bound": "0%", "fps_1_percent_low": "0%", "latency_ms": 0.0},
     # Gated on *anything* using virtualization, not on Docker alone. Docker was
     # the only consumer this ever checked, and it checked it by hardcoded path —
     # so a per-user Docker install, and every WSL distribution ever, went unseen
@@ -1792,7 +1792,7 @@ SYSTEM_VM_PLATFORM = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=51,
     effect="Disables VirtualMachinePlatform when WSL2 and Android apps are not in use",
-    impact_scores={"fps_cpu_bound": "+0-2%", "latency_ms": -0.3},
+    impact_scores={"fps_cpu_bound": "0%", "latency_ms": 0.0},
     # See Hyper-V above. VirtualMachinePlatform is the feature WSL2 and Docker
     # Desktop both sit directly on top of, so this one is the more damaging of
     # the two to recommend blind.
@@ -2245,7 +2245,7 @@ SYSTEM_LARGE_SYSTEM_CACHE = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=40,
     effect="Keeps the memory manager favouring running programs over cached file data",
-    impact_scores={"ram_saved": "0-500MB kept resident", "stability": "high"},
+    impact_scores={"ram_saved": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -3277,7 +3277,7 @@ SERVICE_MMCSS = SettingExecutor(
     category_order=0,
     effect="MMCSS elevates game thread priority. Disabling causes "
     "stutter from background process competition",
-    impact_scores={"fps_cpu_bound": "+1-3%", "stability": "critical"},
+    impact_scores={"fps_cpu_bound": "0%", "stability": "critical"},
     # On Windows 11 MMCSS is a kernel driver (mmcss.sys), not a service:
     # Get-Service never lists it, so a service query read "not found" on every
     # machine and this guard never showed. Its Start value is the one switch.
@@ -3471,7 +3471,7 @@ PRIVACY_ONLINE_SPEECH = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=57,
     effect="Disables online speech recognition to prevent voice data from being sent to Microsoft",
-    impact_scores={"privacy": "improved", "fps": "0%"},
+    impact_scores={"privacy": "protected", "fps": "0%"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -3896,8 +3896,8 @@ GPU_TDR_DELAY = SettingExecutor(
     category=SettingCategory.SYSTEM,
     display_name="GPU TDR Delay",
     short_name="GPU hang tolerance",
-    description="Extends the GPU driver timeout (TDR) from Windows' 2 seconds to 10. DX12 games can stall the "
-    "GPU longer than 2 s, and the forced driver reset surfaces as a Dev Error or black screen.",
+    description="How long Windows waits for a stalled GPU before resetting its driver (TDR); Windows' own "
+    "2 seconds is kept. A longer wait only lengthens a real hang, and Microsoft advises against changing it.",
     value_type=SettingValueType.CHOICE,
     choices=("default", "extended"),
     default_value="default",
@@ -3910,11 +3910,11 @@ GPU_TDR_DELAY = SettingExecutor(
         "https://www.tomshardware.com/how-to/how-to-fix-video_tdr_failure-bsods-and-video_tdr_timeout_detected-errors",
         "https://www.intel.com/content/www/us/en/docs/oneapi/installation-guide-windows/2024-1/gpu-adjust-timeout-detection-and-recovery-setting.html",
     ],
-    current_impact="default (2s): GPU stall > 2s triggers driver reset → Dev Error crash in DX12 titles",
-    recommended_impact="extended (10s): GPU stall up to 10s recovers silently → prevents Dev Error crashes",
+    current_impact="extended (10s): A real GPU hang is left to run for ten seconds before the driver resets it, so a stuck game looks frozen far longer",
+    recommended_impact="default (2s): Windows' own timeout — a stalled GPU is reset after two seconds instead of freezing the screen",
     scope=SettingScope.RECOMMENDED,
     category_order=33,
-    effect="Extends GPU driver TDR timeout to 10s to prevent Dev Error crashes in DX12 games",
+    effect="Removes the TdrDelay value so Windows' own two-second GPU timeout applies",
     impact_scores={"latency_ms": 0.0, "stability": "high"},
     detect_type=DetectType.REGISTRY,
     detect_command="",

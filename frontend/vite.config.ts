@@ -13,7 +13,19 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
-      '@': path.resolve(__dirname, './src'),
+      '@': path.resolve(import.meta.dirname, './src'),
+    },
+  },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Third-party code in its own chunk: one 683 KB script crossed the
+        // 500 KB warning line. The total is the same; the app's own code and
+        // the libraries it pins now load as two files, each under the line.
+        codeSplitting: {
+          groups: [{ name: 'vendor', test: /node_modules/ }],
+        },
+      },
     },
   },
   server: {

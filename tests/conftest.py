@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-import glob
 import json
 import logging
 import os
 import sys
 import tempfile
+from collections.abc import Iterable, Iterator
 from pathlib import Path
 from unittest.mock import MagicMock
 
@@ -20,8 +20,11 @@ import pytest
 # redirected and the writers read %LOCALAPPDATA% and %APPDATA%. This block runs
 # before any fpstune import, so module-level constants that resolve a root at
 # import (headroom.json) land in a throwaway tree too. Each test then gets its
-# own tree (`_isolated_profile`), and the real files' modification times are a
-# backstop (`_real_profile_untouched`): metadata only, no content is ever read.
+# own tree (`_isolated_profile`), and an audit hook is the backstop
+# (`_real_profile_untouched`): it sees only what THIS process opens for writing,
+# renames or removes under a real root. A file's modification time cannot tell
+# who wrote it, and the developer's own Battle.net client rewrites its config
+# while the suite runs.
 _REAL_PROFILE_MARK = "FPSTUNE_TEST_REAL_PROFILE"
 _ROOT_VARIABLES = ("LOCALAPPDATA", "APPDATA", "USERPROFILE")
 
@@ -52,34 +55,96 @@ _SESSION_PROFILE = tempfile.TemporaryDirectory(prefix="fpstune-test-profile-")
 _point_roots_at(Path(_SESSION_PROFILE.name))
 
 
-def _real_profile_files() -> list[Path]:
-    """The real files a writer in this product could rewrite, found by their own globs."""
-    files: list[Path] = []
-    local = REAL_PROFILE_ROOTS.get("LOCALAPPDATA")
-    roaming = REAL_PROFILE_ROOTS.get("APPDATA")
-    home = REAL_PROFILE_ROOTS.get("USERPROFILE")
-    if local:
-        game = Path(local) / "Activision" / "Call of Duty"
-        for pattern in ("players*/s.*.cod26*.txt", "players*/*/g.*.cod26.[0-9]*.l.txt"):
-            files.extend(Path(m) for m in glob.glob(str(game / pattern)))
-    if roaming:
-        files.append(Path(roaming) / "Battle.net" / "Battle.net.config")
-    if home:
-        files.append(Path(home) / ".fpstune" / "headroom.json")
-    return files
+# Events that write, by the position of the path(s) they carry in the audit args.
+_WRITE_PATH_ARGS: dict[str, tuple[int, ...]] = {
+    "os.rename": (0, 1),  # os.replace emits this too: the source goes, the target is written
+    "os.remove": (0,),
+    "os.rmdir": (0,),
+    "os.mkdir": (0,),
+    "os.truncate": (0,),
+    "shutil.copyfile": (1,),
+    "shutil.copytree": (1,),
+    "shutil.move": (0, 1),
+    "shutil.rmtree": (0,),
+}
+_WRITE_MODE_CHARACTERS = frozenset("wax+")
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
 
 
-_REAL_FILES = _real_profile_files()
+class ProfileWriteWatch:
+    """Audit hook: which paths under a real profile root did THIS process change?
+
+    ``sys.addaudithook`` is per interpreter, so a write another process makes (a
+    running Battle.net client, an editor, an antivirus) is invisible to it by
+    construction; only this test process's own opens-for-write, renames, removals
+    and shutil moves count. Reads are never recorded.
+
+    Two kinds of path under a root are not the profile's own: the temporary
+    directory (pytest's ``tmp_path`` lives in the Temp folder under ``%LOCALAPPDATA%``) and
+    ``__pycache__`` (the interpreter caches the standard library next to it).
+
+    The hook records and never raises: an exception thrown from an audit hook
+    lands inside whatever call was being audited, in production code, far from
+    the test that caused it. ``assert_clean`` reports at the test's boundary.
+    """
+
+    def __init__(self, roots: Iterable[str] = (), ignored: Iterable[str] = ()) -> None:
+        self.roots: tuple[str, ...] = ()
+        self.ignored: tuple[str, ...] = ()
+        self.armed = False
+        self.offenders: list[str] = []
+        self.watch(roots, ignored)
+
+    @staticmethod
+    def _normal(path: str) -> str:
+        return os.path.normcase(os.path.abspath(path))
+
+    def watch(self, roots: Iterable[str], ignored: Iterable[str] = ()) -> None:
+        self.roots = tuple(self._normal(r) for r in roots if r)
+        self.ignored = tuple(self._normal(i) for i in ignored if i)
+
+    @staticmethod
+    def _inside(path: str, root: str) -> bool:
+        return path == root or path.startswith(root.rstrip(os.sep) + os.sep)
+
+    def _consider(self, raw: object) -> None:
+        # An int is a file descriptor and carries no path; anything else that is
+        # not a path (None for a dir_fd-only call) is not ours to judge.
+        if not isinstance(raw, str | bytes | os.PathLike):
+            return
+        path = os.fsdecode(raw)
+        normal = self._normal(path)
+        if "__pycache__" in normal.split(os.sep):
+            return
+        if any(self._inside(normal, ignored) for ignored in self.ignored):
+            return
+        if any(self._inside(normal, root) for root in self.roots):
+            self.offenders.append(path)
+
+    def __call__(self, event: str, args: tuple[object, ...]) -> None:
+        if not self.armed or not self.roots:
+            return
+        if event == "open":
+            _path, mode, flags = args
+            writes = (isinstance(mode, str) and not _WRITE_MODE_CHARACTERS.isdisjoint(mode)) or (
+                isinstance(flags, int) and bool(flags & _WRITE_FLAGS)
+            )
+            if writes:
+                self._consider(args[0])
+            return
+        for position in _WRITE_PATH_ARGS.get(event, ()):
+            self._consider(args[position])
+
+    def assert_clean(self) -> None:
+        offenders, self.offenders = self.offenders, []
+        assert not offenders, f"a test wrote to the real user profile: {sorted(set(offenders))}"
 
 
-def _stamps() -> dict[Path, int | None]:
-    stamps: dict[Path, int | None] = {}
-    for path in _REAL_FILES:
-        try:
-            stamps[path] = path.stat().st_mtime_ns
-        except OSError:
-            stamps[path] = None
-    return stamps
+_WATCH = ProfileWriteWatch(
+    REAL_PROFILE_ROOTS.values(),
+    ignored=(tempfile.gettempdir(), _SESSION_PROFILE.name),
+)
+sys.addaudithook(_WATCH)
 
 
 from fpstune.settings.applicability import HardwareContext  # noqa: E402
@@ -200,11 +265,35 @@ def _isolated_profile(
 
 @pytest.fixture(autouse=True)
 def _real_profile_untouched():
-    """Backstop: fail the test during which a real game or launcher file changed."""
-    before = _stamps()
-    yield
-    changed = [str(path) for path, stamp in _stamps().items() if stamp != before[path]]
-    assert not changed, f"a test touched the real user profile: {changed}"
+    """Backstop: fail the test during which this process wrote to the real profile."""
+    _WATCH.offenders.clear()
+    _WATCH.armed = True
+    try:
+        yield
+    finally:
+        _WATCH.armed = False
+    _WATCH.assert_clean()
+
+
+@pytest.fixture(autouse=True)
+def _no_host_processes() -> Iterator[None]:
+    """A test never sees what is running on the machine it happens to run on.
+
+    The running-game guard refuses a config write while the game (or its
+    launcher) is open, by reading the real process list. On a developer's
+    machine mid-session that list names ``cod23-cod`` and ``Battle.net``, so
+    every apply test for those turned into "Modern Warfare III is running" with
+    nothing wrong in the code (#104: eight red in the gate, green when the game
+    was closed). A test that needs a process says so by patching the snapshot,
+    which runs after this fixture and wins.
+    """
+    from fpstune.settings.executors import game_processes
+
+    with pytest.MonkeyPatch.context() as patch:
+        patch.setattr(game_processes, "_snapshot_process_names", lambda: frozenset())
+        game_processes.reset_process_cache()
+        yield
+    game_processes.reset_process_cache()
 
 
 @pytest.fixture(autouse=True)

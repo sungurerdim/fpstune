@@ -19,10 +19,15 @@ from __future__ import annotations
 
 import ast
 import os
+import shutil
+import subprocess
 import sys
+from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+
+from tests.conftest import ProfileWriteWatch
 
 SRC = Path(__file__).resolve().parents[1] / "src" / "fpstune"
 HELPER = SRC / "utils" / "user_paths.py"
@@ -151,6 +156,197 @@ def test_a_real_root_handed_back_by_the_helper_fails_the_test(
     monkeypatch.setenv("USERPROFILE", str(real))
     with pytest.raises(AssertionError, match="real user profile"):
         user_paths.home()
+
+
+# ---------------------------------------------------------------------------
+# The backstop is process-local: it counts what THIS process writes under a real
+# root, and nothing another process does. The real profile is never touched here;
+# a fake "real root" under tmp_path is what the hook is told to watch.
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def probe() -> ProfileWriteWatch:
+    """One installed hook for the module (an audit hook cannot be removed again)."""
+    watch = ProfileWriteWatch()
+    sys.addaudithook(watch)
+    return watch
+
+
+@pytest.fixture
+def watched(probe: ProfileWriteWatch, tmp_path: Path) -> Iterator[tuple[ProfileWriteWatch, Path]]:
+    """The probe watching ``tmp_path / "real"``, armed, and inert again afterwards."""
+    real = tmp_path / "real"
+    real.mkdir()
+    (real / "Battle.net.config").write_text("{}", encoding="utf-8")
+    probe.watch([str(real)])
+    probe.offenders.clear()
+    probe.armed = True
+    try:
+        yield probe, real
+    finally:
+        probe.armed = False
+        probe.watch([])
+        probe.offenders.clear()
+
+
+def _write(path: Path, mode: str) -> None:
+    with open(path, mode) as handle:
+        handle.write("x" if "b" not in mode else b"x")
+
+
+def _create_with_os_open(path: Path) -> None:
+    os.close(os.open(path, os.O_WRONLY | os.O_CREAT, 0o600))
+
+
+def _replace_onto(path: Path) -> None:
+    # The source sits outside the watched root on purpose: the target alone is the offence.
+    outside = path.parents[1] / "incoming.tmp"
+    outside.write_text("x", encoding="utf-8")
+    os.replace(outside, path)
+
+
+def _rename_away(path: Path) -> None:
+    os.rename(path, path.parents[1] / "moved-out.cfg")
+
+
+def _remove(path: Path) -> None:
+    os.remove(path)
+
+
+def _copy_onto(path: Path) -> None:
+    shutil.copyfile(path.parents[1] / "elsewhere.cfg", path)
+
+
+def _move_onto(path: Path) -> None:
+    shutil.move(str(path.parents[1] / "elsewhere.cfg"), str(path))
+
+
+def _remove_tree(path: Path) -> None:
+    shutil.rmtree(path.parent)
+
+
+@pytest.mark.parametrize(
+    "act",
+    [
+        pytest.param(lambda p: _write(p, "w"), id="open-w"),
+        pytest.param(lambda p: _write(p, "a"), id="open-a"),
+        pytest.param(lambda p: _write(p, "r+"), id="open-r+"),
+        pytest.param(lambda p: _write(p, "wb"), id="open-wb"),
+        pytest.param(lambda p: p.write_text("x", encoding="utf-8"), id="path-write_text"),
+        pytest.param(_create_with_os_open, id="os.open-create"),
+        pytest.param(_replace_onto, id="os.replace-target"),
+        pytest.param(_rename_away, id="os.rename-source"),
+        pytest.param(_remove, id="os.remove"),
+        pytest.param(_copy_onto, id="shutil.copyfile"),
+        pytest.param(_move_onto, id="shutil.move"),
+        pytest.param(_remove_tree, id="shutil.rmtree"),
+    ],
+)
+def test_a_write_under_the_real_root_fails_the_test(watched, act) -> None:
+    """Guards the incident: this process rewrote a real file and nothing said so."""
+    probe, real = watched
+    (real.parent / "elsewhere.cfg").write_text("x", encoding="utf-8")
+    target = real / "Battle.net.config"
+    if act is _create_with_os_open:
+        target = real / "created.cfg"
+
+    act(target)
+
+    with pytest.raises(AssertionError, match="real user profile") as caught:
+        probe.assert_clean()
+    assert real.name in str(caught.value)
+
+
+def test_reading_under_the_real_root_is_not_a_write(watched) -> None:
+    probe, real = watched
+    target = real / "Battle.net.config"
+
+    target.read_text(encoding="utf-8")
+    target.read_bytes()
+    target.stat()
+    list(real.iterdir())
+    os.close(os.open(target, os.O_RDONLY))
+
+    probe.assert_clean()
+
+
+def test_a_write_outside_the_real_root_is_not_counted(watched, tmp_path: Path) -> None:
+    probe, real = watched
+
+    (tmp_path / "somewhere-else.cfg").write_text("x", encoding="utf-8")
+    sibling = tmp_path / "real-but-not-under-it"
+    sibling.mkdir()
+    (sibling / "a.cfg").write_text("x", encoding="utf-8")
+
+    probe.assert_clean()
+
+
+def test_another_process_writing_the_watched_file_is_not_counted(watched) -> None:
+    """The false positive that retired the modification-time check.
+
+    The developer's running Battle.net client rewrites its own config while the
+    suite runs. The file changes; this process did not change it.
+    """
+    probe, real = watched
+    target = real / "Battle.net.config"
+
+    subprocess.run(
+        [
+            sys.executable,
+            "-I",
+            "-c",
+            "import sys; open(sys.argv[1], 'w').write('rewritten')",
+            str(target),
+        ],
+        check=True,
+        timeout=60,
+    )
+
+    assert target.read_text(encoding="utf-8") == "rewritten", "precondition: the file did change"
+    probe.assert_clean()
+
+
+def test_a_write_while_disarmed_is_not_counted(watched) -> None:
+    """Between tests (collection, session fixtures) nothing is judged."""
+    probe, real = watched
+    probe.armed = False
+
+    (real / "Battle.net.config").write_text("x", encoding="utf-8")
+
+    probe.assert_clean()
+
+
+def test_the_interpreters_bytecode_cache_under_a_root_is_not_the_profile(watched) -> None:
+    probe, real = watched
+    cache = real / "pkg" / "__pycache__"
+    probe.armed = False  # building the directory is the setup, not the act under test
+    cache.mkdir(parents=True)
+    probe.armed = True
+
+    (cache / "mod.cpython-312.pyc").write_bytes(b"x")
+
+    probe.assert_clean()
+
+
+def test_the_suites_hook_watches_the_real_roots_captured_before_the_redirect() -> None:
+    """Not the redirected tree: that one is where every test is meant to write."""
+    from tests.conftest import _WATCH, REAL_PROFILE_ROOTS
+
+    expected = {os.path.normcase(os.path.abspath(v)) for v in REAL_PROFILE_ROOTS.values()}
+    assert set(_WATCH.roots) == expected
+    assert os.path.normcase(os.path.abspath(os.environ.get("APPDATA", "."))) not in _WATCH.roots
+
+
+def test_the_temporary_directory_is_not_the_profile(tmp_path: Path) -> None:
+    """pytest's own ``tmp_path`` sits under the real %LOCALAPPDATA%; every test writes there."""
+    from tests.conftest import _WATCH
+
+    _WATCH.offenders.clear()
+
+    (tmp_path / "scratch.txt").write_text("x", encoding="utf-8")
+
+    assert _WATCH.offenders == []
 
 
 # ---------------------------------------------------------------------------

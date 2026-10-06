@@ -705,6 +705,19 @@ class TestTheRunningGameGuardCoversThisFileToo:
         assert "Modern Warfare III" in message
         assert "Close the game and apply again" in message
 
+    def test_the_hosts_own_running_game_never_blocks_a_test(self):
+        """No patching at all: what runs on this machine must not decide the result.
+
+        Without the suite's process-list isolation, a developer playing MW3 with
+        Battle.net open turned eight apply tests red ("Modern Warfare III is
+        running") while the code was fine.
+        """
+        from fpstune.settings.executors import game_processes
+
+        assert game_processes.running_process_names() == frozenset()
+        assert game_processes.refuse_if_game_is_running("game_config:mw3:ads_sensitivity") is None
+        assert game_processes.refuse_if_game_is_running("launcher:bnet:anything") is None
+
     def test_nothing_is_refused_when_no_game_is_running(self, monkeypatch):
         from fpstune.settings.executors import game_processes
 

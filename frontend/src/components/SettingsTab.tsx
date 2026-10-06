@@ -102,8 +102,8 @@ export function SettingsTab({
         rows.push({
           setting: s,
           contextLabel: sameAsHeading ? undefined : moduleLabel,
-          // Nothing is created here: getIconByName is a lookup into lucide's
-          // own module exports, so CategoryIcon is a stable reference and
+          // Nothing is created here: getIconByName is a lookup into a fixed
+          // table of lucide components, so CategoryIcon is a stable reference and
           // remounts nothing. The rule cannot see through the indirection.
           contextIcon: sameAsHeading ? undefined : (
             // eslint-disable-next-line react-hooks/static-components -- a lookup, not a definition

@@ -1,7 +1,5 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Settings, type LucideIcon } from "lucide-react";
-import * as LucideIcons from "lucide-react";
 import { TabNavigation } from "./components/TabNavigation";
 import { HomeTab } from "./components/HomeTab";
 import { SettingsTab } from "./components/SettingsTab";
@@ -15,6 +13,7 @@ import { NotificationToasts } from "./components/ui/NotificationToasts";
 import { DisplayModeConfirm } from "./components/DisplayModeConfirm";
 import { tabButtonId, tabPanelId } from "./components/ui/tabIds";
 import { settingsApi } from "./lib/api";
+import { getIconByName } from "./lib/categoryIcons";
 import { useStore } from "./store";
 import type {
   Setting,
@@ -22,15 +21,6 @@ import type {
   ModuleMetadata,
 } from "./types/setting";
 import { moduleResponseToMetadata } from "./types/setting";
-
-/**
- * Get Lucide icon component by name
- * Falls back to Settings icon if not found
- */
-function getIconByName(name: string): LucideIcon {
-  const icons = LucideIcons as unknown as Record<string, LucideIcon>;
-  return icons[name] ?? Settings;
-}
 
 function App() {
   // Module metadata from backend (SSOT)

@@ -221,6 +221,19 @@ _NO_TELEMETRY: TelemetryConfig = {
 }
 
 
+def _include_routers(app: FastAPI) -> None:
+    """Every API router, under the prefix the frontend's api.ts calls."""
+    for system in _SYSTEM_ROUTERS:
+        app.include_router(system, prefix="/api", tags=["System"])
+    app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
+    app.include_router(settings_stream_router, prefix="/api/settings", tags=["Settings"])
+    app.include_router(display_router, prefix="/api", tags=["Display"])
+    app.include_router(safety_router, prefix="/api", tags=["Safety"])
+    app.include_router(benchmark_router, prefix="/api/benchmark", tags=["Benchmark"])
+    app.include_router(benchmark_suite_router, prefix="/api/benchmark", tags=["Benchmark"])
+    app.include_router(updates_router, prefix="/api", tags=["Update"])
+
+
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     pin_powershell_module_cache()
@@ -296,16 +309,7 @@ def create_app() -> FastAPI:
                 )
         return await call_next(request)
 
-    # Include routers
-    for system in _SYSTEM_ROUTERS:
-        app.include_router(system, prefix="/api", tags=["System"])
-    app.include_router(settings_router, prefix="/api/settings", tags=["Settings"])
-    app.include_router(settings_stream_router, prefix="/api/settings", tags=["Settings"])
-    app.include_router(display_router, prefix="/api", tags=["Display"])
-    app.include_router(safety_router, prefix="/api", tags=["Safety"])
-    app.include_router(benchmark_router, prefix="/api/benchmark", tags=["Benchmark"])
-    app.include_router(benchmark_suite_router, prefix="/api/benchmark", tags=["Benchmark"])
-    app.include_router(updates_router, prefix="/api", tags=["Update"])
+    _include_routers(app)
 
     @app.get("/")
     async def root() -> dict[str, str]:

@@ -440,6 +440,7 @@ Module contracts — what the tree does not tell you:
 - `settings/base.py` — `SettingExecutor` dataclass: risk_level, risk_warning, evidence_level,
   impact_scores. `module` is the first segment of the id.
 - `settings/bulk_plan.py` — the one scheduling SSOT for both bulk paths (`/bulk/apply` and the two SSE streams): `plan_lanes()` turns settings into lanes (serial inside, concurrent between) from `SettingExecutor.apply_after` and `resource_key`; `validate_declarations()` fails registry build on an unknown id or a cycle; `run_lanes()` is the thread-pool runner `/bulk/apply` uses. The planner is pure; the callers keep their own concurrency caps.
+- `settings/retired.py` — every setting id ever removed and what became of it (guard row, replacement, no-op by limit 1, mitigation by limit 2, or owner-pending); `tests/test_settings/registered_ids.txt` pins the registered ids, so an id that leaves without an entry fails `test_retired.py`.
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
   alike; `mobile` is derived from GetSystemPowerStatus, never from a model list.
   `ucpd_guard_up` is filled here from `os_protection.ucpd_active()`; the applicability check

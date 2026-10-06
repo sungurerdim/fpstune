@@ -344,7 +344,10 @@ src/fpstune/
             boot_time · pcie_link · process_sampler · furmark (its own panel, verifies nothing)
   commands/ presentation.py (status lines, panels, banner, ASCII fallback) · scan.py
   utils/    console.py · runtime.py · detect.py · hardware_manager.py · admin.py · powershell.py ·
-            instances.py (other fpstune APIs, found by /health and asked to stop)
+            instances.py (other fpstune APIs, found by /health and asked to stop) ·
+            user_paths.py (the one resolver of home, AppData, Documents/Shell Folders and
+            ProgramData; tests redirect every root and an audit hook fails a test that
+            writes under a real one — `tests/test_user_paths.py` keeps direct reads out)
 frontend/src/
   components/  SettingsTab · GameTweaksTab · CleanupPanel · HomeTab · TweakRows · TweakSetting ·
             SelectionToolbar · HardwarePanel · SettingInfoTooltip · SuitePanel · VerifyPanel ·

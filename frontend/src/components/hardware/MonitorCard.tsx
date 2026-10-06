@@ -394,7 +394,7 @@ export function MonitorCard({
       {/* Resolution and refresh rate share one two-column grid: the label column
           is as wide as its longest label in the active language, so the values
           line up without a width chosen for English. A fixed `w-14` held
-          "Resolution:" and ran "Çözünürlük:" into the value ("Çözünürlük2560x1440"). */}
+          "Resolution:" and ran the longer Turkish label into its value. */}
       <div
         data-testid="monitor-modes"
         className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-1 gap-y-1 text-xs pl-4"

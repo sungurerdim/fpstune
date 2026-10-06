@@ -52,7 +52,7 @@ const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = 
  * Which ends of the tab strip have more tabs past them.
  *
  * The strip scrolls rather than wraps (a wrapped label turned a 44px tab into
- * 84px and cut "Ölçüm" mid-word), and a scroll area with its scrollbar hidden says
+ * 84px and cut the Turkish Benchmarks label mid-word), and a scroll area with its scrollbar hidden says
  * nothing about what lies beyond the edge. This is the measurement behind the
  * fade-and-chevron cue: true on a side only while tabs are actually hidden there.
  * Read from the element on scroll and on every size change of the strip or of a

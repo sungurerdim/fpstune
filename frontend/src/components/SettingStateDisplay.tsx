@@ -45,7 +45,7 @@ export function SettingValueState({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 text-xs font-medium",
+          "inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 text-xs font-medium",
           setting.isOptimized ? "text-success" : "text-warning",
           className,
         )}
@@ -56,7 +56,7 @@ export function SettingValueState({
         <span className="sr-only">
           {setting.isOptimized ? t("sr.optimal") : t("sr.currently")}
         </span>
-        <span>{measured.summary}</span>
+        <span className="min-w-0 wrap-break-word">{measured.summary}</span>
       </span>
     );
   }
@@ -80,7 +80,7 @@ export function SettingValueState({
     return (
       <span
         className={cn(
-          "inline-flex items-center gap-1 text-xs font-medium text-success",
+          "inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 text-xs font-medium text-success",
           className,
         )}
         data-testid="setting-value-state"
@@ -94,27 +94,30 @@ export function SettingValueState({
           colour-blind user as nothing distinguishable either.
         */}
         <span className="sr-only">{t("sr.optimal")}</span>
-        <span className="truncate">{label(setting.currentValue)}</span>
+        <span className="min-w-0 wrap-break-word">{label(setting.currentValue)}</span>
       </span>
     );
   }
 
   return (
     <span
-      className={cn("inline-flex items-center gap-1 text-xs", className)}
+      className={cn(
+        "inline-flex min-w-0 max-w-full flex-wrap items-center gap-x-1 text-xs",
+        className,
+      )}
       data-testid="setting-value-state"
       data-state="drifted"
     >
       {/* "100→5" read aloud is "one hundred five". */}
       <span className="sr-only">{t("sr.currently")}</span>
-      <span className="font-medium text-destructive truncate">
+      <span className="min-w-0 font-medium text-destructive wrap-break-word">
         {label(setting.currentValue)}
       </span>
       <span className="text-muted-foreground/70 shrink-0" aria-hidden>
         →
       </span>
       <span className="sr-only">{t("sr.recommendedIs")}</span>
-      <span className="font-medium text-success truncate">
+      <span className="min-w-0 font-medium text-success wrap-break-word">
         {label(setting.recommendedValue)}
       </span>
     </span>

@@ -139,7 +139,7 @@ export function SettingsTab({
 
   const chipClass = (active: boolean) =>
     cn(
-      "text-xs px-2 py-0.5 rounded-full border transition-colors",
+      "max-w-full wrap-anywhere text-left text-xs px-2 py-0.5 rounded-full border transition-colors",
       active
         ? "bg-primary/15 text-primary border-primary/40"
         : "text-muted-foreground border-border hover:border-muted-foreground/50",

@@ -2153,7 +2153,7 @@ export const settingsTr: Record<
     description:
       "Bu bağlantının pazarlıkla vardığı hızı bağdaştırıcının desteklediği en yüksek hızla karşılaştırır. Fark; kablo, anahtar portu veya karşı uç sınırıdır — Windows ayarı değildir.",
     effect:
-      "Cat 5e (1 Gbps) ya da Cat 6 (2,5 Gbps ve üzeri) kablo kullanın; modem veya switch portu da bu hızı desteklemeli",
+      "Kabloyu (1 Gbps için Cat 5e, 2,5 Gbps ve üzeri için Cat 6), switch portunu ve karşı ucu kontrol edin",
   },
   "network:*:wifi_link_quality": {
     name: "Wi-Fi sinyal denetimi",

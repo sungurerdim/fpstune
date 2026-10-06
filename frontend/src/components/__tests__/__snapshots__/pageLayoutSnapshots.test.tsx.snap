@@ -13,11 +13,13 @@ div [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]"
 `;
 
@@ -34,11 +36,13 @@ div [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]"
 `;
 
@@ -177,11 +181,11 @@ section#home-advisories
   div#home-advisory-grid [grid-cols-1]
     div [flex-wrap]
     div#advisory-finding
-      span#setting-value-state
+      span#setting-value-state [max-w-full flex-wrap]
     p#advisory-advice
     div [flex-wrap]
     div#advisory-finding
-      span#setting-value-state
+      span#setting-value-state [max-w-full flex-wrap]
     p#advisory-advice
 section#home-measured
   div [flex-wrap]
@@ -203,12 +207,12 @@ section [flex-col]
       div [flex-wrap]
         span [max-w-full]
       div [flex-wrap]
-        span#setting-value-state
+        span#setting-value-state [max-w-full flex-wrap]
     div#tweak-list-row
       div [flex-wrap]
         span [max-w-full]
       div [flex-wrap]
-        span#setting-value-state
+        span#setting-value-state [max-w-full flex-wrap]
 section [flex-col]
   div [flex-wrap]
     h2 "Game tweaks"
@@ -277,11 +281,11 @@ section#home-advisories
   div#home-advisory-grid [grid-cols-3]
     div [flex-wrap]
     div#advisory-finding
-      span#setting-value-state
+      span#setting-value-state [max-w-full flex-wrap]
     p#advisory-advice
     div [flex-wrap]
     div#advisory-finding
-      span#setting-value-state
+      span#setting-value-state [max-w-full flex-wrap]
     p#advisory-advice
 section#home-measured
   div [flex-wrap]
@@ -304,12 +308,12 @@ div [grid-cols-[2fr_1fr]]
         div [flex-wrap]
           span [max-w-full]
         div [flex-wrap]
-          span#setting-value-state
+          span#setting-value-state [max-w-full flex-wrap]
       div#tweak-list-row
         div [flex-wrap]
           span [max-w-full]
         div [flex-wrap]
-          span#setting-value-state
+          span#setting-value-state [max-w-full flex-wrap]
   section [flex-col]
     div [flex-wrap]
       h2 "Game tweaks"
@@ -373,6 +377,8 @@ div [flex-wrap]
   div [max-w-xs]
   div [flex-wrap]
 div[group] [flex-wrap]
+  button [max-w-full]
+  button [max-w-full]
 div [flex-wrap]
   h2 "System"
   div [max-w-full]
@@ -381,11 +387,13 @@ div [flex-wrap]
 div#tweak-rows [grid-cols-1]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]"
 `;
 
@@ -395,6 +403,8 @@ div [flex-wrap]
   div [max-w-xs]
   div [flex-wrap]
 div[group] [flex-wrap]
+  button [max-w-full]
+  button [max-w-full]
 div [flex-wrap]
   h2 "System"
   div [max-w-full]
@@ -403,10 +413,12 @@ div [flex-wrap]
 div#tweak-rows [grid-cols-3]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]
   div#tweak-row
     div [flex-wrap]
-      span#setting-value-state [max-w-56]
+      div [max-w-full flex-wrap]
+        span#setting-value-state [flex-wrap max-w-56]
     div [flex-wrap]"
 `;

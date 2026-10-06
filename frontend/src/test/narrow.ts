@@ -17,19 +17,28 @@
  *    unless *every* flex item on the way up says `min-w-0`.
  *  - R4 `nowrap-without-clip` (fix 1, `TabNavigation`): `whitespace-nowrap` text
  *    that can neither be clipped nor scrolled is a guaranteed spill.
+ *  - R5 `phrase-in-shrink-0` (the Ethernet "line speed check" row): a *phrase*
+ *    (spaces, no single long token, so R2/R3 never fire) inside a `shrink-0`
+ *    box is as wide as its unwrapped text, and no `truncate` or `wrap-*` inside
+ *    changes that: the box is the thing that cannot narrow.
  *
  * Rules read the class tokens a mobile-first stylesheet applies at the narrowest
  * width: tokens with a variant prefix (`md:`, `lg:`, `hover:`) do not apply at
  * 390px and are ignored. The rules are the same ones whatever the surface, which
- * is the point: a new row is held to them by adding it to
- * `NarrowWidth.test.tsx`, not by writing another one-off assertion.
+ * is the point: a new component that renders a setting is found in the source
+ * tree by `surfaces.ts` and held to them by `NarrowWidth.test.tsx` without
+ * anyone listing it, not by writing another one-off assertion.
  */
 
 import type { Setting } from "../types/setting";
+import { t } from "../i18n";
+import { localizedEffect, localizedName } from "../i18n/settings";
 import { settingsTr } from "../i18n/settingsTr";
 
 /** A run of non-space characters this long cannot wrap at a space. */
 export const UNBROKEN_MIN = 24;
+/** Text this long, with spaces in it, is a phrase: it needs room, or somewhere to wrap. */
+export const PHRASE_MIN = 24;
 
 /** Classes that let a word break inside itself (and therefore shrink min-content). */
 const BREAKS_ANYWHERE = new Set(["wrap-anywhere", "break-all"]);
@@ -139,6 +148,9 @@ export function narrowReport(root: Element, probes: Record<string, string>): Nar
     if (labels.length === 0) continue;
     for (const label of labels) carriers[label] += 1;
 
+    // Screen-reader-only text takes no room on screen; nothing to spill.
+    if (anyUp(el, root, (tok) => tok === "sr-only")) continue;
+
     const text = own.trim();
     const excerpt = `${labels.join("+")}: "${text.slice(0, 40)}"`;
     const flag = (rule: string, at: Element) => {
@@ -162,6 +174,21 @@ export function narrowReport(root: Element, probes: Record<string, string>): Nar
     // R4: nowrap text must be clipped or scrollable by something above it.
     if (anyUp(el, root, (t) => t === "whitespace-nowrap" || t === "text-nowrap")) {
       if (!anyUp(el, root, CLIPS)) flag("R4 nowrap-without-clip", el);
+    }
+
+    // R5: a phrase under a box that refuses to narrow. Clipping or wrapping
+    // *inside* that box does nothing, because the box sizes itself to the
+    // unwrapped text; only `max-w-full` (bounded by the container) rescues it.
+    if (text.length >= PHRASE_MIN && /\s/.test(text)) {
+      for (const item of chain) {
+        if (item === root) break;
+        const itemTokens = tokens(item);
+        if (itemTokens.has("max-w-full")) break;
+        if (itemTokens.has("shrink-0") || itemTokens.has("flex-none")) {
+          flag("R5 phrase-in-shrink-0", item);
+          break;
+        }
+      }
     }
 
     if (unbroken) {
@@ -273,5 +300,52 @@ export function narrowSetting(
     isApplicable: true,
     impactCategories: [],
     ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// The unresolved advisory: a readonly row whose state is a *phrase*, not a token.
+// ---------------------------------------------------------------------------
+
+/**
+ * The Ethernet "line speed check", as a machine whose link runs below the
+ * adapter's maximum reports it. Its two states are the longest real labels in
+ * the catalogue (`choice.below_capability` is 37 characters in Turkish) and its
+ * hint is the longest real `effect`: this is the row a screenshot showed
+ * spilling, and none of the long-token fixtures above could reproduce it
+ * because nothing in it is a single long word.
+ */
+export function narrowAdvisory(overrides: Partial<Setting> = {}): Setting {
+  return narrowSetting("catalogue", {
+    id: "network:12:link_capability" as Setting["id"],
+    module: "network",
+    domain: "hardware",
+    component: "network_adapter",
+    displayName: "Link Speed vs Adapter Capability (Ethernet)",
+    shortName: "Line speed check (Ethernet)",
+    subject: "Ethernet",
+    description:
+      "Compares the speed this link negotiated with the fastest speed the adapter itself supports.",
+    effect: settingsTr["network:*:link_capability"].effect ?? "",
+    currentImpact: "Below capability: the line is capped by cable or port, not by the adapter",
+    recommendedImpact: "At capability: the link runs at the fastest rate the adapter supports",
+    choices: ["at_capability", "below_capability"],
+    defaultValue: "below_capability",
+    recommendedValue: "at_capability",
+    currentValue: "below_capability",
+    lastError: undefined,
+    isReadonly: true,
+    isOptimized: false,
+    ...overrides,
+  });
+}
+
+/** The advisory's own words in the active locale: what a row has to fit on screen. */
+export function advisoryProbes(setting: Setting): Record<string, string> {
+  return {
+    advisoryName: localizedName(setting),
+    advisoryState: t("choice.below_capability"),
+    advisoryTarget: t("choice.at_capability"),
+    advisoryHint: localizedEffect(setting),
   };
 }

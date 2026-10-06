@@ -206,7 +206,11 @@ export function TweakSetting({
           <ImpactCategoryTags setting={setting} max={3} />
         </div>
 
-        <div className="shrink-0 ml-auto flex items-center gap-1">
+        {/* Never `shrink-0`: this cluster holds phrases (an advisory's state and
+            what to do about it), and a box that refuses to narrow is as wide as
+            its unwrapped text. It wraps its children instead and is bounded by
+            the row. */}
+        <div className="ml-auto flex min-w-0 max-w-full flex-wrap items-center justify-end gap-1">
           {/* SSE bulk operation status badge */}
           {operationStatus === "queued" && (
             <span className="text-xs text-muted-foreground/60 px-1 rounded bg-muted/50">
@@ -402,7 +406,7 @@ export function TweakSetting({
       {/* An unresolved advisory: no control can fix it, so the row says where
           to go instead — its `effect` is written as that instruction. */}
       {setting.isReadonly && !isOptimal && setting.effect && (
-        <p className="mt-1 ml-7 text-xs text-muted-foreground leading-snug">
+        <p className="mt-1 ml-7 text-xs text-muted-foreground leading-snug wrap-break-word">
           {localizedEffect(setting)}
         </p>
       )}

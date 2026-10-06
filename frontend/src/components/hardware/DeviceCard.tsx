@@ -130,7 +130,9 @@ export function DeviceCardCompact({
             aria-label={t("device.open", { name: title })}
             className="flex max-w-full items-center gap-1 text-left hover:underline"
           >
-            <span className="truncate">{title}</span>
+            <span className="truncate" title={title}>
+              {title}
+            </span>
             <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
           </button>
         }

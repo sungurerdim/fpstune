@@ -12,17 +12,27 @@
  * locales.
  *
  * jsdom measures nothing; the rules read the classes that make the browser
- * behave. A new surface is one more entry in `SURFACES`.
+ * behave. A surface needing its own state is one more entry in `SURFACES`; one
+ * that does not is found in the source tree and rendered generically (see
+ * `test/surfaces.ts`), so nothing depends on anyone remembering to list it.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { render, screen } from "../../test/utils";
+import { fireEvent, render, screen } from "../../test/utils";
 import userEvent from "@testing-library/user-event";
-import type { ReactElement } from "react";
+import type { ComponentType, ReactElement } from "react";
 import { setLocale } from "../../i18n";
 import { useStore } from "../../store";
 import { makeRunner } from "../../test/runner";
-import { CATALOGUE, UNBROKEN, narrowReport, narrowSetting } from "../../test/narrow";
+import {
+  CATALOGUE,
+  UNBROKEN,
+  advisoryProbes,
+  narrowAdvisory,
+  narrowReport,
+  narrowSetting,
+} from "../../test/narrow";
+import { discoverSurfaces } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
 import { TweakListRow } from "../TweakListRow";
@@ -38,7 +48,6 @@ vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../hardware/useHardware", () => ({
   useHardware: () => ({ hardware: null, isLoading: false }),
 }));
-vi.mock("../MaintenancePanel", () => ({ MaintenancePanel: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../hooks/useBulkApply", () => ({
   useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
@@ -87,14 +96,29 @@ vi.mock("../../lib/api", async (importOriginal) => {
   };
 });
 
-type Kind = "unbroken" | "catalogue";
+/**
+ * `unbroken`: a token no space can break. `catalogue`: the longest real Turkish
+ * copy. `advisory`: the unresolved Ethernet line-speed row, whose state, hint and
+ * value labels are long *phrases* (the shape of the row that spilled).
+ */
+type Kind = "unbroken" | "catalogue" | "advisory";
+const KINDS: Kind[] = ["unbroken", "catalogue", "advisory"];
+
+/** The setting a surface is mounted with for one kind of long input. */
+function fixture(kind: Kind, overrides: Partial<Setting> = {}): Setting {
+  return kind === "advisory" ? narrowAdvisory(overrides) : narrowSetting(kind, overrides);
+}
 
 interface Surface {
   name: string;
   /** What to render for one kind of long input, and where the surface ends. */
   mount: (kind: Kind, long: string) => { ui: ReactElement; ready?: () => Promise<unknown> };
-  /** Probes this surface must actually show, by kind: a probe nobody drew proves nothing. */
-  expects: Record<Kind, string[]>;
+  /**
+   * Probes this surface must actually show, by kind: a probe nobody drew proves
+   * nothing. A kind absent here is one the surface does not render (a cleanup
+   * action has no advisory state), and is not run.
+   */
+  expects: Partial<Record<Kind, string[]>>;
   /** Where the checked content lives; default is the render container. */
   root?: () => Element;
 }
@@ -114,7 +138,14 @@ function seed(settings: Setting[], extra: Record<string, unknown> = {}) {
   } as never);
 }
 
+/** Wait for the first 20 characters of the long text to be drawn (a plain substring, not a pattern). */
+function findLong(long: string) {
+  const head = long.slice(0, 20);
+  return screen.findAllByText((content) => content.includes(head));
+}
+
 function longProbe(kind: Kind): string {
+  if (kind === "advisory") return advisoryProbes(narrowAdvisory()).advisoryHint;
   return kind === "unbroken" ? UNBROKEN : CATALOGUE.description;
 }
 
@@ -122,7 +153,7 @@ const SURFACES: Surface[] = [
   {
     name: "TweakRows (TweakSetting)",
     mount: (kind, long) => {
-      const setting = narrowSetting(kind);
+      const setting = fixture(kind);
       seed([setting], { operationError: { [setting.id]: long } });
       return {
         ui: (
@@ -132,21 +163,29 @@ const SURFACES: Surface[] = [
         ),
       };
     },
-    expects: { unbroken: ["token"], catalogue: ["description", "name"] },
+    expects: {
+      unbroken: ["token"],
+      catalogue: ["description", "name"],
+      advisory: ["advisoryName", "advisoryState", "advisoryTarget", "advisoryHint"],
+    },
   },
   {
     name: "TweakListRow (Home row)",
     mount: (kind, long) => {
-      const setting = narrowSetting(kind);
+      const setting = fixture(kind);
       seed([setting]);
       return { ui: <TweakListRow setting={setting} categoryLabel={long} /> };
     },
-    expects: { unbroken: ["token"], catalogue: ["description", "name"] },
+    expects: {
+      unbroken: ["token"],
+      catalogue: ["description", "name"],
+      advisory: ["advisoryName", "advisoryState", "advisoryTarget"],
+    },
   },
   {
     name: "ActionRow",
     mount: (kind, long) => {
-      const setting = narrowSetting(kind, {
+      const setting = fixture(kind, {
         id: "cleanup:narrow_probe" as Setting["id"],
         module: "cleanup",
         isAction: true,
@@ -187,7 +226,7 @@ const SURFACES: Surface[] = [
   {
     name: "CleanupPanel (group heading and rows)",
     mount: (kind, long) => {
-      const setting = narrowSetting(kind, {
+      const setting = fixture(kind, {
         id: "cleanup:narrow_probe" as Setting["id"],
         module: "cleanup",
         isAction: true,
@@ -210,7 +249,7 @@ const SURFACES: Surface[] = [
   {
     name: "HistoryTab",
     mount: (kind, long) => {
-      const setting = narrowSetting(kind);
+      const setting = fixture(kind);
       seed([setting], {
         operationStatus: { [setting.id]: "failed" },
         operationError: { [setting.id]: long },
@@ -221,7 +260,7 @@ const SURFACES: Surface[] = [
       ];
       return {
         ui: <HistoryTab />,
-        ready: () => screen.findAllByText(new RegExp(long.slice(0, 20))),
+        ready: () => findLong(long),
       };
     },
     expects: { unbroken: ["token"], catalogue: ["description"] },
@@ -229,42 +268,49 @@ const SURFACES: Surface[] = [
   {
     name: "HomeTab groups",
     mount: (kind, long) => {
-      const software = narrowSetting(kind);
-      const hardware = narrowSetting(kind, {
+      const software = fixture(kind);
+      const hardware = fixture(kind, {
         id: `gpu-nvidia:${software.name}` as Setting["id"],
         module: "gpu-nvidia",
         domain: "hardware",
         component: "gpu",
       });
-      const game = narrowSetting(kind, {
+      const game = fixture(kind, {
         id: `game_config:mw4:${software.name}` as Setting["id"],
         module: "game_config",
         domain: "game",
       });
-      const advisory = narrowSetting(kind, {
-        id: `network:12:${software.name}` as Setting["id"],
-        module: "network",
-        domain: "hardware",
-        component: "network_adapter",
-        isReadonly: true,
-        currentValue: "weak_signal",
-        recommendedValue: "good",
-      });
+      const advisory =
+        kind === "advisory"
+          ? narrowAdvisory()
+          : narrowSetting(kind, {
+              id: `network:12:${software.name}` as Setting["id"],
+              module: "network",
+              domain: "hardware",
+              component: "network_adapter",
+              isReadonly: true,
+              currentValue: "weak_signal",
+              recommendedValue: "good",
+            });
       seed([software, hardware, game, advisory]);
-      return { ui: <HomeTab />, ready: () => screen.findAllByText(new RegExp(long.slice(0, 20))) };
+      return { ui: <HomeTab />, ready: () => findLong(long) };
     },
-    expects: { unbroken: ["token"], catalogue: ["description"] },
+    expects: {
+      unbroken: ["token"],
+      catalogue: ["description"],
+      advisory: ["advisoryName", "advisoryState", "advisoryTarget", "advisoryHint"],
+    },
   },
   {
     name: "SettingInfoTooltip",
     mount: (kind) => {
-      const setting = narrowSetting(kind, { sources: [`https://example.com/${UNBROKEN}`] });
+      const setting = fixture(kind, { sources: [`https://example.com/${UNBROKEN}`] });
       seed([setting]);
       return {
         ui: <SettingInfoTooltip setting={setting} />,
         ready: async () => {
           await userEvent.tab();
-          return screen.findAllByText(new RegExp(longProbe(kind).slice(0, 20)));
+          return findLong(longProbe(kind));
         },
       };
     },
@@ -274,6 +320,7 @@ const SURFACES: Surface[] = [
 ];
 
 function probesFor(kind: Kind): Record<string, string> {
+  if (kind === "advisory") return advisoryProbes(narrowAdvisory());
   return kind === "unbroken"
     ? { token: UNBROKEN }
     : { name: CATALOGUE.name, description: CATALOGUE.description, effect: CATALOGUE.effect };
@@ -284,7 +331,7 @@ describe.each(["en", "tr"] as const)("long text at narrow widths (%s)", (locale)
   afterEach(() => setLocale("en"));
 
   describe.each(SURFACES)("$name", (surface) => {
-    it.each(["unbroken", "catalogue"] as const)(
+    it.each(KINDS.filter((k) => surface.expects[k]))(
       "keeps %s text inside its row",
       async (kind) => {
         // The probe shown for a Turkish row is the catalogue's own form; in
@@ -300,11 +347,178 @@ describe.each(["en", "tr"] as const)("long text at narrow widths (%s)", (locale)
 
         // A probe that was never drawn proves nothing: the surface must show
         // the text this test claims to have checked.
-        for (const label of surface.expects[kind]) {
+        for (const label of surface.expects[kind] ?? []) {
           expect(carriers[label], `${surface.name} never drew the ${label} probe`).toBeGreaterThan(0);
         }
         expect(violations).toEqual([]);
       },
     );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Coverage derived from the code, not from a list.
+// ---------------------------------------------------------------------------
+
+/**
+ * Components that import the `Setting` type and still cannot be put through the
+ * generic render, each with the reason. The list is a *debt register*, not a
+ * way out: an entry whose component now renders generically fails (stale), and
+ * so does one naming a component that no longer exists.
+ */
+const NOT_GENERIC: Record<string, string> = {
+  "components/ScopeActions.tsx#ScopeActions":
+    "Icon buttons: the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
+  "components/SelectionToolbar.tsx#SelectionToolbar":
+    "Draws a selection count and fixed labels; no setting text is rendered, only how many are selected.",
+  "components/SettingStateDisplay.tsx#ImpactCategoryTags":
+    "Draws the fixed short category labels (fps, latency, heat); a setting's own text never reaches it.",
+  "components/SettingStateDisplay.tsx#RiskWarningBadge":
+    "Draws the fixed NOTE / RISK badge; the warning text is a title attribute, which takes no room on screen.",
+};
+
+/** Components mounted by hand above, with the state they need. */
+const BESPOKE = new Set([
+  "TweakRows",
+  "TweakListRow",
+  "ActionRow",
+  "CleanupPanel",
+  "HistoryTab",
+  "HomeTab",
+  "SettingInfoTooltip",
+]);
+
+const Icon = () => <svg aria-hidden />;
+
+/**
+ * Every prop name any surface takes, filled with the long text. A component
+ * reads the ones it declares and ignores the rest; one that needs a prop this
+ * bag does not carry fails to render and lands in `NOT_GENERIC` by name.
+ */
+function genericProps(settings: Setting[], long: string): Record<string, unknown> {
+  return {
+    setting: settings[0],
+    settings,
+    rows: settings.map((setting) => ({ setting })),
+    runner: makeRunner(),
+    name: long,
+    title: long,
+    subtitle: long,
+    summary: long,
+    kind: long,
+    deviceKey: "narrow-probe",
+    icon: Icon,
+    accent: "software",
+    detecting: false,
+    categoryLabel: () => long,
+    initialCollapsed: false,
+    match: () => true,
+    categoriesWithSettings: [
+      {
+        category: {
+          id: "network",
+          displayName: long,
+          description: long,
+          icon: "Wifi",
+          color: "text-blue-500",
+          isActionOnly: false,
+          order: 1,
+        },
+        settings,
+      },
+    ],
+    moduleMetaMap: new Map(),
+    definitionsLoading: false,
+    gpuCategoryStatus: "success",
+    hasGpuSettings: false,
+    getIconByName: () => Icon,
+  };
+}
+
+/** One setting per way a surface may meet it: plain, game, maintenance, and unreadable. */
+function genericSettings(kind: Kind): Setting[] {
+  if (kind === "advisory") return [narrowAdvisory()];
+  const base = fixture(kind);
+  const sibling = (module: string, extra: Partial<Setting>) =>
+    fixture(kind, { id: `${module}:${base.name}` as Setting["id"], module, ...extra });
+  return [
+    base,
+    sibling("game_config", { id: `game_config:mw4:${base.name}` as Setting["id"], domain: "game" }),
+    sibling("maintenance", { isAction: true, valueType: "bool", choices: [], currentValue: "ready|4096 MB" }),
+    sibling("network", {
+      detectionError: longProbe(kind),
+      isApplicable: false,
+      domain: "hardware",
+      component: "network_adapter",
+    }),
+  ];
+}
+
+function renderGeneric(Component: ComponentType<Record<string, unknown>>, kind: Kind) {
+  const long = longProbe(kind);
+  const settings = genericSettings(kind);
+  seed(settings, { selectedSettingIds: new Set(settings.map((s) => s.id)) });
+  const view = render(<Component {...genericProps(settings, long)} />);
+  // What a surface keeps behind a disclosure is still a surface: open them all,
+  // twice, so a fold inside a fold is drawn too.
+  for (let pass = 0; pass < 2; pass += 1) {
+    for (const closed of view.container.querySelectorAll('[aria-expanded="false"]')) {
+      fireEvent.click(closed);
+    }
+  }
+  const { violations, carriers } = narrowReport(view.container, probesFor(kind));
+  const drawn = Object.values(carriers).reduce((a, b) => a + b, 0);
+  view.unmount();
+  return { violations, drawn };
+}
+
+describe.each(["en", "tr"] as const)("every surface that renders a setting (%s)", (locale) => {
+  beforeEach(() => setLocale(locale));
+  afterEach(() => setLocale("en"));
+
+  const found = discoverSurfaces();
+  const generic = found.filter((c) => !BESPOKE.has(c.name) && !(c.id in NOT_GENERIC));
+
+  it("finds the surfaces in the source tree", () => {
+    // A discovery that silently finds nothing would pass everything below.
+    expect(found.length).toBeGreaterThan(BESPOKE.size);
+    for (const name of BESPOKE) {
+      expect(
+        found.some((c) => c.name === name),
+        `${name} is mounted by hand but no longer imports the Setting type`,
+      ).toBe(true);
+    }
+  });
+
+  it.each(generic.map((c) => [c.id, c] as const))("%s keeps long text inside its frame", (_id, c) => {
+    const violations: string[] = [];
+    let drawn = 0;
+    for (const kind of KINDS) {
+      const result = renderGeneric(c.Component, kind);
+      violations.push(...result.violations);
+      drawn += result.drawn;
+    }
+    expect(violations).toEqual([]);
+    // Rendering none of the long text proves nothing: either the generic props
+    // are missing one this component needs, or it shows no setting text at all.
+    // Either way it is named in NOT_GENERIC with the reason, not passed.
+    expect(drawn, `${c.id} drew none of the long text: add it to NOT_GENERIC with a reason`).toBeGreaterThan(0);
+  });
+
+  it.each(Object.entries(NOT_GENERIC))("exclusion %s is not stale", (id, reason) => {
+    const c = found.find((f) => f.id === id);
+    expect(c, `${id} is excluded but no longer exists or no longer imports Setting`).toBeDefined();
+    expect(reason.trim().length, `${id} is excluded without a reason`).toBeGreaterThan(20);
+    let drawn = 0;
+    let threw = false;
+    try {
+      for (const kind of KINDS) drawn += renderGeneric(c!.Component, kind).drawn;
+    } catch {
+      threw = true;
+    }
+    expect(
+      threw || drawn === 0,
+      `${id} now renders the long text generically: delete its exclusion`,
+    ).toBe(true);
   });
 });

@@ -67,7 +67,7 @@ export function DetectionNotice({
           {failuresOpen && (
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {failures.map((setting) => (
-                <li key={setting.id}>
+                <li key={setting.id} className="wrap-break-word">
                   <span className="text-foreground">{localizedName(setting)}</span>
                   {" — "}
                   {setting.detectionError}
@@ -97,7 +97,7 @@ export function DetectionNotice({
           {absentOpen && (
             <ul className="mt-1.5 space-y-0.5 text-xs text-muted-foreground">
               {absent.map((setting) => (
-                <li key={setting.id}>
+                <li key={setting.id} className="wrap-break-word">
                   <span className="text-foreground/80">{localizedName(setting)}</span>
                   {" — "}
                   {setting.applicableReason || t("detection.absentFallback")}

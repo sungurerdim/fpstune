@@ -64,7 +64,7 @@ export function ScopeHeader({
             {title}
           </Heading>
           {kind && (
-            <p data-slot="scope-kind" className="text-xs text-muted-foreground">
+            <p data-slot="scope-kind" className="text-xs text-muted-foreground wrap-break-word">
               {kind}
             </p>
           )}

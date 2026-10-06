@@ -28,6 +28,14 @@ backend() {
 
 frontend() {
   cd frontend
+  # A green run over stale packages is not a green run: node_modules here once
+  # lagged package-lock.json by a whole dependency round (jsdom 29 for 30,
+  # vite 8.2 for 8.3) and every check passed against versions nobody ships.
+  if ! npm ls --depth=0 >/dev/null 2>&1; then
+    echo "node_modules does not match package-lock.json - run: cd frontend && npm ci"
+    npm ls --depth=0 2>&1 | grep -E "invalid|missing" | head -10
+    return 1
+  fi
   npm run lint --silent
   npx tsc --noEmit
   npm run test:run --silent

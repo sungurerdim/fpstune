@@ -66,6 +66,7 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         discover_network_adapter_settings,
         discover_wifi_advisories,
     )
+    from fpstune.settings.discovery.nvidia import narrow_nvidia_choices
 
     return (
         discover_network_adapter_settings,
@@ -85,6 +86,9 @@ def all_discoverers() -> tuple[Discoverer, ...]:
         discover_hots_audio_settings,
         discover_title_frame_caps,
         discover_vrr_dependent_settings,
+        # Last: nothing re-registers a gpu-nvidia row after it, so the driver's
+        # answer about what it can hold is the final word on the row's choices.
+        narrow_nvidia_choices,
     )
 
 

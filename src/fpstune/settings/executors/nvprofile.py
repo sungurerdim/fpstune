@@ -9,6 +9,7 @@ lives in ``core/nv_drs.py``; the session handling in ``core/nvapi.py``.
 from __future__ import annotations
 
 import sys
+from collections.abc import Collection, Iterable
 from typing import TYPE_CHECKING, Any
 
 from fpstune.core.nv_drs import EnumKey, NumberKey, lookup
@@ -23,16 +24,52 @@ if TYPE_CHECKING:
 logger = get_logger()
 
 
-def missing_driver_ids(drs: EnumKey | NumberKey) -> frozenset[int]:
-    """The setting's DRS keys the installed driver does not define.
+def missing_ids(ids: Iterable[int]) -> frozenset[int] | None:
+    """The given DRS keys the installed driver does not define.
 
-    Empty when the driver could not be asked: absence is only ever reported from
+    None when the driver could not be asked: absence is only ever reported from
     the driver's own answer, never inferred from a failed probe.
     """
     from fpstune.core.nvapi import known_setting_ids
 
-    known = known_setting_ids(drs.ids)
-    return frozenset() if known is None else frozenset(drs.ids) - known
+    wanted = frozenset(ids)
+    known = known_setting_ids(wanted)
+    return None if known is None else wanted - known
+
+
+def missing_driver_ids(drs: EnumKey | NumberKey) -> frozenset[int]:
+    """The setting's DRS keys the installed driver does not define.
+
+    Empty when the driver could not be asked (see :func:`missing_ids`).
+    """
+    return missing_ids(drs.ids) or frozenset()
+
+
+def holdable_choices(setting: SettingExecutor, missing: Collection[int]) -> tuple[str, ...] | None:
+    """The setting's declared choices this driver can hold, in declared order.
+
+    None when the setting is not a choice over an NVIDIA enum key, so there is
+    nothing to narrow. A declared choice the key table does not know is kept:
+    narrowing only ever removes what the driver's own answer rules out.
+    """
+    drs = lookup(str(setting.detect_args.get("setting", "")))
+    if not isinstance(drs, EnumKey):
+        return None
+    held = drs.choices(missing)
+    return tuple(c for c in setting.choices if c in held or c not in drs.values)
+
+
+def answers_are_holdable(setting: SettingExecutor, drs: EnumKey, missing: Collection[int]) -> bool:
+    """Whether the setting's default and recommendation both fit this driver.
+
+    A recommendation the driver cannot hold is never remapped to another value:
+    the row is not applicable here instead (C10).
+    """
+    held = drs.choices(missing)
+    return all(
+        str(value) in held or str(value) not in drs.values
+        for value in (setting.default_value, setting.recommended_value)
+    )
 
 
 def read_setting_from_driver(setting_key: str) -> Any | None:
@@ -123,9 +160,13 @@ class NvProfileExecutor(BaseExecutor):
             # No NVIDIA driver answering here: the setting does not apply.
             return NOT_AVAILABLE, None
 
-        if not drs.supports(missing_driver_ids(drs)):
-            # The driver does not define the keys this setting lives in (C10:
-            # not-applicable is an answer, not an apply failure waiting to happen).
+        missing = missing_driver_ids(drs)
+        if not drs.supports(missing) or (
+            isinstance(drs, EnumKey) and not answers_are_holdable(setting, drs, missing)
+        ):
+            # The driver does not define the keys this setting lives in, or cannot
+            # hold the value the row recommends or resets to (C10: not-applicable
+            # is an answer, not an apply failure waiting to happen).
             return NOT_SUPPORTED, None
 
         value = drs.decode(raw)

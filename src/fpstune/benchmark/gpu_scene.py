@@ -106,7 +106,6 @@ from __future__ import annotations
 
 import hashlib
 import html
-import os
 import re
 import subprocess
 import sys
@@ -123,7 +122,7 @@ from fpstune.settings.executors.game_processes import (
     game_is_running,
 )
 from fpstune.settings.panel import primary_monitor
-from fpstune.utils import process_watch
+from fpstune.utils import process_watch, user_paths
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.logger import get_logger
 
@@ -230,9 +229,7 @@ def engine_log_path() -> Path:
     back to the home directory where that variable is not set, which is every
     non-Windows machine and no real one.
     """
-    profile = os.environ.get("USERPROFILE")
-    home = Path(profile) if profile else Path.home()
-    return home / "Superposition" / "log.html"
+    return user_paths.home() / "Superposition" / "log.html"
 
 
 def running_game_label() -> str | None:

@@ -39,9 +39,9 @@ import json
 import math
 import time
 from dataclasses import dataclass
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -51,7 +51,7 @@ logger = get_logger()
 
 # In the per-user state directory: it describes this machine and must not travel
 # with the install.
-HEADROOM_PATH = Path.home() / ".fpstune" / "headroom.json"
+HEADROOM_PATH = user_paths.fpstune_home_path() / "headroom.json"
 
 # A measurement older than this is not evidence any more. Drivers change, the
 # panel is swapped, the user re-tunes; a recommendation built on a stale number

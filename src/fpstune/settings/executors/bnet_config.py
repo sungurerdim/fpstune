@@ -22,6 +22,7 @@ from pathlib import Path
 from typing import Any
 
 from fpstune.settings.applicability import NOT_INSTALLED
+from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -44,8 +45,7 @@ def config_path() -> Path | None:
 
     roaming = _console_user_folder("AppData")
     if roaming is None:
-        env = os.environ.get("APPDATA")
-        roaming = Path(env) if env else None
+        roaming = user_paths.roaming_appdata()
     return roaming / _RELATIVE if roaming is not None else None
 
 

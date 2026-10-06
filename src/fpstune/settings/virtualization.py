@@ -30,6 +30,7 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
+from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -191,11 +192,11 @@ def _windows_subsystem_for_android() -> VirtualizationConsumer | None:
     if sys.platform != "win32":
         return None
 
-    local_app_data = os.environ.get("LOCALAPPDATA")
-    if not local_app_data:
+    local_app_data = user_paths.local_appdata()
+    if local_app_data is None:
         return None
 
-    packages = Path(local_app_data) / "Packages"
+    packages = local_app_data / "Packages"
     if not packages.is_dir():
         return None
 

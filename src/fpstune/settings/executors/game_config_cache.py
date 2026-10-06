@@ -12,7 +12,6 @@ submits through ``copy_context().run``.
 
 from __future__ import annotations
 
-import os
 import re
 import sys
 from collections.abc import Iterable
@@ -23,6 +22,7 @@ from fpstune.settings.applicability import NOT_INSTALLED as _NOT_INSTALLED
 from fpstune.settings.executors.game_config_writer import key_prefix
 from fpstune.settings.executors.mw3_paths import MW3_OPTIONS_FILE, MW3_PLAYERS_DIRS
 from fpstune.settings.executors.ps_batch import _get_cache, cache_once
+from fpstune.utils import user_paths
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -115,7 +115,7 @@ def _documents_dir() -> Path | None:
     found = _console_user_folder("Personal")
     if found is not None:
         return found
-    fallback = Path.home() / "Documents"
+    fallback = user_paths.home() / "Documents"
     return fallback if fallback.exists() else None
 
 
@@ -126,8 +126,7 @@ def _local_app_data_dir() -> Path | None:
     found = _console_user_folder("Local AppData")
     if found is not None:
         return found
-    env = os.environ.get("LOCALAPPDATA")
-    return Path(env) if env else None
+    return user_paths.local_appdata()
 
 
 def _steam_library_paths() -> list[Path]:

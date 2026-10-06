@@ -12,19 +12,16 @@ cache), each owning its own format.
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
+
+from fpstune.utils import user_paths
 
 
 def get_config_dir() -> Path:
     """Get the fpstune configuration directory.
 
     Returns:
-        Path to ~/.fpstune/ directory.
+        Path to ~/.fpstune/ directory, resolved by `user_paths` like every
+        other profile root.
     """
-    # Windows: Use USERPROFILE, otherwise use home()
-    home = Path(os.environ.get("USERPROFILE", "~")).expanduser() if os.name == "nt" else Path.home()
-
-    config_dir = home / ".fpstune"
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir
+    return user_paths.fpstune_home()

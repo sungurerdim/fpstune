@@ -2,13 +2,87 @@
 
 from __future__ import annotations
 
+import glob
+import json
 import logging
+import os
 import sys
+import tempfile
+from pathlib import Path
 from unittest.mock import MagicMock
 
 import pytest
 
-from fpstune.settings.hardware_context import HardwareContext
+# --- User-profile roots: nothing in a test may reach the real profile (#104) ---
+#
+# On 2026-10-06 a sweep applying every setting rewrote the developer's real Call
+# of Duty options file and Battle.net.config, because only USERPROFILE was
+# redirected and the writers read %LOCALAPPDATA% and %APPDATA%. This block runs
+# before any fpstune import, so module-level constants that resolve a root at
+# import (headroom.json) land in a throwaway tree too. Each test then gets its
+# own tree (`_isolated_profile`), and the real files' modification times are a
+# backstop (`_real_profile_untouched`): metadata only, no content is ever read.
+_REAL_PROFILE_MARK = "FPSTUNE_TEST_REAL_PROFILE"
+_ROOT_VARIABLES = ("LOCALAPPDATA", "APPDATA", "USERPROFILE")
+
+if _REAL_PROFILE_MARK in os.environ:
+    # A pytest-xdist worker inherits the controller's already-redirected
+    # environment; the real roots travel in the mark instead.
+    REAL_PROFILE_ROOTS: dict[str, str] = json.loads(os.environ[_REAL_PROFILE_MARK])
+else:
+    REAL_PROFILE_ROOTS = {
+        name: os.environ[name] for name in _ROOT_VARIABLES if os.environ.get(name)
+    }
+    os.environ[_REAL_PROFILE_MARK] = json.dumps(REAL_PROFILE_ROOTS)
+
+
+def _point_roots_at(home: Path) -> None:
+    """Send every user-profile root of this process into ``home``."""
+    local = home / "AppData" / "Local"
+    roaming = home / "AppData" / "Roaming"
+    local.mkdir(parents=True, exist_ok=True)
+    roaming.mkdir(parents=True, exist_ok=True)
+    os.environ["HOME"] = str(home)
+    os.environ["USERPROFILE"] = str(home)
+    os.environ["LOCALAPPDATA"] = str(local)
+    os.environ["APPDATA"] = str(roaming)
+
+
+_SESSION_PROFILE = tempfile.TemporaryDirectory(prefix="fpstune-test-profile-")
+_point_roots_at(Path(_SESSION_PROFILE.name))
+
+
+def _real_profile_files() -> list[Path]:
+    """The real files a writer in this product could rewrite, found by their own globs."""
+    files: list[Path] = []
+    local = REAL_PROFILE_ROOTS.get("LOCALAPPDATA")
+    roaming = REAL_PROFILE_ROOTS.get("APPDATA")
+    home = REAL_PROFILE_ROOTS.get("USERPROFILE")
+    if local:
+        game = Path(local) / "Activision" / "Call of Duty"
+        for pattern in ("players*/s.*.cod26*.txt", "players*/*/g.*.cod26.[0-9]*.l.txt"):
+            files.extend(Path(m) for m in glob.glob(str(game / pattern)))
+    if roaming:
+        files.append(Path(roaming) / "Battle.net" / "Battle.net.config")
+    if home:
+        files.append(Path(home) / ".fpstune" / "headroom.json")
+    return files
+
+
+_REAL_FILES = _real_profile_files()
+
+
+def _stamps() -> dict[Path, int | None]:
+    stamps: dict[Path, int | None] = {}
+    for path in _REAL_FILES:
+        try:
+            stamps[path] = path.stat().st_mtime_ns
+        except OSError:
+            stamps[path] = None
+    return stamps
+
+
+from fpstune.settings.applicability import HardwareContext  # noqa: E402
 
 # Mock Windows-specific modules when running on non-Windows
 if sys.platform != "win32":
@@ -81,22 +155,56 @@ def windows_host(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 @pytest.fixture(autouse=True)
-def _isolated_home(tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch):
-    """Every test gets its own ~/.fpstune, never the runner's.
+def _isolated_profile(
+    tmp_path_factory: pytest.TempPathFactory, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Every test gets its own user profile, never the runner's.
 
-    `utils.config.get_config_dir` resolves the home directory at call time, and
-    the suite drives the real apply, scan and bench paths: without this, a run
-    wrote bench results and the self-check
-    into the developer's own profile — and read them back in the next test.
-    The process-wide stores are dropped too, so none carries one test's state
-    into another.
+    `utils.user_paths` resolves every root (home, %LOCALAPPDATA%, %APPDATA%,
+    ~/.fpstune) at call time, and the suite drives the real apply, scan and
+    bench paths: without this, a run wrote bench results, the self-check and
+    game config lines into the developer's own profile, and read them back in
+    the next test. The process-wide stores are dropped too, so none carries one
+    test's state into another.
+
+    The helper is also wrapped so that a root which resolves to the real profile
+    fails the test at the moment it is handed out: a test that un-redirects a
+    variable is refused before anything is written.
     """
     from fpstune.safety import history
+    from fpstune.settings import cleanup_targets, performance_headroom
+    from fpstune.utils import user_paths
 
     home = tmp_path_factory.mktemp("home")
-    monkeypatch.setenv("HOME", str(home))
-    monkeypatch.setenv("USERPROFILE", str(home))
+    # monkeypatch.setenv registers the restore; _point_roots_at assigns.
+    for name in ("HOME", *_ROOT_VARIABLES):
+        monkeypatch.setenv(name, os.environ[name])
+    _point_roots_at(home)
     monkeypatch.setattr(history, "_journal", None)
+    monkeypatch.setattr(performance_headroom, "HEADROOM_PATH", home / ".fpstune" / "headroom.json")
+    # Documents is read from the registry on Windows, which the env redirect
+    # cannot reach; the profile fallback is the redirected one.
+    monkeypatch.setattr(cleanup_targets, "_documents_dir", lambda: str(home / "Documents"))
+
+    real = {os.path.normcase(os.path.normpath(v)) for v in REAL_PROFILE_ROOTS.values()}
+    resolve = user_paths.profile_env
+
+    def guarded(name: str) -> str | None:
+        value = resolve(name)
+        if value is not None and os.path.normcase(os.path.normpath(value)) in real:
+            raise AssertionError(f"{name} resolves to the real user profile: {value}")
+        return value
+
+    monkeypatch.setattr(user_paths, "profile_env", guarded)
+
+
+@pytest.fixture(autouse=True)
+def _real_profile_untouched():
+    """Backstop: fail the test during which a real game or launcher file changed."""
+    before = _stamps()
+    yield
+    changed = [str(path) for path, stamp in _stamps().items() if stamp != before[path]]
+    assert not changed, f"a test touched the real user profile: {changed}"
 
 
 @pytest.fixture(autouse=True)

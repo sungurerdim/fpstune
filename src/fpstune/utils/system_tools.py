@@ -13,6 +13,8 @@ import ctypes
 import os
 from functools import lru_cache
 
+from fpstune.utils import user_paths
+
 
 @lru_cache(maxsize=1)
 def system32() -> str:
@@ -56,7 +58,7 @@ def pin_powershell_module_cache() -> None:
     """
     if os.environ.get(MODULE_CACHE_VARIABLE):
         return
-    local = os.environ.get("LOCALAPPDATA", "")
+    local = str(user_paths.local_appdata() or "")
     if not os.path.isabs(local):
         return
     os.environ[MODULE_CACHE_VARIABLE] = os.path.join(

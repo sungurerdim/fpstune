@@ -41,11 +41,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from fpstune.settings.applicability import NOT_AVAILABLE
+from fpstune.utils import user_paths
 
 logger = logging.getLogger(__name__)
 
@@ -66,10 +66,10 @@ _cache_loaded = False
 
 
 def _config_path() -> Path | None:
-    local_appdata = os.environ.get("LOCALAPPDATA")
-    if not local_appdata:
+    local_appdata = user_paths.local_appdata()
+    if local_appdata is None:
         return None
-    return Path(local_appdata) / _RELATIVE_PATH
+    return local_appdata / _RELATIVE_PATH
 
 
 def _load() -> dict[str, Any] | None:

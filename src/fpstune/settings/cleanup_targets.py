@@ -44,6 +44,8 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from typing import NamedTuple
 
+from fpstune.utils import user_paths
+
 logger = logging.getLogger(__name__)
 
 # How the cleanup command treats each path it is given. The sizer counts exactly
@@ -128,6 +130,8 @@ class CleanupTarget:
 
 
 def _env(name: str) -> str | None:
+    if name in user_paths.PROFILE_VARIABLES:
+        return user_paths.profile_env(name)
     value = os.environ.get(name)
     if not value:
         return None

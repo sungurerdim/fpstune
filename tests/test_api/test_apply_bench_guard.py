@@ -25,6 +25,7 @@ from fpstune.settings.base import (
     SettingExecutor,
     SettingValueType,
 )
+from tests.conftest import neutral_hardware_context
 
 
 def _setting() -> SettingExecutor:
@@ -197,7 +198,10 @@ class TestStreamLeavesTheSentinel:
         mark = MagicMock()
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, response),

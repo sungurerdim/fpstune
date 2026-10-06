@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
+from tests.conftest import neutral_hardware_context
 
 
 @pytest.fixture
@@ -103,7 +104,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
         ):
             response = client.post("/api/settings/bulk/stream-apply", json={"ids": []})
 
@@ -122,7 +126,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
@@ -145,7 +152,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, apply_resp),
@@ -177,7 +187,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, apply_resp),
@@ -207,7 +220,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, apply_resp),
@@ -233,7 +249,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(MagicMock(), apply_resp),
@@ -257,7 +276,10 @@ class TestBulkStreamApply:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
         ):
             response = client.post("/api/settings/bulk/stream-apply", json={"ids": []})
 
@@ -283,7 +305,10 @@ class TestBulkStreamReset:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
         ):
             response = client.post("/api/settings/bulk/stream-reset", json={"ids": []})
 
@@ -302,7 +327,10 @@ class TestBulkStreamReset:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._reset_single_setting",
                 return_value=(setting, reset_resp),
@@ -329,7 +357,10 @@ class TestBulkStreamReset:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
         ):
             response = client.post(
                 "/api/settings/bulk/stream-reset",
@@ -371,7 +402,10 @@ class TestNvidiaSettingsAreNotBatched:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, apply_resp),
@@ -406,7 +440,10 @@ class TestNvidiaSettingsAreNotBatched:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch("fpstune.api.routes.settings_stream._apply_single_setting", side_effect=apply),
         ):
             response = client.post(
@@ -619,7 +656,9 @@ class TestQuietBulkSchedulesSharedResources:
         request = BulkApplyRequest(settings={s.id: "b" for s in settings})
         with (
             patch.object(settings_route, "_get_registry", return_value=registry),
-            patch.object(settings_route, "_get_hardware_context", return_value=None),
+            patch.object(
+                settings_route, "_get_hardware_context", return_value=neutral_hardware_context()
+            ),
             patch.object(settings_route, "_ensure_restore_point"),
             patch.object(settings_route, "_apply_single_setting", side_effect=apply),
         ):

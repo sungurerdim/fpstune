@@ -47,6 +47,7 @@ from fpstune.settings.base import (
     SettingExecutor,
     SettingValueType,
 )
+from tests.conftest import neutral_hardware_context
 
 
 @pytest.fixture
@@ -107,7 +108,10 @@ def _route_mocks(setting: SettingExecutor) -> Iterator[None]:
     registry.get.return_value = setting
     with (
         patch("fpstune.api.routes.settings._get_registry", return_value=registry),
-        patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+        patch(
+            "fpstune.api.routes.settings._get_hardware_context",
+            return_value=neutral_hardware_context(),
+        ),
         patch("fpstune.api.routes.settings._ensure_restore_point"),
     ):
         yield

@@ -8,6 +8,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
+from fpstune.settings.hardware_context import HardwareContext
+
 # Mock Windows-specific modules when running on non-Windows
 if sys.platform != "win32":
     # mimetypes binds winreg at import time and walks it on first use; importing
@@ -124,3 +126,15 @@ def test_client():
     from fpstune.api.main import app
 
     return TestClient(app)
+
+
+def neutral_hardware_context() -> HardwareContext:
+    """The context of a machine nothing was detected on, and no guard is up.
+
+    What a test hands to a patched `_get_hardware_context`: production never
+    returns None there, so a stub that does exercises a state it cannot reach.
+    Every field is its default, which `ApplicabilityChecker` reads as "nothing
+    known"; a setting with no `applicable_conditions` is applicable against it,
+    and a test that needs a condition met states it by building its own context.
+    """
+    return HardwareContext()

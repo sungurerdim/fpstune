@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
 from fpstune.safety.restore import RestoreOutcome
+from tests.conftest import neutral_hardware_context
 
 
 @pytest.fixture
@@ -228,7 +229,7 @@ class TestSettingHardwareContextOffload:
         return (
             patch(
                 "fpstune.api.routes.settings._get_hardware_context",
-                side_effect=_loop_recorder(record, None),
+                side_effect=_loop_recorder(record, neutral_hardware_context()),
             ),
             patch(
                 "fpstune.api.routes.settings.ApplicabilityChecker",
@@ -265,7 +266,7 @@ class TestSettingHardwareContextOffload:
         with (
             patch(
                 "fpstune.api.routes.settings._get_hardware_context",
-                side_effect=_loop_recorder(record, None),
+                side_effect=_loop_recorder(record, neutral_hardware_context()),
             ),
             patch("fpstune.api.routes.settings.DetectionEngine", return_value=engine),
         ):
@@ -291,7 +292,10 @@ class TestBulkStreamSetupOffload:
                 "fpstune.api.routes.settings_stream._get_registry",
                 side_effect=_loop_recorder(record, registry),
             ),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):
             response = client.post("/api/settings/bulk/stream-apply", json={"ids": ["x:y"]})
@@ -307,7 +311,7 @@ class TestBulkStreamSetupOffload:
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
             patch(
                 "fpstune.api.routes.settings_stream._get_hardware_context",
-                side_effect=_loop_recorder(record, None),
+                side_effect=_loop_recorder(record, neutral_hardware_context()),
             ),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):

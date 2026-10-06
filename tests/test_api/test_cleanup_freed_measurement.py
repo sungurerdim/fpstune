@@ -40,6 +40,7 @@ from fpstune.settings.base import (
     SettingValueType,
 )
 from fpstune.settings.cleanup_cache import CleanupSizeCache
+from tests.conftest import neutral_hardware_context
 
 MB = 1024 * 1024
 
@@ -149,8 +150,14 @@ def _run(
         detect_stub,
         patch("fpstune.api.routes.settings._get_registry", return_value=registry),
         patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
-        patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
-        patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+        patch(
+            "fpstune.api.routes.settings._get_hardware_context",
+            return_value=neutral_hardware_context(),
+        ),
+        patch(
+            "fpstune.api.routes.settings_stream._get_hardware_context",
+            return_value=neutral_hardware_context(),
+        ),
         patch("fpstune.api.routes.settings._ensure_restore_point"),
         patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         patch("fpstune.utils.self_check.ensure_checked_before_first_apply"),

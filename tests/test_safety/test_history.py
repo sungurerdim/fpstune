@@ -20,6 +20,7 @@ from fpstune.safety import history
 from fpstune.safety.history import ChangeJournal, remove_retired_files
 from fpstune.settings.base import DetectionResult
 from fpstune.utils.config import get_config_dir
+from tests.conftest import neutral_hardware_context
 
 
 def _stored_state_files(root: Path) -> list[str]:
@@ -178,7 +179,10 @@ class TestNothingWritesThemAgain:
 
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
-            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch("fpstune.api.routes.settings.DetectionEngine", return_value=engine),
             patch("fpstune.api.routes.settings.sys.platform", "linux"),
             patch(

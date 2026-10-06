@@ -14,6 +14,7 @@ from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
 from fpstune.api.schemas import ApplyResponse
+from tests.conftest import neutral_hardware_context
 
 
 @pytest.fixture
@@ -52,7 +53,10 @@ class TestResetCreatesRestorePoint:
 
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings._finalize_apply_response",
                 return_value=response_obj,
@@ -78,7 +82,10 @@ class TestResetCreatesRestorePoint:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):
@@ -96,7 +103,10 @@ class TestResetCreatesRestorePoint:
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch("fpstune.api.routes.settings_stream._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):

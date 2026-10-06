@@ -20,6 +20,7 @@ from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
 from fpstune.settings.base import DetectionResult
+from tests.conftest import neutral_hardware_context
 
 
 @pytest.fixture
@@ -61,7 +62,10 @@ class TestVerifyAnswersTheQuestionItWasAsked:
 
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
-            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings.DetectionEngine.detect_one",
                 return_value=_detection(detected),
@@ -103,7 +107,10 @@ class TestVerifyAnswersTheQuestionItWasAsked:
 
         with (
             patch("fpstune.api.routes.settings._get_registry", return_value=registry),
-            patch("fpstune.api.routes.settings._get_hardware_context", return_value=None),
+            patch(
+                "fpstune.api.routes.settings._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
             patch(
                 "fpstune.api.routes.settings.DetectionEngine.detect_one",
                 return_value=_detection(None, error="timed out"),

@@ -36,6 +36,34 @@ def powershell_exe() -> str:
     return os.path.join(system32(), "WindowsPowerShell", "v1.0", "powershell.exe")
 
 
+MODULE_CACHE_VARIABLE = "PSModuleAnalysisCachePath"
+
+
+def pin_powershell_module_cache() -> None:
+    """Give every PowerShell this process starts an absolute module-cache path.
+
+    PowerShell 5.1 writes its module analysis cache under the folder
+    ``GetFolderPath(LocalApplicationData)`` returns. Under a parallel scan that
+    lookup came back empty for some child processes, the path turned relative,
+    and a ``Microsoft\\Windows\\PowerShell\\ModuleAnalysisCache`` tree appeared in
+    the working directory — the repository during tests, wherever fpstune.exe
+    was started from for a user. Children inherit this process's environment,
+    so pinning the variable once at start-up covers every spawn site.
+
+    The value is the stock location, read from ``%LOCALAPPDATA%``; a path the
+    user already set is kept, and nothing is pinned when there is no absolute
+    folder to pin it to.
+    """
+    if os.environ.get(MODULE_CACHE_VARIABLE):
+        return
+    local = os.environ.get("LOCALAPPDATA", "")
+    if not os.path.isabs(local):
+        return
+    os.environ[MODULE_CACHE_VARIABLE] = os.path.join(
+        local, "Microsoft", "Windows", "PowerShell", "ModuleAnalysisCache"
+    )
+
+
 def nvidia_smi() -> str | None:
     """nvidia-smi.exe where an NVIDIA driver installs it, or None.
 

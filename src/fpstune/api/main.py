@@ -40,6 +40,7 @@ from fpstune.utils.debug import is_debug_enabled
 from fpstune.utils.detect import start_gpu_detection_async
 from fpstune.utils.logger import get_logger as _get_shared_logger
 from fpstune.utils.runtime import frontend_dist, is_frozen
+from fpstune.utils.system_tools import pin_powershell_module_cache
 
 _SYSTEM_ROUTERS = (
     system_router,
@@ -222,6 +223,8 @@ _NO_TELEMETRY: TelemetryConfig = {
 
 def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
+    pin_powershell_module_cache()
+
     # Interactive API docs (Swagger/ReDoc) expose the full schema; gate them
     # behind FPSTUNE_DEBUG so the packaged production binary does not surface them.
     debug_mode = is_debug_enabled()

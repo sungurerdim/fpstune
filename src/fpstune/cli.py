@@ -38,7 +38,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 from fpstune.utils.detect import get_gpu_info as get_gpu_info  # noqa: F401
 from fpstune.utils.detect import get_os_info as get_os_info  # noqa: F401
-from fpstune.utils.system_tools import system_tool
+from fpstune.utils.system_tools import pin_powershell_module_cache, system_tool
 
 _LOCK_PORT = 59471  # Fixed internal port used as single-instance mutex
 
@@ -157,6 +157,8 @@ def main(ctx: click.Context, verbose: bool) -> None:
     Applying is done from the web UI, which is the only path that verifies
     each change actually took effect.
     """
+    pin_powershell_module_cache()
+
     # Require admin privileges - shows UAC prompt on Windows if needed
     require_admin_or_elevate()
 

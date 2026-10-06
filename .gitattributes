@@ -3,3 +3,6 @@
 
 # Batch files run under cmd.exe, which wants CRLF; keep them that way on every checkout.
 *.bat text eol=crlf
+
+# Vitest writes snapshots with LF; a CRLF checkout made every test run look like a change.
+*.snap text eol=lf

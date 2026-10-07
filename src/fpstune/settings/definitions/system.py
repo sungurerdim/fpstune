@@ -3991,6 +3991,49 @@ GPU_TDR_DELAY = SettingExecutor(
     value_hints={"default": "2s", "extended": "10s"},
 )
 
+PERF_EDGE_STARTUP_BOOST = SettingExecutor(
+    id="perf:edge_startup_boost",
+    category=SettingCategory.SYSTEM,
+    display_name="Edge Startup Boost",
+    short_name="Edge preloading at sign-in",
+    description="Whether Edge preloads itself at sign-in so it opens faster. The preloaded processes stay resident "
+    "and use memory whether or not you open Edge.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_value="enabled",
+    recommended_value="disabled",
+    requires_reboot=False,
+    evidence_level="likely",
+    sources=[
+        "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/startupboostenabled"
+    ],
+    current_impact="Enabled: Edge processes stay resident from sign-in, held in memory",
+    recommended_impact="Disabled: Edge loads only when opened, so its idle memory is freed",
+    scope=SettingScope.RECOMMENDED,
+    category_order=84,
+    effect="Stops Edge from preloading its processes at sign-in",
+    impact_scores={"ram_saved": "50-150MB", "cpu_usage": -0.1},
+    # An Edge policy: absent is Edge's own behaviour (on), 0 turns it off. One DWORD,
+    # so the read is the same in every Windows language.
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Edge",
+        "name": "StartupBoostEnabled",
+        "hive": "HKLM",
+    },
+    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Edge",
+        "name": "StartupBoostEnabled",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"disabled": 0, "enabled": None},
+)
+
 PERFORMANCE_SETTINGS: list[SettingExecutor] = [
     SHUTDOWN_SERVICE_TIMEOUT,
     SHUTDOWN_APP_TIMEOUT,
@@ -4012,6 +4055,7 @@ PERFORMANCE_SETTINGS: list[SettingExecutor] = [
     PERF_NUMLOCK_DEFAULT,
     PERF_FOCUS_ASSIST,
     PERF_VBS_CORE_ISOLATION,
+    PERF_EDGE_STARTUP_BOOST,
 ]
 
 # =============================================================================

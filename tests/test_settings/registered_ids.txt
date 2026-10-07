@@ -311,6 +311,7 @@ network:throttling_index
 network:time_wait_delay
 network:wifi_radio_when_wired
 perf:accessibility_popups
+perf:edge_startup_boost
 perf:fast_startup
 perf:focus_assist
 perf:gpu_tdr_delay

@@ -691,6 +691,11 @@ export const settingsTr: Record<
     description:
       "Başlat menüsündeki öneriler, ipuçları ve tanıtılan uygulamalar. Kapatmak karmaşayı azaltır.",
   },
+  "perf:edge_startup_boost": {
+    name: "Edge Başlangıç Hızlandırma",
+    description:
+      "Edge'in oturum açılışında kendini önceden yükleyip daha hızlı açılmasını sağlayıp sağlamadığı. Önceden yüklenen işlemler Edge'i açmasanız da bellekte kalır.",
+  },
   "privacy:edge_telemetry": {
     name: "Edge telemetrisi",
     description:

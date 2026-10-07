@@ -94,23 +94,17 @@ export const en = {
   "action.reset": "Reset to default",
 
   // Row surface
-  "row.ok": "OK",
-  "row.advisory": "Advisory",
   "row.notRead": "Not read",
   "row.unreadReason": "Nothing was read: {reason}",
   "row.unreadNeedsAdmin": "Nothing was read. fpstune is not running as Administrator, which several checks need.",
   "row.unreadNoReason": "Nothing was read, so there is no finding here to act on.",
-  "row.verify": "Verify current value",
   "reset.kind.software": "Windows default",
   "reset.kind.hardware": "Driver default",
   "reset.kind.game": "Game default",
   "row.resetKindValue": "Reset to default: {kind} ({value})",
   "row.resetNamedValue": "Reset {name} to default: {kind} ({value})",
-  "row.target": "Target",
   "row.applyNamed": "Apply {name}",
   "row.selectNamed": "Select {name}",
-  "row.default": "Default",
-  "row.current": "Current",
   "row.skipped": "skipped",
   "row.statusRunning": "Running",
   "row.statusVerified": "Applied and verified",
@@ -124,9 +118,6 @@ export const en = {
   "row.notApplicable": "N/A",
   "row.detecting": "Reading…",
   "row.chooseNamed": "Choose a value for {name}",
-  "row.setTo": "Set to {value}",
-  "row.resetTo": "Reset to {value}",
-  "row.resetChoice": "{value} (reset)",
   "sr.optimal": "Already at the recommended value: ",
   "sr.currently": "Currently ",
   "sr.recommendedIs": ", recommended value is ",
@@ -293,10 +284,7 @@ export const en = {
   "device.toApply": "{count} to apply",
   "device.notOptimized": "{count} not optimized",
   "devices.listLabel": "Devices",
-  "device.ideal": "Ideal",
-  "device.noTweaks": "Nothing to tune on this device",
   "device.nothingToDo": "Nothing to do on this device.",
-  "device.open": "Open {name} on the Hardware page",
   "device.primary": "primary",
   "device.secondary": "secondary",
   "device.monitor": "Monitor {n}",
@@ -311,8 +299,6 @@ export const en = {
   "devices.allIdeal": "All {count} ideal",
   "devices.needYou": "{count} need you",
   "devices.reading": "Reading tweaks…",
-  "devices.advisoryHint":
-    "fpstune cannot change these — each row says where to.",
 
   // Monitor card
   "monitor.applying": "Applying…",
@@ -489,13 +475,7 @@ export const en = {
   "tooltip.recommended": "Recommended:",
   "tooltip.effect": "Effect:",
   "tooltip.howToChange": "How to change:",
-  "tooltip.proven": "Proven",
-  "tooltip.experimental": "Experimental",
-  "tooltip.likely": "Likely",
   "tooltip.ariaInfo": "Information about {name}",
-  "tooltip.provenDetail": "Proven: 3+ independent sources",
-  "tooltip.experimentalDetail":
-    "Experimental: safe but unproven on modern systems",
   "tooltip.monitorOnly":
     "FPSTune cannot apply this automatically — monitor only.",
   "tooltip.sources": "Sources:",
@@ -565,8 +545,6 @@ export const en = {
   "actions.none.apply": "Apply: nothing to apply in {name}",
   "actions.none.reset": "Reset to default: everything in {name} is already at its default",
   // Header metrics: a count set apart in bold, then what it counts
-  "metric.toApply": "to apply",
-  "metric.needYou": "need you",
   "actions.confirm.apply": "Apply {count} tweaks on {name}?",
   "actions.confirm.reset": "{count} settings will return to their defaults.",
   "actions.confirmBody.reset.software": "Every setting that differs from what Windows ships is put back to it. Each row shows its own result.",
@@ -586,8 +564,6 @@ export const en = {
   "bands.needs": "Needs action",
   "bands.ideal": "Ideal",
   "bands.nothingToDo": "Nothing to do here.",
-  "bands.showIdeal": "Show {count} already ideal",
-  "bands.hideIdeal": "Hide {count} already ideal",
 } as const;
 
 export type MessageKey = keyof typeof en;

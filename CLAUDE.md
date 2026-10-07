@@ -476,7 +476,8 @@ Module contracts — what the tree does not tell you:
 - `commands/scan.py` — one detection pass shaped by status/gpu; neither prints.
 - `utils/console.py` — the one Rich Console; the logger writes through it.
 - `utils/runtime.py` — frozen-vs-source packaging facts (sys._MEIPASS, bundled frontend).
-- `TweakRows.tsx` — the one row list (apply/reset/verify), shared by Software and Game.
+- `TweakRow.tsx` — the one row (apply, pick, reset behind its (i)); `TweakRowList.tsx` — a run of rows with the
+  read-only ones folded under "Manual steps"; every category on the Optimize tab draws its rows through them.
 - `ui/ConfirmDialog.tsx` — the one modal confirmation: role, focus trap, Escape, inert page.
 - `ui/NotificationToasts.tsx` — the one reader of the store's `notifications`; two
   always-mounted live regions (assertive for errors and warnings, polite for the rest),

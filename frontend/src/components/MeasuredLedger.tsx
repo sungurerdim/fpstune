@@ -21,7 +21,6 @@ import {
 import { LEDGER_QUERY_KEY, useBenchLedger } from "../hooks/useBenchLedger";
 import { Button } from "./ui/Button";
 import { Card } from "./ui/Card";
-import { ScopeHeader } from "./ui/ScopeHeader";
 
 /**
  * Did any of that help — answered per area, by one instrument each.
@@ -239,12 +238,22 @@ export function LedgerPanel() {
 
   return (
     <Card className="p-4 space-y-3" data-testid="ledger-panel">
-      <ScopeHeader
-        level={3}
-        icon={<Activity className="h-4 w-4" aria-hidden="true" />}
-        title={t("ledger.panelTitle")}
-        kind={t("ledger.panelHint")}
-        actions={
+      <div className="flex flex-wrap items-start gap-x-3 gap-y-2">
+        <div className="flex min-w-0 flex-1 basis-56 items-start gap-2">
+          <Activity className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <div className="min-w-0">
+            <h3
+              className="truncate text-sm font-semibold leading-snug"
+              title={t("ledger.panelTitle")}
+            >
+              {t("ledger.panelTitle")}
+            </h3>
+            <p className="text-xs text-muted-foreground wrap-break-word">
+              {t("ledger.panelHint")}
+            </p>
+          </div>
+        </div>
+        <div className="ml-auto max-w-full shrink-0">
           <div className="space-y-1">
             <Button
               size="md"
@@ -259,8 +268,8 @@ export function LedgerPanel() {
             </p>
             {notice && <p className="text-xs text-muted-foreground">{notice}</p>}
           </div>
-        }
-      />
+        </div>
+      </div>
 
       {isLoading && <LedgerNotice text={t("ledger.loading")} />}
       {isError && <LedgerNotice text={t("ledger.unreachable")} />}

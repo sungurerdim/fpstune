@@ -216,6 +216,44 @@ describe("a category opens to its own rows, not-optimized ones first", () => {
   });
 });
 
+describe("what a closed page costs", () => {
+  it("draws no row at all for a registry of hundreds, and none when one of them changes", async () => {
+    // The render budget of the old flat lists ("one change re-renders one row,
+    // not four hundred") holds here by construction: a closed category draws
+    // nothing, so a change to a row nobody opened costs the page no row.
+    const many = Array.from({ length: 400 }, (_, n) =>
+      makeSetting({ id: id(`network:tweak_${n}`), displayName: `Tweak ${n}` }),
+    );
+    seed(many);
+    render(<OptimizeTab />);
+    expect(screen.queryAllByTestId("tweak-row")).toHaveLength(0);
+
+    useStore.setState({
+      settings: new Map(
+        many.map((s) => [s.id, s.id === "network:tweak_7" ? optimal({ id: s.id }) : s]),
+      ),
+      _settingsVersion: useStore.getState()._settingsVersion + 1,
+    } as never);
+
+    expect(await screen.findByRole("button", { name: "Software 399 of 400 not optimized" })).toBeInTheDocument();
+    expect(screen.queryAllByTestId("tweak-row")).toHaveLength(0);
+  });
+
+  it("draws only the rows of the category that was opened", async () => {
+    seed([
+      ...Array.from({ length: 30 }, (_, n) => makeSetting({ id: id(`network:tweak_${n}`) })),
+      ...Array.from({ length: 30 }, (_, n) =>
+        makeSetting({ id: id(`system:tweak_${n}`), category: "system" as Setting["category"] }),
+      ),
+    ]);
+    render(<OptimizeTab />);
+    await userEvent.click(header(/^Software/));
+    await userEvent.click(header(/^Network/));
+
+    expect(screen.getAllByTestId("tweak-row")).toHaveLength(30);
+  });
+});
+
 describe("a tweak is in exactly one category", () => {
   it("leaves a game's config line to Games, and a hardware key to Hardware", () => {
     // The invariant the old tabs each enforced by hand: a surface excludes the

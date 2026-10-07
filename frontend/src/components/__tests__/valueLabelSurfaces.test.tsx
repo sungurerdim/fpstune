@@ -19,7 +19,7 @@ import { useStore } from "../../store";
 import { narrowSetting } from "../../test/narrow";
 import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
-import { TweakRows } from "../TweakRows";
+import { TweakRow } from "../TweakRow";
 
 
 vi.mock("../hardware/useHardware", () => ({
@@ -186,44 +186,45 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
       expect(leaks, `a stored value is printed where its name belongs: ${leaks.join("; ")}`).toEqual([]);
       // The sweep proves nothing if no surface drew the name: the state line,
       // the row is the one it must reach.
-      for (const must of ["TweakRows", "TweakRow"]) {
+      for (const must of ["TweakRow"]) {
         expect(drewName, `${must} never drew "${names.on}"`).toContain(must);
       }
     });
   });
 
-  it("names the target on the toggle tooltip, and the default on its reset", async () => {
+  it("names the target on the row, and the default on its reset", async () => {
     const drifted = lowLatency();
     seed([drifted]);
-    const first = render(<TweakRows rows={[{ setting: drifted }]} />);
-    await userEvent.hover(within(first.container).getByRole("switch"));
-    const setTo = locale === "en" ? `Set to ${names.on}` : `${names.on} yap`;
-    expect((await screen.findAllByText(setTo)).length).toBeGreaterThan(0);
-    expect(spoken(document.body)).not.toMatch(STORED);
+    const first = render(<TweakRow setting={drifted} onApply={vi.fn()} onReset={vi.fn()} />);
+    // What the machine is on and what is recommended, by their names.
+    expect(within(first.container).getByTitle(`${names.off} → ${names.on}`)).toBeInTheDocument();
+    expect(spoken(first.container)).not.toMatch(STORED);
     first.unmount();
 
     const optimal = lowLatency({ currentValue: RAW.on, isOptimized: true });
     seed([optimal]);
-    const second = render(<TweakRows rows={[{ setting: optimal }]} />);
-    await userEvent.hover(within(second.container).getByRole("switch"));
-    const reset = locale === "en" ? `${names.off} (reset)` : `${names.off} (sıfırla)`;
-    expect((await screen.findAllByText(reset)).length).toBeGreaterThan(0);
+    const second = render(<TweakRow setting={optimal} onApply={vi.fn()} onReset={vi.fn()} />);
+    await userEvent.click(within(second.container).getByRole("button", { name: /^Information about|hakkında bilgi$/ }));
+    const reset = await screen.findByRole("button", {
+      name: /^Reset .* to default|ayarını varsayılana döndür/,
+    });
+    // The button writes the default, and says which value that is.
+    expect(reset).toHaveAccessibleName(new RegExp(names.off));
     expect(spoken(document.body)).not.toMatch(STORED);
   });
 
-  it("names the pills, and the target pill's tooltip", async () => {
+  it("names the options of the picker, and the recommended one beside the choice", async () => {
     const setting = lowLatency({ choices: [RAW.off, RAW.on, RAW.max] });
     seed([setting]);
-    const view = render(<TweakRows rows={[{ setting }]} />);
-    const pill = within(view.container).getByRole("button", { name: names.on });
-    expect(within(view.container).getByRole("button", { name: names.off })).toBeInTheDocument();
+    const view = render(<TweakRow setting={setting} onApply={vi.fn()} onReset={vi.fn()} />);
+
+    const picker = within(view.container).getByRole("combobox");
+    expect(within(picker).getByRole("option", { name: names.on })).toBeInTheDocument();
+    expect(within(picker).getByRole("option", { name: names.off })).toBeInTheDocument();
     expect(spoken(view.container)).not.toMatch(STORED);
 
-    // `on` is the recommended value and the row sits at `off`, so its pill is
-    // the target and says so on hover.
-    await userEvent.hover(pill);
-    const target = locale === "en" ? "Target" : "Hedef";
-    expect((await screen.findAllByText(`${target}: ${names.on}`)).length).toBeGreaterThan(0);
-    expect(spoken(document.body)).not.toMatch(STORED);
+    // `on` is the recommended value and the row sits at `off`, so the row says
+    // where it is going, by name.
+    expect(within(view.container).getByText(names.on, { selector: "span" })).toBeInTheDocument();
   });
 });

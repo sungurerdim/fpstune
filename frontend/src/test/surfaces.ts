@@ -2,8 +2,8 @@
  * Every component that renders a setting's text, found in the source tree.
  *
  * The narrow-width test used to hold a hand-picked list of surfaces, and a
- * surface nobody listed (the readonly branch of `TweakSetting`, the Home
- * advisory cards) shipped overflowing its frame. A component belongs here when
+ * surface nobody listed (the readonly branch of a row, an advisory card)
+ * shipped overflowing its frame. A component belongs here when
  * its source imports from `types/setting`: that import is what it takes to
  * render a setting's fields. A new component that renders settings is therefore
  * found without anyone editing a list, and the test either renders it or

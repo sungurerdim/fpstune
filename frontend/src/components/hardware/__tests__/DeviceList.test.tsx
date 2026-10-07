@@ -203,6 +203,27 @@ describe("DeviceList", () => {
     expect(within(gpu).getByText("1 not optimized")).toBeInTheDocument();
   });
 
+  it("does not imply a device is clean before anything has been read", () => {
+    seed([]);
+    useStore.setState({ categoryDetectionStatus: { core: "loading" } } as never);
+    render(<DeviceList hardware={HARDWARE} renderRows={renderRows} />);
+
+    const gpu = screen.getByRole("button", { name: /Example GPU 1/ });
+    expect(within(gpu).getByText(/Reading tweaks/i)).toBeInTheDocument();
+    expect(within(gpu).queryByText(/ideal|not optimized/i)).toBeNull();
+  });
+
+  it("keeps the model, its kind and its count apart instead of running them together", () => {
+    // The reported card read its model, kind and counts as one run-on stream
+    // ("NVIDIA GeForce RTX 3070 Laptop GPU / kind / to apply 9 / 1 needs you").
+    render(<DeviceList hardware={HARDWARE} renderRows={renderRows} />);
+
+    const gpu = screen.getByRole("button", { name: /Example GPU 1/ });
+    expect(within(gpu).getByText("Example GPU 1")).toBeInTheDocument();
+    expect(within(gpu).getByText("GPU · 8 GB")).toBeInTheDocument();
+    expect(within(gpu).getByText("1 not optimized")).toBeInTheDocument();
+  });
+
   it("shows no count on a device whose tweaks are all optimized", () => {
     seed([GPU_IDEAL]);
     render(<DeviceList hardware={HARDWARE} renderRows={renderRows} />);

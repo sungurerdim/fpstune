@@ -3,7 +3,7 @@
  *
  * Commit 574e6c1 let the backend name a choice for the machine it runs on (the
  * NVIDIA low-latency tier "on" is "Ultra" where the driver lacks the legacy
- * keys). Only two surfaces learned it: the pill selector kept printing the raw
+ * keys). Only two surfaces learned it: the choice picker kept printing the raw
  * `on`, and the toggle tooltip printed `String(setting.choices[0])`, because
  * each surface formatted a value by hand. A rule that lives in one function is
  * only a rule while nothing else formats a value, so this reads the source of
@@ -55,8 +55,8 @@ describe("a value is printed by valueLabel and nothing else", () => {
   it("reads the components and hooks it guards", () => {
     // A glob that silently matches nothing would pass forever.
     const names = Object.keys(SOURCES);
-    expect(names.some((n) => n.endsWith("/TweakSetting.tsx"))).toBe(true);
-    expect(names.some((n) => n.endsWith("/ui/PillSelector.tsx"))).toBe(true);
+    expect(names.some((n) => n.endsWith("/TweakRow.tsx"))).toBe(true);
+    expect(names.some((n) => n.endsWith("/TweakDetail.tsx"))).toBe(true);
     expect(names.some((n) => n.endsWith("/hooks/useApply.ts"))).toBe(true);
   });
 

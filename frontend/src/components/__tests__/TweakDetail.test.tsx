@@ -374,3 +374,45 @@ describe("long text stays inside the panel, in both languages", () => {
     expect(violations).toEqual([]);
   });
 });
+
+describe("the case for changing follows whether there is anything to change", () => {
+  // Verbosity follows actionability: the effect and the "as it is now" line are
+  // the argument for applying, and a setting already right is not asking for one.
+  it("drops the effect and the as-it-is line once the setting is optimized, and keeps what is true now", async () => {
+    renderDetail(makeSetting({ ...OPTIMIZED, effect: "Lowers network latency in online games" }));
+    await userEvent.click(trigger());
+    const detail = within(panel()!);
+
+    expect(detail.queryByText("Lowers network latency in online games")).not.toBeInTheDocument();
+    expect(detail.queryByText("Enabled: small packets wait for a full buffer")).not.toBeInTheDocument();
+    // The recommended line is the one that is true right now.
+    expect(detail.getByText("Disabled: small packets leave at once")).toBeInTheDocument();
+  });
+
+  it("keeps the whole case while the setting still needs applying", async () => {
+    renderDetail(makeSetting({ effect: "Lowers network latency in online games" }));
+    await userEvent.click(trigger());
+    const detail = within(panel()!);
+
+    expect(detail.getByText("Lowers network latency in online games")).toBeInTheDocument();
+    expect(detail.getByText("Enabled: small packets wait for a full buffer")).toBeInTheDocument();
+    expect(detail.getByText("Disabled: small packets leave at once")).toBeInTheDocument();
+  });
+
+  it("keeps the how-to on an advisory even when it reads OK", async () => {
+    // An advisory has no Apply, so this line is the only place that tells the
+    // user what to do about it.
+    renderDetail(
+      makeSetting({
+        ...OPTIMIZED,
+        isReadonly: true,
+        effect: "Enable Resizable BAR in the UEFI setup",
+      }),
+    );
+    await userEvent.click(trigger());
+    const detail = within(panel()!);
+
+    expect(detail.getByText("How to change:")).toBeInTheDocument();
+    expect(detail.getByText("Enable Resizable BAR in the UEFI setup")).toBeInTheDocument();
+  });
+});

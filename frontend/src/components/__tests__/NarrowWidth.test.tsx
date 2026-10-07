@@ -18,8 +18,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { fireEvent, render, screen } from "../../test/utils";
-import userEvent from "@testing-library/user-event";
+import { fireEvent, render } from "../../test/utils";
 import type { ComponentType, ReactElement } from "react";
 import { setLocale } from "../../i18n";
 import { useStore } from "../../store";
@@ -33,9 +32,7 @@ import {
 } from "../../test/narrow";
 import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
-import { TweakRows } from "../TweakRows";
 import { DiskCleanupTab } from "../DiskCleanupTab";
-import { SettingInfoTooltip } from "../SettingInfoTooltip";
 
 
 vi.mock("../hardware/useHardware", () => ({
@@ -94,37 +91,12 @@ function seed(settings: Setting[], extra: Record<string, unknown> = {}) {
   } as never);
 }
 
-/** Wait for the first 20 characters of the long text to be drawn (a plain substring, not a pattern). */
-function findLong(long: string) {
-  const head = long.slice(0, 20);
-  return screen.findAllByText((content) => content.includes(head));
-}
-
 function longProbe(kind: Kind): string {
   if (kind === "advisory") return advisoryProbes(narrowAdvisory()).advisoryHint;
   return kind === "unbroken" ? UNBROKEN : CATALOGUE.description;
 }
 
 const SURFACES: Surface[] = [
-  {
-    name: "TweakRows (TweakSetting)",
-    mount: (kind, long) => {
-      const setting = fixture(kind);
-      seed([setting], { operationError: { [setting.id]: long } });
-      return {
-        ui: (
-          <TweakRows
-            rows={[{ setting, contextLabel: long, contextIcon: <span /> }]}
-          />
-        ),
-      };
-    },
-    expects: {
-      unbroken: ["token"],
-      catalogue: ["description", "name"],
-      advisory: ["advisoryName", "advisoryState", "advisoryTarget", "advisoryHint"],
-    },
-  },
   {
     name: "DiskCleanupTab (group heading, row, run and outcome)",
     mount: (kind, long) => {
@@ -182,22 +154,6 @@ const SURFACES: Surface[] = [
     },
     expects: { unbroken: ["token"], catalogue: ["description", "name"] },
   },
-  {
-    name: "SettingInfoTooltip",
-    mount: (kind) => {
-      const setting = fixture(kind, { sources: [`https://example.com/${UNBROKEN}`] });
-      seed([setting]);
-      return {
-        ui: <SettingInfoTooltip setting={setting} />,
-        ready: async () => {
-          await userEvent.tab();
-          return findLong(longProbe(kind));
-        },
-      };
-    },
-    root: () => document.body,
-    expects: { unbroken: ["token"], catalogue: ["description"] },
-  },
 ];
 
 function probesFor(kind: Kind): Record<string, string> {
@@ -254,21 +210,13 @@ const NOT_GENERIC: Record<string, string> = {
     "The question a bulk button asks: fixed words and a count in a dialog the caller opens, with no setting text in it.",
   "components/CategoryApply.tsx#CategoryApply":
     "One button, \"Apply (N)\": the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
-  "components/ScopeActions.tsx#ScopeActions":
-    "Icon buttons: the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
   "components/SelectionToolbar.tsx#SelectionToolbar":
     "Draws a selection count and fixed labels; no setting text is rendered, only how many are selected.",
-  "components/SettingStateDisplay.tsx#ImpactCategoryTags":
-    "Draws the fixed short category labels (fps, latency, heat); a setting's own text never reaches it.",
-  "components/SettingStateDisplay.tsx#RiskWarningBadge":
-    "Draws the fixed NOTE / RISK badge; the warning text is a title attribute, which takes no room on screen.",
 };
 
 /** Components mounted by hand above, with the state they need. */
 const BESPOKE = new Set([
-  "TweakRows",
   "DiskCleanupTab",
-  "SettingInfoTooltip",
 ]);
 
 /** One setting per way a surface may meet it: plain, game, maintenance, and unreadable. */

@@ -30,16 +30,12 @@ const COMPONENTS = import.meta.glob("../**/*.tsx", {
 const _UNTRANSLATED_BASELINE = new Set([
   "App.tsx", // string-free or prop-fed — nothing to migrate
   "components/CleanupRunnerProvider.tsx", // string-free or prop-fed — nothing to migrate
-  "components/TweakRows.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Badge.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Button.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Card.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Feedback.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/LoadingSpinner.tsx", // string-free or prop-fed — nothing to migrate
-  "components/ui/StatusChip.tsx", // string-free or prop-fed — nothing to migrate
-  "components/ui/ScopeHeader.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/ToggleSwitch.tsx", // string-free or prop-fed — nothing to migrate
-  "components/ui/tooltip.tsx", // string-free or prop-fed — nothing to migrate
   "main.tsx", // string-free or prop-fed — nothing to migrate
 ]);
 

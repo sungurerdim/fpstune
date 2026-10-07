@@ -4,7 +4,7 @@
  * The panel detected the state and rendered "120Hz -> 300Hz" in amber, and nothing
  * anywhere could act on it. Three things pointed at each other:
  *   - registry.py: display settings are "handled in Hardware panel"
- *   - HardwarePanel.tsx: display optimization is "managed in Optimizations tab"
+ *   - the Hardware page: display optimization is "managed in Optimizations tab"
  *   - `_discover_display_settings()` was commented out
  * while POST /display/{index}/auto and `api.setDisplayToAuto` both existed with no
  * caller. Telling a user something is wrong with no way to fix it is worse than

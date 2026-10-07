@@ -1,12 +1,13 @@
-"""Server-Sent Events (SSE) streaming endpoints for bulk apply/reset.
+"""The one bulk path: ``POST /bulk/stream-apply`` over Server-Sent Events.
 
-Split out of routes/settings.py: this module owns the SSE bulk operations
-(``/bulk/stream-apply`` and ``/bulk/stream-reset``), which run up to four settings
-at a time, planned by ``settings.bulk_plan`` so settings that share a resource or
-declare an order never overlap. It reuses the
-single-setting apply/reset helpers from routes/settings.py — the dependency is
-one-way (settings_stream imports settings, never the reverse) so there is no
-import cycle. Registered under the same ``/api/settings`` prefix.
+Split out of routes/settings.py. The request is a map of setting id to the value
+to write; the server derives none of them, so "apply recommended" and "reset to
+default" are the same call with different maps. Up to four settings run at a
+time, planned by ``settings.bulk_plan`` so settings that share a resource or
+declare an order never overlap. It reuses the single-setting apply helper from
+routes/settings.py — the dependency is one-way (settings_stream imports
+settings, never the reverse) so there is no import cycle. Registered under the
+same ``/api/settings`` prefix.
 """
 
 from __future__ import annotations
@@ -27,7 +28,6 @@ from fpstune.api.routes.settings import (
     _ensure_restore_point,
     _get_hardware_context,
     _get_registry,
-    _reset_single_setting,
 )
 from fpstune.api.schemas import ApplyResponse, BulkStreamRequest
 from fpstune.settings import SettingsRegistry
@@ -66,29 +66,6 @@ def _percent(pattern: str | None, line: str) -> float | None:
     except ValueError:  # pragma: no cover - the pattern matched digits
         return None
     return max(0.0, min(100.0, value))
-
-
-def apply_target(setting: SettingExecutor, action: str) -> Any:
-    """The value this run writes.
-
-    An action is *run*, and the only value that means run is True. Its
-    `recommended_value` answers a different question — whether fpstune suggests
-    running it unprompted — and for 24 of the 38 actions this ships, including
-    both repairs and every developer cache, the answer is False. Deriving the
-    target from it made `CommandExecutor.apply` take its own falsy-value branch,
-    which skips the action and reports success: measured on the reporting machine
-    as `[APPLY] maintenance:sfc_scan → False` followed immediately by
-    `Applied System File Checker`, with nothing having run.
-
-    The quiet bulk endpoint never had to know this, because its callers send
-    explicit values (`{id: True}`). The stream derives them, so it must.
-
-    A reset is unchanged: writing an action's `default_value` is False by design,
-    a cleanup cannot be un-run, and the falsy branch skipping it is correct.
-    """
-    if action != "apply":
-        return setting.default_value
-    return True if setting.is_action else setting.recommended_value
 
 
 def _started(setting: SettingExecutor, *, reports_progress: bool | None = None) -> str:
@@ -202,7 +179,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
 
 async def _stream_each(
     settings: list[SettingExecutor],
-    action: str,
+    values: dict[str, Any],
     hardware_context: HardwareContext | None,
     tally: _Tally,
 ) -> AsyncIterator[str]:
@@ -213,9 +190,9 @@ async def _stream_each(
     after another inside their lane, in dependency order; lanes run side by side
     under the same four-at-a-time cap as before.
 
-    An apply is handed a line pump so a command that takes minutes can say what
-    it is doing while it does it; a reset is not, because resets are registry and
-    powercfg writes with nothing to print.
+    Every setting is handed a line pump so a command that takes minutes can say
+    what it is doing while it does it; a registry or powercfg write has nothing
+    to print and simply never calls it.
     """
     event_queue: asyncio.Queue[str | None] = asyncio.Queue()
     result_counts: dict[str, bool] = {}
@@ -226,18 +203,13 @@ async def _stream_each(
         async with sem:
             try:
                 event_queue.put_nowait(_started(setting))
-                if action == "apply":
-                    _, response = await asyncio.to_thread(
-                        _apply_single_setting,
-                        setting,
-                        apply_target(setting, action),
-                        hardware_context,
-                        _output_pump(setting, event_queue, loop),
-                    )
-                else:
-                    _, response = await asyncio.to_thread(
-                        _reset_single_setting, setting, hardware_context
-                    )
+                _, response = await asyncio.to_thread(
+                    _apply_single_setting,
+                    setting,
+                    values[setting.id],
+                    hardware_context,
+                    _output_pump(setting, event_queue, loop),
+                )
                 result_counts[setting.id] = response.skipped or response.success
                 for event in _outcome_events(setting.id, response):
                     event_queue.put_nowait(event)
@@ -283,8 +255,7 @@ async def _stream_each(
 
 
 async def _stream_grouped(
-    ids: list[str],
-    action: str,  # "apply" or "reset"
+    values: dict[str, Any],
     registry: SettingsRegistry,
     hardware_context: HardwareContext | None,
 ) -> AsyncIterator[str]:
@@ -292,7 +263,7 @@ async def _stream_grouped(
     tally = _Tally()
     known: list[SettingExecutor] = []
 
-    for setting_id in ids:
+    for setting_id in values:
         setting = registry.get(setting_id)
         if not setting:
             tally.failed += 1
@@ -303,10 +274,10 @@ async def _stream_grouped(
         known.append(setting)
 
     if known:
-        async for event in _stream_each(known, action, hardware_context, tally):
+        async for event in _stream_each(known, values, hardware_context, tally):
             yield event
 
-    if action == "apply" and tally.succeeded:
+    if tally.succeeded:
         # The one thing the apply path knows about benchmarking: a sentinel the
         # scheduler finds on its next tick, which is what turns "the machine
         # changed" into an after-measurement without anyone asking for one.
@@ -317,7 +288,7 @@ async def _stream_grouped(
     yield _sse(
         {
             "event": "done",
-            "total": len(ids),
+            "total": len(values),
             "succeeded": tally.succeeded,
             "failed": tally.failed,
         }
@@ -326,9 +297,10 @@ async def _stream_grouped(
 
 @router.post("/bulk/stream-apply")
 async def bulk_stream_apply(request: BulkStreamRequest) -> StreamingResponse:
-    """SSE bulk apply — uses recommended_value for each setting.
+    """SSE bulk apply — writes the value the request names for each setting.
 
     Streams per-setting events: started → applied → verified → (failed | done).
+    Settings run four at a time, except that ones sharing a resource run in turn.
     Failures do not abort the stream; all IDs are processed.
     """
     # Both are cached, and both build their cache with subprocess work on first
@@ -336,33 +308,11 @@ async def bulk_stream_apply(request: BulkStreamRequest) -> StreamingResponse:
     registry = await asyncio.to_thread(_get_registry)
     hardware_context = await asyncio.to_thread(_get_hardware_context)
 
-    if request.ids and sys.platform == "win32":
+    if request.settings and sys.platform == "win32":
         await asyncio.to_thread(_ensure_restore_point)
 
     return StreamingResponse(
-        _stream_grouped(request.ids, "apply", registry, hardware_context),
-        media_type="text/event-stream",
-        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
-    )
-
-
-@router.post("/bulk/stream-reset")
-async def bulk_stream_reset(request: BulkStreamRequest) -> StreamingResponse:
-    """SSE bulk reset — resets each setting to its default_value.
-
-    Streams per-setting events: started → applied → verified → (failed | done).
-    Settings run four at a time, except that ones sharing a resource run in turn.
-    Failures do not abort the stream; all IDs are processed.
-    """
-    registry = await asyncio.to_thread(_get_registry)
-    hardware_context = await asyncio.to_thread(_get_hardware_context)
-
-    # Bulk reset mutates state just like bulk apply — same rollback safety net.
-    if request.ids and sys.platform == "win32":
-        await asyncio.to_thread(_ensure_restore_point)
-
-    return StreamingResponse(
-        _stream_grouped(request.ids, "reset", registry, hardware_context),
+        _stream_grouped(request.settings, registry, hardware_context),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

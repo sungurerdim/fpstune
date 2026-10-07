@@ -26,8 +26,6 @@ from fpstune.api.routes.settings_apply import apply_and_finalize
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
-    BulkApplyRequest,
-    BulkApplyResponse,
     CategoryMetadataResponse,
     DetectRequest,
     DetectResponse,
@@ -56,7 +54,6 @@ from fpstune.settings.base import (
     get_all_categories_metadata,
     get_all_modules_metadata,
 )
-from fpstune.settings.bulk_plan import plan_lanes, run_lanes
 from fpstune.settings.hardware_context import build_hardware_context
 from fpstune.utils.logger import log_activity, tweak_label
 
@@ -268,7 +265,7 @@ _SLOW_RESET_TOLERANCES: dict[str, _SlowResetTolerance] = {
 
 
 # =============================================================================
-# Bulk Apply/Reset/Optimize Endpoints (must be before parameterized routes)
+# Verifying an apply, and the post-apply path every apply ends in
 # =============================================================================
 
 
@@ -461,7 +458,7 @@ def _validate_apply_value(setting: SettingExecutor, value: Any) -> str | None:
     """Reject a value the setting's own declaration does not allow (SEC-16).
 
     The one validation every apply path shares: the single-apply route raises it
-    as a 400, ``_apply_one`` returns it as a per-setting failure — so a bulk
+    as a 400, ``_apply_single_setting`` returns it as a per-setting failure — so a bulk
     request can no longer hand an arbitrary body straight to an elevated
     command slot that the single-setting route would have refused.
 
@@ -508,19 +505,17 @@ def _validate_apply_value(setting: SettingExecutor, value: Any) -> str | None:
     return None
 
 
-def _apply_one(
+def _apply_single_setting(
     setting: SettingExecutor,
     value: Any,
-    hardware_context: HardwareContext | None,
-    activity_label: str,
-    *,
-    skip_when_inapplicable: bool,
+    hardware_context: HardwareContext | None = None,
     on_line: Callable[[str, bool], None] | None = None,
 ) -> tuple[str, ApplyResponse]:
-    """Apply one setting's value and verify. Shared core for the bulk helpers.
+    """Apply one setting's value and verify. The core the bulk stream runs per id.
 
-    When the setting is not applicable to the current hardware, bulk apply treats
-    it as a benign skip (success), while reset/optimize report it as a failure.
+    A setting that does not apply to this hardware is a benign skip (success).
+    Reset is not a separate path: it is this function called with the setting's
+    `default_value`.
 
     `on_line` asks for the command's output while it runs, for the callers that
     can show it. Everything else about the run is identical — same applicability
@@ -528,21 +523,14 @@ def _apply_one(
     streamed apply that took a different path would be a second apply.
     """
     if hardware_context:
-        is_applicable, reason = ApplicabilityChecker(hardware_context).is_applicable(setting)
+        is_applicable, _reason = ApplicabilityChecker(hardware_context).is_applicable(setting)
         if not is_applicable:
-            if skip_when_inapplicable:
-                return setting.id, ApplyResponse(
-                    setting_id=setting.id,
-                    success=True,
-                    error=None,
-                    requires_reboot=False,
-                    skipped=True,
-                )
             return setting.id, ApplyResponse(
                 setting_id=setting.id,
-                success=False,
-                error=reason or "Setting not applicable to this system",
+                success=True,
+                error=None,
                 requires_reboot=False,
+                skipped=True,
             )
 
     invalid = _validate_apply_value(setting, value)
@@ -555,140 +543,7 @@ def _apply_one(
         )
 
     engine = DetectionEngine(hardware_context=hardware_context)
-    return setting.id, apply_and_finalize(setting, value, engine, activity_label, on_line)
-
-
-def _apply_single_setting(
-    setting: SettingExecutor,
-    value: Any,
-    hardware_context: HardwareContext | None = None,
-    on_line: Callable[[str, bool], None] | None = None,
-) -> tuple[str, ApplyResponse]:
-    """Apply a single setting and verify. Returns (setting_id, ApplyResponse)."""
-    return _apply_one(
-        setting,
-        value,
-        hardware_context,
-        "Applied",
-        skip_when_inapplicable=True,
-        on_line=on_line,
-    )
-
-
-def _no_default_refusal(setting: SettingExecutor) -> ApplyResponse | None:
-    """A reset for a row whose default could not be derived (C6): refused, never a None write.
-
-    The UI already hides the button (`DefaultSource.NONE`); this is the same rule
-    where the write happens, so no client can reach it.
-    """
-    if setting.default_value is not None:
-        return None
-    return ApplyResponse(
-        setting_id=setting.id,
-        success=False,
-        error=f"{setting.display_name} has no default fpstune could derive, so it cannot be reset.",
-        requires_reboot=False,
-    )
-
-
-def _reset_single_setting(
-    setting: SettingExecutor,
-    hardware_context: HardwareContext | None = None,
-) -> tuple[str, ApplyResponse]:
-    """Reset a single setting to its default value. Returns (setting_id, ApplyResponse)."""
-    refused = _no_default_refusal(setting)
-    if refused is not None:
-        return setting.id, refused
-    return _apply_one(
-        setting, setting.default_value, hardware_context, "Reset", skip_when_inapplicable=False
-    )
-
-
-@router.post("/bulk/apply", response_model=BulkApplyResponse)
-async def bulk_apply_settings(request: BulkApplyRequest) -> BulkApplyResponse:
-    """Apply multiple settings at once with verification (parallel execution).
-
-    The fan-out below is synchronous — a ThreadPoolExecutor drained with
-    ``as_completed`` — so the whole run goes to a worker thread. Draining it
-    inline blocked the event loop for up to the bulk timeout (PERF-13).
-    """
-    return await asyncio.to_thread(_run_bulk_apply, request)
-
-
-def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
-    """Synchronous core of ``/bulk/apply``; runs on a worker thread."""
-    registry = _get_registry()
-    hardware_context = _get_hardware_context()
-    results: dict[str, ApplyResponse] = {}
-    success_count = 0
-    error_count = 0
-    any_requires_reboot = False
-
-    # Prepare valid settings and check for actions (long-running operations)
-    valid_settings: list[tuple[SettingExecutor, Any]] = []
-    for setting_id, value in request.settings.items():
-        setting = registry.get(setting_id)
-        if not setting:
-            results[setting_id] = ApplyResponse(
-                setting_id=setting_id,
-                success=False,
-                error=f"Unknown setting: {setting_id}",
-                requires_reboot=False,
-            )
-            error_count += 1
-            log_activity(f"Unknown setting: {setting_id}", "error")
-        else:
-            valid_settings.append((setting, value))
-
-    # A restore point before the first change of the session (best-effort; this
-    # already runs on a worker thread).
-    if valid_settings and sys.platform == "win32":
-        _ensure_restore_point()
-
-    # Apply in parallel, except that settings sharing a resource (one adapter, the
-    # DNS resolver list) or declared `apply_after` another run in turn inside one
-    # lane (settings/bulk_plan.py); unrelated lanes overlap up to the pool size.
-    # No deadline over the set: each apply runs under its own stall rule
-    # (utils.process_watch), so one that is working is waited for and one that is
-    # stuck ends itself and says so.
-    values = {setting.id: value for setting, value in valid_settings}
-    finished = run_lanes(
-        plan_lanes([setting for setting, _ in valid_settings]),
-        lambda setting: _apply_single_setting(setting, values[setting.id], hardware_context),
-        max_workers=16,
-    )
-    for setting, outcome in finished:
-        if isinstance(outcome, Exception):
-            response = ApplyResponse(
-                setting_id=setting.id,
-                success=False,
-                error=str(outcome),
-                requires_reboot=False,
-            )
-            log_activity(f"APPLY ERROR {setting.id}: {outcome}", "error")
-        else:
-            response = outcome[1]
-        results[setting.id] = response
-        if response.success:
-            success_count += 1
-            any_requires_reboot = any_requires_reboot or response.requires_reboot
-        else:
-            error_count += 1
-            if response.error:
-                log_activity(f"APPLY FAILED {setting.id}: {response.error}", "error")
-
-    # Log summary
-    if success_count > 0:
-        log_activity(f"Applied {success_count} setting(s) OK", "success")
-    if error_count > 0:
-        log_activity(f"Failed to apply {error_count} setting(s)", "error")
-
-    return BulkApplyResponse(
-        results=results,
-        success_count=success_count,
-        error_count=error_count,
-        requires_reboot=any_requires_reboot,
-    )
+    return setting.id, apply_and_finalize(setting, value, engine, "Applied", on_line)
 
 
 # =============================================================================
@@ -803,7 +658,7 @@ async def get_modules_metadata() -> list[ModuleMetadataResponse]:
 
 # =============================================================================
 # Individual Apply Endpoint
-# (declared after bulk routes to avoid path conflicts)
+# (declared after the fixed-path routes to avoid path conflicts)
 # =============================================================================
 
 
@@ -817,7 +672,7 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
         raise HTTPException(404, f"Unknown setting: {setting_id}")
 
     # The one validation every apply path shares (SEC-16): here it surfaces as
-    # an HTTP 400, in the bulk helpers as a per-setting failure.
+    # an HTTP 400, in the bulk stream as a per-setting failure.
     invalid = _validate_apply_value(setting, request.value)
     if invalid is not None:
         raise HTTPException(400, invalid)

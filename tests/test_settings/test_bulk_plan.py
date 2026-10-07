@@ -10,7 +10,6 @@ from fpstune.settings.base import SettingCategory, SettingExecutor
 from fpstune.settings.bulk_plan import (
     BulkPlanError,
     plan_lanes,
-    run_lanes,
     validate_declarations,
 )
 
@@ -169,25 +168,3 @@ class TestShippedDeclarations:
         assert _ids(plan_lanes([doh, security])) == [
             ["network:dns_security", "network:dns_over_https"]
         ]
-
-
-class TestRunLanes:
-    def test_a_raising_setting_is_reported_and_its_lane_goes_on(self) -> None:
-        a = _setting("network:wifi:power_management", apply_args={"ifindex": 7})
-        b = _setting("network:wifi:wake_on_lan", apply_args={"ifindex": 7})
-        c = _setting("core:other")
-
-        def run_one(setting: SettingExecutor) -> str:
-            if setting is a:
-                raise RuntimeError("adapter vanished")
-            return f"ran {setting.id}"
-
-        finished = run_lanes(plan_lanes([a, b, c]), run_one, max_workers=4)
-        outcomes = {setting.id: outcome for setting, outcome in finished}
-
-        assert isinstance(outcomes[a.id], RuntimeError)
-        assert outcomes[b.id] == f"ran {b.id}"
-        assert outcomes[c.id] == f"ran {c.id}"
-
-    def test_no_lanes_is_no_outcomes(self) -> None:
-        assert run_lanes([], lambda s: s, max_workers=4) == []

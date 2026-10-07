@@ -173,7 +173,7 @@ class TestStreamLeavesTheSentinel:
     def client(self) -> TestClient:
         return TestClient(create_app(), raise_server_exceptions=False)
 
-    def _stream(self, client: TestClient, success: bool, action: str = "apply") -> MagicMock:
+    def _stream(self, client: TestClient, success: bool, value: str = "1") -> MagicMock:
         setting = MagicMock()
         setting.id = "core:game_mode"
         setting.apply_type = MagicMock()
@@ -209,7 +209,9 @@ class TestStreamLeavesTheSentinel:
             ),
             patch("fpstune.benchmark.ledger.mark_bulk_apply_finished", mark),
         ):
-            r = client.post(f"/api/settings/bulk/stream-{action}", json={"ids": ["core:game_mode"]})
+            r = client.post(
+                "/api/settings/bulk/stream-apply", json={"settings": {"core:game_mode": value}}
+            )
         assert r.status_code == 200
         return mark
 
@@ -220,5 +222,6 @@ class TestStreamLeavesTheSentinel:
         """Nothing changed, so there is nothing to measure after."""
         assert self._stream(client, success=False).call_count == 0
 
-    def test_reset_does_not(self, client: TestClient) -> None:
-        assert self._stream(client, success=True, action="reset").call_count == 0
+    def test_a_bulk_reset_leaves_it_too(self, client: TestClient) -> None:
+        """A reset is an apply of the defaults: the machine changed, so it is measured."""
+        assert self._stream(client, success=True, value="0").call_count == 1

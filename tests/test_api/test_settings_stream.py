@@ -99,7 +99,7 @@ def _make_setting(
 class TestBulkStreamApply:
     """Tests for POST /api/settings/bulk/stream-apply."""
 
-    def test_empty_ids_returns_done_event(self, client: TestClient) -> None:
+    def test_empty_settings_returns_done_event(self, client: TestClient) -> None:
         mock_registry = MagicMock()
         mock_registry.get.return_value = None
 
@@ -110,7 +110,7 @@ class TestBulkStreamApply:
                 return_value=neutral_hardware_context(),
             ),
         ):
-            response = client.post("/api/settings/bulk/stream-apply", json={"ids": []})
+            response = client.post("/api/settings/bulk/stream-apply", json={"settings": {}})
 
         assert response.status_code == 200
         assert "text/event-stream" in response.headers["content-type"]
@@ -134,7 +134,7 @@ class TestBulkStreamApply:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["nonexistent:setting"]},
+                json={"settings": {"nonexistent:setting": "1"}},
             )
 
         assert response.status_code == 200
@@ -160,14 +160,16 @@ class TestBulkStreamApply:
             patch(
                 "fpstune.api.routes.settings_stream._apply_single_setting",
                 return_value=(setting, apply_resp),
-            ),
+            ) as single,
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["core:game_mode"]},
+                json={"settings": {"core:game_mode": "1"}},
             )
 
         assert response.status_code == 200
+        # The value written is the one the request names, verbatim.
+        assert single.call_args.args[1] == "1"
         events = _parse_sse(response.text)
         event_types = [e.get("event") for e in events]
         assert "started" in event_types
@@ -199,7 +201,7 @@ class TestBulkStreamApply:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["core:bad_setting"]},
+                json={"settings": {"core:bad_setting": "1"}},
             )
 
         assert response.status_code == 200
@@ -232,7 +234,7 @@ class TestBulkStreamApply:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["core:skipped_setting"]},
+                json={"settings": {"core:skipped_setting": "1"}},
             )
 
         assert response.status_code == 200
@@ -261,7 +263,7 @@ class TestBulkStreamApply:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ids},
+                json={"settings": dict.fromkeys(ids, "1")},
             )
 
         assert response.status_code == 200
@@ -282,47 +284,83 @@ class TestBulkStreamApply:
                 return_value=neutral_hardware_context(),
             ),
         ):
-            response = client.post("/api/settings/bulk/stream-apply", json={"ids": []})
+            response = client.post("/api/settings/bulk/stream-apply", json={"settings": {}})
 
         assert "text/event-stream" in response.headers["content-type"]
         assert response.headers.get("cache-control") == "no-cache"
 
-    def test_missing_ids_field_returns_422(self, client: TestClient) -> None:
+    def test_missing_settings_field_returns_422(self, client: TestClient) -> None:
         response = client.post("/api/settings/bulk/stream-apply", json={})
+        assert response.status_code == 422
+
+    def test_the_retired_ids_body_is_refused(self, client: TestClient) -> None:
+        """The server derives no value of its own, so a list of ids has nothing to write."""
+        response = client.post("/api/settings/bulk/stream-apply", json={"ids": ["core:game_mode"]})
         assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
-# POST /api/settings/bulk/stream-reset
+# A bulk reset is the same call with each row's default as its value
 # ---------------------------------------------------------------------------
 
 
-class TestBulkStreamReset:
-    """Tests for POST /api/settings/bulk/stream-reset."""
+def _real_choice_setting(setting_id: str):
+    """A real two-state setting whose default and recommendation differ."""
+    from fpstune.settings.base import (
+        DetectType,
+        SettingCategory,
+        SettingExecutor,
+        SettingValueType,
+    )
 
-    def test_empty_ids_returns_done(self, client: TestClient) -> None:
-        mock_registry = MagicMock()
-        mock_registry.get.return_value = None
+    return SettingExecutor(
+        id=setting_id,
+        category=SettingCategory.SYSTEM,
+        display_name=setting_id.rsplit(":", 1)[-1].replace("_", " ").title(),
+        description="A two-state setting. Its default and its recommendation differ.",
+        value_type=SettingValueType.CHOICE,
+        choices=("off", "on"),
+        default_value="off",
+        recommended_value="on",
+        detect_type=DetectType.POWERSHELL,
+        detect_command="Get-Something",
+        apply_type=DetectType.POWERSHELL,
+        apply_command="Set-Something -Value '%value%'",
+    )
 
-        with (
-            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
-            patch(
-                "fpstune.api.routes.settings_stream._get_hardware_context",
-                return_value=neutral_hardware_context(),
-            ),
-        ):
-            response = client.post("/api/settings/bulk/stream-reset", json={"ids": []})
 
-        assert response.status_code == 200
-        events = _parse_sse(response.text)
-        done = next((e for e in events if e.get("event") == "done"), None)
-        assert done is not None
-        assert done["total"] == 0
+class _FakeMachine:
+    """The machine as a dict, written through the boundary the real one is."""
 
-    def test_successful_reset_emits_applied_and_verified(self, client: TestClient) -> None:
+    def __init__(self, state: dict[str, str]) -> None:
+        self.state = state
+
+    def apply(self, setting, value, _on_line=None):
+        self.state[setting.id] = value
+        return True, None
+
+    def detect(self, setting):
+        from fpstune.settings.base import DetectionResult
+
+        return DetectionResult(
+            setting_id=setting.id,
+            value=self.state[setting.id],
+            error=None,
+            time_ms=1,
+            is_optimized=self.state[setting.id] == setting.recommended_value,
+        )
+
+
+class TestBulkResetIsTheSameCall:
+    """There is no `/bulk/stream-reset`: a reset sends each row's `default`."""
+
+    def test_the_retired_route_is_gone(self, client: TestClient) -> None:
+        response = client.post("/api/settings/bulk/stream-reset", json={"settings": {}})
+        assert response.status_code == 404
+
+    def test_the_value_written_is_the_default_the_request_names(self, client: TestClient) -> None:
+        """Not the setting's recommendation: the server derives nothing."""
         setting = _make_setting("core:game_mode", recommended_value="1", default_value="0")
-        reset_resp = _make_apply_response(success=True, current="0")
-
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
 
@@ -333,26 +371,94 @@ class TestBulkStreamReset:
                 return_value=neutral_hardware_context(),
             ),
             patch(
-                "fpstune.api.routes.settings_stream._reset_single_setting",
-                return_value=(setting, reset_resp),
+                "fpstune.api.routes.settings_stream._apply_single_setting",
+                return_value=(setting, _make_apply_response(success=True, current="0")),
+            ) as single,
+        ):
+            response = client.post(
+                "/api/settings/bulk/stream-apply",
+                json={"settings": {"core:game_mode": setting.default_value}},
+            )
+
+        assert single.call_args.args[1] == "0"
+        events = _parse_sse(response.text)
+        assert "applied" in [e.get("event") for e in events]
+        done = next(e for e in events if e.get("event") == "done")
+        assert (done["succeeded"], done["failed"]) == (1, 0)
+
+    def test_eight_defaults_reach_done_with_every_row_verified(self, client: TestClient) -> None:
+        """The whole pipeline, real except the machine: validation, applicability,
+        write, re-detect, verification — for a bulk reset of eight rows."""
+        settings = [_real_choice_setting(f"system:reset_probe_{i}") for i in range(8)]
+        registry = MagicMock()
+        registry.get.side_effect = {s.id: s for s in settings}.get
+        machine = _FakeMachine({s.id: s.recommended_value for s in settings})
+
+        with (
+            patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply",
+                side_effect=machine.apply,
+            ),
+            patch(
+                "fpstune.api.routes.settings.DetectionEngine.detect_one",
+                side_effect=machine.detect,
             ),
         ):
             response = client.post(
-                "/api/settings/bulk/stream-reset",
-                json={"ids": ["core:game_mode"]},
+                "/api/settings/bulk/stream-apply",
+                json={"settings": {s.id: s.default_value for s in settings}},
             )
 
         assert response.status_code == 200
         events = _parse_sse(response.text)
-        event_types = [e.get("event") for e in events]
-        assert "applied" in event_types
-        assert "verified" in event_types
+        done = events[-1]
+        assert done["event"] == "done"
+        assert (done["total"], done["succeeded"], done["failed"]) == (8, 8, 0)
+        verified = {e["id"]: e for e in events if e.get("event") == "verified"}
+        assert set(verified) == {s.id for s in settings}
+        assert all(e["matches"] is True for e in verified.values())
+        assert not [e for e in events if e.get("event") in ("failed", "skipped")]
+        # And the machine really holds each row's default now, not its recommendation.
+        assert machine.state == {s.id: s.default_value for s in settings}
 
-        done = next(e for e in events if e.get("event") == "done")
-        assert done["succeeded"] == 1
-        assert done["failed"] == 0
+    def test_a_row_with_no_derived_default_is_refused_and_nothing_is_written(
+        self, client: TestClient
+    ) -> None:
+        """C6: a default that cannot be derived is not invented. A client that
+        posts the null anyway gets a failed row, and no write."""
+        setting = _real_choice_setting("system:no_default_probe")
+        object.__setattr__(setting, "default_value", None)
+        registry = MagicMock()
+        registry.get.return_value = setting
 
-    def test_unknown_id_yields_failed(self, client: TestClient) -> None:
+        with (
+            patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
+            patch("fpstune.api.routes.settings_apply.CommandExecutor.apply") as write,
+        ):
+            response = client.post(
+                "/api/settings/bulk/stream-apply",
+                json={"settings": {setting.id: None}},
+            )
+
+        events = _parse_sse(response.text)
+        failed = [e for e in events if e.get("event") == "failed"]
+        assert [e["id"] for e in failed] == [setting.id]
+        assert "needs a value" in failed[0]["error"]
+        write.assert_not_called()
+
+    def test_an_unknown_id_yields_failed(self, client: TestClient) -> None:
         mock_registry = MagicMock()
         mock_registry.get.return_value = None
 
@@ -364,19 +470,14 @@ class TestBulkStreamReset:
             ),
         ):
             response = client.post(
-                "/api/settings/bulk/stream-reset",
-                json={"ids": ["ghost:setting"]},
+                "/api/settings/bulk/stream-apply",
+                json={"settings": {"ghost:setting": "0"}},
             )
 
-        assert response.status_code == 200
         events = _parse_sse(response.text)
         failed = [e for e in events if e.get("event") == "failed"]
         assert len(failed) == 1
         assert failed[0]["id"] == "ghost:setting"
-
-    def test_missing_ids_field_returns_422(self, client: TestClient) -> None:
-        response = client.post("/api/settings/bulk/stream-reset", json={})
-        assert response.status_code == 422
 
 
 # ---------------------------------------------------------------------------
@@ -414,7 +515,7 @@ class TestNvidiaSettingsAreNotBatched:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:low_latency"]},
+                json={"settings": {"gpu-nvidia:low_latency": "on"}},
             )
 
         events = _parse_sse(response.text)
@@ -449,7 +550,7 @@ class TestNvidiaSettingsAreNotBatched:
         ):
             response = client.post(
                 "/api/settings/bulk/stream-apply",
-                json={"ids": ["gpu-nvidia:vsync", "gpu-nvidia:vrr_mode"]},
+                json={"settings": {"gpu-nvidia:vsync": "1", "gpu-nvidia:vrr_mode": "1"}},
             )
 
         events = _parse_sse(response.text)
@@ -485,7 +586,9 @@ class TestStopStopsTheServer:
 
         tally = settings_stream._Tally()
         with patch.object(settings_stream, "_apply_single_setting", side_effect=slow_apply):
-            stream = settings_stream._stream_each(settings, "apply", None, tally)
+            stream = settings_stream._stream_each(
+                settings, {s.id: "1" for s in settings}, None, tally
+            )
             first = await stream.__anext__()
             assert '"started"' in first
             closing = asyncio.create_task(stream.aclose())
@@ -499,7 +602,7 @@ class TestStopStopsTheServer:
 
 
 # ---------------------------------------------------------------------------
-# Scheduling: shared resources and declared order, on both bulk paths (#104 A)
+# Scheduling: shared resources and declared order on the one bulk path (#104 A)
 # ---------------------------------------------------------------------------
 
 
@@ -554,21 +657,17 @@ class _Probe:
         return a0 < b1 and b0 < a1
 
 
-def _run_stream(settings, apply, action: str = "apply") -> list[dict]:
+def _run_stream(settings, apply, values: dict | None = None) -> list[dict]:
+    """Drive `_stream_each` over `settings`, writing each row's recommendation unless told otherwise."""
     from fpstune.api.routes import settings_stream
+
+    targets = values if values is not None else {s.id: s.recommended_value for s in settings}
 
     async def drive() -> list[str]:
         tally = settings_stream._Tally()
-        return [e async for e in settings_stream._stream_each(settings, action, None, tally)]
+        return [e async for e in settings_stream._stream_each(settings, targets, None, tally)]
 
-    with (
-        patch.object(settings_stream, "_apply_single_setting", side_effect=apply),
-        patch.object(
-            settings_stream,
-            "_reset_single_setting",
-            side_effect=lambda s, _ctx: apply(s),
-        ),
-    ):
+    with patch.object(settings_stream, "_apply_single_setting", side_effect=apply):
         raw = asyncio.run(drive())
     return _parse_sse("".join(raw))
 
@@ -619,14 +718,31 @@ class TestStreamSchedulesSharedResources:
         assert probe.overlap(a.id, b.id)
         assert probe.overlap(a.id, c.id)
 
-    def test_reset_is_scheduled_the_same_way(self) -> None:
+    def test_a_bulk_reset_is_scheduled_the_same_way(self) -> None:
+        """A reset is a bulk apply of the defaults, so it plans like any other."""
         power = _real_setting("network:wifi:power_management", apply_args={"ifindex": 7})
         wol = _real_setting("network:wifi:wake_on_lan", apply_args={"ifindex": 7})
         probe = _Probe()
 
-        _run_stream([power, wol], probe.apply, action="reset")
+        _run_stream([power, wol], probe.apply, values={s.id: s.default_value for s in (power, wol)})
 
         assert not probe.overlap(power.id, wol.id)
+
+    def test_a_raising_setting_is_reported_and_its_lane_goes_on(self) -> None:
+        a = _real_setting("network:wifi:power_management", apply_args={"ifindex": 7})
+        b = _real_setting("network:wifi:wake_on_lan", apply_args={"ifindex": 7})
+        probe = _Probe(hold=0.01)
+
+        def apply(setting, *args, **kwargs):
+            if setting is a:
+                raise RuntimeError("adapter vanished")
+            return probe.apply(setting, *args, **kwargs)
+
+        events = _run_stream([a, b], apply)
+
+        failed = [e for e in events if e["event"] == "failed"]
+        assert [(e["id"], e["error"]) for e in failed] == [(a.id, "adapter vanished")]
+        assert [e["id"] for e in events if e["event"] == "applied"] == [b.id]
 
     def test_a_failed_dependency_does_not_stop_its_dependent(self) -> None:
         security, doh = _dns_pair()
@@ -643,67 +759,3 @@ class TestStreamSchedulesSharedResources:
 
         assert [e["id"] for e in events if e["event"] == "failed"] == ["network:dns_security"]
         assert "network:dns_over_https" in [e["id"] for e in events if e["event"] == "applied"]
-
-
-class TestQuietBulkSchedulesSharedResources:
-    """POST /bulk/apply goes through the same planner as the streams."""
-
-    def _run(self, settings, apply):
-        from fpstune.api.routes import settings as settings_route
-        from fpstune.api.schemas import BulkApplyRequest
-
-        registry = MagicMock()
-        registry.get.side_effect = {s.id: s for s in settings}.get
-        request = BulkApplyRequest(settings={s.id: "b" for s in settings})
-        with (
-            patch.object(settings_route, "_get_registry", return_value=registry),
-            patch.object(
-                settings_route, "_get_hardware_context", return_value=neutral_hardware_context()
-            ),
-            patch.object(settings_route, "_ensure_restore_point"),
-            patch.object(settings_route, "_apply_single_setting", side_effect=apply),
-        ):
-            return settings_route._run_bulk_apply(request)
-
-    def test_quiet_bulk_runs_a_declared_dependency_first(self) -> None:
-        security, doh = _dns_pair()
-        probe = _Probe()
-
-        result = self._run([doh, security], probe.apply)
-
-        assert result.success_count == 2
-        assert probe.spans["network:dns_security"][1] <= probe.spans["network:dns_over_https"][0]
-
-    def test_quiet_bulk_never_overlaps_two_settings_on_one_adapter(self) -> None:
-        power = _real_setting("network:wifi:power_management", apply_args={"ifindex": 7})
-        wol = _real_setting("network:wifi:wake_on_lan", apply_args={"ifindex": 7})
-        probe = _Probe()
-
-        self._run([power, wol], probe.apply)
-
-        assert not probe.overlap(power.id, wol.id)
-
-    def test_quiet_bulk_still_overlaps_unrelated_settings(self) -> None:
-        a = _real_setting("network:wifi:power_management", apply_args={"ifindex": 7})
-        b = _real_setting("network:eth:power_management", apply_args={"ifindex": 9})
-        probe = _Probe(hold=0.3)
-
-        self._run([a, b], probe.apply)
-
-        assert probe.overlap(a.id, b.id)
-
-    def test_quiet_bulk_reports_a_raising_setting_without_losing_its_lane(self) -> None:
-        a = _real_setting("network:wifi:power_management", apply_args={"ifindex": 7})
-        b = _real_setting("network:wifi:wake_on_lan", apply_args={"ifindex": 7})
-        probe = _Probe(hold=0.01)
-
-        def apply(setting, *args, **kwargs):
-            if setting is a:
-                raise RuntimeError("adapter vanished")
-            return probe.apply(setting, *args, **kwargs)
-
-        result = self._run([a, b], apply)
-
-        assert result.results[a.id].error == "adapter vanished"
-        assert result.results[b.id].success is True
-        assert (result.success_count, result.error_count) == (1, 1)

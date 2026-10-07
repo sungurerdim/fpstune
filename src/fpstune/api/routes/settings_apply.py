@@ -2,9 +2,9 @@
 
 Split out of routes/settings.py under the SoC ceiling that module carries: the
 apply *pipeline* is where new surface has been landing, and this is the first
-piece of it to move. It is the one place every apply and reset path runs a
-command — bulk, streamed and single-setting alike — which is what lets a cleanup
-be measured rather than estimated.
+piece of it to move. It is the one place every apply path runs a command — the
+bulk stream and the single-setting route alike; reset is an apply of the
+default — which is what lets a cleanup be measured rather than estimated.
 
 The dependency runs one way at import time: nothing here imports routes/settings
 at module level, so this module can be imported from it. `_finalize_apply_response`
@@ -35,9 +35,6 @@ if TYPE_CHECKING:
 
     from fpstune.settings.base import SettingExecutor
 
-
-#: How many applies `/bulk/apply` runs at once (`routes/settings.py`).
-_BULK_WORKERS = 16
 
 #: How often an apply looks again while a measurement holds the machine.
 _BENCH_POLL_SECONDS = 0.5
@@ -83,9 +80,9 @@ def apply_and_finalize(
 ) -> ApplyResponse:
     """Run one setting's command and turn the outcome into the response.
 
-    The single point every apply and reset path reaches — bulk, streamed
-    and single-setting alike — which is what lets a cleanup be *measured* rather
-    than estimated: the same size instrument runs immediately before the command
+    The single point every apply path reaches — the bulk stream and the
+    single-setting route alike; reset is an apply of the default — which is what
+    lets a cleanup be *measured* rather than estimated: the same size instrument runs immediately before the command
     and immediately after it, and the response carries the difference. A second
     copy of this pairing is how the quiet route and the streamed one would come
     to report different numbers for the same run.

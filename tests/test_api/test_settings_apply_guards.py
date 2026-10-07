@@ -2,15 +2,13 @@
 
 Failures these tests guard against, each observed in the shipped route module:
 
-  SEC-16   ``POST /bulk/apply`` handed each request value straight to
-           ``CommandExecutor.apply`` with no validation, so a value the
-           single-setting route refused with a 400 reached an elevated
-           ``%value%`` command slot through the bulk route.
+  SEC-16   the bulk route (now ``POST /bulk/stream-apply``) handed each
+           request value straight to ``CommandExecutor.apply`` with no
+           validation, so a value the single-setting route refused with a 400
+           reached an elevated ``%value%`` command slot through the bulk route.
   SEC-12   a free-form STRING setting (``choices=()``) was never validated on
            any path, so shell metacharacters could ride a plausible-looking
            request into the same slot.
-  PERF-13/14  the bulk routes drained their ThreadPoolExecutor inline in an
-           ``async def``, blocking the event loop for up to the bulk timeout.
   PERF-23  ``_get_registry()`` ran on the event loop, so a request arriving
            during startup warm-up blocked the loop for the whole discovery.
   CC-02    a local two-string respelling of the absence sentinels let
@@ -20,6 +18,7 @@ Failures these tests guard against, each observed in the shipped route module:
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -33,15 +32,9 @@ from fpstune.api.main import create_app
 from fpstune.api.routes.settings import (
     _finalize_apply_response,
     _verify_setting_applied,
-    bulk_apply_settings,
     get_definitions,
 )
-from fpstune.api.schemas import (
-    ApplyResponse,
-    BulkApplyRequest,
-    BulkApplyResponse,
-    SettingState,
-)
+from fpstune.api.schemas import ApplyResponse, SettingState
 from fpstune.settings.base import (
     DetectType,
     SettingCategory,
@@ -118,30 +111,55 @@ def _route_mocks(setting: SettingExecutor) -> Iterator[None]:
         yield
 
 
+@contextmanager
+def _stream_mocks(setting: SettingExecutor) -> Iterator[None]:
+    """The same patch set for the bulk stream, which binds its own names."""
+    registry = MagicMock()
+    registry.get.return_value = setting
+    with (
+        patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
+        patch(
+            "fpstune.api.routes.settings_stream._get_hardware_context",
+            return_value=neutral_hardware_context(),
+        ),
+        patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
+    ):
+        yield
+
+
+def _events(response: Any) -> list[dict[str, Any]]:
+    return [
+        json.loads(line[len("data:") :].strip())
+        for line in response.text.splitlines()
+        if line.strip().startswith("data:")
+    ]
+
+
 class TestBulkApplySharesSingleApplyValidation:
-    """SEC-16: bulk apply must refuse exactly what single apply refuses."""
+    """SEC-16: the bulk stream must refuse exactly what single apply refuses."""
 
     def test_bulk_apply_rejects_a_value_the_single_route_would_reject(
         self, client: TestClient
     ) -> None:
-        """The defect, exactly: a non-choice value through /bulk/apply used to
+        """The defect, exactly: a non-choice value through the bulk route used to
         reach CommandExecutor.apply — and its %value% slot — unvalidated."""
         setting = _choice_setting()
 
         with (
-            _route_mocks(setting),
+            _stream_mocks(setting),
             patch("fpstune.api.routes.settings_apply.CommandExecutor.apply") as apply_cmd,
         ):
             result = client.post(
-                "/api/settings/bulk/apply",
+                "/api/settings/bulk/stream-apply",
                 json={"settings": {"test:mode": "on'; Start-Process calc; '"}},
             )
 
         assert result.status_code == 200
-        body = result.json()
-        assert body["error_count"] == 1
-        assert body["results"]["test:mode"]["success"] is False
-        assert "not valid" in body["results"]["test:mode"]["error"]
+        events = _events(result)
+        failed = [e for e in events if e["event"] == "failed"]
+        assert [e["id"] for e in failed] == ["test:mode"]
+        assert "not valid" in failed[0]["error"]
+        assert events[-1]["failed"] == 1
         apply_cmd.assert_not_called()
 
     def test_a_declared_value_still_applies_through_bulk(self, client: TestClient) -> None:
@@ -149,7 +167,7 @@ class TestBulkApplySharesSingleApplyValidation:
         setting = _choice_setting()
 
         with (
-            _route_mocks(setting),
+            _stream_mocks(setting),
             patch(
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
             ) as apply_cmd,
@@ -157,17 +175,18 @@ class TestBulkApplySharesSingleApplyValidation:
                 "fpstune.api.routes.settings._finalize_apply_response",
                 return_value=_success_response(setting.id, "on"),
             ),
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
         ):
             result = client.post(
-                "/api/settings/bulk/apply",
+                "/api/settings/bulk/stream-apply",
                 json={"settings": {"test:mode": "on"}},
             )
 
         assert result.status_code == 200
-        assert result.json()["success_count"] == 1
-        # The third argument is the line callback a streamed run passes; a bulk
-        # apply has nowhere to stream to, so it passes None.
-        apply_cmd.assert_called_once_with(setting, "on", None)
+        assert _events(result)[-1]["succeeded"] == 1
+        # The third argument is the line pump the stream hands every command.
+        apply_cmd.assert_called_once()
+        assert apply_cmd.call_args.args[:2] == (setting, "on")
 
 
 class TestFreeStringValidation:
@@ -237,20 +256,21 @@ class TestFreeStringValidation:
         setting = _free_string_setting()
 
         with (
-            _route_mocks(setting),
+            _stream_mocks(setting),
             patch("fpstune.api.routes.settings_apply.CommandExecutor.apply") as apply_cmd,
         ):
             result = client.post(
-                "/api/settings/bulk/apply",
+                "/api/settings/bulk/stream-apply",
                 json={"settings": {"test:free_string": "$(whoami)"}},
             )
 
-        assert result.json()["results"]["test:free_string"]["success"] is False
+        failed = [e for e in _events(result) if e["event"] == "failed"]
+        assert [e["id"] for e in failed] == ["test:free_string"]
         apply_cmd.assert_not_called()
 
 
-class TestBulkWorkRunsOffTheEventLoop:
-    """PERF-13/14/23: the blocking core must execute on a worker thread.
+class TestRegistryFetchRunsOffTheEventLoop:
+    """PERF-23: the blocking registry build must execute on a worker thread.
 
     Asserted on the mechanism — the thread the synchronous core actually ran
     on — not on wall-clock timing. ``asyncio.run`` drives the loop on the
@@ -265,20 +285,6 @@ class TestBulkWorkRunsOffTheEventLoop:
             return response
 
         return _recorder
-
-    def test_bulk_apply_core_runs_on_a_worker_thread(self) -> None:
-        seen: list[int] = []
-        empty = BulkApplyResponse(results={}, success_count=0, error_count=0, requires_reboot=False)
-
-        with patch(
-            "fpstune.api.routes.settings._run_bulk_apply",
-            side_effect=self._record_thread(seen, empty),
-        ):
-            asyncio.run(bulk_apply_settings(BulkApplyRequest(settings={})))
-
-        assert seen and seen[0] != threading.get_ident(), (
-            "the ThreadPoolExecutor drain ran inline on the event loop"
-        )
 
     def test_registry_fetch_runs_on_a_worker_thread(self) -> None:
         """PERF-23: a request during warm-up must wait on _registry_lock from a

@@ -501,13 +501,6 @@ export interface ApplyResponse {
   size_after_bytes?: number | null;
 }
 
-export interface BulkApplyResponse {
-  results: Record<string, ApplyResponse>;
-  success_count: number;
-  error_count: number;
-  requires_reboot: boolean;
-}
-
 // =============================================================================
 // Settings API Methods (new SettingExecutor architecture)
 // =============================================================================
@@ -541,47 +534,22 @@ export const settingsApi = {
     }),
 
   /**
-   * Apply multiple settings at once
-   */
-  bulkApply: (settings: Record<string, unknown>) =>
-    fetchJson<BulkApplyResponse>("/settings/bulk/apply", {
-      method: "POST",
-      body: JSON.stringify({ settings }),
-    }),
-
-  /**
-   * Sequential SSE bulk apply — streams per-setting events as each completes.
+   * The one bulk path: SSE apply of a `{id: value}` map, streaming per-setting
+   * events as each completes. The server derives no value, so a bulk reset
+   * sends each row's `defaultValue` and "apply recommended" each row's
+   * `recommendedValue` (`true` for an action) — see `bulkTargets`.
    * Returns a cancel function; call it to abort mid-stream.
    */
   bulkStreamApply: (
-    ids: string[],
+    settings: Record<string, unknown>,
     onEvent: (event: Record<string, unknown>) => void,
     onDone?: () => void,
     onError?: (error: unknown) => void,
   ): (() => void) =>
     postEventStream(
       "/settings/bulk/stream-apply",
-      { ids },
+      { settings },
       "bulkStreamApply",
-      onEvent,
-      onDone,
-      onError,
-    ),
-
-  /**
-   * Sequential SSE bulk reset — streams per-setting events as each completes.
-   * Returns a cancel function; call it to abort mid-stream.
-   */
-  bulkStreamReset: (
-    ids: string[],
-    onEvent: (event: Record<string, unknown>) => void,
-    onDone?: () => void,
-    onError?: (error: unknown) => void,
-  ): (() => void) =>
-    postEventStream(
-      "/settings/bulk/stream-reset",
-      { ids },
-      "bulkStreamReset",
       onEvent,
       onDone,
       onError,

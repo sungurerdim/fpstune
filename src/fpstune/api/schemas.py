@@ -428,22 +428,11 @@ class ApplyResponse(BaseModel):
     size_after_bytes: int | None = None
 
 
-class BulkApplyRequest(BaseModel):
-    """Request to apply multiple settings."""
-
-    settings: dict[str, Any] = Field(..., description="Map of setting_id to value")
-
-
-class BulkApplyResponse(BaseModel):
-    """Response after applying multiple settings."""
-
-    results: dict[str, ApplyResponse]
-    success_count: int
-    error_count: int
-    requires_reboot: bool
-
-
 class BulkStreamRequest(BaseModel):
-    """Request for sequential SSE bulk operations."""
+    """The one bulk request: each setting id with the value to apply to it.
 
-    ids: list[str] = Field(..., description="Setting IDs to process sequentially")
+    A bulk reset sends each row's `default`, a bulk "apply recommended" sends each
+    row's `recommended` (an action, `True`); the server derives no value of its own.
+    """
+
+    settings: dict[str, Any] = Field(..., description="Map of setting_id to the value to apply")

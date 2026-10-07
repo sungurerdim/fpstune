@@ -1,30 +1,27 @@
-"""The one answer to "what may run at the same time" for a bulk apply or reset.
+"""The one answer to "what may run at the same time" for a bulk apply.
 
-Both bulk paths (`POST /bulk/apply` and the two SSE streams) used to start their
-settings in client order and let the pool decide the overlap, with no idea that
-two settings can share something. Measured on 2026-10-06: `network:dns_over_https`
-ran before `network:dns_security` had switched the resolvers it needs, and two
-settings on one NIC (both restart the adapter) ran together, one reading the
-link while the other had it down.
+The bulk path (`POST /bulk/stream-apply`) used to start its settings in client
+order and let the pool decide the overlap, with no idea that two settings can
+share something. Measured on 2026-10-06: `network:dns_over_https` ran before
+`network:dns_security` had switched the resolvers it needs, and two settings on
+one NIC (both restart the adapter) ran together, one reading the link while the
+other had it down.
 
 A setting says what it shares in two places on `SettingExecutor`, never here:
 `apply_after` (ids that must finish first) and `resource_key` (what it holds
-while it writes). The planner is pure: it reads those and returns lanes. `run_lanes` is the one
-thread-pool runner for them, for the caller that is not already async.
+while it writes). The planner is pure: it reads those and returns lanes.
 
 A lane is a list of settings that must run one after another, in order. Settings
 in different lanes share nothing and are free to overlap, so the caller's own
-concurrency limit (four for the stream, sixteen for the quiet bulk) is the only
-cap, exactly as before. Lanes are the connected components of "shares a resource
+concurrency limit (four for the stream) is the only cap. Lanes are the connected components of "shares a resource
 or is ordered after", because a lane is the smallest unit that can be run
 serially without ever blocking on another lane.
 """
 
 from __future__ import annotations
 
-import concurrent.futures as cf
 import heapq
-from collections.abc import Callable, Iterable, Sequence
+from collections.abc import Iterable, Sequence
 
 from fpstune.settings.base import SettingExecutor
 
@@ -142,34 +139,3 @@ def validate_declarations(settings: Iterable[SettingExecutor]) -> None:
     if len(ordered) != len(items):
         stuck = sorted({items[i].id for i in set(range(len(items))) - set(ordered)})
         raise BulkPlanError(f"apply_after forms a cycle among: {', '.join(stuck)}")
-
-
-def run_lanes[S, R](
-    lanes: Sequence[Sequence[S]],
-    run_one: Callable[[S], R],
-    *,
-    max_workers: int,
-) -> list[tuple[S, R | Exception]]:
-    """Run each lane on a pool thread, its settings in turn; collect every outcome.
-
-    A setting that raises is reported as the exception it raised and does not stop
-    the rest of its lane, because a bulk run reports every id. Outcomes come back
-    as lanes finish, so a lane's settings stay together and in order.
-    """
-
-    def run_lane(lane: Sequence[S]) -> list[tuple[S, R | Exception]]:
-        done: list[tuple[S, R | Exception]] = []
-        for setting in lane:
-            try:
-                done.append((setting, run_one(setting)))
-            except Exception as exc:
-                done.append((setting, exc))
-        return done
-
-    finished: list[tuple[S, R | Exception]] = []
-    # No deadline over the set: each setting runs under its own stall rule.
-    with cf.ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = [pool.submit(run_lane, lane) for lane in lanes]
-        for future in cf.as_completed(futures):
-            finished.extend(future.result())
-    return finished

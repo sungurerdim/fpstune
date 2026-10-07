@@ -2,6 +2,7 @@ import { useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "../i18n";
 import { errorMessage, settingsApi } from "../lib/api";
+import { bulkTargets } from "../lib/bulkStream";
 import { detectionManager } from "../lib/detection-manager";
 import { useStore, type BulkAction } from "../store";
 import { valuesEqual, type SettingId } from "../types/setting";
@@ -45,12 +46,8 @@ export function useBulkStream() {
         void detectionManager.redetectSettings(ids);
       };
 
-      const stream = {
-        apply: settingsApi.bulkStreamApply,
-        reset: settingsApi.bulkStreamReset,
-      }[action];
-      const cancel = stream(
-        ids,
+      const cancel = settingsApi.bulkStreamApply(
+        bulkTargets(ids, action),
         (event) => {
           const id = event.id as string | undefined;
           if (!id) return;

@@ -85,7 +85,7 @@ class TestResetCreatesRestorePoint:
         write.assert_called_once_with(setting, "0", None)
         mock_rp.assert_called_once()
 
-    def test_bulk_stream_reset_creates_restore_point(self, client: TestClient) -> None:
+    def test_a_bulk_reset_creates_a_restore_point(self, client: TestClient) -> None:
         mock_registry = MagicMock()
         mock_registry.get.return_value = None  # unknown IDs still exercise the guard
 
@@ -98,15 +98,17 @@ class TestResetCreatesRestorePoint:
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):
-            result = client.post("/api/settings/bulk/stream-reset", json={"ids": ["core:whatever"]})
+            result = client.post(
+                "/api/settings/bulk/stream-apply", json={"settings": {"core:whatever": "0"}}
+            )
 
         assert result.status_code == 200
         mock_rp.assert_called_once()
 
-    def test_bulk_stream_reset_skips_restore_point_for_empty_request(
+    def test_a_bulk_reset_skips_the_restore_point_for_an_empty_request(
         self, client: TestClient
     ) -> None:
-        """No IDs means no state change — don't spend minutes on a restore point."""
+        """No settings means no state change — don't spend minutes on a restore point."""
         mock_registry = MagicMock()
         mock_registry.get.return_value = None
 
@@ -119,7 +121,7 @@ class TestResetCreatesRestorePoint:
             patch("fpstune.api.routes.settings_stream.sys.platform", "win32"),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point") as mock_rp,
         ):
-            result = client.post("/api/settings/bulk/stream-reset", json={"ids": []})
+            result = client.post("/api/settings/bulk/stream-apply", json={"settings": {}})
 
         assert result.status_code == 200
         mock_rp.assert_not_called()
@@ -152,15 +154,3 @@ class TestResetWithoutADerivedDefault:
         assert "needs a value" in response.json()["detail"]
         write.assert_not_called()
         restore_point.assert_not_called()
-
-    def test_bulk_reset_refuses_the_row_without_writing(self) -> None:
-        from fpstune.api.routes.settings import _reset_single_setting
-
-        setting = _fake_setting()
-        setting.default_value = None
-        with patch("fpstune.api.routes.settings._apply_one") as write:
-            setting_id, response = _reset_single_setting(setting, neutral_hardware_context())
-
-        assert setting_id == setting.id
-        assert response.success is False
-        write.assert_not_called()

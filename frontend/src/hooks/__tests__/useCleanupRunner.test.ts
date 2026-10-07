@@ -225,6 +225,45 @@ describe("useCleanupRunner", () => {
     expect(cleanupResult?.success).toBe(true);
   });
 
+  it("runs an action with true even when fpstune would not recommend running it unasked", async () => {
+    // The trap: deriving the value from `recommendedValue` skipped 24 of the 38
+    // shipped actions (the backend reads a falsy action value as "do not run")
+    // and reported success. The request must carry the run permission itself.
+    useStore.setState({
+      settings: new Map([
+        [
+          "cleanup:temp_files",
+          makeActionSetting("cleanup:temp_files", "cleanup", "temp_files", {
+            recommendedValue: false,
+          }),
+        ],
+      ]),
+    } as never);
+    let sent: unknown;
+    server.use(
+      http.post("/api/settings/bulk/stream-apply", async ({ request }) => {
+        sent = await request.json();
+        return new HttpResponse(sseBody(successEvents()), {
+          headers: { "Content-Type": "text/event-stream" },
+        });
+      }),
+    );
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(
+      () => useCleanupRunner({ modules: ["cleanup"] }),
+      { wrapper: Wrapper },
+    );
+
+    await act(async () => {
+      result.current.run(["cleanup:temp_files"]);
+    });
+    await waitFor(() => {
+      expect(result.current.isRunning).toBe(false);
+    });
+
+    expect(sent).toEqual({ settings: { "cleanup:temp_files": true } });
+  });
+
   it("run() with no ids and no selection is a no-op", () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(

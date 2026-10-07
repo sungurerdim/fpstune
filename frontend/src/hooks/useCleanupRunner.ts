@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { settingsApi, type BulkApplyResponse } from "../lib/api";
+import { settingsApi } from "../lib/api";
+import { bulkTargets, type BulkApplyResponse } from "../lib/bulkStream";
 import { parseActionReading } from "../lib/actionReading";
 import { detectionManager } from "../lib/detection-manager";
 import { createLogger } from "../lib/logger";
@@ -28,7 +29,7 @@ const asText = (value: unknown): string =>
 
 /**
  * Run the ids through the streaming endpoint, driving the live run rows, and
- * answer with the same shape the quiet bulk endpoint returned.
+ * answer with the outcome assembled from them.
  *
  * The two halves are deliberately separate: the events are what the user reads
  * while it happens, the assembled result is what the freed-space bookkeeping
@@ -59,7 +60,7 @@ function runStreamed(ids: string[]): Promise<BulkApplyResponse> {
     };
 
     settingsApi.bulkStreamApply(
-      ids,
+      bulkTargets(ids, "apply"),
       (event) => {
         const id = asText(event.id);
         if (!id) return;

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { errorMessage, settingsApi, BulkApplyResponse } from "../lib/api";
+import { errorMessage } from "../lib/api";
+import { applyStreamed, type BulkApplyResponse } from "../lib/bulkStream";
 import { useT } from "../i18n";
 import { useStore } from "../store";
 import { hardwareManager } from "../lib/hardware-manager";
@@ -46,8 +47,7 @@ export function useBulkApply(
   const mutation = useMutation({
     onMutate: () => useStore.getState().beginOperation(),
     onSettled: () => useStore.getState().endOperation(),
-    mutationFn: (settings: Record<string, unknown>) =>
-      settingsApi.bulkApply(settings),
+    mutationFn: (settings: Record<string, unknown>) => applyStreamed(settings),
     onSuccess: async (response, settings) => {
       // Every id in the request is re-read, failures included: a failed write
       // can still have changed part of what it touched.
@@ -56,11 +56,9 @@ export function useBulkApply(
         await detectionManager.redetectSettings(touched);
       }
 
-      // Count skipped (non-applicable) separately from real errors
-      const skippedCount = Object.values(response.results).filter(
-        (r) => r.skipped,
-      ).length;
-      const realErrorCount = response.error_count - skippedCount;
+      // A skipped (non-applicable) row is neither written nor failed: the
+      // assembled outcome counts it as neither, so error_count is real errors.
+      const realErrorCount = response.error_count;
 
       // Log errors for failed settings (not skipped)
       if (realErrorCount > 0) {

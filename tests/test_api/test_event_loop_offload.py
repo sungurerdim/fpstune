@@ -247,12 +247,14 @@ class TestBulkStreamSetupOffload:
             ),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):
-            response = client.post("/api/settings/bulk/stream-apply", json={"ids": ["x:y"]})
+            response = client.post(
+                "/api/settings/bulk/stream-apply", json={"settings": {"x:y": "on"}}
+            )
 
         assert response.status_code == 200
         assert record["on_event_loop"] is False
 
-    def test_stream_reset_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
+    def test_stream_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
         record: dict[str, bool] = {}
         registry = MagicMock()
         registry.get.return_value = None
@@ -264,7 +266,9 @@ class TestBulkStreamSetupOffload:
             ),
             patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
         ):
-            response = client.post("/api/settings/bulk/stream-reset", json={"ids": ["x:y"]})
+            response = client.post(
+                "/api/settings/bulk/stream-apply", json={"settings": {"x:y": "off"}}
+            )
 
         assert response.status_code == 200
         assert record["on_event_loop"] is False

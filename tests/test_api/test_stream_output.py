@@ -120,53 +120,50 @@ class TestOutputPump:
         )
 
 
-class TestAnActionRunsWhenItIsRun:
+class TestAnActionRunsWhenItIsSentTrue:
     """Pressing Run must run it, whatever fpstune thinks of running it unasked.
 
-    The streamed run derives its target from the setting, and deriving it from
+    The stream used to derive its own target, and deriving it from
     `recommended_value` skipped 24 of the 38 shipped actions and reported success:
     `[APPLY] maintenance:sfc_scan → False` on the reporting machine, followed
     immediately by `Applied System File Checker`, with nothing having run.
     `CommandExecutor.apply` treats a falsy value on an action as "do not run",
-    which is right — the value was wrong.
+    which is right — the value was wrong. The request now carries the value, so
+    what the server owes is this: `True` runs every shipped action, and the
+    action's own default (a reset) is the do-not-run it has always been.
     """
 
-    def test_an_action_that_is_not_recommended_still_runs(self) -> None:
-        from fpstune.settings.definitions.system import MAINTENANCE_SFC
-
-        assert MAINTENANCE_SFC.recommended_value is not True  # the trap
-        assert settings_stream.apply_target(MAINTENANCE_SFC, "apply") is True
-
-    def test_no_shipped_action_would_be_skipped_by_its_own_target(self) -> None:
-        """The whole class, not the two that were reported."""
-        from fpstune.settings.base import SettingValueType
+    @staticmethod
+    def _actions() -> list[SettingExecutor]:
         from fpstune.settings.definitions import get_all_static_settings
-        from fpstune.settings.executors import coerce_value_type
 
-        skipped = [
-            s.id
-            for s in get_all_static_settings()
-            if s.is_action
-            and not coerce_value_type(
-                settings_stream.apply_target(s, "apply"), SettingValueType.BOOL
-            )
-        ]
+        actions = [s for s in get_all_static_settings() if s.is_action]
+        assert len(actions) > 30, "the shipped actions are not vacuous"
+        return actions
+
+    def test_true_runs_every_shipped_action(self) -> None:
+        from fpstune.settings.executors import action_will_not_run
+
+        skipped = [s.id for s in self._actions() if action_will_not_run(s, True)]
+
         assert not skipped, "these actions would report success without running: " + ", ".join(
             skipped
         )
 
-    def test_an_ordinary_setting_still_gets_its_recommendation(self) -> None:
-        setting = _action("system:test", progress=False)
-        object.__setattr__(setting, "is_action", False)
-        object.__setattr__(setting, "recommended_value", "on")
-
-        assert settings_stream.apply_target(setting, "apply") == "on"
-
-    def test_a_reset_still_writes_the_default(self) -> None:
-        """An action cannot be un-run; its default is False and skipping is right."""
+    def test_an_action_that_is_not_recommended_still_runs_when_sent_true(self) -> None:
         from fpstune.settings.definitions.system import MAINTENANCE_SFC
+        from fpstune.settings.executors import action_will_not_run
 
-        assert settings_stream.apply_target(MAINTENANCE_SFC, "reset") is False
+        assert MAINTENANCE_SFC.recommended_value is not True  # the trap
+        assert action_will_not_run(MAINTENANCE_SFC, True) is False
+
+    def test_an_actions_reset_is_do_not_run(self) -> None:
+        """An action cannot be un-run; its default is False and skipping is right."""
+        from fpstune.settings.executors import action_will_not_run
+
+        runs = [s.id for s in self._actions() if not action_will_not_run(s, s.default_value)]
+
+        assert not runs, "a reset would re-run these cleanups: " + ", ".join(runs)
 
 
 class TestSettingsCarryTheirOwnProgress:

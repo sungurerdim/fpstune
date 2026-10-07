@@ -13,8 +13,7 @@ import { SelectionToolbar } from "../SelectionToolbar";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
-const bulkStreamApply = vi.fn((_ids: string[]) => () => {});
-const bulkStreamReset = vi.fn((_ids: string[]) => () => {});
+const bulkStreamApply = vi.fn((_settings: Record<string, unknown>) => () => {});
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
@@ -22,10 +21,10 @@ vi.mock("../../lib/api", async (importOriginal) => {
     ...actual,
     settingsApi: {
       ...actual.settingsApi,
-      // Only the ids matter here; the SSE callbacks are the stream's business
-      // and are exercised where the stream is.
-      bulkStreamApply: (ids: string[]) => bulkStreamApply(ids),
-      bulkStreamReset: (ids: string[]) => bulkStreamReset(ids),
+      // Only the {id: value} map matters here; the SSE callbacks are the
+      // stream's business and are exercised where the stream is.
+      bulkStreamApply: (settings: Record<string, unknown>) =>
+        bulkStreamApply(settings),
     },
   };
 });
@@ -76,7 +75,6 @@ function select(setting: Setting) {
 describe("SelectionToolbar's advanced gate", () => {
   beforeEach(() => {
     bulkStreamApply.mockClear();
-    bulkStreamReset.mockClear();
   });
 
   it("asks as a real dialog before applying anything marked Advanced", () => {
@@ -110,7 +108,10 @@ describe("SelectionToolbar's advanced gate", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
 
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
-    expect(bulkStreamApply.mock.calls[0][0]).toEqual(["system:experimental"]);
+    // Apply writes the recommendation: one stream request, {id: recommended}.
+    expect(bulkStreamApply.mock.calls[0][0]).toEqual({
+      "system:experimental": "disabled",
+    });
   });
 
   it("asks with the count when no selected tweak is Advanced, like every scope", () => {
@@ -134,11 +135,14 @@ describe("SelectionToolbar's advanced gate", () => {
     fireEvent.click(
       screen.getByRole("button", { name: "Reset 1 settings to the Windows default: 1 selected" }),
     );
-    expect(bulkStreamReset).not.toHaveBeenCalled();
+    expect(bulkStreamApply).not.toHaveBeenCalled();
 
+    // Reset is the same stream with each row's own default as its value.
     fireEvent.click(screen.getByRole("button", { name: "Reset to default" }));
-    expect(bulkStreamReset).toHaveBeenCalledTimes(1);
-    expect(bulkStreamReset.mock.calls[0][0]).toEqual(["system:ordinary"]);
+    expect(bulkStreamApply).toHaveBeenCalledTimes(1);
+    expect(bulkStreamApply.mock.calls[0][0]).toEqual({
+      "system:ordinary": "enabled",
+    });
   });
 
   it("disables Reset to default, saying why, when the selection is already at its defaults", () => {

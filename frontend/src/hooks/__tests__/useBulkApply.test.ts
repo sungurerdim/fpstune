@@ -1,6 +1,7 @@
 /**
  * Tests for useBulkApply hook.
- * Mocks settingsApi.bulkApply via MSW local server.use() handlers.
+ * The hook runs the one bulk path (the SSE stream) and assembles its outcome;
+ * MSW answers `/settings/bulk/stream-apply` with the real wire format.
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
@@ -63,29 +64,44 @@ function makeSetting(overrides: Partial<Setting> = {}): Setting {
   };
 }
 
-const bulkApplySuccessResponse = {
-  results: {
-    "timer:hpet": {
-      setting_id: "timer:hpet",
-      success: true,
-      error: null,
-      new_value: "disabled",
-      requires_reboot: false,
-      skipped: false,
-    },
-    "power:usb": {
-      setting_id: "power:usb",
-      success: true,
-      error: null,
-      new_value: "disabled",
-      requires_reboot: false,
-      skipped: false,
-    },
+/** The wire format the app speaks: one SSE `data:` line per event. */
+function sseBody(events: Array<Record<string, unknown>>): string {
+  return events.map((event) => `data: ${JSON.stringify(event)}
+
+`).join("");
+}
+
+function streamHandler(
+  events: Array<Record<string, unknown>>,
+  seen?: { body?: unknown },
+) {
+  return http.post("/api/settings/bulk/stream-apply", async ({ request }) => {
+    if (seen) seen.body = await request.json();
+    return new HttpResponse(sseBody(events), {
+      headers: { "Content-Type": "text/event-stream" },
+    });
+  });
+}
+
+const appliedAndVerified = (id: string) => [
+  { event: "started", id, name: id, duration_estimate: "", reports_progress: false },
+  {
+    event: "applied",
+    id,
+    success: true,
+    current_value: "disabled",
+    requires_reboot: false,
+    freed_bytes: null,
+    size_after_bytes: null,
   },
-  success_count: 2,
-  error_count: 0,
-  requires_reboot: false,
-};
+  { event: "verified", id, matches: true, current_value: "disabled" },
+];
+
+const bothApplied = [
+  ...appliedAndVerified("timer:hpet"),
+  ...appliedAndVerified("power:usb"),
+  { event: "done", total: 2, succeeded: 2, failed: 0 },
+];
 
 function makeWrapper() {
   const queryClient = new QueryClient({
@@ -110,11 +126,7 @@ describe("useBulkApply", () => {
     );
     useStore.setState({ settings, _settingsVersion: 0 });
 
-    server.use(
-      http.post("/api/settings/bulk/apply", () =>
-        HttpResponse.json(bulkApplySuccessResponse),
-      ),
-    );
+    server.use(streamHandler(bothApplied));
   });
 
   it("returns apply function, isApplying=false, and lastResult=null initially", () => {
@@ -177,7 +189,7 @@ describe("useBulkApply", () => {
 
   it("calls onError callback when apply fails", async () => {
     server.use(
-      http.post("/api/settings/bulk/apply", () =>
+      http.post("/api/settings/bulk/stream-apply", () =>
         HttpResponse.json({ detail: "Server error" }, { status: 500 }),
       ),
     );
@@ -201,47 +213,78 @@ describe("useBulkApply", () => {
     });
   });
 
-  it("counts real errors excluding skipped settings", async () => {
+  it("sends the map to the stream as {settings: {id: value}} and nothing else", async () => {
+    const seen: { body?: unknown } = {};
+    server.use(streamHandler(bothApplied, seen));
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useBulkApply(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.apply({
+        "timer:hpet": "disabled",
+        "power:usb": "disabled",
+      });
+    });
+
+    expect(seen.body).toEqual({
+      settings: { "timer:hpet": "disabled", "power:usb": "disabled" },
+    });
+  });
+
+  it("counts a failed row as an error and a skipped one as neither", async () => {
     server.use(
-      http.post("/api/settings/bulk/apply", () =>
-        HttpResponse.json({
-          results: {
-            "timer:hpet": {
-              setting_id: "timer:hpet",
-              success: true,
-              error: null,
-              new_value: "disabled",
-              requires_reboot: false,
-              skipped: false,
-            },
-            "gpu:nvidia_extra": {
-              setting_id: "gpu:nvidia_extra",
-              success: false,
-              error: "Not applicable",
-              new_value: null,
-              requires_reboot: false,
-              skipped: true, // Skipped, not a real error
-            },
-          },
-          success_count: 1,
-          error_count: 1,
-          requires_reboot: false,
-        }),
-      ),
+      streamHandler([
+        ...appliedAndVerified("timer:hpet"),
+        { event: "skipped", id: "gpu:nvidia_extra" },
+        { event: "failed", id: "power:usb", error: "Access denied" },
+        { event: "done", total: 3, succeeded: 2, failed: 1 },
+      ]),
     );
 
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useBulkApply(), { wrapper: Wrapper });
 
     await act(async () => {
-      await result.current.apply({ "timer:hpet": "disabled" });
+      await result.current.apply({
+        "timer:hpet": "disabled",
+        "gpu:nvidia_extra": "disabled",
+        "power:usb": "disabled",
+      });
     });
 
     await waitFor(() => {
       expect(result.current.lastResult).not.toBeNull();
     });
 
-    // skipped entries are excluded from real error count
-    expect(result.current.lastResult?.error).toBe(0);
+    // One written, one failed; the skipped row is neither (it was not applicable).
+    expect(result.current.lastResult).toEqual({ success: 1, error: 1 });
+  });
+
+  it("counts a skipped row as no error at all", async () => {
+    server.use(
+      streamHandler([
+        ...appliedAndVerified("timer:hpet"),
+        { event: "skipped", id: "gpu:nvidia_extra" },
+        { event: "done", total: 2, succeeded: 2, failed: 0 },
+      ]),
+    );
+
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useBulkApply(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.apply({
+        "timer:hpet": "disabled",
+        "gpu:nvidia_extra": "disabled",
+      });
+    });
+
+    await waitFor(() => {
+      expect(result.current.lastResult).not.toBeNull();
+    });
+
+    // The old arithmetic subtracted skipped rows from an error count that never
+    // held them, which read one skipped row as -1 failures.
+    expect(result.current.lastResult).toEqual({ success: 1, error: 0 });
   });
 });

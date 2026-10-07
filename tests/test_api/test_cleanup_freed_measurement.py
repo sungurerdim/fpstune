@@ -374,7 +374,12 @@ class TestTheStreamReportsTheSameNumbers:
     """A bulk run must not report something different from a single apply."""
 
     def _events(self, client: TestClient, setting: SettingExecutor) -> list[dict[str, Any]]:
-        response = client.post("/api/settings/bulk/stream-apply", json={"ids": [setting.id]})
+        # What a client sends: an action is run with True, anything else is
+        # written its recommendation. The server derives neither.
+        value = True if setting.is_action else setting.recommended_value
+        response = client.post(
+            "/api/settings/bulk/stream-apply", json={"settings": {setting.id: value}}
+        )
         assert response.status_code == 200
         events = []
         for line in response.text.splitlines():
@@ -409,31 +414,3 @@ class TestTheStreamReportsTheSameNumbers:
         applied = next(e for e in events if e.get("event") == "applied")
         assert applied["freed_bytes"] is None
         assert applied["size_after_bytes"] is None
-
-
-class TestTheBulkRunWaitsForWhatItStarted:
-    """A cap over the set is a run abandoned while it is succeeding.
-
-    `/bulk/apply` waited a flat 300 s, then a budget derived per setting; both
-    answered "timed out" for applies that went on to succeed, because cancel()
-    cannot stop a running thread. Each apply now carries its own stall rule
-    (utils.process_watch), so the set waits for every member to finish.
-    """
-
-    def test_the_set_is_collected_without_a_deadline(self, client: TestClient, cache) -> None:
-        from concurrent import futures as cf
-
-        setting = _registry_setting()
-        seen: list[dict[str, Any]] = []
-        real = cf.as_completed
-
-        def spy(fs, **kwargs):
-            seen.append(kwargs)
-            return real(fs, **kwargs)
-
-        with _run(setting, cache, [], detected="off"), patch.object(cf, "as_completed", spy):
-            result = client.post("/api/settings/bulk/apply", json={"settings": {setting.id: "on"}})
-
-        assert result.status_code == 200, result.text
-        assert seen, "the bulk route no longer collects through as_completed"
-        assert all(kwargs.get("timeout") is None for kwargs in seen)

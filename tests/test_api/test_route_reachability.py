@@ -25,7 +25,12 @@ ROOT = Path(__file__).resolve().parents[2]
 # a new uncalled route fails immediately, and an entry that gains a caller (or
 # is deleted) turns stale and must be removed here in the same change, so the
 # shrink is visible in the diff.
-_UNCALLED_BASELINE: set[str] = set()
+#
+# One temporary entry, by name: the findings route landed backend-first (#107 H1)
+# and its caller is H2/H3 (the Optimize tab's rows and badge). The entry is not a
+# verdict that the route is dead — `test_the_baseline_only_shrinks` goes red the
+# moment api.ts calls it, and that same change deletes this line.
+_UNCALLED_BASELINE: set[str] = {"GET /api/health/findings"}
 
 # Routes whose consumer is documented and is not the UI. Not a verdict queue
 # like the baseline: an entry here names who calls it, and a route with no

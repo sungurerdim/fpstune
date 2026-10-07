@@ -3,6 +3,7 @@
 from fpstune.api.routes.benchmark import router as benchmark_router
 from fpstune.api.routes.benchmark_suite import router as benchmark_suite_router
 from fpstune.api.routes.display import router as display_router
+from fpstune.api.routes.health import router as health_router
 from fpstune.api.routes.safety import router as safety_router
 from fpstune.api.routes.settings import router as settings_router
 from fpstune.api.routes.settings_stream import router as settings_stream_router
@@ -23,5 +24,6 @@ __all__ = [
     "system_network_router",
     "system_storage_router",
     "display_router",
+    "health_router",
     "updates_router",
 ]

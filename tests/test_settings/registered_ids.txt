@@ -412,6 +412,9 @@ system:vm_platform
 system:widgets
 system:windows_update_mode
 system:xmp_expo
+timer:boot_dynamic_tick
+timer:boot_platform_clock
+timer:boot_tsc_sync_policy
 timer:global_timer_resolution
 visual:animations
 visual:transparency

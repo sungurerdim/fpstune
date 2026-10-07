@@ -8,6 +8,12 @@ driven by the timer being changed.
 
 These tests exist so the settings cannot quietly reappear, and so the one timer
 setting that does carry evidence is not removed along with them.
+
+One thing changed on purpose (owner-approved, issue #107 Phase 3c T4, consequence 6 of
+the product goal): machines that already carry a forced value keep carrying it, so
+three guards (``timer:boot_*``) now remove it. They may run the boot editor, but only
+to *delete* a value; a command that sets one is still forbidden, and a guard is not a
+no-op, because it has a drift state to detect (``unwritable_values``).
 """
 
 from __future__ import annotations
@@ -17,6 +23,12 @@ import pytest
 from fpstune.settings.base import SettingScope
 from fpstune.settings.definitions.timer import TIMER_SETTINGS
 from fpstune.settings.registry import SettingsRegistry
+
+BOOT_GUARD_IDS = {
+    "timer:boot_platform_clock",
+    "timer:boot_dynamic_tick",
+    "timer:boot_tsc_sync_policy",
+}
 
 REMOVED_IDS = [
     "timer:hpet",
@@ -45,16 +57,33 @@ def test_removed_timer_setting_is_not_exported(setting_id: str) -> None:
     assert setting_id not in {s.id for s in TIMER_SETTINGS}
 
 
-def test_no_setting_writes_boot_configuration(registry: SettingsRegistry) -> None:
+def test_no_tweak_writes_boot_configuration(registry: SettingsRegistry) -> None:
     # Catches a re-add under a different id or category: the point was to stop
-    # writing boot configuration at all, not to blacklist four strings. A bad
-    # BCD entry can leave a machine unable to start, so no setting runs bcdedit.
+    # writing boot configuration values, not to blacklist four strings. A bad BCD
+    # entry can leave a machine unable to start, so the only settings that run the
+    # boot editor are the three guards, and they only ever delete a value.
     offenders = [
         s.id
         for s in registry.get_all()
-        if any("bcdedit" in str(command).lower() for command in (s.detect_command, s.apply_command))
+        if s.id not in BOOT_GUARD_IDS
+        and any(
+            "bcdedit" in str(command).lower() for command in (s.detect_command, s.apply_command)
+        )
     ]
     assert offenders == []
+
+
+@pytest.mark.parametrize("setting_id", sorted(BOOT_GUARD_IDS))
+def test_a_boot_guard_only_ever_deletes_a_value(
+    registry: SettingsRegistry, setting_id: str
+) -> None:
+    setting = registry.get(setting_id)
+    assert setting is not None
+    assert "bcdedit /deletevalue" in setting.apply_command
+    for verb in ("/set ", "/create", "/delete ", "/import", "/export"):
+        assert verb not in setting.apply_command, verb
+    # And it reads no printed text: the boot editor only appears on the apply side.
+    assert "bcdedit" not in setting.detect_command.lower()
 
 
 def test_global_timer_resolution_survives(registry: SettingsRegistry) -> None:
@@ -86,7 +115,9 @@ def test_removal_closed_the_timer_c1_violations(registry: SettingsRegistry) -> N
 
 def test_removal_closed_the_timer_noops(registry: SettingsRegistry) -> None:
     # A tweak whose recommendation equals the default does nothing when applied,
-    # yet presents as actionable in the UI. None should remain in this category.
+    # yet presents as actionable in the UI. None should remain in this category,
+    # except a guard: it recommends the default because it undoes another tool's
+    # drift, and says so by naming the state it detects but never writes.
     noops = [
         s.id
         for s in registry.get_all()
@@ -94,5 +125,6 @@ def test_removal_closed_the_timer_noops(registry: SettingsRegistry) -> None:
         and s.recommended_value == s.default_value
         and not s.is_readonly
         and not s.is_action
+        and not s.unwritable_values
     ]
     assert noops == []

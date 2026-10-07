@@ -166,6 +166,21 @@ export const settingsTr: Record<
     description:
       "Daha ince zamanlayıcı isteyen bir programın bunu yalnızca kendisi için mi yoksa tüm sistem için mi aldığı. Sistem genelinde olması, isteyen oyun olmasa da kare düzenini korur.",
   },
+  "timer:boot_platform_clock": {
+    name: "Zorlanmış HPET saat kaynağı",
+    description:
+      "Önyükleme yapılandırmasının Windows'u zamanı HPET çipinden okumaya zorlayıp zorlamadığı. Saati Windows kendisi seçer; HPET'i zorlamak her zaman okumasını yavaşlatır.",
+  },
+  "timer:boot_dynamic_tick": {
+    name: "Kapatılmış dinamik tik",
+    description:
+      "Önyükleme yapılandırmasının Windows'un boştayken zamanlayıcı tikini durdurmasını engelleyip engellemediği. Zorlamak çekirdekleri uyanık tutar, fare hissini ve kare süresini bozabilir.",
+  },
+  "timer:boot_tsc_sync_policy": {
+    name: "TSC eşitleme ilkesi",
+    description:
+      "Önyükleme yapılandırmasının Windows'un çekirdek zaman sayaçlarını hizalama biçimini değiştirip değiştirmediği. Windows'un kendi seçimi sınanmış olandır; zorlanan ilke kararlılığa mal oldu.",
+  },
   "priority:game_priority": {
     name: "Oyuna CPU önceliği",
     description: "Oyun görev önceliği (1-6; 6 en yüksek).",

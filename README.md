@@ -35,7 +35,7 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**417 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**420 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
@@ -51,7 +51,7 @@ this rule raises a setting as readily as it lowers one.
 | Audio | 4 | Per-output effects, sample rate, exclusive access, voice ducking |
 | Visual | 2 | Animations, transparency |
 | Storage | 4 | NVMe, disk timeout, write caching, Windows update reserve |
-| Timer | 1 | Timer resolution |
+| Timer | 4 | Timer resolution, plus guards that remove a forced HPET clock, constant tick or TSC sync policy |
 
 Counts are the static registry. On a real machine the network total is higher: each adapter contributes its own settings, and their choices come from that adapter's driver — a NIC that offers sixteen RSS queues is offered sixteen, not a number written into this repo.
 
@@ -352,7 +352,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (detect, apply, SSE bulk apply),
                     system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
-    definitions/    16 category files producing the 417 settings in 13 categories —
+    definitions/    16 category files producing the 420 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal

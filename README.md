@@ -349,7 +349,7 @@ Metrics: avg FPS, 1% low, 0.1% low, frame time std-dev, stutter count.
 ```
 src/fpstune/
   api/              FastAPI backend
-    routes/         settings.py + settings_stream.py (apply/reset/verify, SSE bulk),
+    routes/         settings.py + settings_stream.py (detect, apply, SSE bulk apply),
                     system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
     definitions/    16 category files producing the 413 settings in 13 categories —

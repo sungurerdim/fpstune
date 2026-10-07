@@ -82,8 +82,6 @@ export const en = {
   "displayConfirm.keep": "Keep",
   "displayConfirm.dontKeep": "Don't keep",
 
-  // Change history
-
   // Detection notice
   "detection.failedOne": "1 setting could not be checked on this machine",
   "detection.failedMany":

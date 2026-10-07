@@ -102,7 +102,7 @@ describe("DetectionNotice", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("reports only the settings its surface owns", () => {
+  it("reports every domain's failure in one list, game rows included", () => {
     const gameFailed = makeSetting({
       id: "game_config:mw4:dxr" as `${string}:${string}`,
       displayName: "Ray Tracing",
@@ -110,10 +110,10 @@ describe("DetectionNotice", () => {
       detectionError: "config file locked",
     });
     seed(FAILED, gameFailed);
-    render(<DetectionNotice owns={(s) => s.module === "game_config"} />);
-    const toggle = screen.getByText(/1 setting could not be checked/);
+    render(<DetectionNotice />);
+    const toggle = screen.getByText(/2 settings could not be checked/);
     fireEvent.click(toggle);
     expect(screen.getByText(/Ray Tracing/)).toBeInTheDocument();
-    expect(screen.queryByText(/Receive Buffers/)).toBeNull();
+    expect(screen.getByText(/Receive Buffers/)).toBeInTheDocument();
   });
 });

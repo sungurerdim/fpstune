@@ -15,13 +15,11 @@ import type { Setting } from "../types/setting";
  * was already optimal. This notice sits above the filter: failures render as a
  * warning with each setting's own error, and the genuinely-absent rows are
  * countable behind a quiet disclosure with the reason detection recorded.
+ *
+ * Mounted once, at app level, over every setting: a failure is a fact about the
+ * machine, not about the tab that happens to be open.
  */
-export function DetectionNotice({
-  owns,
-}: {
-  /** Which settings this surface owns; the notice reports only those. */
-  owns?: (setting: Setting) => boolean;
-}) {
+export function DetectionNotice() {
   const { t } = useT();
   const settingsMap = useStore((state) => state.settings);
   const settingsVersion = useStore((state) => state._settingsVersion);
@@ -32,7 +30,6 @@ export function DetectionNotice({
     const failed: Setting[] = [];
     const notPresent: Setting[] = [];
     for (const setting of settingsMap.values()) {
-      if (owns && !owns(setting)) continue;
       if (setting.detectionError) {
         failed.push(setting);
       } else if (!setting.isApplicable) {
@@ -41,12 +38,12 @@ export function DetectionNotice({
     }
     return { failures: failed, absent: notPresent };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
-  }, [settingsMap, settingsVersion, owns]);
+  }, [settingsMap, settingsVersion]);
 
   if (failures.length === 0 && absent.length === 0) return null;
 
   return (
-    <div className="space-y-1">
+    <div className="mb-4 space-y-1">
       {failures.length > 0 && (
         <div className="rounded border border-warning/40 bg-warning/10 px-3 py-2">
           <button

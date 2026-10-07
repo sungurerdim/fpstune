@@ -35,7 +35,6 @@ import { ActionableAdvisories, ClearAdvisories, UnreadAdvisories } from "./home/
 import { OptimizedFold } from "./home/HomeOptimizedFold";
 import { ActionRow } from "./ActionRow";
 import { DockerConfirmModal } from "./DockerConfirmModal";
-import { DetectionNotice } from "./DetectionNotice";
 import { FirstRunNotice } from "./FirstRunNotice";
 import { SelfCheckNotice } from "./SelfCheckNotice";
 import { OsUpdateNotice } from "./OsUpdateNotice";
@@ -365,8 +364,6 @@ export function HomeTab() {
     <div className="space-y-4 pb-8">
       {/* What this is and that nothing has been touched — once, first. */}
       <FirstRunNotice />
-      {/* Home owns the whole product, so its notice owns every setting. */}
-      <DetectionNotice />
       {/* And its self-check owns every detector (A12): a disagreement between
           independent sources is a Home-page fact, not a buried report. */}
       <SelfCheckNotice />

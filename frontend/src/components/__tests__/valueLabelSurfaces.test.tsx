@@ -21,7 +21,6 @@ import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
 
-const history = vi.hoisted(() => ({ settings: [] as unknown[] }));
 
 vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../hardware/useHardware", () => ({
@@ -68,9 +67,6 @@ vi.mock("../../lib/api", async (importOriginal) => {
             measured_at: null,
           },
         }),
-    },
-    historyApi: {
-      get: () => Promise.resolve({ settings: history.settings, entries: [] }),
     },
   };
 });
@@ -162,7 +158,6 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
     ["a three-choice pill selector", [RAW.off, RAW.on, RAW.max]],
   ] as const)("%s", (_shape, choices) => {
     it("prints no stored value on any surface that renders", async () => {
-      history.settings = [];
       const settings = [
         lowLatency({ choices: [...choices] }),
         lowLatency({
@@ -173,12 +168,6 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
           isOptimized: true,
         }),
       ];
-      history.settings = settings.map((s) => ({
-        setting_id: s.id,
-        last_action: "apply",
-        value: RAW.on,
-        at: 1_759_650_000,
-      }));
 
       const leaks: string[] = [];
       const drewName: string[] = [];
@@ -190,7 +179,7 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
         } catch {
           continue; // needs state this generic bag lacks; the sweep names it below
         }
-        // Past the first paint: HistoryTab fetches its rows.
+        // Past the first paint: some surfaces fetch their rows.
         await new Promise((resolve) => setTimeout(resolve, 20));
         for (let pass = 0; pass < 2; pass += 1) {
           for (const closed of view.container.querySelectorAll('[aria-expanded="false"]')) {
@@ -205,8 +194,8 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
 
       expect(leaks, `a stored value is printed where its name belongs: ${leaks.join("; ")}`).toEqual([]);
       // The sweep proves nothing if no surface drew the name: the state line,
-      // the row and the history entry are the ones it must reach.
-      for (const must of ["TweakRows", "TweakListRow", "HistoryTab"]) {
+      // the row is the one it must reach.
+      for (const must of ["TweakRows", "TweakListRow"]) {
         expect(drewName, `${must} never drew "${names.on}"`).toContain(must);
       }
     });

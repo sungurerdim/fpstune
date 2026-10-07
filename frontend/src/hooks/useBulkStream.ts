@@ -33,7 +33,6 @@ export function useBulkStream() {
         state.setBulkRun(null);
         state.endOperation();
         queryClient.invalidateQueries({ queryKey: ["activity"] });
-        queryClient.invalidateQueries({ queryKey: ["history"] });
         const status = state.operationStatus;
         const failed = ids.filter((id) => status[id] === "failed").length;
         const done = ids.filter(

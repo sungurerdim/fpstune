@@ -134,42 +134,6 @@ div#hardware-columns [grid-cols-2]
   h4 "Audio Input""
 `;
 
-exports[`'History' page layout > at a narrow window (390px) 1`] = `
-"viewport 390px
-div [flex-wrap]
-  h2 "What fpstune changed"
-  div [max-w-full]
-    div [flex-wrap]
-div [flex-wrap]
-  h3 "Still changed by fpstune"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-li [flex-wrap]
-div [flex-wrap]
-  h3 "Already put back"
-  ul [flex-wrap]
-li [flex-wrap]"
-`;
-
-exports[`'History' page layout > at a wide window (2560px) 1`] = `
-"viewport 2560px
-div [flex-wrap]
-  h2 "What fpstune changed"
-  div [max-w-full]
-    div [flex-wrap]
-div [flex-wrap]
-  h3 "Still changed by fpstune"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-li [flex-wrap]
-div [flex-wrap]
-  h3 "Already put back"
-  ul [flex-wrap]
-li [flex-wrap]"
-`;
-
 exports[`'Home' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
 section [flex-wrap]

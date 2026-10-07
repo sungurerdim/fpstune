@@ -34,7 +34,6 @@ from fpstune.api.schemas import (
     SettingState,
 )
 from fpstune.safety import restore
-from fpstune.safety.history import ACTION_FOR_LABEL, get_change_journal
 from fpstune.settings import (
     DetectionEngine,
     SettingsRegistry,
@@ -363,26 +362,12 @@ def _verify_setting_applied(
     return True, None, True
 
 
-def _record_change(setting: SettingExecutor, activity_label: str, value: Any) -> None:
-    """Put a landed, verified write on the change history (safety/history.py).
-
-    Here because every apply and reset ends in `_finalize_apply_response`,
-    so no write can bypass the record. Actions and advisories change nothing
-    that can be put back, so they are not history.
-    """
-    action = ACTION_FOR_LABEL.get(activity_label)
-    if action is None or setting.is_action or setting.is_readonly:
-        return
-    get_change_journal().record(setting.id, action, value)
-
-
 def _finalize_apply_response(
     setting: SettingExecutor,
     requested_value: Any,
     engine: DetectionEngine,
     cmd_success: bool,
     cmd_error: str | None,
-    activity_label: str,
     *,
     freed_bytes: int | None = None,
     size_after_bytes: int | None = None,
@@ -418,13 +403,11 @@ def _finalize_apply_response(
             )
         else:
             log_activity(
-                f"{activity_label} {setting.display_name}: {requested_value!r} → detected={result.value!r}",
+                f"Applied {setting.display_name}: {requested_value!r} → detected={result.value!r}",
                 "success",
             )
-            _record_change(setting, activity_label, requested_value)
     else:
-        verb = ACTION_FOR_LABEL.get(activity_label, activity_label.lower())
-        log_activity(f"Failed to {verb} {setting.display_name}: {error}", "error")
+        log_activity(f"Failed to apply {setting.display_name}: {error}", "error")
 
     return ApplyResponse(
         setting_id=setting.id,
@@ -543,7 +526,7 @@ def _apply_single_setting(
         )
 
     engine = DetectionEngine(hardware_context=hardware_context)
-    return setting.id, apply_and_finalize(setting, value, engine, "Applied", on_line)
+    return setting.id, apply_and_finalize(setting, value, engine, on_line)
 
 
 # =============================================================================
@@ -699,6 +682,6 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
     engine = DetectionEngine(hardware_context=hardware_context)
 
     def _apply() -> ApplyResponse:
-        return apply_and_finalize(setting, request.value, engine, "Applied")
+        return apply_and_finalize(setting, request.value, engine)
 
     return await asyncio.to_thread(_apply)

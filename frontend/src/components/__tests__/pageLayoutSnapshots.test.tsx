@@ -25,10 +25,9 @@ import { HomeTab } from "../HomeTab";
 import { SettingsTab } from "../SettingsTab";
 import { GameTweaksTab } from "../GameTweaksTab";
 import { HardwarePanel } from "../HardwarePanel";
-import { HistoryTab } from "../HistoryTab";
 import { useStore } from "../../store";
 import { Settings as SettingsIcon } from "lucide-react";
-import type { HardwareInfo, HistoryResponse } from "../../lib/api";
+import type { HardwareInfo } from "../../lib/api";
 import type { CategoryMetadata, Setting } from "../../types/setting";
 
 const NARROW = 390;
@@ -83,24 +82,6 @@ const inventory: HardwareInfo = {
   detecting: false,
 };
 
-const history: HistoryResponse = {
-  settings: [
-    {
-      setting_id: "network:nagle_algorithm",
-      last_action: "apply",
-      value: "disabled",
-      at: 1_759_650_000,
-    },
-    {
-      setting_id: "power:hibernation",
-      last_action: "revert",
-      value: "on",
-      at: 1_759_630_000,
-    },
-  ],
-  entries: [],
-};
-
 vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: {
     hasData: () => true,
@@ -133,7 +114,6 @@ vi.mock("../../lib/api", async (importOriginal) => {
     ...actual,
     api: { ...actual.api, getSystemInfo: () => Promise.resolve(undefined) },
     headroomApi: { list: () => Promise.resolve({ headroom: unmeasuredHeadroom() }) },
-    historyApi: { get: () => Promise.resolve(history) },
   };
 });
 
@@ -203,9 +183,9 @@ const SYSTEM_CATEGORY = {
 interface Page {
   name: string;
   /**
-   * Whether the page has a layout that depends on the window. History is one
-   * list in the flow at every width; saying so here makes the day it gains a
-   * column grid a deliberate edit rather than a silent one.
+   * Whether the page has a layout that depends on the window. A page that is
+   * one list in the flow at every width says so here, which makes the day it
+   * gains a column grid a deliberate edit rather than a silent one.
    */
   adapts: boolean;
   /** Fills the store and renders; resolves once the page has what it will show. */
@@ -281,16 +261,6 @@ const PAGES: Page[] = [
       );
       const view = render(<GameTweaksTab />);
       await screen.findAllByTestId("tweak-rows");
-      return view;
-    },
-  },
-  {
-    name: "History",
-    adapts: false,
-    mount: async () => {
-      setStore([]);
-      const view = render(<HistoryTab />);
-      await screen.findByText(/Still changed by fpstune/);
       return view;
     },
   },

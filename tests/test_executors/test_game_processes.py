@@ -282,9 +282,7 @@ class TestTheMessageReachesTheUser:
         _fake_processes(monkeypatch, {"cod26-cod"})
 
         success, error = PowerShellExecutor().apply(MW4_TEXTURE_QUALITY, "0")
-        response = _finalize_apply_response(
-            MW4_TEXTURE_QUALITY, "0", None, success, error, "Applied"
-        )
+        response = _finalize_apply_response(MW4_TEXTURE_QUALITY, "0", None, success, error)
 
         assert response.success is False
         assert response.error is not None

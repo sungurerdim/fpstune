@@ -156,3 +156,57 @@ class TestDetectAndApply:
             assert display_mode.pending_devices() == ["\\\\.\\DISPLAY1"]
             assert display_mode.keep_all() == ["\\\\.\\DISPLAY1"]
             assert display_mode.pending_devices() == []
+
+
+class TestARevertIsLoggedNotJournaled:
+    """The activity log is the only record of a revert, so it must tell the truth.
+
+    The revert used to also write a "revert" line to the in-memory change history,
+    and logged "put back" whether or not the write-back worked. With the history
+    gone the log is all there is.
+    """
+
+    DEVICE = "\\.\\DISPLAY1"
+
+    def _fire(self, status: str, setting_id: str | None = "display:k:mode") -> list[tuple]:
+        """Schedule a revert, then run its timer body now instead of waiting for it."""
+        logged: list[tuple] = []
+        with (
+            patch.object(display_mode, "run_mode_change", return_value=(status, None)),
+            patch(
+                "fpstune.utils.logger.log_activity",
+                lambda message, level="info": logged.append((message, level)),
+            ),
+            patch("fpstune.utils.hardware_manager.hardware_manager"),
+        ):
+            display_mode.schedule_revert(
+                self.DEVICE, (2560, 1440, 60), DM_DISPLAYFREQUENCY, setting_id
+            )
+            timer = display_mode._pending_reverts[self.DEVICE]["timer"]
+            timer.cancel()
+            timer.function()
+        return logged
+
+    def test_a_reverted_mode_is_logged_with_the_setting_that_changed_it(self) -> None:
+        logged = self._fire("SUCCESS")
+
+        assert logged == [
+            (
+                f"Display {self.DEVICE} (display:k:mode) not kept — put back to 2560x1440 @ 60 Hz",
+                "warning",
+            )
+        ]
+
+    def test_a_write_back_that_failed_is_not_reported_as_put_back(self) -> None:
+        logged = self._fire("ERROR:-1")
+
+        assert len(logged) == 1
+        message, level = logged[0]
+        assert level == "error"
+        assert "put back" not in message
+        assert "failed (ERROR:-1)" in message
+
+    def test_a_revert_with_no_named_setting_still_logs(self) -> None:
+        logged = self._fire("SUCCESS", setting_id=None)
+
+        assert logged[0][0] == f"Display {self.DEVICE} not kept — put back to 2560x1440 @ 60 Hz"

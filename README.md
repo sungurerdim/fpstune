@@ -318,8 +318,8 @@ silently discarding fifty-six is saying something false with true arithmetic.
 5. **Applicability checks** — NVIDIA tweaks hidden on AMD systems; a setting whose feature is absent from your hardware is not offered at all
 6. **Advanced tweaks** show alongside the rest with an inline `risk_warning` badge
 
-fpstune stores no previous values and no history on disk. The History tab lists
-what this session did, from memory; start-up deletes the `originals.json` and
+fpstune stores no previous values and keeps no history: the way back is one reset
+to each setting's own default, and start-up deletes the `originals.json` and
 `history.json` that earlier releases kept.
 
 There is no file-level backup manifest — earlier versions of this README
@@ -361,7 +361,7 @@ src/fpstune/
     applicability.py  HardwareContext filtering + values_equal()
     base.py         SettingExecutor schema (risk_level, evidence_level, impact_scores)
   core/             DISM, NVIDIA driver settings (NVAPI), power profiles
-  safety/           System Restore points + this session's history (in memory)
+  safety/           System Restore points; deletes the files earlier releases kept
   benchmark/        PresentMon, FurMark, DPC latency, the suite, claim verification
   commands/         the CLI surface (status, gpu, benchmark, fps, cleanup, ...)
   utils/            Hardware detection, admin check, logging, PowerShell runner

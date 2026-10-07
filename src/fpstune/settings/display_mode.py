@@ -168,15 +168,20 @@ def schedule_revert(
             status, _ = run_mode_change(device, width, height, refresh, fields)
             from fpstune.utils.logger import log_activity
 
-            log_activity(
-                f"Display {device} not kept — put back to {width}x{height} @ {refresh} Hz",
-                "warning",
-            )
-            if setting_id is not None and status == "SUCCESS":
-                # The change history must not claim a mode the machine no longer has.
-                from fpstune.safety.history import get_change_journal
-
-                get_change_journal().record(setting_id, "revert", NOT_NATIVE)
+            # The activity log is the only record of a revert, so it says what
+            # happened: a write-back that failed must not read as "put back".
+            subject = f"Display {device}" + (f" ({setting_id})" if setting_id else "")
+            if status == "SUCCESS":
+                log_activity(
+                    f"{subject} not kept — put back to {width}x{height} @ {refresh} Hz",
+                    "warning",
+                )
+            else:
+                log_activity(
+                    f"{subject} not kept, but putting it back to {width}x{height} "
+                    f"@ {refresh} Hz failed ({status})",
+                    "error",
+                )
             hardware_manager.invalidate_cache("monitors")
         except Exception as exc:  # pragma: no cover - defensive logging
             logger.warning("Display revert failed for %s: %s", device, exc)

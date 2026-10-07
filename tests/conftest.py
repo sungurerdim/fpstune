@@ -241,7 +241,6 @@ def _isolated_profile(
     fails the test at the moment it is handed out: a test that un-redirects a
     variable is refused before anything is written.
     """
-    from fpstune.safety import history
     from fpstune.settings import performance_headroom
     from fpstune.utils import user_paths
 
@@ -250,7 +249,6 @@ def _isolated_profile(
     for name in ("HOME", *_ROOT_VARIABLES, *_ALIAS_VARIABLES):
         monkeypatch.setenv(name, os.environ[name])
     _point_roots_at(home)
-    monkeypatch.setattr(history, "_journal", None)
     monkeypatch.setattr(performance_headroom, "HEADROOM_PATH", home / ".fpstune" / "headroom.json")
     # The two answers an environment variable cannot redirect: the console user's
     # Shell Folders key and SHGetKnownFolderPath. A test sees a shell that says

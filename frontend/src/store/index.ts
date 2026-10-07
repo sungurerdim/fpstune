@@ -12,8 +12,7 @@ export type TabId =
   | "hardware"
   | "games"
   | "cleanup"
-  | "benchmarks"
-  | "history";
+  | "benchmarks";
 /** What a streamed bulk run does to each row: apply, or reset to its default. */
 export type BulkAction = "apply" | "reset";
 export type OperationStatus =

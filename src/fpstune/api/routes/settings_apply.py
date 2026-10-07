@@ -75,7 +75,6 @@ def apply_and_finalize(
     setting: SettingExecutor,
     value: Any,
     engine: DetectionEngine,
-    activity_label: str,
     on_line: Callable[[str, bool], None] | None = None,
 ) -> ApplyResponse:
     """Run one setting's command and turn the outcome into the response.
@@ -126,7 +125,6 @@ def apply_and_finalize(
         engine,
         success,
         error,
-        activity_label,
         freed_bytes=freed.freed_bytes,
         size_after_bytes=freed.size_after_bytes,
     )

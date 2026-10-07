@@ -70,7 +70,6 @@ export const tr: Record<keyof typeof en, string> = {
   "tab.games": "Oyun İnce Ayarları",
   "tab.cleanup": "Temizlik ve Onarım",
   "tab.benchmarks": "Ölçümler",
-  "tab.history": "Geçmiş",
 
   // Ekran modu onayı
   "displayConfirm.title": "Yeni ekran modu korunsun mu?",
@@ -80,21 +79,6 @@ export const tr: Record<keyof typeof en, string> = {
   "displayConfirm.dontKeep": "Koruma",
 
   // Değişiklik geçmişi
-  "history.title": "fpstune'un değiştirdikleri",
-  "history.intro": "fpstune'un bu oturumda değiştirdiği her ayar. Hiçbir şey saklanmaz: uygulamayı kapatmak bu listeyi siler. Varsayılana dön, ayarın kendi varsayılanını geri yazar: Windows varsayılanı, sürücü varsayılanı ya da oyun varsayılanı.",
-  "history.loading": "Geçmiş okunuyor…",
-  "history.error": "Geçmiş okunamadı: {reason}",
-  "history.empty": "fpstune bu oturumda henüz hiçbir şeyi değiştirmedi.",
-  "history.active": "Hâlâ fpstune'un değiştirdiği haliyle",
-  "history.reverted": "Zaten geri alınmış",
-  "history.action.apply": "Uygulandı",
-  "history.action.reset": "Varsayılana döndürüldü",
-  "history.action.revert": "Geri alındı",
-  "history.value": "{value} yapıldı",
-  "history.resetNamed": "{name} ayarını varsayılanına döndür",
-  "history.selectNamed": "{name} seç",
-  "history.selectAll": "Tümünü seç",
-  "history.resetSelected": "Seçilenleri varsayılana döndür ({count})",
 
   // Detection notice
   "detection.failedOne": "1 ayar bu makinede okunamadı",

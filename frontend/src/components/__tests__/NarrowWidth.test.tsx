@@ -38,11 +38,9 @@ import { TweakRows } from "../TweakRows";
 import { TweakListRow } from "../TweakListRow";
 import { ActionRow } from "../ActionRow";
 import { CleanupPanel } from "../CleanupPanel";
-import { HistoryTab } from "../HistoryTab";
 import { HomeTab } from "../HomeTab";
 import { SettingInfoTooltip } from "../SettingInfoTooltip";
 
-const history = vi.hoisted(() => ({ settings: [] as unknown[] }));
 
 vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../hardware/useHardware", () => ({
@@ -89,9 +87,6 @@ vi.mock("../../lib/api", async (importOriginal) => {
             measured_at: null,
           },
         }),
-    },
-    historyApi: {
-      get: () => Promise.resolve({ settings: history.settings, entries: [] }),
     },
   };
 });
@@ -247,25 +242,6 @@ const SURFACES: Surface[] = [
     expects: { unbroken: ["token"], catalogue: ["description"] },
   },
   {
-    name: "HistoryTab",
-    mount: (kind, long) => {
-      const setting = fixture(kind);
-      seed([setting], {
-        operationStatus: { [setting.id]: "failed" },
-        operationError: { [setting.id]: long },
-      });
-      history.settings = [
-        { setting_id: setting.id, last_action: "apply", value: long, at: 1_759_650_000 },
-        { setting_id: `network:${long}`, last_action: "apply", value: long, at: 1_759_650_000 },
-      ];
-      return {
-        ui: <HistoryTab />,
-        ready: () => findLong(long),
-      };
-    },
-    expects: { unbroken: ["token"], catalogue: ["description"] },
-  },
-  {
     name: "HomeTab groups",
     mount: (kind, long) => {
       const software = fixture(kind);
@@ -383,7 +359,6 @@ const BESPOKE = new Set([
   "TweakListRow",
   "ActionRow",
   "CleanupPanel",
-  "HistoryTab",
   "HomeTab",
   "SettingInfoTooltip",
 ]);

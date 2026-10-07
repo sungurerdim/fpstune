@@ -74,7 +74,6 @@ export const en = {
   "tab.games": "Game Tweaks",
   "tab.cleanup": "Cleanup & Repair",
   "tab.benchmarks": "Benchmarks",
-  "tab.history": "History",
 
   // Display mode confirmation
   "displayConfirm.title": "Keep the new display mode?",
@@ -84,21 +83,6 @@ export const en = {
   "displayConfirm.dontKeep": "Don't keep",
 
   // Change history
-  "history.title": "What fpstune changed",
-  "history.intro": "Every setting fpstune changed in this session. Nothing is stored: closing the app clears this list. Reset to default writes the setting's own default back — the Windows default, the driver default or the game default.",
-  "history.loading": "Reading the history…",
-  "history.error": "Could not read the history: {reason}",
-  "history.empty": "fpstune has not changed anything in this session yet.",
-  "history.active": "Still changed by fpstune",
-  "history.reverted": "Already put back",
-  "history.action.apply": "Applied",
-  "history.action.reset": "Reset to default",
-  "history.action.revert": "Reverted",
-  "history.value": "set to {value}",
-  "history.resetNamed": "Reset {name} to its default",
-  "history.selectNamed": "Select {name}",
-  "history.selectAll": "Select all",
-  "history.resetSelected": "Reset selected to default ({count})",
 
   // Detection notice
   "detection.failedOne": "1 setting could not be checked on this machine",

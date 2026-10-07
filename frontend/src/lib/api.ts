@@ -1086,28 +1086,3 @@ export const updateApi = {
     fetchJson<UpdateInstallResult>("/update/install", { method: "POST" }),
 };
 
-/** One setting fpstune changed this session: its latest change. */
-export interface HistorySetting {
-  setting_id: string;
-  last_action: "apply" | "reset" | "revert";
-  value: unknown;
-  /** Unix seconds. */
-  at: number;
-}
-
-export interface HistoryEntry {
-  setting_id: string;
-  action: "apply" | "reset" | "revert";
-  value: unknown;
-  at: number;
-}
-
-export interface HistoryResponse {
-  settings: HistorySetting[];
-  entries: HistoryEntry[];
-}
-
-export const historyApi = {
-  /** Every change fpstune made on this machine, across runs. */
-  get: () => fetchJson<HistoryResponse>("/history"),
-};

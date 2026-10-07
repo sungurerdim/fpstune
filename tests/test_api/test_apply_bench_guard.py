@@ -71,7 +71,7 @@ class TestApplyWaitsForBench:
             patch("fpstune.api.routes.settings._finalize_apply_response", _finalize_stub),
             patch("fpstune.utils.logger.log_activity", lambda m, *_: order.append(m)),
         ):
-            args, _ = settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+            args, _ = settings_apply.apply_and_finalize(_setting(), "off", MagicMock())
 
         assert args[3] is True
         assert order == [
@@ -95,7 +95,7 @@ class TestApplyWaitsForBench:
             patch("fpstune.api.routes.settings_apply.CommandExecutor.apply", _apply),
             patch("fpstune.api.routes.settings._finalize_apply_response", _finalize_stub),
         ):
-            settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+            settings_apply.apply_and_finalize(_setting(), "off", MagicMock())
         assert seen == [1]
         assert settings_apply.applies_in_flight() == 0
 
@@ -120,7 +120,7 @@ class TestApplyWaitsForBench:
             ),
             patch("fpstune.api.routes.settings._finalize_apply_response", _finalize_stub),
         ):
-            settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+            settings_apply.apply_and_finalize(_setting(), "off", MagicMock())
         assert seen_while_waiting == [1]
         assert settings_apply.applies_in_flight() == 0
 
@@ -135,7 +135,7 @@ class TestApplyWaitsForBench:
             ),
             pytest.raises(RuntimeError),
         ):
-            settings_apply.apply_and_finalize(_setting(), "off", MagicMock(), "Applied")
+            settings_apply.apply_and_finalize(_setting(), "off", MagicMock())
         assert settings_apply.applies_in_flight() == 0
 
     def test_two_parallel_applies_do_not_block_each_other(
@@ -157,7 +157,7 @@ class TestApplyWaitsForBench:
             threads = [
                 threading.Thread(
                     target=settings_apply.apply_and_finalize,
-                    args=(_setting(), "off", MagicMock(), "Applied"),
+                    args=(_setting(), "off", MagicMock()),
                 )
                 for _ in range(2)
             ]

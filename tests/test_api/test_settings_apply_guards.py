@@ -332,13 +332,12 @@ class TestAbsenceSentinelsSkipVerification:
         assert verified is False
 
 
-@pytest.mark.parametrize(("label", "verb"), [("Applied", "apply"), ("Reset", "reset")])
-def test_a_failed_write_is_logged_with_its_verb_not_its_past_tense(label: str, verb: str) -> None:
+def test_a_failed_write_is_logged_with_its_verb_not_its_past_tense() -> None:
     """The log read "Failed to applied <name>" because the past-tense label was lowercased."""
     setting = _choice_setting()
     with patch("fpstune.api.routes.settings.log_activity") as log:
-        response = _finalize_apply_response(setting, "on", MagicMock(), False, "refused", label)
+        response = _finalize_apply_response(setting, "on", MagicMock(), False, "refused")
 
     assert response.success is False
     message = log.call_args.args[0]
-    assert message == f"Failed to {verb} {setting.display_name}: refused"
+    assert message == f"Failed to apply {setting.display_name}: refused"

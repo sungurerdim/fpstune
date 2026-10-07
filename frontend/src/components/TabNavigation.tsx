@@ -12,7 +12,6 @@ import {
   Monitor,
   Gamepad2,
   Gauge,
-  History,
   Activity,
   ShieldCheck,
   ShieldAlert,
@@ -44,8 +43,6 @@ const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = 
   { id: "games", labelKey: "tab.games", icon: Gamepad2 },
   { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
   { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
-  // Last: what fpstune changed, and the way back from each change.
-  { id: "history", labelKey: "tab.history", icon: History },
 ];
 
 /**
@@ -169,7 +166,7 @@ export function TabNavigation() {
 
   return (
     <div className="sticky top-0 z-10 bg-background border-b border-border">
-      {/* Two rows until the window is wide enough for brand, seven labelled tabs
+      {/* Two rows until the window is wide enough for brand, six labelled tabs
           and the chrome on one line (about 1920px: the Turkish labels alone are
           1031px). Squeezed onto one row below that, the tabs were what gave way:
           their labels wrapped to three lines and the strip outgrew its box. */}

@@ -1,23 +1,22 @@
-"""fpstune keeps no history and no previous values on disk (#103).
+"""fpstune keeps no history and no previous values (#103, #107).
 
-The journal is this process's own log: it answers the History tab for the
-session and is empty after a restart. What earlier releases left behind
-(`originals.json`, `history.json`) is deleted at start-up, and nothing writes
-either file again.
+A reset is an apply of the setting's own default; nothing remembers what a
+setting held before, on disk or in memory, and there is no History tab. What
+earlier releases left behind (`originals.json`, `history.json`) is deleted at
+start-up, and nothing writes either file again.
 """
 
 from __future__ import annotations
 
+import importlib
 from pathlib import Path
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app, lifespan
-from fpstune.safety import history
-from fpstune.safety.history import ChangeJournal, remove_retired_files
+from fpstune.safety.retired_files import remove_retired_files
 from fpstune.settings.base import DefaultSource, DetectionResult
 from fpstune.utils.config import get_config_dir
 from tests.conftest import neutral_hardware_context
@@ -32,44 +31,22 @@ def _stored_state_files(root: Path) -> list[str]:
     )
 
 
-class TestJournalIsMemoryOnly:
-    def test_a_new_journal_is_empty_whatever_an_old_release_left_on_disk(self) -> None:
-        (get_config_dir() / "history.json").write_text(
-            '{"version": 1, "entries": [{"setting_id": "system:x", "action": "apply", '
-            '"value": 1, "at": 1}]}',
-            encoding="utf-8",
-        )
+class TestThereIsNoHistoryToAskFor:
+    """The in-memory change journal, its module and its endpoint are gone."""
 
-        assert ChangeJournal().entries() == []
+    def test_the_history_endpoint_is_gone(self) -> None:
+        client = TestClient(create_app(), raise_server_exceptions=False)
 
-    def test_recording_writes_nothing_under_the_config_directory(self) -> None:
-        journal = ChangeJournal()
-        journal.record("network:nagle_algorithm", "apply", "disabled")
-        journal.record("network:nagle_algorithm", "reset", "enabled")
+        assert client.get("/api/history").status_code == 404
 
-        assert _stored_state_files(get_config_dir()) == []
-        assert [(c.action, c.value) for c in journal.entries()] == [
-            ("reset", "enabled"),
-            ("apply", "disabled"),
-        ]
-        assert journal.latest()["network:nagle_algorithm"].action == "reset"
+    def test_the_journal_module_is_gone(self) -> None:
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("fpstune.safety.history")
 
-    def test_the_display_revert_is_logged_as_a_revert(self) -> None:
-        journal = ChangeJournal()
-        journal.record("display:mode", "revert", "not_native")
+    def test_no_route_in_the_schema_mentions_history(self) -> None:
+        paths = create_app().openapi()["paths"]
 
-        assert journal.entries()[0].action == "revert"
-
-    def test_the_journal_cannot_grow_without_bound(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        monkeypatch.setattr(history, "MAX_ENTRIES", 3)
-        journal = ChangeJournal()
-        for i in range(5):
-            journal.record(f"system:s{i}", "apply", i)
-        assert [c.setting_id for c in journal.entries()] == ["system:s4", "system:s3", "system:s2"]
-
-    def test_undo_is_not_an_action_the_journal_knows(self) -> None:
-        assert "Undo" not in history.ACTION_FOR_LABEL
-        assert set(history.ACTION_FOR_LABEL.values()) == {"apply", "reset"}
+        assert [p for p in paths if "history" in p] == []
 
 
 class TestRetiredFilesAreDeleted:
@@ -199,42 +176,5 @@ class TestNothingWritesThemAgain:
 
         assert scan.status_code == 200
         assert reset.status_code == 200 and reset.json()["success"] is True
-        # The reset (an apply of the default) did land on the in-memory journal...
-        assert [(c.setting_id, c.action) for c in history.get_change_journal().entries()] == [
-            ("core:fake", "apply")
-        ]
-        # ...and nothing reached the disk.
         assert _stored_state_files(get_config_dir()) == []
         assert "original_value" not in scan.json()["results"]["core:fake"]
-
-    def test_the_record_step_stays_in_memory(self) -> None:
-        """`_record_change` is the one writer of the journal; it must not persist."""
-        from fpstune.api.routes import settings as routes
-
-        routes._record_change(
-            SimpleNamespace(id="system:x", is_action=False, is_readonly=False), "Applied", "off"
-        )
-
-        assert _stored_state_files(get_config_dir()) == []
-        assert history.get_change_journal().entries()[0].setting_id == "system:x"
-
-
-class TestOnlyLandedChangesAreRecorded:
-    """Recorded from the one post-write path, and only for what can be put back."""
-
-    @staticmethod
-    def _record(**setting) -> list:
-        from fpstune.api.routes import settings as routes
-
-        defaults = {"id": "system:x", "is_action": False, "is_readonly": False}
-        routes._record_change(SimpleNamespace(**(defaults | setting)), "Applied", "off")
-        return history.get_change_journal().entries()
-
-    def test_a_tweak_is_recorded(self) -> None:
-        assert [(c.setting_id, c.action, c.value) for c in self._record()] == [
-            ("system:x", "apply", "off")
-        ]
-
-    @pytest.mark.parametrize("flag", ["is_action", "is_readonly"])
-    def test_actions_and_advisories_are_not_history(self, flag: str) -> None:
-        assert self._record(**{flag: True}) == []

@@ -120,10 +120,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     _ = app  # Reserved for future startup/shutdown hooks
     # Startup
     get_logger().info("fpstune API starting...")
-    # fpstune keeps no previous values and no history on disk (#103): delete what
+    # fpstune keeps no previous values and no history (#103, #107): delete what
     # an earlier release left behind, before anything could read it.
     try:
-        from fpstune.safety.history import remove_retired_files
+        from fpstune.safety.retired_files import remove_retired_files
 
         remove_retired_files()
     except OSError as exc:

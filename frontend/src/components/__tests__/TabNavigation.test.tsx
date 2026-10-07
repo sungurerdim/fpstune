@@ -37,11 +37,11 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     } as never);
   });
 
-  it("exposes exactly one tab strip over the seven tabs", () => {
+  it("exposes exactly one tab strip over the six tabs", () => {
     render(<TabNavigation />);
 
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    expect(tabButtons()).toHaveLength(7);
+    expect(tabButtons()).toHaveLength(6);
   });
 
   it("keeps every tab findable by the words on it, at any width", () => {
@@ -138,7 +138,7 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
   });
 
   it("takes a row of its own until the window can hold it beside the chrome", () => {
-    // Below 3xl the seven labels, the brand and the update/admin/theme chrome
+    // Below 3xl the six labels, the brand and the update/admin/theme chrome
     // cannot share one line; the strip is `basis-full` and wraps under them.
     render(<TabNavigation />);
 

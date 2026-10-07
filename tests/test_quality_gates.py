@@ -724,7 +724,7 @@ class TestRouteModuleCeiling:
 
     # Frozen at the H1 audit (2026-08-26), in lines; lowered as modules shrink.
     _CEILING = {
-        "src/fpstune/api/routes/settings.py": 750,
+        "src/fpstune/api/routes/settings.py": 700,
         "src/fpstune/api/routes/display.py": 200,
     }
 

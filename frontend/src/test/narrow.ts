@@ -6,7 +6,7 @@
  * commit e957523 ("no text spills, overlaps or slides off-screen at any width")
  * fixed three kinds of defect that were all one class-shaped cause:
  *
- *  - R1 `clipped-without-title` (fix 6, `HistoryTab`, `AudioSection`): a name
+ *  - R1 `clipped-without-title` (fix 6, `AudioSection`): a name
  *    clipped by `truncate` is unreadable in full unless a `title` carries it.
  *  - R2 `unbroken-without-wrap` (fix 7, `ActionRow`): a long unbroken token (a
  *    path, a command) spilled out of its row because nothing told it to wrap or

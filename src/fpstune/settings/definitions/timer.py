@@ -192,7 +192,9 @@ def _boot_guard(
         ],
         current_impact=current_impact,
         recommended_impact=recommended_impact,
-        scope=SettingScope.ESSENTIAL,
+        # Not ESSENTIAL: the conservative preset stays small, and this row edits the boot
+        # configuration, needs a reboot and does nothing on a machine no other tool touched.
+        scope=SettingScope.RECOMMENDED,
         category_order=order,
         effect=effect,
         # A guard puts a stock state back: it claims no gain, because the gain belongs

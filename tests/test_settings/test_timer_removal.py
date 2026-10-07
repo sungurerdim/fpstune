@@ -86,6 +86,17 @@ def test_a_boot_guard_only_ever_deletes_a_value(
     assert "bcdedit" not in setting.detect_command.lower()
 
 
+@pytest.mark.parametrize("setting_id", sorted(BOOT_GUARD_IDS))
+def test_boot_guard_stays_out_of_the_essential_preset(
+    registry: SettingsRegistry, setting_id: str
+) -> None:
+    # A guard edits the boot configuration, needs a reboot and is a no-op on a clean
+    # machine; in ESSENTIAL it would grow the conservative preset past its cap.
+    setting = registry.get(setting_id)
+    assert setting is not None
+    assert setting.scope is SettingScope.RECOMMENDED
+
+
 def test_global_timer_resolution_survives(registry: SettingsRegistry) -> None:
     # The same research that debunked the four validates this one: timer
     # resolution is the knob that actually affects frame pacing.

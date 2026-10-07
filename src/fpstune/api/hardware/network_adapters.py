@@ -10,6 +10,12 @@ translation can be exercised without a Windows machine attached.
 An adapter is identified by its PnpDevice ``InstanceId`` (C5). ``InterfaceIndex``
 travels with it because the netsh and Get-Net* commands take one, but it is never
 the identity: it is reassigned when adapters are enabled and disabled.
+
+Nothing in the inventory is matched against a name. ``Get-NetAdapter`` hands over the
+adapter's own ``PnPDeviceID``; the WMI and PnP records are joined on that id; and a
+device the network stack does not list (disabled in Device Manager) is told Wi-Fi from
+Ethernet by the numbers its driver INF declares, not by the words in its FriendlyName,
+which a non-English Windows translates.
 """
 
 from __future__ import annotations
@@ -46,72 +52,35 @@ _ADAPTER_INVENTORY_SCRIPT = """
         $_.InterfaceDescription -notlike '*Bluetooth*'
     }
 
-    # Cache all network PnpDevices once for efficiency
+    # Cache all network PnpDevices and WMI adapters once for efficiency
     $allNetPnp = Get-PnpDevice -Class Net -EA SilentlyContinue
+    $allWmi = @(Get-CimInstance -ClassName Win32_NetworkAdapter -EA SilentlyContinue)
+
+    # Only accept physical device IDs (PCI, USB, ACPI) - reject virtual (SWD, ROOT).
+    # These are bus prefixes, which no Windows language translates.
+    function Test-PhysicalDevice($id) {
+        if (-not $id) { return $false }
+        return ($id -like 'PCI\\*' -or $id -like 'USB\\*' -or $id -like 'ACPI\\*')
+    }
 
     foreach ($adapter in $netAdapters) {
-        $seenIds[$adapter.InterfaceDescription] = $true
         $idx = $adapter.InterfaceIndex
-        $adapterDesc = $adapter.InterfaceDescription
 
-        # Get PnpDevice InstanceId for this adapter (needed for enable/disable)
-        # IMPORTANT: Only accept physical device IDs (PCI, USB) - reject virtual (SWD, ROOT)
+        # The adapter's identity is its PnP device id, which Get-NetAdapter already
+        # carries (needed for enable/disable). Nothing here is matched by name: a
+        # description or FriendlyName is the driver's text, translated on a
+        # non-English Windows, so a join on it picked the wrong device or none.
         $pnpInstanceId = $null
-
-        # Helper function to check if InstanceId is a physical device
-        function Test-PhysicalDevice($id) {
-            if (-not $id) { return $false }
-            return ($id -like 'PCI\\*' -or $id -like 'USB\\*' -or $id -like 'ACPI\\*')
+        if (Test-PhysicalDevice $adapter.PnPDeviceID) {
+            $pnpInstanceId = $adapter.PnPDeviceID
+            $seenIds[$pnpInstanceId] = $true
         }
 
-        # Strategy 1: WMI Win32_NetworkAdapter using Description match (most reliable)
-        # This correctly maps adapter description to PNPDeviceID
-        # Also capture NetEnabled which is the authoritative hardware state
-        $wmiAdapter = Get-CimInstance -ClassName Win32_NetworkAdapter -EA SilentlyContinue | Where-Object {
-            $_.Description -eq $adapterDesc -and $_.PNPDeviceID -and (Test-PhysicalDevice $_.PNPDeviceID)
-        } | Select-Object -First 1
+        # WMI NetEnabled is the authoritative hardware state; joined on the same id.
         $wmiNetEnabled = $null
-        if ($wmiAdapter) {
-            $pnpInstanceId = $wmiAdapter.PNPDeviceID
-            $wmiNetEnabled = $wmiAdapter.NetEnabled
-        }
-
-        # Strategy 2: WMI using NetConnectionID (adapter name shown in Windows)
-        if (-not $pnpInstanceId) {
-            $escapedName = $adapter.Name -replace "'", "''"
-            $wmiAdapter = Get-CimInstance -ClassName Win32_NetworkAdapter -Filter "NetConnectionID='$escapedName'" -EA SilentlyContinue
-            if ($wmiAdapter -and $wmiAdapter.PNPDeviceID -and (Test-PhysicalDevice $wmiAdapter.PNPDeviceID)) {
-                $pnpInstanceId = $wmiAdapter.PNPDeviceID
-                if ($null -eq $wmiNetEnabled) { $wmiNetEnabled = $wmiAdapter.NetEnabled }
-            }
-        }
-
-        # Strategy 3: PnpDevice exact FriendlyName match (only physical devices)
-        if (-not $pnpInstanceId) {
-            $pnpDev = $allNetPnp | Where-Object {
-                $_.FriendlyName -eq $adapterDesc -and (Test-PhysicalDevice $_.InstanceId)
-            } | Select-Object -First 1
-            if ($pnpDev) { $pnpInstanceId = $pnpDev.InstanceId }
-        }
-
-        # Strategy 4: PnpDevice partial match (only physical devices)
-        if (-not $pnpInstanceId) {
-            $pnpDev = $allNetPnp | Where-Object {
-                $_.FriendlyName -and (Test-PhysicalDevice $_.InstanceId) -and (
-                    $_.FriendlyName -like "*$adapterDesc*" -or
-                    $adapterDesc -like "*$($_.FriendlyName)*"
-                )
-            } | Select-Object -First 1
-            if ($pnpDev) { $pnpInstanceId = $pnpDev.InstanceId }
-        }
-
-        # Strategy 5: Vendor-specific match from PnpDevice (only physical devices)
-        if (-not $pnpInstanceId -and $adapterDesc -match '(Realtek|Intel|Killer|Broadcom|Qualcomm|Marvell|Aquantia|NVIDIA)') {
-            $vendor = $Matches[1]
-            $pnpDev = $allNetPnp | Where-Object {
-                $_.FriendlyName -like "*$vendor*" -and (Test-PhysicalDevice $_.InstanceId)
-            } | Select-Object -First 1
-            if ($pnpDev) { $pnpInstanceId = $pnpDev.InstanceId }
+        if ($pnpInstanceId) {
+            $wmiAdapter = $allWmi | Where-Object { $_.PNPDeviceID -eq $pnpInstanceId } | Select-Object -First 1
+            if ($wmiAdapter) { $wmiNetEnabled = $wmiAdapter.NetEnabled }
         }
 
         # Get IP addresses
@@ -150,7 +119,7 @@ _ADAPTER_INVENTORY_SCRIPT = """
     }
 
     # Method 2: Get disabled/unknown adapters from PnpDevice (not in Get-NetAdapter)
-    $pnpDevices = Get-PnpDevice -Class Net -EA SilentlyContinue | Where-Object {
+    $pnpDevices = $allNetPnp | Where-Object {
         $_.FriendlyName -and
         $_.FriendlyName -notlike '*Miniport*' -and
         $_.FriendlyName -notlike '*Virtual*' -and
@@ -163,8 +132,8 @@ _ADAPTER_INVENTORY_SCRIPT = """
     }
 
     foreach ($pnp in $pnpDevices) {
-        # Skip if already found via Get-NetAdapter
-        if ($seenIds.ContainsKey($pnp.FriendlyName)) { continue }
+        # Skip if already found via Get-NetAdapter (same PnP device id)
+        if ($seenIds.ContainsKey($pnp.InstanceId)) { continue }
 
         # Determine status from PnpDevice
         $pnpStatus = $pnp.Status
@@ -177,7 +146,23 @@ _ADAPTER_INVENTORY_SCRIPT = """
         $isPhantom = ($pnpProblem -eq 45) -and ($pnp.InstanceId -like 'USB*')
         $isDisabled = ($pnpProblem -eq 22) -or ($pnpStatus -eq 'Error') -or ($pnpStatus -eq 'Degraded')
         $isEnabled = ($pnpStatus -eq 'OK' -and $pnpProblem -eq 0)
-        $mediaType = if ($pnp.FriendlyName -match 'Wi-Fi|Wireless') { 'Native 802.11' } else { '802.3' }
+
+        # Wi-Fi or Ethernet from the numbers the driver's INF declares, not from its
+        # name: NdisPhysicalMedium (*PhysicalMediaType: 9 = Native 802.11, 1 = wireless
+        # LAN, 14 = 802.3) and IANA ifType (*IfType: 71 = IEEE 802.11, 6 = Ethernet).
+        # The driver key stays bound to a disabled device, so they are readable here.
+        # A device whose driver key cannot be read has no medium: unknown, not Ethernet.
+        $physicalMedium = $null
+        $ifType = $null
+        $driverKeyName = (Get-PnpDeviceProperty -InstanceId $pnp.InstanceId -KeyName 'DEVPKEY_Device_Driver' -EA SilentlyContinue).Data
+        if ($driverKeyName) {
+            $driverKey = Get-ItemProperty -LiteralPath "HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Class\\$driverKeyName" -EA SilentlyContinue
+            if ($driverKey) {
+                $physicalMedium = $driverKey.'*PhysicalMediaType'
+                $ifType = $driverKey.'*IfType'
+            }
+        }
+        $mediaType = if ($physicalMedium -eq 9 -or $physicalMedium -eq 1 -or $ifType -eq 71) { 'Native 802.11' } elseif ($physicalMedium -eq 14 -or $ifType -eq 6) { '802.3' } else { '' }
 
         # Status string for UI - be specific about disabled vs phantom vs unknown
         # Only USB devices can be truly "phantom" (physically removed)
@@ -201,7 +186,7 @@ _ADAPTER_INVENTORY_SCRIPT = """
         $adminStr = if ($isEnabled) { 'Up' } elseif ($isPhantom) { 'NotConnected' } else { 'Down' }
 
         # Look up WMI NetEnabled for this PnpDevice
-        $pnpWmiAdapter = Get-CimInstance -ClassName Win32_NetworkAdapter -EA SilentlyContinue | Where-Object {
+        $pnpWmiAdapter = $allWmi | Where-Object {
             $_.PNPDeviceID -eq $pnp.InstanceId
         } | Select-Object -First 1
         $pnpWmiNetEnabled = if ($pnpWmiAdapter) { $pnpWmiAdapter.NetEnabled } else { $null }

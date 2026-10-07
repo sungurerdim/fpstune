@@ -905,21 +905,6 @@ class TestNoLocalizedTextParsing:
     # (relative path, substring on the same line) -> why it cannot be localized.
     _ALLOWED: dict[tuple[str, str], str] = {
         ("src/fpstune/api/hardware/network_adapters.py", "-notlike '*"): _ADAPTER_STRINGS,
-        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$adapterDesc*"'): (
-            "correlates two of the driver's own strings"
-        ),
-        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$($_.FriendlyName)*"'): (
-            "correlates two of the driver's own strings"
-        ),
-        ("src/fpstune/api/hardware/network_adapters.py", "(Realtek|Intel|Killer"): (
-            "vendor brand names inside the driver's own string"
-        ),
-        ("src/fpstune/api/hardware/network_adapters.py", '-like "*$vendor*"'): (
-            "vendor brand names inside the driver's own string"
-        ),
-        ("src/fpstune/api/hardware/network_adapters.py", "'Wi-Fi|Wireless'"): (
-            "fallback on the driver's own name where MediaType is absent"
-        ),
         ("src/fpstune/benchmark/event_scan.py", "$_.ProviderName -match"): (
             "an event provider's registered id — the name the driver published to ETW, "
             "not the sentence the event renders into, so no Windows language changes it"

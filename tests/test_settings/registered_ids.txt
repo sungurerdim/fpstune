@@ -368,6 +368,7 @@ privacy:copilot
 privacy:edge_telemetry
 privacy:feedback_reminders
 privacy:input_personalization
+privacy:location_tracking
 privacy:online_speech
 privacy:recall
 privacy:web_search_policy

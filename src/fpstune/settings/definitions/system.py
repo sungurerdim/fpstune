@@ -2290,7 +2290,7 @@ SYSTEM_RESERVED_STORAGE = SettingExecutor(
     risk_level="moderate",
     risk_warning="With the reserve off, a full disk can make a Windows update fail instead of using the reserved space.",
     sources=[
-        "https://learn.microsoft.com/en-us/windows/manage/reserved-storage",
+        "https://learn.microsoft.com/en-us/powershell/module/dism/get-windowsreservedstoragestate",
         "https://learn.microsoft.com/en-us/powershell/module/dism/set-windowsreservedstoragestate",
     ],
     current_impact="Enabled: part of the system drive is held back for updates",
@@ -3625,6 +3625,50 @@ PRIVACY_APP_TELEMETRY = SettingExecutor(
     apply_value_map={"disabled": "disable", "enabled": "enable"},
 )
 
+PRIVACY_LOCATION = SettingExecutor(
+    id="privacy:location_tracking",
+    category=SettingCategory.SYSTEM,
+    display_name="Location Service",
+    short_name="Device location",
+    description="Whether Windows and its apps can ask this PC where it is. Off, maps, weather and "
+    "automatic time zone stop knowing your position.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_value="enabled",
+    recommended_value="disabled",
+    requires_reboot=False,
+    evidence_level="likely",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/client-management/mdm/policy-csp-system#allowlocation",
+        "https://learn.microsoft.com/en-us/windows/privacy/manage-connections-from-windows-operating-system-components-to-microsoft-services#bkmk-location",
+    ],
+    current_impact="Enabled: apps can read this PC's location when they ask",
+    recommended_impact="Disabled: no app can read the location, so none reports it onward",
+    scope=SettingScope.COMPLETE,
+    category_order=28,
+    effect="Turns the Windows location service off for every account",
+    impact_scores={"privacy": "improved", "cpu_usage": -0.1},
+    # The machine-wide policy "Turn off location": 1 turns it off for every user, and
+    # no value is Windows' own behaviour (on). One DWORD, the same in every language.
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+        "name": "DisableLocation",
+        "hive": "HKLM",
+    },
+    value_map={1: "disabled", "1": "disabled", 0: "enabled", "0": "enabled", None: "enabled"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Windows\LocationAndSensors",
+        "name": "DisableLocation",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"disabled": 1, "enabled": None},
+)
+
 PRIVACY_SETTINGS: list[SettingExecutor] = [
     PRIVACY_ADVERTISING_ID,
     PRIVACY_ACTIVITY_HISTORY,
@@ -3641,6 +3685,7 @@ PRIVACY_SETTINGS: list[SettingExecutor] = [
     PRIVACY_ONLINE_SPEECH,
     PRIVACY_FEEDBACK_REMINDERS,
     PRIVACY_APP_TELEMETRY,
+    PRIVACY_LOCATION,
 ]
 
 PERF_STARTUP_DELAY = SettingExecutor(

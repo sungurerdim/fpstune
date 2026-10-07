@@ -701,6 +701,11 @@ export const settingsTr: Record<
     description:
       "Edge'in son penceresi kapandıktan sonra eklentiler ve site bildirimleri için çalışmaya devam edip etmediği. Kapatmak bu işlemleri de bitirir; bildirimler siz açana kadar bekler.",
   },
+  "privacy:location_tracking": {
+    name: "Konum hizmeti",
+    description:
+      "Windows ve uygulamalarının bu bilgisayardan konumunu isteyip isteyemediği. Kapalıyken haritalar, hava durumu ve otomatik saat dilimi konumunuzu bilemez.",
+  },
   "privacy:edge_telemetry": {
     name: "Edge telemetrisi",
     description:

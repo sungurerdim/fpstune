@@ -401,6 +401,7 @@ system:network_afd_receive_window
 system:network_afd_send_window
 system:network_dscp_qos
 system:onedrive_upload_limit
+system:reserved_storage
 system:startup_apps
 system:thermal_condition
 system:vbs_core_isolation

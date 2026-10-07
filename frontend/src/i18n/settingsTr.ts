@@ -656,6 +656,11 @@ export const settingsTr: Record<
     effect:
       "BIOS'ta Advanced > DRAM Configuration altında XMP/EXPO profilini Profile 1 veya en yükseği yapın",
   },
+  "system:reserved_storage": {
+    name: "Windows güncelleme ayrılmış alanı",
+    description:
+      "Windows'un güncellemelerin her zaman kurulabilmesi için ayırdığı disk alanı. Kapatmak bu alanı geri verir; güncellemeler o zaman kendi boş alanlarına ihtiyaç duyar.",
+  },
   "system:network_afd_receive_window": {
     name: "Ağ alma arabelleği",
     description:

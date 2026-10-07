@@ -2272,6 +2272,60 @@ SYSTEM_LARGE_SYSTEM_CACHE = SettingExecutor(
     apply_value_map={"applications": 0, "file_cache": 1},
 )
 
+SYSTEM_RESERVED_STORAGE = SettingExecutor(
+    id="system:reserved_storage",
+    category=SettingCategory.STORAGE,
+    display_name="Reserved Storage",
+    short_name="Windows update reserve",
+    description="Disk space Windows sets aside so updates always have room to install. "
+    "Turning it off gives that space back, and updates then need free space of their own.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_value="enabled",
+    recommended_value="disabled",
+    requires_reboot=False,
+    evidence_level="likely",
+    # The cost is real and only shows on a nearly full disk: an update that finds no
+    # room fails instead of using the reserve. Offered, never assumed.
+    risk_level="moderate",
+    risk_warning="With the reserve off, a full disk can make a Windows update fail instead of using the reserved space.",
+    sources=[
+        "https://learn.microsoft.com/en-us/windows/manage/reserved-storage",
+        "https://learn.microsoft.com/en-us/powershell/module/dism/set-windowsreservedstoragestate",
+    ],
+    current_impact="Enabled: part of the system drive is held back for updates",
+    recommended_impact="Disabled: the reserved space becomes free space on the drive",
+    scope=SettingScope.COMPLETE,
+    category_order=4,
+    min_os_build=19041,  # reserved storage arrived in Windows 10 2004
+    effect="Gives the space Windows reserves for updates back to the drive",
+    impact_scores={"disk_freed": "5-7GB"},
+    # ShippedWithReserves is the flag the Dism cmdlet flips: 1 = reserve on, 0 = off.
+    # A number, so the read is the same in every Windows language; an absent value is a
+    # Windows without the feature, not a reserve that is off.
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={
+        "path": r"SOFTWARE\Microsoft\Windows\CurrentVersion\ReserveManager",
+        "name": "ShippedWithReserves",
+        "hive": "HKLM",
+    },
+    value_map={1: "enabled", "1": "enabled", 0: "disabled", "0": "disabled", None: "not_available"},
+    # The supported way to change it. Windows refuses while an update is pending or
+    # being installed; that comes back as the reason, in the user's own language.
+    apply_type=DetectType.POWERSHELL,
+    apply_command=(
+        "try { "
+        "Set-WindowsReservedStorageState -State '%value%' -ErrorAction Stop; 'ok' "
+        "} catch { "
+        "'error:Windows would not change Reserved Storage. It cannot while an update is "
+        "pending or installing: restart to finish it, then try again. Windows said: ' + "
+        "($_.Exception.Message -replace '\\s+', ' ') }"
+    ),
+    apply_args={},
+    apply_value_map={"enabled": "Enabled", "disabled": "Disabled"},
+)
+
 SYSTEM_CONFIG_SETTINGS: list[SettingExecutor] = [
     SYSTEM_LARGE_SYSTEM_CACHE,
     SYSTEM_DRIVER_UPDATES_PROTECTION,
@@ -2287,6 +2341,7 @@ SYSTEM_CONFIG_SETTINGS: list[SettingExecutor] = [
     SYSTEM_XMP_EXPO,
     SYSTEM_THERMAL_CONDITION,
     SYSTEM_STARTUP_APPS,
+    SYSTEM_RESERVED_STORAGE,
     NETWORK_AFD_RECEIVE_WINDOW,
     NETWORK_AFD_SEND_WINDOW,
     NETWORK_DSCP_QOS,

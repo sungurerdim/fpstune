@@ -696,6 +696,11 @@ export const settingsTr: Record<
     description:
       "Edge'in oturum açılışında kendini önceden yükleyip daha hızlı açılmasını sağlayıp sağlamadığı. Önceden yüklenen işlemler Edge'i açmasanız da bellekte kalır.",
   },
+  "perf:edge_background_mode": {
+    name: "Edge arka planda çalışma",
+    description:
+      "Edge'in son penceresi kapandıktan sonra eklentiler ve site bildirimleri için çalışmaya devam edip etmediği. Kapatmak bu işlemleri de bitirir; bildirimler siz açana kadar bekler.",
+  },
   "privacy:edge_telemetry": {
     name: "Edge telemetrisi",
     description:

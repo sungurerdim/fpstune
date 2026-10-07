@@ -4034,6 +4034,49 @@ PERF_EDGE_STARTUP_BOOST = SettingExecutor(
     apply_value_map={"disabled": 0, "enabled": None},
 )
 
+PERF_EDGE_BACKGROUND_MODE = SettingExecutor(
+    id="perf:edge_background_mode",
+    category=SettingCategory.SYSTEM,
+    display_name="Edge Background Running",
+    short_name="Edge after close",
+    description="Whether Edge keeps running after its last window closes, for extensions and site notifications. "
+    "Off, it ends with its last window and site notifications wait until you open it.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_value="enabled",
+    recommended_value="disabled",
+    requires_reboot=False,
+    evidence_level="likely",
+    sources=[
+        "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/backgroundmodeenabled"
+    ],
+    current_impact="Enabled: Edge keeps running after it is closed, held in memory",
+    recommended_impact="Disabled: closing Edge ends it, so its memory is freed",
+    scope=SettingScope.RECOMMENDED,
+    category_order=85,
+    effect="Ends Edge completely when its last window closes",
+    impact_scores={"ram_saved": "30-100MB", "cpu_usage": -0.1},
+    # An Edge policy: absent is Edge's own behaviour (on), 0 turns it off. One DWORD,
+    # so the read is the same in every Windows language.
+    detect_type=DetectType.REGISTRY,
+    detect_command="",
+    detect_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Edge",
+        "name": "BackgroundModeEnabled",
+        "hive": "HKLM",
+    },
+    value_map={0: "disabled", "0": "disabled", 1: "enabled", "1": "enabled", None: "enabled"},
+    apply_type=DetectType.REGISTRY,
+    apply_command="",
+    apply_args={
+        "path": r"SOFTWARE\Policies\Microsoft\Edge",
+        "name": "BackgroundModeEnabled",
+        "hive": "HKLM",
+        "type": "REG_DWORD",
+    },
+    apply_value_map={"disabled": 0, "enabled": None},
+)
+
 PERFORMANCE_SETTINGS: list[SettingExecutor] = [
     SHUTDOWN_SERVICE_TIMEOUT,
     SHUTDOWN_APP_TIMEOUT,
@@ -4056,6 +4099,7 @@ PERFORMANCE_SETTINGS: list[SettingExecutor] = [
     PERF_FOCUS_ASSIST,
     PERF_VBS_CORE_ISOLATION,
     PERF_EDGE_STARTUP_BOOST,
+    PERF_EDGE_BACKGROUND_MODE,
 ]
 
 # =============================================================================

@@ -428,6 +428,64 @@ class TestBulkResetIsTheSameCall:
         # And the machine really holds each row's default now, not its recommendation.
         assert machine.state == {s.id: s.default_value for s in settings}
 
+    def test_each_verified_event_carries_the_state_with_the_backends_verdict(
+        self, client: TestClient
+    ) -> None:
+        """B15 (#107): a row learns its `is_optimized` from its own `verified`
+        event, so a bulk run updates rows as they finish and not only at the
+        end-of-run re-detect. One row is written its recommendation, the other
+        its default: the verdict must differ between them, and it is the
+        backend's, not a comparison the client makes."""
+        recommended, default = (
+            _real_choice_setting("system:verdict_recommended_probe"),
+            _real_choice_setting("system:verdict_default_probe"),
+        )
+        registry = MagicMock()
+        registry.get.side_effect = {s.id: s for s in (recommended, default)}.get
+        machine = _FakeMachine({recommended.id: "off", default.id: "on"})
+
+        with (
+            patch("fpstune.api.routes.settings_stream._get_registry", return_value=registry),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
+            patch("fpstune.api.routes.settings_stream._ensure_restore_point"),
+            patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
+            patch(
+                "fpstune.api.routes.settings_apply.CommandExecutor.apply",
+                side_effect=machine.apply,
+            ),
+            patch(
+                "fpstune.api.routes.settings.DetectionEngine.detect_one",
+                side_effect=machine.detect,
+            ),
+        ):
+            response = client.post(
+                "/api/settings/bulk/stream-apply",
+                json={
+                    "settings": {
+                        recommended.id: recommended.recommended_value,
+                        default.id: default.default_value,
+                    }
+                },
+            )
+
+        events = _parse_sse(response.text)
+        verified = {e["id"]: e for e in events if e.get("event") == "verified"}
+        assert set(verified) == {recommended.id, default.id}
+        # The shape /detect and /apply answer with, whole.
+        assert verified[recommended.id]["state"]["setting_id"] == recommended.id
+        assert verified[recommended.id]["state"]["current"] == "on"
+        assert verified[recommended.id]["state"]["is_optimized"] is True
+        assert verified[default.id]["state"]["current"] == "off"
+        assert verified[default.id]["state"]["is_optimized"] is False
+        assert verified[default.id]["state"]["recommended"] == "on"
+        assert verified[default.id]["state"]["default"] == "off"
+        # `verified` precedes `done`, so the row is live before the run ends.
+        order = [e["event"] for e in events]
+        assert order.index("verified") < order.index("done")
+
     def test_a_row_with_no_derived_default_is_refused_and_nothing_is_written(
         self, client: TestClient
     ) -> None:

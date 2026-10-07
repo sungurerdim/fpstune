@@ -3,7 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import { errorMessage, settingsApi, type ApplyResponse } from "../lib/api";
-import { bulkTargets } from "../lib/bulkStream";
+import { bulkTargets, verifiedState } from "../lib/bulkStream";
 import { detectionManager } from "../lib/detection-manager";
 import { hardwareManager } from "../lib/hardware-manager";
 import { useStore, type BulkAction } from "../store";
@@ -31,10 +31,13 @@ function failedResponse(setting: Setting, error: string): ApplyResponse {
  *   re-detect, `is_optimized` included. Nothing here compares a value to the
  *   recommendation.
  * - `run(action, ids)`: one `POST /settings/bulk/stream-apply` with
- *   `{id: value}` (`bulkTargets`), each row's outcome as it streams, then one
- *   batched re-detect of every id because the stream's events carry the read-back
- *   value but not the verdict. The run lives in the store, so switching tabs
- *   neither loses its Stop nor lets a second run start over it.
+ *   `{id: value}` (`bulkTargets`), each row's outcome as it streams. A `verified`
+ *   event carries the row's whole `SettingState` (the backend's verdict,
+ *   `is_optimized` included), which goes into the store as it arrives, so a row
+ *   is live before `done`. At the end, one batched re-detect of every id still runs:
+ *   the rows with no state (failed, skipped, never reached) need it, and a
+ *   verified row's state predates the writes that ran beside it. The run lives in the store, so
+ *   switching tabs neither loses its Stop nor lets a second run start over it.
  *
  * Every outcome gets a visible confirmation, and every run invalidates
  * ["activity"] so successes and failures surface in the drawer.
@@ -131,7 +134,9 @@ export function useApply() {
           failed > 0 ? "warning" : "success",
         );
         // Every id is read again, failures included: a failed write can still
-        // have changed part of what it touched.
+        // have changed part of what it touched, and a verified row's state
+        // predates the writes that ran beside it, so this is the one reading
+        // taken after the whole run settled.
         void detectionManager.redetectSettings(ids);
         if (ids.some(isDisplaySetting)) hardwareManager.refreshMonitors();
       };
@@ -146,6 +151,10 @@ export function useApply() {
             state.setOperationStatus(id, "running");
           } else if (event.event === "verified") {
             state.setOperationStatus(id, "verified");
+            const settingState = verifiedState(event);
+            if (settingState !== null) {
+              state.applySettingStates({ [id]: settingState });
+            }
           } else if (event.event === "failed") {
             state.setOperationStatus(id, "failed", (event.error as string) || undefined);
           } else if (event.event === "skipped") {

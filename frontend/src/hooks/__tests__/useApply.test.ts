@@ -421,13 +421,13 @@ describe("useApply.run (bulk over the one stream)", () => {
     act(() => onEvent({ event: "started", id: "timer:hpet" }));
     expect(useStore.getState().operationStatus["timer:hpet"]).toBe("running");
     act(() => {
-      onEvent({ event: "verified", id: "timer:hpet", matches: true, current_value: "disabled" });
+      onEvent({ event: "verified", id: "timer:hpet", matches: true, state: null });
       onEvent({ event: "failed", id: "power:usb", error: "access denied" });
     });
     expect(useStore.getState().operationStatus["timer:hpet"]).toBe("verified");
     expect(useStore.getState().operationStatus["power:usb"]).toBe("failed");
-    // The stream carries the read-back but not the verdict, so the store's
-    // verdict is untouched until the re-detect: nothing was recomputed here.
+    // A `verified` event with no state gives the row nothing to show, so its
+    // verdict stays the store's until the re-detect: nothing is recomputed here.
     expect(useStore.getState().settings.get("timer:hpet")?.isOptimized).toBe(false);
     expect(redetect).not.toHaveBeenCalled();
 
@@ -438,6 +438,53 @@ describe("useApply.run (bulk over the one stream)", () => {
     expect(
       useStore.getState().notifications.some((n) => n.type === "warning" && n.message === "1 done, 1 failed."),
     ).toBe(true);
+  });
+
+  it("updates a row from its verified event's state before done (B15)", () => {
+    // The defect this guards: the stream carried the read-back value but not the
+    // verdict, so every row of a bulk run sat on its old badge until the
+    // end-of-run re-detect, however long the run took.
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useApply(), { wrapper: Wrapper });
+    act(() => result.current.run("apply", ["timer:hpet", "power:usb"]));
+    const onEvent = bulkStreamApply.mock.calls[0][1] as (e: Record<string, unknown>) => void;
+    const onDone = bulkStreamApply.mock.calls[0][2] as () => void;
+    expect(useStore.getState().settings.get("timer:hpet")?.isOptimized).toBe(false);
+
+    act(() =>
+      onEvent({
+        event: "verified",
+        id: "timer:hpet",
+        matches: true,
+        state: stateOf("disabled"),
+      }),
+    );
+
+    // No `done` yet, no re-detect yet: the row is already the backend's verdict.
+    const row = useStore.getState().settings.get("timer:hpet");
+    expect(row?.currentValue).toBe("disabled");
+    expect(row?.isOptimized).toBe(true);
+    expect(row?.status).toBe("optimal");
+    expect(useStore.getState().bulkRun).not.toBeNull();
+    expect(redetect).not.toHaveBeenCalled();
+    // The row that has not reported keeps what it had.
+    expect(useStore.getState().settings.get("power:usb")?.isOptimized).toBe(false);
+
+    // The backend's word wins over a comparison: current equals the
+    // recommendation here, and the state still says not optimized.
+    act(() =>
+      onEvent({
+        event: "verified",
+        id: "power:usb",
+        matches: true,
+        state: { ...stateOf("off"), setting_id: "power:usb", recommended: "off", is_optimized: false },
+      }),
+    );
+    expect(useStore.getState().settings.get("power:usb")?.isOptimized).toBe(false);
+
+    // The end-of-run re-detect still runs, over every id.
+    act(() => onDone());
+    expect(redetect).toHaveBeenCalledWith(["timer:hpet", "power:usb"]);
   });
 
   it("marks every row the stream never reached as failed, with the reason, when it dies", () => {

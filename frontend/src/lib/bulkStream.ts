@@ -10,7 +10,7 @@
  * `false`, which the backend reads as "do not run" and reports as success.
  */
 
-import type { ApplyResponse } from "./api";
+import type { ApplyResponse, SettingState } from "./api";
 import { isTweakSuboptimal } from "./tweakStatus";
 import { useStore, type BulkAction } from "../store";
 import { canResetSetting, type Setting, type SettingId } from "../types/setting";
@@ -22,6 +22,23 @@ export interface BulkApplyResponse {
   success_count: number;
   error_count: number;
   requires_reboot: boolean;
+}
+
+/**
+ * The `SettingState` a streamed `verified` event carries, or null when it has none.
+ *
+ * The backend builds it with the same builder `/detect` and `/apply` use, so the
+ * row can take it as it came (`is_optimized` included) the moment it lands.
+ * Null is a real answer: no re-detect happened for that row, and the caller then
+ * leaves it for the end-of-run re-detect rather than guessing a verdict.
+ */
+export function verifiedState(event: Record<string, unknown>): SettingState | null {
+  const state = event.state;
+  if (typeof state !== "object" || state === null) return null;
+  const candidate = state as Partial<SettingState>;
+  return typeof candidate.setting_id === "string" && typeof candidate.is_optimized === "boolean"
+    ? (candidate as SettingState)
+    : null;
 }
 
 /**

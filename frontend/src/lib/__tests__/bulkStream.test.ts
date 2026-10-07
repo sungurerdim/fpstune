@@ -5,7 +5,7 @@
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
-import { bulkTargets } from "../bulkStream";
+import { bulkTargets, verifiedState } from "../bulkStream";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
@@ -92,5 +92,35 @@ describe("bulkTargets", () => {
     expect(bulkTargets(["ghost:setting"], "apply")).toEqual({
       "ghost:setting": null,
     });
+  });
+});
+
+describe("verifiedState", () => {
+  const state = {
+    setting_id: "timer:hpet",
+    current: "disabled",
+    applicable: true,
+    applicable_reason: "",
+    recommended: "disabled",
+    default: "enabled",
+    default_source: "windows_stock",
+    is_optimized: true,
+    error: null,
+    finding: null,
+  };
+
+  it("returns the state a verified event carries, verdict included", () => {
+    expect(verifiedState({ event: "verified", id: "timer:hpet", state })).toEqual(state);
+  });
+
+  it("returns null when the event has no state, rather than inventing one", () => {
+    // A row with no re-detect (null state) must fall to the end-of-run re-detect.
+    expect(verifiedState({ event: "verified", id: "timer:hpet", state: null })).toBeNull();
+    expect(verifiedState({ event: "verified", id: "timer:hpet" })).toBeNull();
+  });
+
+  it("returns null for a state with no verdict, never a guess from current and recommended", () => {
+    const { is_optimized: _verdict, ...noVerdict } = state;
+    expect(verifiedState({ event: "verified", id: "timer:hpet", state: noVerdict })).toBeNull();
   });
 });

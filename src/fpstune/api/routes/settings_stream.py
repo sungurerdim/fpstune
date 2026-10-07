@@ -135,6 +135,12 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
     apply a *different* rule than the one that produced `response.success` (it
     misses the DNS-propagation and service-absent tolerances), so the stream
     could report success=True beside matches=False.
+
+    `verified` carries the whole `SettingState` the re-detect produced — the object
+    `/detect` and `/apply` answer with, built once by `settings.setting_state` — so
+    the row can show the backend's verdict (`is_optimized`) the moment it lands,
+    not only at the end-of-run re-detect. No second builder: it is
+    `response.state`, serialised. `null` when no re-detect happened.
     """
     current_value = response.state.current if response.state is not None else None
     if response.skipped:
@@ -171,7 +177,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
                 "event": "verified",
                 "id": setting_id,
                 "matches": response.verified,
-                "current_value": current_value,
+                "state": response.state.model_dump(mode="json") if response.state else None,
             }
         ),
     ]

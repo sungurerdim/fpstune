@@ -9,8 +9,8 @@
  * requests a minute to be told nothing happened, all session.
  *
  * `staleTime` stays at the 5 s C7 gives dynamic data: it is what makes a second
- * mount of the card (Home and the Benchmarks tab both read this) reuse the
- * answer the first one already has instead of asking again.
+ * mount of the panel reuse the answer the first one already has instead of
+ * asking again.
  */
 
 import { useQuery } from "@tanstack/react-query";

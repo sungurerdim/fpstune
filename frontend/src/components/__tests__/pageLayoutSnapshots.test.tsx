@@ -20,7 +20,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { layoutOutline, setViewport } from "../../test/layoutOutline";
-import { HomeTab } from "../HomeTab";
 import { SettingsTab } from "../SettingsTab";
 import { GameTweaksTab } from "../GameTweaksTab";
 import { HardwarePanel } from "../HardwarePanel";
@@ -190,30 +189,6 @@ interface Page {
 }
 
 const PAGES: Page[] = [
-  {
-    name: "Home",
-    adapts: true,
-    mount: async () => {
-      setStore([
-        ...pair("system:home"),
-        ...pair("system:advisory", {
-          isReadonly: true,
-          effect: "Move the cable to a Cat 6 run",
-        }),
-        ...pair("cleanup:cache", {
-          isAction: true,
-          category: "maintenance",
-          currentValue: "ready|800 MB",
-          groupId: "windows",
-          groupLabel: "Windows",
-          groupOrder: 1,
-        }),
-      ]);
-      const view = render(<HomeTab />);
-      await screen.findByTestId("home-advisory-grid");
-      return view;
-    },
-  },
   {
     name: "Software",
     adapts: true,

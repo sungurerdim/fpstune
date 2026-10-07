@@ -10,13 +10,17 @@
  *   the not-optimized rows up to that level (`levelTargets`).
  *
  * Anything wider than one row asks first and names the count; a target marked
- * Advanced keeps its own question, whose answer is "apply anyway".
+ * Advanced keeps its own question, whose answer is "apply anyway". A level
+ * button (the whole page) also offers a System Restore point first, and a
+ * target that spends picture or sound quality has its cost listed in the
+ * question itself, before anything runs.
  */
 
 import { useMemo, useState, type ReactNode } from "react";
 import { Loader2, RotateCcw, Square, X, Zap } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
+import { api, errorMessage } from "../lib/api";
 import { useStore, type BulkAction } from "../store";
 import { useApply } from "../hooks/useApply";
 import { levelTargets, scopeTargets, type ScopeLevel } from "../lib/bulkStream";
@@ -28,11 +32,13 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
 const LEVELS: readonly ScopeLevel[] = ["essential", "recommended", "complete"];
 
 /** The question a button has opened: what it would do, to which rows. */
-interface Pending {
+export interface Pending {
   action: BulkAction;
   targets: Setting[];
   /** The scope in words, for the question's title. */
   scopeName: string;
+  /** Set by a level button: a page-wide write, which offers a restore point first. */
+  level?: ScopeLevel;
 }
 
 export interface SelectionToolbarProps {
@@ -51,8 +57,10 @@ export function SelectionToolbar({ settings: scope, name = "" }: SelectionToolba
   const clearSelection = useStore((s) => s.clearSelection);
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
+  const addNotification = useStore((s) => s.addNotification);
   const { run, stop, isRunning } = useApply();
   const [pending, setPending] = useState<Pending | null>(null);
+  const [restoreFirst, setRestoreFirst] = useState(true);
 
   const selected = useMemo(
     () =>
@@ -94,45 +102,41 @@ export function SelectionToolbar({ settings: scope, name = "" }: SelectionToolba
   if (!hasSelection && levels === null) return null;
   const selectionName = t("toolbar.selected", { count: selectedSettingIds.size });
 
-  const advanced = pending?.action === "apply" && pending.targets.some((s) => s.riskLevel === "advanced");
-  const resetDomain = scopeDomain(pending?.targets ?? []);
-  const title = pending === null
-    ? ""
-    : advanced
-      ? t("toolbar.advancedTitle")
-      : t(`actions.confirm.${pending.action}`, { count: pending.targets.length, name: pending.scopeName });
-  const body = pending === null
-    ? ""
-    : advanced
-      ? t("toolbar.advancedBody")
-      : pending.action === "reset"
-        ? t(`actions.confirmBody.reset.${resetDomain}`)
-        : t("actions.confirmBody.apply");
-  const confirmLabel = pending === null
-    ? ""
-    : advanced
-      ? t("toolbar.applyAnyway")
-      : t(`actions.${pending.action}Short`);
+  const confirm = async () => {
+    const asked = pending;
+    setPending(null);
+    if (!asked) return;
+    if (asked.level && restoreFirst) {
+      try {
+        const result = await api.createRestorePoint();
+        if (!result.success) throw new Error(result.message);
+      } catch (error) {
+        // The user asked for the safety net; applying without it would honour
+        // the button and betray the checkbox.
+        addNotification(t("toolbar.restoreFailed", { reason: errorMessage(error) }), "error");
+        return;
+      }
+    }
+    run(
+      asked.action,
+      asked.targets.map((s) => s.id),
+    );
+  };
 
   return (
     <Bar>
-      <ConfirmDialog
-        open={pending !== null}
-        title={title}
-        confirmLabel={confirmLabel}
-        onConfirm={() => {
-          if (pending) {
-            run(
-              pending.action,
-              pending.targets.map((s) => s.id),
-            );
-          }
-          setPending(null);
-        }}
-        onCancel={() => setPending(null)}
-      >
-        {body}
-      </ConfirmDialog>
+      <BulkConfirm pending={pending} onConfirm={() => void confirm()} onCancel={() => setPending(null)}>
+        {pending?.level && (
+          <label className="flex items-center gap-2 pt-1 text-xs">
+            <input
+              type="checkbox"
+              checked={restoreFirst}
+              onChange={(event) => setRestoreFirst(event.target.checked)}
+            />
+            {t("scope.restoreFirst")}
+          </label>
+        )}
+      </BulkConfirm>
 
       {hasSelection && (
         <>
@@ -196,13 +200,85 @@ export function SelectionToolbar({ settings: scope, name = "" }: SelectionToolba
                 }
                 icon={primary ? <Zap className="h-3.5 w-3.5" aria-hidden /> : undefined}
                 variant={primary ? "primary" : "outline"}
-                onPress={() => setPending({ action: "apply", targets, scopeName: name })}
+                onPress={() => setPending({ action: "apply", targets, scopeName: name, level })}
               />
             );
           })}
         </div>
       )}
     </Bar>
+  );
+}
+
+/**
+ * The one question every bulk button asks before it writes: what will happen,
+ * to how many rows. A target marked Advanced keeps its own question, whose
+ * answer is "apply anyway". A target that spends picture or sound quality has
+ * its own cost sentence listed here, so what is given up is on screen before
+ * anything runs. Shared by this bar and by a category's own Apply, so the
+ * wording and the gate cannot differ between them; `children` is the caller's
+ * extra line (the restore-point choice).
+ */
+export function BulkConfirm({
+  pending,
+  onConfirm,
+  onCancel,
+  children,
+}: {
+  pending: Pending | null;
+  onConfirm: () => void;
+  onCancel: () => void;
+  children?: ReactNode;
+}) {
+  const { t } = useT();
+  const advanced =
+    pending?.action === "apply" && pending.targets.some((s) => s.riskLevel === "advanced");
+  const costs =
+    pending?.action === "apply"
+      ? [...new Set(pending.targets.map((s) => s.perceptibleCost).filter((c): c is string => !!c))]
+      : [];
+  const resetDomain = scopeDomain(pending?.targets ?? []);
+  const title = pending === null
+    ? ""
+    : advanced
+      ? t("toolbar.advancedTitle")
+      : t(`actions.confirm.${pending.action}`, { count: pending.targets.length, name: pending.scopeName });
+  const body = pending === null
+    ? ""
+    : advanced
+      ? t("toolbar.advancedBody")
+      : pending.action === "reset"
+        ? t(`actions.confirmBody.reset.${resetDomain}`)
+        : t("actions.confirmBody.apply");
+  const confirmLabel = pending === null
+    ? ""
+    : advanced
+      ? t("toolbar.applyAnyway")
+      : t(`actions.${pending.action}Short`);
+
+  return (
+    <ConfirmDialog
+      open={pending !== null}
+      title={title}
+      confirmLabel={confirmLabel}
+      onConfirm={onConfirm}
+      onCancel={onCancel}
+    >
+      <div className="space-y-2">
+        <p>
+          {body}
+          {costs.length > 0 && ` ${t("scope.whatYouGiveUp")}`}
+        </p>
+        {costs.length > 0 && (
+          <ul className="list-disc pl-4 space-y-1 max-h-48 overflow-y-auto">
+            {costs.map((cost) => (
+              <li key={cost}>{cost}</li>
+            ))}
+          </ul>
+        )}
+        {children}
+      </div>
+    </ConfirmDialog>
   );
 }
 

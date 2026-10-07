@@ -13,8 +13,6 @@
 export const en = {
   // First run
   "firstRun.title": "Welcome to fpstune",
-  "firstRun.what":
-    "fpstune tunes this machine for the best gaming experience it is capable of — frame rate first, derived from your own hardware, never from a generic preset.",
   "firstRun.nothingChanged": "Nothing has been changed yet.",
   "firstRun.nothingChangedBody": "Opening the app only reads your current settings. Every change waits for your click, every row can be reset to its default, and the bulk buttons offer a System Restore point first.",
   "firstRun.admin":
@@ -22,21 +20,7 @@ export const en = {
   "firstRun.dismiss": "Got it — show me the machine",
 
   // The two buttons
-  "scope.competitive": "Competitive Max",
-  "scope.competitiveHint":
-    "The most frames without touching what you can see or hear.",
-  "scope.absolute": "Absolute Max",
-  "scope.absoluteHint":
-    "Every setting to its frame-rate extreme — quality is spent, and the cost is listed before anything runs.",
-  "scope.competitiveConfirmTitle": "Apply Competitive Max? ({count} settings)",
-  "scope.competitiveConfirmBody":
-    "Applies every essential and recommended tweak — the most frames this machine can reach without changing anything you can see or hear in-game. Settings that spend visual or audio quality are left alone.",
-  "scope.absoluteConfirmTitle": "Apply Absolute Max? ({count} settings)",
-  "scope.absoluteConfirmBody":
-    "Pushes every setting to its frame-rate extreme, including the ones that spend picture and sound quality.",
   "scope.whatYouGiveUp": "What you give up:",
-  "scope.apply": "Apply",
-  "scope.spendIt": "Spend it",
   "scope.restoreFirst": "Create a System Restore point first (recommended)",
 
   // Tabs
@@ -68,7 +52,6 @@ export const en = {
   "update.unreachable": "Could not check for updates: {reason}",
   "header.admin": "Admin",
   "header.notAdmin": "Not Admin",
-  "tab.home": "Home",
   "tab.software": "Software Tweaks",
   "tab.hardware": "Hardware Tweaks",
   "tab.games": "Game Tweaks",
@@ -109,7 +92,6 @@ export const en = {
   // Common actions
   "action.apply": "Apply",
   "action.cancel": "Cancel",
-  "action.runAll": "Run All",
   "action.keep": "Keep",
   "action.reset": "Reset to default",
 
@@ -136,6 +118,7 @@ export const en = {
   "toolbar.streamFailed": "The bulk run stopped: {reason}",
   "toolbar.doneSummary": "{done} done, {failed} failed.",
   "toolbar.stopped": "Stopped. Settings not yet started were left as they were.",
+  "toolbar.restoreFailed": "Restore point failed — nothing was applied. {reason}",
   "row.queued": "queued",
   "row.notApplicable": "N/A",
   "row.detecting": "Reading…",
@@ -232,55 +215,6 @@ export const en = {
   "impact.storage": "Storage",
   "impact.privacy": "Privacy",
   "impact.visual": "Visual",
-
-  // Home
-  "home.hardwareTweaks": "Hardware tweaks",
-  "home.hardwareSubtitle": "GPU, display, adapters, storage, audio",
-  "home.softwareTweaks": "Software tweaks",
-  "home.softwareSubtitle": "Windows, services, launchers",
-  "home.gameTweaks": "Game tweaks",
-  "home.gameSubtitle": "Settings inside a game's own config file",
-  "home.readingSettings": "Reading your current settings…",
-  "home.allOptimized": "Everything applicable is already optimized.",
-  "home.cleanupTitle": "Available disk cleanup actions",
-  // The same card, once maintenance that is overdue is in it: a TRIM run
-  // reclaims nothing, so the cleanup-only heading would misname its own rows.
-  "home.cleanupUpkeepTitle": "Disk cleanup and upkeep",
-  "home.measuringReclaim": "Measuring what can be reclaimed…",
-  "home.nothingToReclaim": "Nothing to reclaim right now.",
-  "home.rowMeasuring": "— measuring what can be reclaimed…",
-  "home.advisories": "Needs your attention",
-  "home.advisoriesHint": "findings fpstune can detect but only you can change",
-  "home.advisoriesClear": "Checked, nothing to change",
-  "home.advisoriesClearHint":
-    "hardware fpstune checked and found already correct",
-  "home.whatToDo": "What you can do:",
-  "home.advisoriesUnread": "Could not be checked",
-  "home.advisoriesUnreadHint":
-    "these say nothing about this machine either way",
-  "home.advisoryUnreadReason": "Nothing was read: {reason}",
-  "home.advisoryUnreadNeedsAdmin":
-    "Nothing was read. fpstune is not running as Administrator, which several checks need.",
-  "home.advisoryUnreadNoReason":
-    "Nothing was read, so there is no finding here to act on.",
-  "home.alreadyOptimized": "Already optimized",
-  "home.detecting":
-    "Detecting your settings — {done}/{total} categories read, the lists and totals fill in as results arrive…",
-  "home.detectingProgress": "Detection progress across setting categories",
-  "home.statIdeal": "settings at their ideal value",
-  "home.statIdealHint":
-    "{changed} fpstune changed · {stock} were already correct",
-  "home.statGuards": " · {count} drift guards standing watch",
-  "home.measured": "Measured",
-  "home.noMeasurement":
-    "no frame rate measured yet — open Benchmarks to run the test scene",
-  "home.sceneLabel": "Test scene, at this display's resolution",
-  "home.ofTarget": "{pct}% of the {target} fps this display can show",
-  "home.noTarget": "no display target — panel refresh unknown",
-  "home.claimed": "Claimed by settings not yet applied",
-  "home.latencyTweaks": "latency tweaks",
-  "home.memoryTweaks": "memory tweaks",
-  "home.diskToReclaim": "disk to reclaim",
 
   // Cleanup & maintenance surfaces
   "run.percent": "{value}%",
@@ -586,8 +520,6 @@ export const en = {
   "category.manualSteps": "Manual steps ({count})",
 
   // What fpstune changed, measured (the benchmark ledger)
-  "ledger.homeTitle": "What fpstune changed, measured",
-  "ledger.homeHint": "One area, one instrument. Never a sum of the two.",
   "ledger.panelTitle": "Measured on this machine",
   "ledger.panelHint": "Kept on disk, so a reload does not lose the baseline.",
   "ledger.area": "Area",
@@ -606,7 +538,6 @@ export const en = {
   "ledger.samples": "{before} and {after} readings",
   "ledger.loading": "Reading what this machine has measured…",
   "ledger.unreachable": "The measurement ledger could not be read.",
-  "ledger.noAreas": "No area has been reported yet.",
   "ledger.triggerBaseline": "Baseline",
   "ledger.triggerAfter": "After your changes",
   "ledger.triggerManual": "Measurement",
@@ -648,9 +579,6 @@ export const en = {
   "metric.needYou": "need you",
   "metric.toFix": "to fix",
   "metric.total": "total",
-  "metric.settings": "settings",
-  "metric.measuring": "measuring",
-  "metric.toRun": "to run",
   "actions.confirm.apply": "Apply {count} tweaks on {name}?",
   "actions.confirm.reset": "{count} settings will return to their defaults.",
   "actions.confirmBody.reset.software": "Every setting that differs from what Windows ships is put back to it. Each row shows its own result.",

@@ -8,17 +8,19 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent } from "../../test/utils";
+import { render, screen, fireEvent, waitFor } from "../../test/utils";
 import { SelectionToolbar } from "../SelectionToolbar";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
 const bulkStreamApply = vi.fn((_settings: Record<string, unknown>) => () => {});
+const restorePoint = vi.fn();
 
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return {
     ...actual,
+    api: { ...actual.api, createRestorePoint: () => restorePoint() },
     settingsApi: {
       ...actual.settingsApi,
       // Only the {id: value} map matters here; the SSE callbacks are the
@@ -191,6 +193,7 @@ describe("SelectionToolbar's scope buttons", () => {
 
   beforeEach(() => {
     bulkStreamApply.mockClear();
+    restorePoint.mockReset().mockResolvedValue({ success: true, message: "" });
     useStore.setState({
       settings: new Map(rows.map((s) => [s.id, s])),
       selectedSettingIds: new Set(),
@@ -213,7 +216,7 @@ describe("SelectionToolbar's scope buttons", () => {
     expect(screen.getByRole("button", { name: "Apply complete (3)" })).toBeEnabled();
   });
 
-  it("Apply recommended asks, then sends one stream request with essential + recommended, never complete", () => {
+  it("Apply recommended asks, then sends one stream request with essential + recommended, never complete", async () => {
     render(<SelectionToolbar settings={rows} name="Software" />);
 
     fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
@@ -221,7 +224,7 @@ describe("SelectionToolbar's scope buttons", () => {
     expect(bulkStreamApply).not.toHaveBeenCalled();
 
     fireEvent.click(screen.getByRole("button", { name: "Apply" }));
-    expect(bulkStreamApply).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(bulkStreamApply).toHaveBeenCalledTimes(1));
     expect(bulkStreamApply.mock.calls[0][0]).toEqual({
       "system:essential_row": "disabled",
       "system:recommended_row": "disabled",
@@ -254,5 +257,99 @@ describe("SelectionToolbar's scope buttons", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply complete (1)" }));
     expect(screen.getByRole("dialog", { name: "Advanced tweaks selected" })).toBeTruthy();
     expect(bulkStreamApply).not.toHaveBeenCalled();
+  });
+});
+
+
+describe("a page-wide apply asks for a restore point, and says what it costs", () => {
+  const costly = makeScoped("game_config:mw4:model_quality", "complete", {
+    perceptibleCost:
+      "Characters and objects render at reduced model detail; at long range, identification takes a beat longer.",
+  });
+  const rows = [makeScoped("system:essential_row", "essential"), makeScoped("system:recommended_row", "recommended"), costly];
+
+  beforeEach(() => {
+    bulkStreamApply.mockClear();
+    restorePoint.mockReset().mockResolvedValue({ success: true, message: "" });
+    useStore.setState({
+      settings: new Map(rows.map((s) => [s.id, s])),
+      selectedSettingIds: new Set(),
+      operationStatus: {},
+      operationError: {},
+      notifications: [],
+      bulkRun: null,
+    } as never);
+  });
+
+  it("creates the restore point before the apply when asked", async () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
+    expect(screen.getByRole("checkbox", { name: /System Restore point/ })).toBeChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(bulkStreamApply).toHaveBeenCalledTimes(1));
+    expect(restorePoint).toHaveBeenCalledTimes(1);
+    expect(restorePoint.mock.invocationCallOrder[0]).toBeLessThan(
+      bulkStreamApply.mock.invocationCallOrder[0],
+    );
+  });
+
+  it("skips it when the box is cleared", async () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: /System Restore point/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() => expect(bulkStreamApply).toHaveBeenCalledTimes(1));
+    expect(restorePoint).not.toHaveBeenCalled();
+  });
+
+  it("applies nothing, and says so, when the restore point could not be made", async () => {
+    // The user asked for the safety net; going ahead without it would honour
+    // the button and betray the checkbox.
+    restorePoint.mockResolvedValue({ success: false, message: "System Protection is off" });
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+
+    await waitFor(() =>
+      expect(useStore.getState().notifications.map((n) => n.message).join(" ")).toMatch(
+        /Restore point failed — nothing was applied\. System Protection is off/,
+      ),
+    );
+    expect(bulkStreamApply).not.toHaveBeenCalled();
+  });
+
+  it("lists what a row spends before anything runs, and applies nothing if cancelled", () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply complete (3)" }));
+
+    // The cost copy is on screen before anything runs (consequence 5).
+    expect(screen.getByText(/reduced model detail/)).toBeInTheDocument();
+    expect(screen.getByText(/What you give up/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(bulkStreamApply).not.toHaveBeenCalled();
+    expect(restorePoint).not.toHaveBeenCalled();
+  });
+
+  it("says nothing about costs when no row spends anything", () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
+
+    expect(screen.queryByText(/What you give up/)).not.toBeInTheDocument();
+  });
+
+  it("offers a ticked selection no restore point: it is not a page-wide write", () => {
+    select(makeSetting("system:ordinary", "low"));
+    render(<SelectionToolbar />);
+
+    fireEvent.click(screen.getByRole("button", { name: /^Apply selected \(1\)/ }));
+
+    expect(screen.queryByRole("checkbox", { name: /System Restore point/ })).not.toBeInTheDocument();
   });
 });

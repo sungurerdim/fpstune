@@ -14,13 +14,10 @@ import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
 import { render, screen, waitFor, within } from "../../test/utils";
 import { server } from "../../test/mocks/server";
-import { HomeMeasuredCard, LedgerPanel } from "../MeasuredLedger";
-import { HomeTab } from "../HomeTab";
+import { LedgerPanel } from "../MeasuredLedger";
 import { useStore } from "../../store";
 import type { BenchLedger, LedgerArea, LedgerJob } from "../../lib/api";
 
-vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
-vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../hooks/useApply", () => ({
   useApply: () => ({
     apply: vi.fn(),
@@ -149,73 +146,61 @@ beforeEach(() => {
   } as never);
 });
 
-describe("Home: what fpstune changed, measured", () => {
+describe("the ledger table: what fpstune changed, measured", () => {
   it("shows a measured area's before, after and change in its own unit", async () => {
     serveLedger(ledger());
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
-    const tile = await screen.findByTestId("measured-area-disk");
-    expect(within(tile).getByText("1240.50MB/s")).toBeInTheDocument();
-    expect(within(tile).getByText("1310.25MB/s")).toBeInTheDocument();
-    expect(within(tile).getByText("+69.75MB/s")).toBeInTheDocument();
+    await screen.findByTestId("ledger-area-table");
+    const row = screen.getByTestId("ledger-row-disk");
+    expect(within(row).getByText("1240.50MB/s")).toBeInTheDocument();
+    expect(within(row).getByText("1310.25MB/s")).toBeInTheDocument();
+    expect(within(row).getByText("+69.75MB/s")).toBeInTheDocument();
     // The direction is the server's: this metric improves upward, so a rise is
     // an improvement and the row is allowed to say so.
-    expect(within(tile).getByText("Improved")).toBeInTheDocument();
+    expect(within(row).getByText("Improved")).toBeInTheDocument();
     // The noise floor travels with the number that beat it.
-    expect(within(tile).getByText(/noise 12\.50MB\/s/)).toBeInTheDocument();
+    expect(within(row).getByText(/noise 12\.50MB\/s/)).toBeInTheDocument();
   });
 
   it("says a change inside the machine's own variation concludes nothing", async () => {
     serveLedger(ledger());
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
-    const tile = await screen.findByTestId("measured-area-timing");
+    await screen.findByTestId("ledger-area-table");
+    const row = screen.getByTestId("ledger-row-timing");
     expect(
-      within(tile).getByText(/Within this machine's own variation of 0\.11ms/),
+      within(row).getByText(/Within this machine's own variation of 0\.11ms/),
     ).toBeInTheDocument();
     // Not "no change", and not an improvement either.
-    expect(within(tile).queryByText("Improved")).toBeNull();
-    expect(within(tile).queryByText("Worse")).toBeNull();
-  });
-
-  it("gives an unmeasured area its reason and no number at all", async () => {
-    serveLedger(ledger());
-
-    render(<HomeMeasuredCard />);
-
-    const tile = await screen.findByTestId("measured-area-fps");
-    expect(within(tile).getByText(/needs a game rendering to measure/)).toBeInTheDocument();
-    // A zero here would read as a measurement of zero, which is the failure
-    // this rule exists to prevent.
-    expect(tile.textContent ?? "").not.toMatch(/\d/);
+    expect(within(row).queryByText("Improved")).toBeNull();
+    expect(within(row).queryByText("Worse")).toBeNull();
   });
 
   it("never adds two areas together into a headline", async () => {
     serveLedger(ledger());
 
-    render(<HomeMeasuredCard />);
-    const card = await screen.findByTestId("home-measured");
-    // Wait for the readings themselves: an empty card trivially has no total.
-    await screen.findByTestId("measured-area-disk");
+    render(<LedgerPanel />);
+    const table = await screen.findByTestId("ledger-area-table");
 
-    // No number in this card may be one no instrument produced, and the
-    // classic invented number is the sum: 69.75 + 2.50 + 0.03 MB/s and ms
-    // added together, which is four units in one figure and means nothing.
-    const text = card.textContent ?? "";
+    // No number here may be one no instrument produced, and the classic invented
+    // number is the sum: 69.75 + 2.50 + 0.03 of MB/s and ms added together, which
+    // is four units in one figure and means nothing.
+    const text = table.textContent ?? "";
     expect(text).not.toContain("72.28");
     // And no headline wording that would imply one. "Gained +28-45% FPS" is
     // the exact sentence this product shipped and had to withdraw.
     expect(text.toLowerCase()).not.toMatch(/total|overall|combined|gained/);
     // Every area still speaks for itself.
-    expect(screen.getAllByTestId(/^measured-area-/)).toHaveLength(4);
+    expect(screen.getAllByTestId(/^ledger-row-/)).toHaveLength(4);
   });
 
   it("says which step the background job is on, in the backend's own words", async () => {
     serveLedger(ledger({ job: RUNNING_JOB }));
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
     const status = await screen.findByTestId("ledger-job-status");
     // "network" is the bench key; "Network" is the label the ledger itself
@@ -228,7 +213,7 @@ describe("Home: what fpstune changed, measured", () => {
       ledger({ job: { ...RUNNING_JOB, status: "queued", trigger: "after" } }),
     );
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
     const status = await screen.findByTestId("ledger-job-status");
     expect(status).toHaveTextContent(/waiting for the machine to be idle/);
@@ -237,37 +222,24 @@ describe("Home: what fpstune changed, measured", () => {
   it("says a bulk apply is still unmeasured when nothing is in flight", async () => {
     serveLedger(ledger({ bulk_apply_pending: true }));
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
     const status = await screen.findByTestId("ledger-job-status");
     expect(status).toHaveTextContent(/Tweaks were applied since the last measurement/);
   });
 
-  it("says the ledger could not be read instead of rendering an empty card", async () => {
+  it("says the ledger could not be read instead of rendering an empty panel", async () => {
     server.use(
       http.get("/api/benchmark/ledger", () =>
         HttpResponse.text("nope", { status: 500 }),
       ),
     );
 
-    render(<HomeMeasuredCard />);
+    render(<LedgerPanel />);
 
     expect(
       await screen.findByText("The measurement ledger could not be read."),
     ).toBeInTheDocument();
-  });
-
-  it("is mounted on Home, laid out across the width it is given", async () => {
-    serveLedger(ledger());
-
-    render(<HomeTab />);
-
-    expect(await screen.findByTestId("home-measured")).toBeInTheDocument();
-    const grid = await screen.findByTestId("home-measured-grid");
-    expect(grid).toHaveClass("grid");
-    expect(grid).toHaveClass("grid-cols-1");
-    expect(grid).toHaveClass("lg:grid-cols-2");
-    expect(grid).toHaveClass("2xl:grid-cols-3");
   });
 });
 

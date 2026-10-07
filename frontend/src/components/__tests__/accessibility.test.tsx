@@ -4,9 +4,9 @@
  * These are asserted rather than eyeballed because the two defects below both
  * look completely fine on screen, and that is exactly why they survive:
  *
- * *A list of identical buttons.* Home renders one row per setting that needs
- * changing — thirty of them on a fresh machine — each with a button labelled
- * "Apply". Sighted, the row above it says which setting. Read aloud, it is
+ * *A list of identical buttons.* A category opens to one row per setting that
+ * needs changing — thirty of them on a fresh machine — each with a button
+ * labelled "Apply". Sighted, the row above it says which setting. Read aloud, it is
  * "Apply, Apply, Apply", and there is no way to tell which one is about to
  * change the CPU's minimum clock.
  *
@@ -23,21 +23,12 @@
 
 import { describe, it, expect, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { TweakListRow } from "../TweakListRow";
-import { SettingValueState } from "../SettingStateDisplay";
+import { TweakRow } from "../TweakRow";
 import type { Setting } from "../../types/setting";
 
-vi.mock("../../hooks/useApply", () => ({
-  useApply: () => ({
-    apply: vi.fn(),
-    reset: vi.fn(),
-    run: vi.fn(),
-    stop: vi.fn(),
-    pendingIds: new Set<string>(),
-    isPending: () => false,
-    isRunning: false,
-  }),
-}));
+const row = (setting: Setting) => (
+  <TweakRow setting={setting} onApply={vi.fn()} onReset={vi.fn()} />
+);
 
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
@@ -75,7 +66,7 @@ function makeSetting(overrides: Partial<Setting> = {}): Setting {
 
 describe("every control says what it acts on", () => {
   it("names the setting in the row's Apply button", () => {
-    render(<TweakListRow setting={makeSetting()} />);
+    render(row(makeSetting()));
 
     // Queried by accessible name, which is what assistive tech actually reads —
     // a `getByText("Apply")` would pass on the broken version.
@@ -87,13 +78,13 @@ describe("every control says what it acts on", () => {
   it("distinguishes two rows' buttons from each other", () => {
     render(
       <>
-        <TweakListRow setting={makeSetting()} />
-        <TweakListRow
-          setting={makeSetting({
+        {row(makeSetting())}
+        {row(
+          makeSetting({
             id: "power:cpu_idle_states" as `${string}:${string}`,
             displayName: "CPU Idle States",
-          })}
-        />
+          }),
+        )}
       </>,
     );
 
@@ -107,9 +98,7 @@ describe("every control says what it acts on", () => {
 
 describe("state is readable without seeing colour", () => {
   it("says a setting is already at its recommended value", () => {
-    const { container } = render(
-      <SettingValueState setting={makeSetting({ isOptimized: true, currentValue: 5 })} />,
-    );
+    const { container } = render(row(makeSetting({ isOptimized: true, currentValue: 5 })));
 
     // The tick is decorative; the sentence has to exist somewhere a reader
     // reaches it. `textContent` covers visible text and sr-only alike.
@@ -117,7 +106,7 @@ describe("state is readable without seeing colour", () => {
   });
 
   it("says a setting is not, and what it would become", () => {
-    const { container } = render(<SettingValueState setting={makeSetting()} />);
+    const { container } = render(row(makeSetting()));
 
     expect(container.textContent).toMatch(/100/);
     expect(container.textContent).toMatch(/5/);
@@ -130,7 +119,7 @@ describe("keyboard order is the reading order", () => {
     // A positive tabindex pulls one control to the front of the whole page's
     // tab order, which is invisible until someone tabs through and lands
     // somewhere absurd.
-    const { container } = render(<TweakListRow setting={makeSetting()} />);
+    const { container } = render(row(makeSetting()));
 
     const forced = Array.from(container.querySelectorAll("[tabindex]")).filter(
       (element) => Number(element.getAttribute("tabindex")) > 0,
@@ -140,7 +129,7 @@ describe("keyboard order is the reading order", () => {
   });
 
   it("leaves the Apply button reachable", () => {
-    render(<TweakListRow setting={makeSetting()} />);
+    render(row(makeSetting()));
 
     const button = screen.getByRole("button", {
       name: "Apply Minimum Processor State",

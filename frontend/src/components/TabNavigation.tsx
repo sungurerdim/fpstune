@@ -6,7 +6,6 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
-  Home,
   Settings,
   HardDrive,
   Monitor,
@@ -37,7 +36,6 @@ import { tabButtonId, tabPanelId } from "./ui/tabIds";
 import type { MessageKey } from "../i18n/en";
 
 const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = [
-  { id: "home", labelKey: "tab.home", icon: Home },
   { id: "settings", labelKey: "tab.software", icon: Settings },
   { id: "hardware", labelKey: "tab.hardware", icon: Monitor },
   { id: "games", labelKey: "tab.games", icon: Gamepad2 },

@@ -237,7 +237,7 @@ Every number a user is shown was produced by an instrument on *that* machine, or
 not shown; "derived from what the settings claim" is not a third option. Three
 meaningless headlines shipped and must never return: `"GAINED -683ms LATENCY"` (DNS
 lookup, mouse polling, timer resolution and NIC buffering are different clocks over
-different events, so the sum has no referent — `impact.ts`, `latencyTweaks`),
+different events, so the sum has no referent — the retired Home headline over `latencyTweaks`),
 `dns_security`'s unmeasured `-12 ms`, and `"Gained +28-45% FPS"` (claimed fps midpoints
 summed under an invented decay curve). Seven rules:
 
@@ -355,7 +355,7 @@ frontend/src/
   store/    index.ts (AppSlice: selectedSettingIds, operationStatus, maintenanceSelection,
             cleanupResults, notifications) · settings.ts (SettingsSlice: flat
             Map<SettingId, Setting>, detection, selectors)
-  lib/      api.ts · detection-manager.ts · hardware-manager.ts · tweakDomain.ts · impact.ts
+  lib/      api.ts · detection-manager.ts · hardware-manager.ts · tweakDomain.ts
 ```
 
 UI surfaces: Home = what still needs optimizing plus reclaimable disk, one bulk action per
@@ -522,8 +522,8 @@ Module contracts — what the tree does not tell you:
   that label verbatim (C9), each heading selecting its own group. A setting in a grouped module
   with no group fails `tests/test_settings/test_groups.py`, so a new game or cleanup cannot
   land under no heading.
-- `impact.ts` writes per-row benefit text from `impact_scores` — claims only, never a summed
-  headline (C11 rule 1)
+- `TweakDetail.tsx` writes a row's claimed benefit from `impact_scores` — claims only, never a
+  summed headline (C11 rule 1)
 
 ---
 

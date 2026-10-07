@@ -34,17 +34,13 @@ import {
 import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
-import { TweakListRow } from "../TweakListRow";
 import { DiskCleanupTab } from "../DiskCleanupTab";
-import { HomeTab } from "../HomeTab";
 import { SettingInfoTooltip } from "../SettingInfoTooltip";
 
 
-vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../hardware/useHardware", () => ({
   useHardware: () => ({ hardware: null, isLoading: false }),
 }));
-vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../hooks/useApply", () => ({
   useApply: () => ({
     apply: vi.fn(),
@@ -56,31 +52,6 @@ vi.mock("../../hooks/useApply", () => ({
     isRunning: false,
   }),
 }));
-vi.mock("../../lib/api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../lib/api")>();
-  return {
-    ...actual,
-    headroomApi: {
-      list: () =>
-        Promise.resolve({
-          headroom: {
-            is_measured: false,
-            measured_fps: null,
-            fps_1_percent_low: null,
-            target_fps: null,
-            achievement_percent: null,
-            tier: "unknown",
-            bottleneck: "unknown",
-            present_mode: null,
-            width: null,
-            height: null,
-            measured_at: null,
-          },
-        }),
-    },
-  };
-});
-
 /**
  * `unbroken`: a token no space can break. `catalogue`: the longest real Turkish
  * copy. `advisory`: the unresolved Ethernet line-speed row, whose state, hint and
@@ -155,19 +126,6 @@ const SURFACES: Surface[] = [
     },
   },
   {
-    name: "TweakListRow (Home row)",
-    mount: (kind, long) => {
-      const setting = fixture(kind);
-      seed([setting]);
-      return { ui: <TweakListRow setting={setting} categoryLabel={long} /> };
-    },
-    expects: {
-      unbroken: ["token"],
-      catalogue: ["description", "name"],
-      advisory: ["advisoryName", "advisoryState", "advisoryTarget"],
-    },
-  },
-  {
     name: "DiskCleanupTab (group heading, row, run and outcome)",
     mount: (kind, long) => {
       const setting = fixture(kind, {
@@ -223,42 +181,6 @@ const SURFACES: Surface[] = [
       };
     },
     expects: { unbroken: ["token"], catalogue: ["description", "name"] },
-  },
-  {
-    name: "HomeTab groups",
-    mount: (kind, long) => {
-      const software = fixture(kind);
-      const hardware = fixture(kind, {
-        id: `gpu-nvidia:${software.name}` as Setting["id"],
-        module: "gpu-nvidia",
-        domain: "hardware",
-        component: "gpu",
-      });
-      const game = fixture(kind, {
-        id: `game_config:mw4:${software.name}` as Setting["id"],
-        module: "game_config",
-        domain: "game",
-      });
-      const advisory =
-        kind === "advisory"
-          ? narrowAdvisory()
-          : narrowSetting(kind, {
-              id: `network:12:${software.name}` as Setting["id"],
-              module: "network",
-              domain: "hardware",
-              component: "network_adapter",
-              isReadonly: true,
-              currentValue: "weak_signal",
-              recommendedValue: "good",
-            });
-      seed([software, hardware, game, advisory]);
-      return { ui: <HomeTab />, ready: () => findLong(long) };
-    },
-    expects: {
-      unbroken: ["token"],
-      catalogue: ["description"],
-      advisory: ["advisoryName", "advisoryState", "advisoryTarget", "advisoryHint"],
-    },
   },
   {
     name: "SettingInfoTooltip",
@@ -328,6 +250,8 @@ describe.each(["en", "tr"] as const)("long text at narrow widths (%s)", (locale)
 const NOT_GENERIC: Record<string, string> = {
   "components/ActionNote.tsx#ActionNote":
     "Draws a reclaimable size, a TRIM age and measured figures; a setting's own text never reaches it. Its place on the row is held by the DiskCleanupTab surface above.",
+  "components/SelectionToolbar.tsx#BulkConfirm":
+    "The question a bulk button asks: fixed words and a count in a dialog the caller opens, with no setting text in it.",
   "components/ScopeActions.tsx#ScopeActions":
     "Icon buttons: the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
   "components/SelectionToolbar.tsx#SelectionToolbar":
@@ -341,9 +265,7 @@ const NOT_GENERIC: Record<string, string> = {
 /** Components mounted by hand above, with the state they need. */
 const BESPOKE = new Set([
   "TweakRows",
-  "TweakListRow",
   "DiskCleanupTab",
-  "HomeTab",
   "SettingInfoTooltip",
 ]);
 

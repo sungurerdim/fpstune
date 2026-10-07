@@ -32,16 +32,16 @@ const lastTab = (): HTMLElement => {
 describe("TabNavigation keeps the keyboard contract its roles promise", () => {
   beforeEach(() => {
     useStore.setState({
-      activeTab: "home",
+      activeTab: "settings",
       settings: new Map(),
     } as never);
   });
 
-  it("exposes exactly one tab strip over the six tabs", () => {
+  it("exposes exactly one tab strip over the five tabs", () => {
     render(<TabNavigation />);
 
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    expect(tabButtons()).toHaveLength(6);
+    expect(tabButtons()).toHaveLength(5);
   });
 
   it("keeps every tab findable by the words on it, at any width", () => {
@@ -52,15 +52,15 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     expect(
       screen.getByRole("tab", { name: /Software Tweaks/ }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Home/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Hardware Tweaks/ })).toBeInTheDocument();
   });
 
   it("puts only the selected tab in the page's tab order", () => {
     render(<TabNavigation />);
 
-    const [home, ...rest] = tabButtons();
-    expect(home).toHaveAttribute("aria-selected", "true");
-    expect(home).toHaveAttribute("tabindex", "0");
+    const [first, ...rest] = tabButtons();
+    expect(first).toHaveAttribute("aria-selected", "true");
+    expect(first).toHaveAttribute("tabindex", "0");
     for (const tab of rest) {
       expect(tab).toHaveAttribute("tabindex", "-1");
     }

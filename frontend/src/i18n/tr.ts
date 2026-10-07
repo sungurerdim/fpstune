@@ -8,8 +8,6 @@ import type { en } from "./en";
 export const tr: Record<keyof typeof en, string> = {
   // First run
   "firstRun.title": "fpstune'a hoş geldiniz",
-  "firstRun.what":
-    "fpstune bu makineyi, donanımının izin verdiği en iyi oyun deneyimi için ayarlar — önce kare hızı, her değer kendi donanımınızdan türetilir, asla genel bir ön ayardan değil.",
   "firstRun.nothingChanged": "Henüz hiçbir şey değiştirilmedi.",
   "firstRun.nothingChangedBody": "Uygulamayı açmak yalnızca mevcut ayarlarınızı okur. Her değişiklik sizin tıklamanızı bekler, her satır varsayılanına döndürülebilir ve toplu düğmeler önce bir Sistem Geri Yükleme noktası önerir.",
   "firstRun.admin":
@@ -17,22 +15,7 @@ export const tr: Record<keyof typeof en, string> = {
   "firstRun.dismiss": "Anladım — makineyi göster",
 
   // The two buttons
-  "scope.competitive": "Rekabetçi Maksimum",
-  "scope.competitiveHint":
-    "Gördüğünüze ve duyduğunuza dokunmadan alınabilecek en yüksek kare hızı.",
-  "scope.absolute": "Mutlak Maksimum",
-  "scope.absoluteHint":
-    "Her ayar kare hızı ucuna çekilir — kalite harcanır ve bedeli, hiçbir şey çalışmadan önce listelenir.",
-  "scope.competitiveConfirmTitle":
-    "Rekabetçi Maksimum uygulansın mı? ({count} ayar)",
-  "scope.competitiveConfirmBody":
-    "Temel ve önerilen tüm ince ayarları uygular — oyun içinde görebildiğiniz veya duyabildiğiniz hiçbir şeyi değiştirmeden bu makinenin ulaşabileceği en yüksek kare hızı. Görüntü veya ses kalitesi harcayan ayarlara dokunulmaz.",
-  "scope.absoluteConfirmTitle": "Mutlak Maksimum uygulansın mı? ({count} ayar)",
-  "scope.absoluteConfirmBody":
-    "Resim ve ses kalitesini harcayanlar dahil, her ayarı kare hızı ucuna iter.",
   "scope.whatYouGiveUp": "Vazgeçtikleriniz:",
-  "scope.apply": "Uygula",
-  "scope.spendIt": "Harca",
   "scope.restoreFirst": "Önce Sistem Geri Yükleme noktası oluştur (önerilir)",
 
   // Tabs
@@ -64,7 +47,6 @@ export const tr: Record<keyof typeof en, string> = {
   "update.unreachable": "Güncellemeler denetlenemedi: {reason}",
   "header.admin": "Yönetici",
   "header.notAdmin": "Yönetici değil",
-  "tab.home": "Ana Sayfa",
   "tab.software": "Yazılım İnce Ayarları",
   "tab.hardware": "Donanım İnce Ayarları",
   "tab.games": "Oyun İnce Ayarları",
@@ -106,7 +88,6 @@ export const tr: Record<keyof typeof en, string> = {
   // Common actions
   "action.apply": "Uygula",
   "action.cancel": "Vazgeç",
-  "action.runAll": "Tümünü Çalıştır",
   "action.keep": "Koru",
   "action.reset": "Varsayılana dön",
   // Row surface
@@ -132,6 +113,7 @@ export const tr: Record<keyof typeof en, string> = {
   "toolbar.streamFailed": "Toplu işlem durdu: {reason}",
   "toolbar.doneSummary": "{done} tamamlandı, {failed} başarısız.",
   "toolbar.stopped": "Durduruldu. Henüz başlamamış ayarlara dokunulmadı.",
+  "toolbar.restoreFailed": "Geri yükleme noktası oluşturulamadı — hiçbir şey uygulanmadı. {reason}",
   "row.queued": "sırada",
   "row.notApplicable": "N/A",
   "row.detecting": "Okunuyor…",
@@ -221,53 +203,6 @@ export const tr: Record<keyof typeof en, string> = {
   "impact.storage": "Depolama",
   "impact.privacy": "Gizlilik",
   "impact.visual": "Görsel",
-  // Home
-  "home.hardwareTweaks": "Donanım ince ayarları",
-  "home.hardwareSubtitle": "GPU, ekran, ağ bağdaştırıcıları, depolama, ses",
-  "home.softwareTweaks": "Yazılım ince ayarları",
-  "home.softwareSubtitle": "Windows, hizmetler, oyun başlatıcıları",
-  "home.gameTweaks": "Oyun ince ayarları",
-  "home.gameSubtitle": "Oyunun kendi yapılandırma dosyasındaki ayarlar",
-  "home.readingSettings": "Mevcut ayarlarınız okunuyor…",
-  "home.allOptimized": "Uygulanabilir her şey zaten en iyi durumda.",
-  "home.cleanupTitle": "Kullanılabilir disk temizliği eylemleri",
-  "home.cleanupUpkeepTitle": "Disk temizliği ve bakım",
-  "home.measuringReclaim": "Geri kazanılabilecek alan ölçülüyor…",
-  "home.nothingToReclaim": "Şu an geri kazanılacak bir şey yok.",
-  "home.rowMeasuring": "— geri kazanılabilecek alan ölçülüyor…",
-  "home.advisories": "Sizin müdahalenizi bekliyor",
-  "home.advisoriesHint":
-    "fpstune'un algılayabildiği ama yalnızca sizin değiştirebileceğiniz bulgular",
-  "home.advisoriesClear": "Denetlendi, değişiklik gerekmiyor",
-  "home.advisoriesClearHint":
-    "fpstune'un denetleyip zaten doğru bulduğu donanım ayarları",
-  "home.whatToDo": "Ne yapabilirsiniz:",
-  "home.advisoriesUnread": "Denetlenemedi",
-  "home.advisoriesUnreadHint":
-    "bunlar bu makine hakkında hiçbir şey söylemiyor",
-  "home.advisoryUnreadReason": "Hiçbir değer okunamadı: {reason}",
-  "home.advisoryUnreadNeedsAdmin":
-    "Hiçbir değer okunamadı. fpstune yönetici olarak çalışmıyor; birkaç denetim bunu gerektiriyor.",
-  "home.advisoryUnreadNoReason":
-    "Hiçbir değer okunamadı, dolayısıyla burada eyleme geçilecek bir bulgu yok.",
-  "home.alreadyOptimized": "Zaten en iyi durumda",
-  "home.detecting":
-    "Ayarlarınız algılanıyor — {done}/{total} kategori okundu; listeler ve toplamlar sonuçlar geldikçe dolar…",
-  "home.detectingProgress": "Ayar kategorilerinde algılama ilerlemesi",
-  "home.statIdeal": "ayar ideal değerinde",
-  "home.statIdealHint":
-    "{changed} tanesini fpstune değiştirdi · {stock} tanesi zaten doğruydu",
-  "home.statGuards": " · {count} sapma bekçisi nöbette",
-  "home.measured": "Ölçüldü",
-  "home.noMeasurement":
-    "henüz kare hızı ölçülmedi — test sahnesini çalıştırmak için Ölçümler'i açın",
-  "home.sceneLabel": "Test sahnesi, bu ekranın çözünürlüğünde",
-  "home.ofTarget": "bu ekranın gösterebildiği {target} fps'in %{pct}'i",
-  "home.noTarget": "ekran hedefi yok — panel yenileme hızı bilinmiyor",
-  "home.claimed": "Henüz uygulanmamış ayarların vaadi",
-  "home.latencyTweaks": "gecikme ayarı",
-  "home.memoryTweaks": "bellek ayarı",
-  "home.diskToReclaim": "geri kazanılabilir disk",
   // Cleanup & maintenance surfaces
   "run.percent": "%{value}",
   "run.elapsed": "{seconds} sn geçti",
@@ -564,8 +499,6 @@ export const tr: Record<keyof typeof en, string> = {
   "category.manualSteps": "Elle yapılacaklar ({count})",
 
   // fpstune neyi değiştirdi, ölçüldü (ölçüm defteri)
-  "ledger.homeTitle": "fpstune neyi değiştirdi, ölçüldü",
-  "ledger.homeHint": "Her alan için tek araç. İkisi asla toplanmaz.",
   "ledger.panelTitle": "Bu makinede ölçülenler",
   "ledger.panelHint": "Diskte tutulur; sayfa yenilenince temel ölçüm kaybolmaz.",
   "ledger.area": "Alan",
@@ -584,7 +517,6 @@ export const tr: Record<keyof typeof en, string> = {
   "ledger.samples": "{before} ve {after} okuma",
   "ledger.loading": "Bu makinede nelerin ölçüldüğü okunuyor…",
   "ledger.unreachable": "Ölçüm defteri okunamadı.",
-  "ledger.noAreas": "Henüz hiçbir alan bildirilmedi.",
   "ledger.triggerBaseline": "Temel ölçüm",
   "ledger.triggerAfter": "Değişikliklerinizden sonra",
   "ledger.triggerManual": "Ölçüm",
@@ -626,9 +558,6 @@ export const tr: Record<keyof typeof en, string> = {
   "metric.needYou": "senden işlem bekliyor",
   "metric.toFix": "düzeltilecek",
   "metric.total": "toplam",
-  "metric.settings": "ayar",
-  "metric.measuring": "ölçülüyor",
-  "metric.toRun": "çalıştırılacak",
   "actions.confirm.apply": "{name} için {count} ayar uygulansın mı?",
   "actions.confirm.reset": "{count} ayar varsayılanına dönecek.",
   "actions.confirmBody.reset.software": "Windows'un sunduğundan farklı olan her ayar ona geri döner. Her satır kendi sonucunu gösterir.",

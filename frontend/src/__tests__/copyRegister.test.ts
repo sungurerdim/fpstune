@@ -25,7 +25,7 @@ const COMPONENTS = import.meta.glob("../**/*.tsx", {
 }) as Record<string, string>;
 
 // Frozen at the F1 landing: the components that still speak raw English.
-// Shrink-only. FirstRunNotice, HomeTab and TabNavigation are absent because
+// Shrink-only. FirstRunNotice and TabNavigation are absent because
 // they migrated with the infrastructure.
 const _UNTRANSLATED_BASELINE = new Set([
   "App.tsx", // string-free or prop-fed — nothing to migrate
@@ -33,7 +33,6 @@ const _UNTRANSLATED_BASELINE = new Set([
   // string-free (renders HardwarePanel only) — nothing to migrate:
   "components/HardwareTab.tsx",
   "components/TweakRows.tsx", // string-free or prop-fed — nothing to migrate
-  "components/home/HomeStats.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Badge.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Button.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Card.tsx", // string-free or prop-fed — nothing to migrate

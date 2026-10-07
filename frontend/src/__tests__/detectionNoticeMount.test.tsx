@@ -16,10 +16,12 @@ import { useStore } from "../store";
 import type { Setting } from "../types/setting";
 
 vi.mock("../components/ActivityLog", () => ({ ActivityLog: () => null }));
+vi.mock("../components/FirstRunNotice", () => ({ FirstRunNotice: () => null }));
+vi.mock("../components/OsUpdateNotice", () => ({ OsUpdateNotice: () => null }));
+vi.mock("../components/SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../components/CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
-vi.mock("../components/HomeTab", () => ({ HomeTab: () => <p>home panel</p> }));
 vi.mock("../components/SettingsTab", () => ({ SettingsTab: () => <p>software panel</p> }));
 vi.mock("../components/DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
 vi.mock("../components/HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));

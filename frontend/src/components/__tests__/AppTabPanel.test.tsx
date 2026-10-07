@@ -17,10 +17,12 @@ import App from "../../App";
 import { useStore } from "../../store";
 
 vi.mock("../ActivityLog", () => ({ ActivityLog: () => null }));
+vi.mock("../FirstRunNotice", () => ({ FirstRunNotice: () => null }));
+vi.mock("../OsUpdateNotice", () => ({ OsUpdateNotice: () => null }));
+vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
-vi.mock("../HomeTab", () => ({ HomeTab: () => <p>home panel</p> }));
 vi.mock("../SettingsTab", () => ({ SettingsTab: () => <p>software panel</p> }));
 vi.mock("../DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
 vi.mock("../HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
@@ -39,13 +41,13 @@ function assertTabOwnsThePanel() {
 
 describe("the selected tab and the panel on screen are one thing", () => {
   beforeEach(() => {
-    useStore.setState({ activeTab: "home", settings: new Map() } as never);
+    useStore.setState({ activeTab: "settings", settings: new Map() } as never);
   });
 
   it("ties the panel to the tab that selected it", () => {
     render(<App />);
 
-    expect(screen.getByText("home panel")).toBeInTheDocument();
+    expect(screen.getByText("software panel")).toBeInTheDocument();
     assertTabOwnsThePanel();
   });
 
@@ -61,9 +63,9 @@ describe("the selected tab and the panel on screen are one thing", () => {
   it("keeps the tie when the arrow keys move the selection", () => {
     render(<App />);
 
-    const home = screen.getByRole("tab", { selected: true });
-    home.focus();
-    fireEvent.keyDown(home, { key: "End" });
+    const first = screen.getByRole("tab", { selected: true });
+    first.focus();
+    fireEvent.keyDown(first, { key: "End" });
 
     expect(screen.getByText("benchmarks panel")).toBeInTheDocument();
     assertTabOwnsThePanel();

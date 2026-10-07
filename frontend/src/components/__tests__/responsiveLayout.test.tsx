@@ -22,7 +22,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen } from "../../test/utils";
 import App from "../../App";
-import { HomeTab } from "../HomeTab";
 import { SettingsTab } from "../SettingsTab";
 import { GameTweaksTab } from "../GameTweaksTab";
 import { HardwarePanel } from "../HardwarePanel";
@@ -37,9 +36,9 @@ vi.mock("../CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
 vi.mock("../ActivityLog", () => ({ ActivityLog: () => null }));
-vi.mock("../HomeTab", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../HomeTab")>()),
-}));
+vi.mock("../FirstRunNotice", () => ({ FirstRunNotice: () => null }));
+vi.mock("../OsUpdateNotice", () => ({ OsUpdateNotice: () => null }));
+vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 
 
 vi.mock("../../hooks/useApply", () => ({
@@ -54,7 +53,7 @@ vi.mock("../../hooks/useApply", () => ({
   }),
 }));
 
-// Home mounts the whole device inventory; the hardware page asserts that itself.
+// The hardware page asserts its own layout; the panel is real here.
 vi.mock("../HardwarePanel", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../HardwarePanel")>()),
 }));
@@ -167,7 +166,7 @@ beforeEach(() => {
 
 describe("every page lays its content out across the width it is given", () => {
   it("Shell: the content column widens past 1920px instead of banking margin", () => {
-    useStore.setState({ activeTab: "home", settings: new Map() } as never);
+    useStore.setState({ activeTab: "settings", settings: new Map() } as never);
 
     render(<App />);
 
@@ -177,60 +176,6 @@ describe("every page lays its content out across the width it is given", () => {
     expect(shell).toHaveClass("max-w-7xl");
     expect(shell).toHaveClass("2xl:max-w-[120rem]");
     expect(shell).toHaveClass("3xl:max-w-[150rem]");
-  });
-
-  it("Home: a domain's outstanding tweaks tile instead of queueing down the page", () => {
-    setStore(pair("system:home"));
-
-    render(<HomeTab />);
-
-    const rows = screen.getAllByTestId("tweak-group-rows");
-    expect(rows.length).toBeGreaterThan(0);
-    for (const group of rows) expectRespondsToWidth(group, "2xl:grid-cols-2");
-  });
-
-  it("Home: the advisories tile, since each is a self-contained finding", () => {
-    setStore(
-      pair("system:advisory", {
-        isReadonly: true,
-        isOptimized: false,
-        effect: "Move the cable to a Cat 6 run",
-      }),
-    );
-
-    render(<HomeTab />);
-
-    const advisories = screen.getByTestId("home-advisory-grid");
-    expectRespondsToWidth(advisories, "lg:grid-cols-2");
-    expect(advisories).toHaveClass("2xl:grid-cols-3");
-  });
-
-  it("Home: the cleanup card tiles when it has the page, and not when it shares it", () => {
-    // Its width depends on whether the tweak groups are beside it, and a column
-    // count that ignored that would put three columns inside a third of the
-    // page. Both halves are asserted, because only having one is the bug.
-    const cleanups = pair("cleanup:cache", {
-      isAction: true,
-      category: "maintenance",
-      currentValue: "ready|800 MB",
-      groupId: "windows",
-      groupLabel: "Windows",
-      groupOrder: 1,
-    });
-
-    setStore(cleanups);
-    const alone = render(<HomeTab />);
-    const wide = alone.getByTestId("home-cleanup-rows");
-    expect(wide).toHaveClass("grid-cols-1");
-    expect(wide).toHaveClass("lg:grid-cols-2");
-    alone.unmount();
-
-    // Now with tweaks beside it, so the card is the narrow third of the row.
-    setStore([...cleanups, ...pair("system:shared")]);
-    const shared = render(<HomeTab />);
-    const narrow = shared.getByTestId("home-cleanup-rows");
-    expect(narrow).toHaveClass("grid-cols-1");
-    expect(narrow).not.toHaveClass("lg:grid-cols-2");
   });
 
   it("Software Tweaks: the row list gains columns as the window widens", () => {

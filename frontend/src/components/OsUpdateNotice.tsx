@@ -5,7 +5,7 @@ import { useT } from "../i18n";
 import { api } from "../lib/api";
 
 /**
- * "Windows was updated since fpstune last ran" — once, on Home.
+ * "Windows was updated since fpstune last ran" — once, above whichever tab is open.
  *
  * Updates put settings back to Windows' own values, which is the drift the
  * guards exist to catch. The scan that runs at every start already re-read the
@@ -29,7 +29,7 @@ export function OsUpdateNotice() {
   return (
     <div
       role="status"
-      className="rounded-lg border border-border bg-muted/40 p-3 flex items-start gap-2"
+      className="mb-2 rounded-md border border-border bg-muted/40 px-3 py-2 flex items-start gap-2"
     >
       <RefreshCw className="w-4 h-4 mt-0.5 text-primary shrink-0" aria-hidden="true" />
       <p className="text-sm text-foreground/80">

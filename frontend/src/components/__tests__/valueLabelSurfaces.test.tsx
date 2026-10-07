@@ -71,7 +71,7 @@ const NAMES = {
 
 /**
  * The values the row stores. Real ones are `off` and `on`, plain English words
- * that the static copy of Home and Game Tweaks uses too ("found on this
+ * that the static copy of the tweak lists uses too ("found on this
  * machine"), so a search for them reads that copy as a leak; these carry the
  * same shape and appear nowhere else.
  */
@@ -187,7 +187,7 @@ describe.each(["en", "tr"] as const)("a named choice reaches every surface (%s)"
       expect(leaks, `a stored value is printed where its name belongs: ${leaks.join("; ")}`).toEqual([]);
       // The sweep proves nothing if no surface drew the name: the state line,
       // the row is the one it must reach.
-      for (const must of ["TweakRows", "TweakListRow"]) {
+      for (const must of ["TweakRows", "TweakRow"]) {
         expect(drewName, `${must} never drew "${names.on}"`).toContain(must);
       }
     });

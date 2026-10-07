@@ -4,7 +4,7 @@ import { useT } from "../i18n";
 import { api } from "../lib/api";
 
 /**
- * The detection self-check's disagreements, on Home (A12 → D3).
+ * The detection self-check's disagreements, above whichever tab is open (A12 → D3).
  *
  * Every detector is cross-checked against an independent source before the
  * first apply; the report was persisted and reachable by nothing — a machine
@@ -34,7 +34,7 @@ export function SelfCheckNotice() {
   const disagreements = report.findings.filter((finding) => !finding.agrees);
 
   return (
-    <div className="rounded-lg border border-warning/40 bg-warning/6 p-3 space-y-2">
+    <div className="mb-2 rounded-md border border-warning/40 bg-warning/6 px-3 py-2 space-y-1">
       <div className="flex items-center gap-2">
         <ShieldAlert className="w-4 h-4 text-warning" aria-hidden="true" />
         <p className="text-sm font-medium text-warning">

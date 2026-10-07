@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Activity, ArrowRight, Gauge, Loader2, Play } from "lucide-react";
+import { Activity, Loader2, Play } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
 import { formatAge } from "../lib/formatAge";
@@ -38,9 +38,8 @@ import { ScopeHeader } from "./ui/ScopeHeader";
  * this build two areas say that permanently, because a frame rate needs a game
  * rendering and nothing here samples temperature around a bench.
  *
- * Both surfaces read the same query. Home gets the tiles, the Benchmarks tab
- * gets the full table with the runs behind it and the button that asks for a
- * new one; neither keeps a copy, so they cannot drift apart.
+ * One query feeds it: the Benchmarks tab gets the full table with the runs
+ * behind it and the button that asks for a new one, and keeps no copy of it.
  */
 
 /** How a verdict is coloured. Never a colour the server did not justify. */
@@ -133,48 +132,6 @@ function SampleCount({ area }: { area: LedgerArea }) {
   );
 }
 
-/** One area as a tile: what moved, by how much, or why nothing is known. */
-function AreaTile({ area }: { area: LedgerArea }) {
-  const verdict = verdictOf(area);
-
-  return (
-    <div
-      data-testid={`measured-area-${area.area}`}
-      className="p-3 rounded-md border border-border"
-    >
-      <div className="flex items-center gap-2 flex-wrap">
-        <span className="font-medium text-sm">{area.label}</span>
-        <span className="text-xs text-muted-foreground font-mono">
-          {area.instrument}
-        </span>
-      </div>
-
-      {verdict === "unmeasured" ? (
-        // The reason, and nothing else. A zero here would read as a measurement.
-        <p className="text-xs text-muted-foreground mt-1">{area.reason}</p>
-      ) : (
-        <>
-          <div className="mt-1 text-sm flex items-center gap-1.5 flex-wrap tabular-nums">
-            <span>{formatReading(area.before, area.unit)}</span>
-            <ArrowRight
-              className="w-3 h-3 text-muted-foreground"
-              aria-hidden="true"
-            />
-            <span>{formatReading(area.after, area.unit)}</span>
-            <span className={cn("font-medium", TONE[verdict])}>
-              {formatDelta(area.delta, area.unit)}
-            </span>
-          </div>
-          <div className="text-xs mt-1">
-            <VerdictText area={area} />
-          </div>
-          <SampleCount area={area} />
-        </>
-      )}
-    </div>
-  );
-}
-
 /**
  * What the background scheduler is doing, in one line.
  *
@@ -236,51 +193,6 @@ function JobStatusLine({ ledger }: { ledger: BenchLedger }) {
 /** Loading and unreachable, said rather than rendered as an empty panel. */
 function LedgerNotice({ text }: { text: string }) {
   return <p className="text-sm text-muted-foreground">{text}</p>;
-}
-
-/**
- * Home's card: the measured counterpart to the claims above it.
- *
- * It is rendered even when nothing has been measured, because seven rows each
- * saying what they are waiting for is a plan, and an absent card is a promise
- * nobody made.
- */
-export function HomeMeasuredCard() {
-  const { t } = useT();
-  const { data, isLoading, isError } = useBenchLedger();
-
-  return (
-    <Card data-testid="home-measured">
-      <ScopeHeader
-        level={2}
-        className="border-b border-border p-3"
-        icon={<Gauge className="h-4 w-4 text-primary" aria-hidden="true" />}
-        title={t("ledger.homeTitle")}
-        kind={t("ledger.homeHint")}
-      />
-
-      <div className="p-3 space-y-2">
-        {isLoading && <LedgerNotice text={t("ledger.loading")} />}
-        {isError && <LedgerNotice text={t("ledger.unreachable")} />}
-        {data && (
-          <>
-            <JobStatusLine ledger={data} />
-            <div
-              data-testid="home-measured-grid"
-              className="grid grid-cols-1 gap-2 items-start lg:grid-cols-2 2xl:grid-cols-3"
-            >
-              {data.areas.map((area) => (
-                <AreaTile key={area.area} area={area} />
-              ))}
-            </div>
-            {data.areas.length === 0 && (
-              <LedgerNotice text={t("ledger.noAreas")} />
-            )}
-          </>
-        )}
-      </div>
-    </Card>
-  );
 }
 
 /** One stored run, in its own words, with how long ago it was taken. */

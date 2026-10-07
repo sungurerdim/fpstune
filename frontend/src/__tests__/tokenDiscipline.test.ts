@@ -42,7 +42,6 @@ const RAW_COLOUR =
 // want their own tokens, not a mapping onto warning.
 const _FROZEN = new Map<string, number>([
   ["components/HeadroomPanel.tsx", 2],
-  ["components/HomeTab.tsx", 1],
   ["components/SettingInfoTooltip.tsx", 2],
   ["components/SuitePanel.tsx", 1],
   ["components/TweakSetting.tsx", 2],

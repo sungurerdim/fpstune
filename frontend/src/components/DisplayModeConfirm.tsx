@@ -10,8 +10,8 @@ import { ConfirmDialog } from "./ui/ConfirmDialog";
  *
  * A mode change goes back on its own unless it is kept (`settings.display_mode`),
  * so a mode the panel cannot show leaves a black screen for fifteen seconds, not
- * for good. The per-monitor settings change modes from anywhere — a row, Home's
- * bulk apply, a streamed run — so the question is asked here, once, for every
+ * for good. The per-monitor settings change modes from anywhere — a row, a
+ * category's bulk apply, a streamed run — so the question is asked here, once, for every
  * pending display, rather than by each surface that might have caused one.
  *
  * While anything is running it checks every second, so the question appears

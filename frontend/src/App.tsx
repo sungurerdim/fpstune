@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { TabNavigation } from "./components/TabNavigation";
-import { HomeTab } from "./components/HomeTab";
 import { SettingsTab } from "./components/SettingsTab";
 import { DiskCleanupTab } from "./components/DiskCleanupTab";
 import { HardwareTab } from "./components/HardwareTab";
@@ -11,6 +10,9 @@ import { CleanupRunnerProvider } from "./components/CleanupRunnerProvider";
 import { NotificationToasts } from "./components/ui/NotificationToasts";
 import { DisplayModeConfirm } from "./components/DisplayModeConfirm";
 import { DetectionNotice } from "./components/DetectionNotice";
+import { FirstRunNotice } from "./components/FirstRunNotice";
+import { OsUpdateNotice } from "./components/OsUpdateNotice";
+import { SelfCheckNotice } from "./components/SelfCheckNotice";
 import { tabButtonId, tabPanelId } from "./components/ui/tabIds";
 import { settingsApi } from "./lib/api";
 import { getIconByName } from "./lib/categoryIcons";
@@ -112,15 +114,20 @@ function App() {
         data-testid="app-shell"
         className="flex-1 max-w-7xl 2xl:max-w-[120rem] 3xl:max-w-[150rem] mx-auto w-full px-6 py-4 pb-8"
       >
-        {/* Settings that could not be read, on every tab: a detection failure is
-            a fact about the machine, so it is stated once, above the panel. */}
+        {/* Facts about the app and the machine, not about one tab, stated once
+            above the panel and each absent when there is nothing to say: the
+            welcome (until dismissed), a Windows update since the last run, a
+            detector two independent sources disagree on, and settings that
+            could not be read. */}
+        <FirstRunNotice />
+        <OsUpdateNotice />
+        <SelfCheckNotice />
         <DetectionNotice />
         <div
           role="tabpanel"
           id={tabPanelId(activeTab)}
           aria-labelledby={tabButtonId(activeTab)}
         >
-          {activeTab === "home" && <HomeTab />}
           {activeTab === "settings" && (
             <SettingsTab
               categoriesWithSettings={categoriesWithSettings}

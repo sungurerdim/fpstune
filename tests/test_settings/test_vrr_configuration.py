@@ -8,11 +8,11 @@ useless or harmful without the other two:
   * no V-Sync -> tearing returns in the moments the cap is overshot
   * VRR scoped to fullscreen only -> none of it applies in borderless
 
-fpstune shipped two answers to this question. ``gpu-nvidia:vrr_mode`` and
-``gpu-nvidia:vsync`` derived the configuration correctly, while the display
-panel's own ``get_vrr_optimization_info_for_monitor`` handed back "fullscreen"
-and V-Sync "off" — telling the user, in a different part of the same product, to
-undo it. These tests exist so the two paths cannot drift apart again.
+fpstune once shipped two answers to this question: ``gpu-nvidia:vrr_mode`` and
+``gpu-nvidia:vsync`` derived the configuration correctly, while a second path in the
+display panel handed back "fullscreen" and V-Sync "off", telling the user in a
+different part of the same product to undo it. That path is gone; the settings
+are the one answer, and these tests pin it.
 
 Source for the V-Sync pairing and the cap margin (``frame_cap_for_refresh``):
 https://blurbusters.com/gsync/gsync101-input-lag-tests-and-settings/
@@ -30,7 +30,6 @@ from fpstune.settings.definitions.gpu import (
     create_nvidia_vsync_setting,
 )
 from fpstune.settings.discovery.display import discover_vrr_dependent_settings
-from fpstune.settings.executors.nvprofile import NvProfileExecutor
 
 
 class TestDriverFpsCapFollowsThePanel:
@@ -98,43 +97,22 @@ class TestDriverFpsCapFollowsThePanel:
             )
 
 
-class TestTheVrrPanelAgreesWithTheSettings:
-    """The display panel and the settings registry answer the same question."""
+class TestTheVrrSettingsAreOneConfiguration:
+    """VRR mode, driver V-Sync and the cap are recommended together, never apart."""
 
     def test_vrr_mode_is_never_scoped_to_fullscreen_only(self) -> None:
         # "fullscreen" is NVCP's "Enable G-SYNC for full screen mode", which
         # leaves borderless without VRR entirely.
-        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(300, True)
-        assert info["recommended_vrr_mode"] != "fullscreen"
+        assert NVIDIA_VRR_MODE.recommended_value != "fullscreen"
 
-    def test_vrr_mode_matches_the_setting_that_writes_it(self) -> None:
-        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(300, True)
-        assert info["recommended_vrr_mode"] == NVIDIA_VRR_MODE.recommended_value
+    def test_vrr_mode_covers_borderless_too(self) -> None:
+        assert NVIDIA_VRR_MODE.recommended_value == "on"
 
-    def test_vsync_matches_the_setting_that_writes_it(self) -> None:
-        for hz, vrr in ((300, True), (60, False)):
-            info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(hz, vrr)
-            assert info["recommended_vsync"] == create_nvidia_vsync_setting(vrr).recommended_value
+    def test_vsync_is_on_under_vrr_where_it_costs_nothing(self) -> None:
+        assert create_nvidia_vsync_setting(True).recommended_value == "on"
 
-    def test_fps_limit_matches_the_setting_that_writes_it(self) -> None:
-        for hz in (60, 144, 300):
-            info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(hz, True)
-            assert (
-                info["recommended_fps_limit"]
-                == create_nvidia_fps_limiter_setting(True, hz).recommended_value
-            )
-
-    def test_a_fixed_refresh_panel_is_told_to_turn_everything_off(self) -> None:
-        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(144, False)
-        assert info["recommended_vrr_mode"] == "off"
-        assert info["recommended_vsync"] == "off"
-        assert info["recommended_fps_limit"] == 0
-
-    def test_the_explanation_does_not_advertise_the_setting_it_no_longer_makes(self) -> None:
-        # It used to read "VSync off eliminates input lag" while recommending
-        # V-Sync on two modules away.
-        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(300, True)
-        assert "VSync off eliminates input lag" not in info["explanation"]
+    def test_a_fixed_refresh_panel_gets_vsync_off_because_it_costs_latency_there(self) -> None:
+        assert create_nvidia_vsync_setting(False).recommended_value == "off"
 
 
 class TestDiscoveryRegistersTheDerivedCap:
@@ -282,10 +260,3 @@ class TestQualityGates:
         for s in settings:
             for text in (s.display_name, s.description, s.effect, s.recommended_impact):
                 assert not (forbidden & set(str(text))), s.id
-
-
-class TestAnUnknownRateGetsNoCap:
-    def test_a_vrr_panel_with_an_unknown_rate_gets_no_fabricated_cap(self) -> None:
-        # frame_cap_for_refresh(0) floors at 30 — a ceiling nothing measured.
-        info = NvProfileExecutor().get_vrr_optimization_info_for_monitor(0, True)
-        assert info["recommended_fps_limit"] == 0

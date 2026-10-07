@@ -15,7 +15,6 @@ from typing import TYPE_CHECKING, Any
 from fpstune.core.nv_drs import EnumKey, NumberKey, lookup
 from fpstune.settings.applicability import NOT_AVAILABLE, NOT_SUPPORTED
 from fpstune.settings.executors import BaseExecutor
-from fpstune.settings.performance_headroom import frame_cap_for_refresh
 from fpstune.utils.logger import get_logger
 
 if TYPE_CHECKING:
@@ -92,57 +91,6 @@ def read_setting_from_driver(setting_key: str) -> Any | None:
 
 class NvProfileExecutor(BaseExecutor):
     """Executor for NVIDIA Control Panel global settings."""
-
-    def get_vrr_optimization_info_for_monitor(
-        self, refresh_rate: int, supports_vrr: bool | None
-    ) -> dict[str, Any]:
-        """Get VRR optimization info for a specific monitor.
-
-        Args:
-            refresh_rate: Monitor's native/max refresh rate in Hz.
-            supports_vrr: The EDID's declaration — None when it could not be
-                read. Unknown recommends nothing VRR-shaped, same as False;
-                the caller owns saying "unknown" rather than "unsupported".
-
-        Returns:
-            Dict with recommended VRR settings for the monitor.
-        """
-        # Calculate recommended FPS limit (refresh - 3 for G-Sync optimal)
-        # A VRR panel whose rate is unknown gets no cap: frame_cap_for_refresh(0)
-        # would floor at 30 — a fabricated ceiling on an unread panel.
-        recommended_fps_limit = (
-            frame_cap_for_refresh(refresh_rate) if supports_vrr and refresh_rate > 0 else 0
-        )
-
-        # The three values below are one configuration, not three preferences, and
-        # this panel used to hand back a version of it that undid itself:
-        #
-        #   "fullscreen" is NVCP's "Enable G-SYNC for full screen mode", which
-        #   leaves VRR switched off in borderless — the mode most modern titles
-        #   default to and the one game_config:mw3:display_mode recommends. The
-        #   setting gpu-nvidia:vrr_mode has recommended "on" for exactly this
-        #   reason, so this panel was telling the user to undo it.
-        #
-        #   V-Sync "off" is right on a fixed-refresh display, where it costs
-        #   8-16 ms. Under a below-refresh cap on a VRR panel it is never reached,
-        #   so it costs nothing and is what keeps tearing away in the moments the
-        #   cap is overshot. gpu-nvidia:vsync already derives this per panel.
-        return {
-            "monitor_refresh_hz": refresh_rate,
-            "supports_vrr": supports_vrr,
-            "recommended_fps_limit": recommended_fps_limit,
-            "recommended_vrr_mode": "on" if supports_vrr else "off",
-            "recommended_vsync": "on" if supports_vrr else "off",
-            "explanation": (
-                f"FPS limit {recommended_fps_limit} keeps G-Sync active at {refresh_rate}Hz, "
-                "in borderless as well as fullscreen. Driver V-Sync stays on as the safety "
-                "net above the cap, where it costs no latency. Result: no tearing + lowest "
-                "latency."
-                if supports_vrr
-                else "Monitor doesn't support G-Sync/FreeSync. VRR disabled, FPS uncapped, "
-                "VSync off to avoid its 8-16 ms cost."
-            ),
-        }
 
     def detect(self, setting: SettingExecutor) -> tuple[Any | None, str | None]:
         if sys.platform != "win32":

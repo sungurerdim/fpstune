@@ -72,17 +72,6 @@ class TestFpsCapDerivation:
         assert create_mw3_fps_cap_setting(165, vrr=True).recommended_value == 157
         assert create_mw3_fps_cap_setting(300, vrr=True).recommended_value == 275
 
-    def test_matches_the_nvidia_path_formula(self) -> None:
-        # The driver cap and the in-game cap come from one function; if they
-        # disagree the lower one silently becomes the ceiling.
-        from fpstune.settings.executors.nvprofile import NvProfileExecutor
-
-        for hz in (60, 144, 165, 300):
-            driver_side = NvProfileExecutor().get_vrr_optimization_info_for_monitor(
-                refresh_rate=hz, supports_vrr=True
-            )["recommended_fps_limit"]
-            assert create_mw3_fps_cap_setting(hz, vrr=True).recommended_value == driver_side
-
     def test_floors_at_30_for_low_refresh_panels(self) -> None:
         # MaxFpsInGame's own range is 30-300; 30 - 3 would fall outside it.
         setting = create_mw3_fps_cap_setting(30, vrr=True)

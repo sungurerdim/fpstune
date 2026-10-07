@@ -163,6 +163,38 @@ class TestComparableDriverVersion:
         assert comparable_driver_version("nvidia", "32.0.15.9159") == "591.59"
         assert comparable_driver_version("nvidia", "31.0.15.3623") == "536.23"
 
+    @pytest.mark.parametrize(
+        ("windows_form", "marketing"),
+        [
+            ("32.0.16.0095", "600.95"),  # fourth part zero-padded: 95 is "0095", not 95
+            ("32.0.15.9159", "591.59"),
+            ("32.0.16.0001", "600.01"),
+            ("32.0.15.9999", "599.99"),
+            ("31.0.15.3623", "536.23"),
+            ("26.21.14.4250", "442.50"),  # the older NVIDIA numbering follows the same rule
+            ("  32.0.16.0095  ", "600.95"),
+        ],
+    )
+    def test_the_zero_padded_fourth_part_keeps_its_leading_zero(
+        self, windows_form: str, marketing: str
+    ) -> None:
+        """Last digit of the third part + the four-digit tail is the NVIDIA number.
+
+        `len(str(parsed[3]))` read the tail as an int, so "0095" became 95 and the
+        conversion was skipped: a 600.95 driver stayed "32.0.16.0095" and every
+        `DriverGate` written as "600.95" read it as an older, unconvertible version.
+        """
+        assert comparable_driver_version("nvidia", windows_form) == marketing
+
+    @pytest.mark.parametrize(
+        "unconvertible", ["32.0.16.95", "32.0.16.00095", "32.0.16", "591.59.1", "32.0.16.0095.1"]
+    )
+    def test_a_form_that_is_not_the_four_part_windows_one_is_left_as_reported(
+        self, unconvertible: str
+    ) -> None:
+        """Unknown shapes are never guessed into a marketing number."""
+        assert comparable_driver_version("nvidia", unconvertible) == unconvertible
+
     def test_amd_and_intel_keep_windows_form(self) -> None:
         assert comparable_driver_version("amd", "32.0.15.7602") == "32.0.15.7602"
         assert comparable_driver_version("intel", "31.0.101.5186") == "31.0.101.5186"

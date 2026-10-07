@@ -110,8 +110,11 @@ def comparable_driver_version(vendor: str | None, reported: str | None) -> str |
     if parsed is None or reported is None:
         return None
     text = reported.strip()
-    if vendor == "nvidia" and len(parsed) == 4 and len(str(parsed[3])) == 4:
-        digits = f"{str(parsed[2])[-1]}{parsed[3]:04d}"
+    # The parts stay strings: the tail is zero-padded to four digits ("0095" is
+    # 600.95), and read as an int its leading zero is gone and so is its length.
+    parts = text.split(".")
+    if vendor == "nvidia" and len(parts) == 4 and len(parts[3]) == 4:
+        digits = f"{parts[2][-1]}{parts[3]}"
         return f"{int(digits[:-2])}.{digits[-2:]}"
     return text
 

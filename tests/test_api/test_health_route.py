@@ -17,7 +17,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
-from fpstune.health.findings import Finding, Gap, HealthReport, Quantity
+from fpstune.health.model import Finding, Gap, HealthReport, Quantity
 
 ROUTE = "/api/health/findings"
 

@@ -1,24 +1,16 @@
 """One list of what is wrong with this machine, built from the instruments.
 
-Four instruments already knew something about the machine's health and none of
-them said it as a problem: `storage_health` reads a drive's own wear counter,
-`pcie_link` reads the lanes the graphics card negotiated, `event_scan` counts what
-Windows recorded going wrong. Each answered through its own panel, in its own
-shape, to someone who already knew to look. This module is the one place they are
-turned into the same thing — a **finding** — so a screen that asks "is anything
-wrong?" reads one list instead of three panels (#107, H1).
+Four sources already knew something about the machine's health and none of them
+said it as a problem: `storage_health` reads a drive's own wear counter, `pcie_link`
+reads the lanes the graphics card negotiated, `event_scan` counts what Windows
+recorded going wrong, and the thermal readers (`health.thermal_source`) read each
+device's temperature against the limit its own driver or firmware published. Each
+answered through its own panel, in its own shape, to someone who already knew to
+look. This module is the one place they are turned into the same thing — a
+**finding** — so a screen that asks "is anything wrong?" reads one list instead of
+four panels (#107, H1, H5).
 
-A finding carries the reading, the limit it was read against, and the component it
-belongs under:
-
-| Field | Meaning |
-|---|---|
-| `component` | `cpu`, `gpu`, `storage` or `system` — which heading a UI files it under |
-| `device_id` | a stable id (C5) of the device, or None when the evidence names a class of device and not one of them (a Windows event does not say which disk) |
-| `severity` | `warning` (near its limit, or reported degraded) or `critical` (at or over it) |
-| `title_key` | an i18n key — one of `TITLE_KEYS`, which the UI must hold a string for |
-| `reading`, `limit` | what was measured and what it was measured against; both optional |
-| `source` | which instrument said so |
+A finding's fields and the keys it may carry are in `health.model`.
 
 **Healthy is an empty list.** No instrument "reports OK": a source that finds
 nothing wrong contributes nothing.
@@ -44,46 +36,30 @@ for one refill rather than starting several.
 
 from __future__ import annotations
 
-import re
 import threading
 import time
 from collections.abc import Callable, Mapping
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
-from typing import Literal
 
 from fpstune.benchmark.event_scan import EventScanBench
 from fpstune.benchmark.pcie_link import PcieLinkBench
 from fpstune.benchmark.storage_health import StorageHealthBench
 from fpstune.benchmark.suite import Bench, BenchResult, run_bench_with_deadline
+from fpstune.health.model import (
+    Component,
+    Finding,
+    Gap,
+    HealthReport,
+    Quantity,
+    Severity,
+    Source,
+    SourceResult,
+    stable_pci_id,
+)
+from fpstune.health.thermal_source import thermal_source
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
-
-Component = Literal["cpu", "gpu", "storage", "system"]
-Severity = Literal["warning", "critical"]
-
-TITLE_KEYS = frozenset(
-    {
-        # A drive's own rated-endurance counter.
-        "health.storage.endurance",
-        # The graphics card negotiated fewer PCIe lanes than it has.
-        "health.gpu.pcie_link_width",
-        # Windows' own record of failures over the scan window.
-        "health.system.crashes",
-        "health.system.unexpected_shutdowns",
-        "health.system.hardware_errors",
-        "health.gpu.driver_resets",
-        "health.storage.io_errors",
-    }
-)
-"""Every `title_key` a finding may carry.
-
-A finding built with a key that is not here fails at construction, because the key
-is a promise to the UI that a translated string exists: a misspelt one would reach
-a screen as a raw identifier. The frontend adds the strings (`i18n/en.ts`,
-`i18n/tr.ts`); a test there compares against this set.
-"""
 
 CACHE_SECONDS = 30.0
 """How long a collected report is served without asking the instruments again.
@@ -102,71 +78,6 @@ drive reports the share of its rated endurance already spent in whole percent, a
 replacement should be planned rather than discovered, and a reading is whole
 percent so a margin finer than a few points would be noise.
 """
-
-_PCI_STABLE_ID = re.compile(r"(PCI\\VEN_[0-9A-F]+&DEV_[0-9A-F]+)", re.IGNORECASE)
-
-
-@dataclass(frozen=True)
-class Quantity:
-    """A number with the unit it is in."""
-
-    value: float
-    unit: str
-
-
-@dataclass(frozen=True)
-class Finding:
-    """One thing that is wrong, or about to be, on one component."""
-
-    component: Component
-    device_id: str | None
-    severity: Severity
-    title_key: str
-    reading: Quantity | None
-    limit: Quantity | None
-    source: str
-
-    def __post_init__(self) -> None:
-        if self.title_key not in TITLE_KEYS:
-            raise ValueError(
-                f"{self.title_key!r} is not a known finding title — add it to TITLE_KEYS "
-                "and give the UI a string for it"
-            )
-
-
-@dataclass(frozen=True)
-class Gap:
-    """A check that could not be made, and why."""
-
-    source: str
-    reason: str
-
-
-@dataclass(frozen=True)
-class SourceResult:
-    """What one source contributed: findings, and gaps it could not close."""
-
-    findings: tuple[Finding, ...] = ()
-    gaps: tuple[Gap, ...] = ()
-
-
-@dataclass(frozen=True)
-class HealthReport:
-    """Everything wrong, and everything that could not be checked."""
-
-    findings: tuple[Finding, ...]
-    unmeasured: tuple[Gap, ...]
-    measured_at: float
-    """Wall-clock epoch seconds when the sources were asked, so a UI can say how old this is."""
-
-
-Source = Callable[[], SourceResult]
-
-
-def stable_pci_id(pnp_device_id: str) -> str | None:
-    """The `PCI\\VEN_xxxx&DEV_xxxx` part of a PNPDeviceID, upper-cased (C5), or None."""
-    match = _PCI_STABLE_ID.match(pnp_device_id or "")
-    return match.group(1).upper() if match else None
 
 
 def _gap(result: BenchResult) -> SourceResult:
@@ -316,6 +227,7 @@ SOURCES: dict[str, Source] = {
     "storage_health": _from_bench(StorageHealthBench, storage_findings),
     "pcie_link": _from_bench(PcieLinkBench, pcie_findings),
     "event_scan": _from_bench(EventScanBench, event_findings),
+    "thermal": thermal_source,
 }
 """Every source `collect` asks, by the name a gap is reported under."""
 

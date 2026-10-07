@@ -18,14 +18,14 @@ import asyncio
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
 
-from fpstune.health.findings import (
+from fpstune.health.findings import collect
+from fpstune.health.model import (
     Component,
     Finding,
     Gap,
     HealthReport,
     Quantity,
     Severity,
-    collect,
 )
 
 router = APIRouter()

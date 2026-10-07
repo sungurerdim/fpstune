@@ -29,18 +29,20 @@ from fpstune.benchmark.suite import BenchResult
 from fpstune.health import findings as health
 from fpstune.health.findings import (
     CACHE_SECONDS,
-    TITLE_KEYS,
     WEAR_WARNING_MARGIN_PERCENT,
-    Finding,
-    Gap,
-    Quantity,
-    SourceResult,
     collect,
     event_findings,
     pcie_findings,
     reset_cache,
-    stable_pci_id,
     storage_findings,
+)
+from fpstune.health.model import (
+    TITLE_KEYS,
+    Finding,
+    Gap,
+    Quantity,
+    SourceResult,
+    stable_pci_id,
 )
 
 # An NVMe's own EUI-64 and a discrete + integrated adapter pair, passed in as
@@ -306,8 +308,8 @@ class TestCollect:
         assert len(report.findings) == 1
         assert report.unmeasured == (Gap("broken", "the check failed (OSError)"),)
 
-    def test_the_registry_names_the_three_instruments(self) -> None:
-        assert set(health.SOURCES) >= {"storage_health", "pcie_link", "event_scan"}
+    def test_the_registry_names_every_source(self) -> None:
+        assert set(health.SOURCES) == {"storage_health", "pcie_link", "event_scan", "thermal"}
 
 
 class TestTheCache:

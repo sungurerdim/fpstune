@@ -22,7 +22,6 @@ import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
 
 
-vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../hardware/useHardware", () => ({
   useHardware: () => ({ hardware: null, isLoading: false }),
 }));

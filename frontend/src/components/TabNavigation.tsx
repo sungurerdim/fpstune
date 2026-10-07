@@ -8,7 +8,6 @@ import {
   ChevronRight,
   Zap,
   HardDrive,
-  Monitor,
   Gauge,
   Activity,
   ShieldCheck,
@@ -28,9 +27,8 @@ import type { MessageKey } from "../i18n/en";
 
 const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Zap }> = [
   { id: "optimize", labelKey: "tab.optimize", icon: Zap },
-  { id: "hardware", labelKey: "tab.hardware", icon: Monitor },
   { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
-  { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
+  { id: "measure", labelKey: "tab.measure", icon: Gauge },
 ];
 
 /**
@@ -139,10 +137,10 @@ export function TabNavigation() {
 
   return (
     <div className="sticky top-0 z-10 bg-background border-b border-border">
-      {/* Two rows until the window is wide enough for brand, six labelled tabs
-          and the chrome on one line (about 1920px: the Turkish labels alone are
-          1031px). Squeezed onto one row below that, the tabs were what gave way:
-          their labels wrapped to three lines and the strip outgrew its box. */}
+      {/* Two rows until the window is wide enough for brand, the labelled tabs
+          and the chrome on one line (the 3xl breakpoint). Squeezed onto one row
+          below that, the tabs were what gave way: their labels wrapped to three
+          lines and the strip outgrew its box. */}
       <div className="max-w-7xl 2xl:max-w-[120rem] mx-auto px-6 flex flex-wrap items-center justify-between gap-x-3">
         {/* Brand */}
         <div className="order-1 flex items-center gap-1.5 pr-2 py-2 3xl:py-0 shrink-0">
@@ -199,8 +197,8 @@ export function TabNavigation() {
                   <Icon className="w-4 h-4 shrink-0" aria-hidden="true" />
                   {/* Hidden from the eye below lg, never from the reader:
                       `hidden` is display:none, which took the tab's only
-                      accessible name away on a narrow window and left six
-                      unnamed buttons. `max-lg:sr-only` rather than
+                      accessible name away on a narrow window and left every
+                      tab an unnamed button. `max-lg:sr-only` rather than
                       `sr-only lg:not-sr-only`: not-sr-only resets
                       `white-space` to normal, which let the button's own
                       nowrap lapse and wrapped every label onto 2-3 lines. */}

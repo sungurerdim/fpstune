@@ -108,7 +108,7 @@ export function DeviceCardCompact({
   if (tweaks.toApply === 0) return null;
 
   const open = () => {
-    setActiveTab("hardware");
+    setActiveTab("optimize");
     // The Hardware page mounts on the tab switch; scroll once it has.
     requestAnimationFrame(() =>
       document.getElementById(deviceCardId(deviceKey))?.scrollIntoView({ block: "start" }),

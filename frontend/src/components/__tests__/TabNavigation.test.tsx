@@ -38,11 +38,15 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     } as never);
   });
 
-  it("exposes exactly one tab strip over the four tabs", () => {
+  it("exposes exactly one tab strip over three tabs: Optimize, Cleanup, Measure, in that order", () => {
     render(<TabNavigation />);
 
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    expect(tabButtons()).toHaveLength(4);
+    expect(tabButtons().map((tab) => tab.getAttribute("title"))).toEqual([
+      "Optimize",
+      "Cleanup & Repair",
+      "Measure",
+    ]);
   });
 
   it("keeps every tab findable by the words on it, at any width", () => {
@@ -50,10 +54,9 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     // md the tab had no accessible name at all, only an icon.
     render(<TabNavigation />);
 
-    expect(
-      screen.getByRole("tab", { name: /Optimize/ }),
-    ).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: /Hardware Tweaks/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Optimize/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Cleanup/ })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: /Measure/ })).toBeInTheDocument();
   });
 
   it("puts only the selected tab in the page's tab order", () => {
@@ -210,7 +213,9 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     render(<TabNavigation />);
 
     expect(within(screen.getByRole("tab", { name: /Optimize/ })).getByText("3")).toBeInTheDocument();
-    expect(within(screen.getByRole("tab", { name: /Hardware/ })).queryByText(/^\d+$/)).toBeNull();
+    // Nothing else on the strip carries a number.
+    expect(within(screen.getByRole("tab", { name: /Cleanup/ })).queryByText(/^\d+$/)).toBeNull();
+    expect(within(screen.getByRole("tab", { name: /Measure/ })).queryByText(/^\d+$/)).toBeNull();
   });
 
   it("names a panel only from the tab that actually has one", () => {

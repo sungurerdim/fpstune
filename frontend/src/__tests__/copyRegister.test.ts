@@ -30,8 +30,6 @@ const COMPONENTS = import.meta.glob("../**/*.tsx", {
 const _UNTRANSLATED_BASELINE = new Set([
   "App.tsx", // string-free or prop-fed — nothing to migrate
   "components/CleanupRunnerProvider.tsx", // string-free or prop-fed — nothing to migrate
-  // string-free (renders HardwarePanel only) — nothing to migrate:
-  "components/HardwareTab.tsx",
   "components/TweakRows.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Badge.tsx", // string-free or prop-fed — nothing to migrate
   "components/ui/Button.tsx", // string-free or prop-fed — nothing to migrate

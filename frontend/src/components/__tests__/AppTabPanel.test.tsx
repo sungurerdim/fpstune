@@ -25,7 +25,6 @@ vi.mock("../CleanupRunnerProvider", () => ({
 }));
 vi.mock("../OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
-vi.mock("../HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
 vi.mock("../BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
 
 function assertTabOwnsThePanel() {
@@ -53,9 +52,9 @@ describe("the selected tab and the panel on screen are one thing", () => {
   it("keeps the tie after the tab changes", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /Hardware Tweaks/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Cleanup/ }));
 
-    expect(screen.getByText("hardware panel")).toBeInTheDocument();
+    expect(screen.getByText("cleanup panel")).toBeInTheDocument();
     assertTabOwnsThePanel();
   });
 

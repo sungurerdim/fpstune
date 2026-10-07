@@ -378,11 +378,11 @@ describe("DeviceCard", () => {
 
     it("opens the Hardware page", async () => {
       setStore([FIXABLE]);
-      useStore.setState({ activeTab: "home" } as never);
+      useStore.setState({ activeTab: "cleanup" } as never);
       render(<DeviceCardCompact deviceKey="gpu-0" icon={Monitor} title="GPU" match={matchAll} />);
 
       fireEvent.click(screen.getByRole("button", { name: "Open GPU on the Hardware page" }));
-      expect(useStore.getState().activeTab).toBe("hardware");
+      expect(useStore.getState().activeTab).toBe("optimize");
     });
   });
 });

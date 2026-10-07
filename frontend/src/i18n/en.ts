@@ -52,10 +52,9 @@ export const en = {
   "update.unreachable": "Could not check for updates: {reason}",
   "header.admin": "Admin",
   "header.notAdmin": "Not Admin",
-  "tab.hardware": "Hardware Tweaks",
   "tab.optimize": "Optimize",
   "tab.cleanup": "Cleanup & Repair",
-  "tab.benchmarks": "Benchmarks",
+  "tab.measure": "Measure",
 
   // Display mode confirmation
   "displayConfirm.title": "Keep the new display mode?",
@@ -275,10 +274,6 @@ export const en = {
   "toolbar.none.reset": "Everything in {name} is already at its default",
 
   // Hardware surfaces
-  "hw.ramSummary": "{total} GB RAM • {available} GB available",
-  "hw.title": "Hardware",
-  "hw.admin": "Admin",
-  "hw.notAdmin": "Not Admin",
   "hw.cpu": "CPU",
   "hw.memory": "Memory",
   "hw.gpu": "GPU",
@@ -444,7 +439,7 @@ export const en = {
   // Verify panel
   "verify.title": "Verify a claim",
   "verify.selectFirst":
-    "Select the settings you are about to change, on the Settings tab. A round is only meaningful about settings it knows changed — so this asks which ones rather than guessing from what is applied.",
+    "Select the settings you are about to change, on the Optimize tab. A round is only meaningful about settings it knows changed — so this asks which ones rather than guessing from what is applied.",
   "verify.selectedSummary":
     "{count} selected. Measure, apply them, measure again, and this judges what the settings claimed against what the machine did.",
   "verify.couldShow": "What this could show",
@@ -484,9 +479,7 @@ export const en = {
   "activity.open": "Open activity log",
   "activity.close": "Close activity log",
 
-  // Software Tweaks tab
-
-  // Game Tweaks tab
+  // Optimize tab
   "games.reading": "Reading your game configs…",
   "games.noneFound":
     "No supported game config was found on this machine. fpstune reads a game's config only where the game is installed.",

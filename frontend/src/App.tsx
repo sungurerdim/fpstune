@@ -1,7 +1,6 @@
 import { TabNavigation } from "./components/TabNavigation";
 import { OptimizeTab } from "./components/OptimizeTab";
 import { DiskCleanupTab } from "./components/DiskCleanupTab";
-import { HardwareTab } from "./components/HardwareTab";
 import { BenchmarksTab } from "./components/BenchmarksTab";
 import { CleanupRunnerProvider } from "./components/CleanupRunnerProvider";
 import { NotificationToasts } from "./components/ui/NotificationToasts";
@@ -54,8 +53,7 @@ function App() {
         >
           {activeTab === "optimize" && <OptimizeTab />}
           {activeTab === "cleanup" && <DiskCleanupTab />}
-          {activeTab === "hardware" && <HardwareTab />}
-          {activeTab === "benchmarks" && <BenchmarksTab />}
+          {activeTab === "measure" && <BenchmarksTab />}
         </div>
       </main>
     </div>

@@ -14,6 +14,8 @@
  * refactor without anyone noticing, which is how the single column came back
  * the first time. The narrow-end assertion (`grid-cols-1`) is half the point:
  * a change that widens the desktop layout by breaking the phone one fails here.
+ * The Optimize tab is the one exception, on purpose: its one-line rows stay in
+ * one column at every width, and it pins that instead.
  *
  * The pages are asserted through their real containers rather than a snapshot,
  * so a renamed class fails loudly and a re-worded heading does not.
@@ -23,7 +25,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen } from "../../test/utils";
 import App from "../../App";
 import { OptimizeTab } from "../OptimizeTab";
-import { HardwarePanel } from "../HardwarePanel";
 import { BenchmarksTab } from "../BenchmarksTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
@@ -34,7 +35,6 @@ vi.mock("../CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
 vi.mock("../ActivityLog", () => ({ ActivityLog: () => null }));
-vi.mock("../hardware/useRefreshOnFocus", () => ({ useRefreshOnFocus: () => undefined }));
 vi.mock("../FirstRunNotice", () => ({ FirstRunNotice: () => null }));
 vi.mock("../OsUpdateNotice", () => ({ OsUpdateNotice: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
@@ -52,18 +52,13 @@ vi.mock("../../hooks/useApply", () => ({
   }),
 }));
 
-// The hardware page asserts its own layout; the panel is real here.
-vi.mock("../HardwarePanel", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../HardwarePanel")>()),
-}));
-
 // The benchmark panels each hold a query and an SSE client. The tab's own job is
 // to place them, and that is what this file asks it.
 vi.mock("../SuitePanel", () => ({ SuitePanel: () => <p>suite</p> }));
 vi.mock("../VerifyPanel", () => ({ VerifyPanel: () => <p>verify</p> }));
 vi.mock("../HeadroomPanel", () => ({ HeadroomPanel: () => <p>headroom</p> }));
 
-// The hardware page's own children each probe a device; the columns are what is
+// A device the Optimize page opens probes the machine; the columns are what is
 // under test, and an unmocked probe would make this a network test.
 vi.mock("../hardware/useRefreshOnFocus", () => ({
   useRefreshOnFocus: () => undefined,
@@ -146,19 +141,6 @@ function setStore(settings: Setting[]) {
   } as never);
 }
 
-/**
- * The contract itself: one column when narrow, more than one further up.
- *
- * Written as a helper so every page states the same property, and so a page that
- * declares only the wide half — the regression that starts "it looks fine on my
- * monitor" — cannot pass by naming one class.
- */
-function expectRespondsToWidth(element: HTMLElement, wideClass: string) {
-  expect(element).toHaveClass("grid");
-  expect(element).toHaveClass("grid-cols-1");
-  expect(element).toHaveClass(wideClass);
-}
-
 beforeEach(() => {
   setStore([]);
 });
@@ -200,12 +182,6 @@ describe("every page lays its content out across the width it is given", () => {
     const rows = screen.getAllByTestId("tweak-row");
     expect(rows).toHaveLength(4);
     for (const row of rows) expect(row.closest('[class*="grid-cols"]')).toBeNull();
-  });
-
-  it("Hardware: device cards sit two abreast on a wide window, one on a narrow one", () => {
-    render(<HardwarePanel />);
-
-    expectRespondsToWidth(screen.getByTestId("hardware-columns"), "xl:grid-cols-2");
   });
 
   it("Benchmarks: the result sits beside the instrument on a wide window", () => {

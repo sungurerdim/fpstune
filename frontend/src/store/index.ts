@@ -6,11 +6,7 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 // Cleanup already drove the same action runner. The repair panel moved there and
 // the tab is gone; nothing persists the active tab, so no stored value can point
 // at a route that no longer exists.
-export type TabId =
-  | "optimize"
-  | "hardware"
-  | "cleanup"
-  | "benchmarks";
+export type TabId = "optimize" | "cleanup" | "measure";
 /** What a streamed bulk run does to each row: apply, or reset to its default. */
 export type BulkAction = "apply" | "reset";
 export type OperationStatus =

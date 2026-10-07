@@ -22,7 +22,6 @@ vi.mock("../components/CleanupRunnerProvider", () => ({
 vi.mock("../components/SelfCheckNotice", () => ({ SelfCheckNotice: () => <p>self-check notice</p> }));
 vi.mock("../components/OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../components/DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
-vi.mock("../components/HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
 vi.mock("../components/BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
 
 const SOURCES = import.meta.glob("../**/*.tsx", {
@@ -63,7 +62,7 @@ describe("app-level notices", () => {
         current: "26200.6584",
         changed: true,
       });
-      useStore.setState({ activeTab: "benchmarks", settings: new Map() } as never);
+      useStore.setState({ activeTab: "measure", settings: new Map() } as never);
     });
 
     it("welcomes a first run, and does not again once dismissed", () => {

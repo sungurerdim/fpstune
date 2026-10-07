@@ -47,10 +47,9 @@ export const tr: Record<keyof typeof en, string> = {
   "update.unreachable": "Güncellemeler denetlenemedi: {reason}",
   "header.admin": "Yönetici",
   "header.notAdmin": "Yönetici değil",
-  "tab.hardware": "Donanım İnce Ayarları",
   "tab.optimize": "Optimize Et",
   "tab.cleanup": "Temizlik ve Onarım",
-  "tab.benchmarks": "Ölçümler",
+  "tab.measure": "Ölçüm",
 
   // Ekran modu onayı
   "displayConfirm.title": "Yeni ekran modu korunsun mu?",
@@ -256,10 +255,6 @@ export const tr: Record<keyof typeof en, string> = {
   "toolbar.none.apply": "{name} içinde uygulanacak bir şey yok",
   "toolbar.none.reset": "{name} içindeki her şey zaten varsayılanında",
   // Hardware surfaces
-  "hw.ramSummary": "{total} GB RAM • {available} GB boş",
-  "hw.title": "Donanım",
-  "hw.admin": "Yönetici",
-  "hw.notAdmin": "Yönetici Değil",
   "hw.cpu": "İşlemci",
   "hw.memory": "Bellek",
   "hw.gpu": "Ekran Kartı",
@@ -423,7 +418,7 @@ export const tr: Record<keyof typeof en, string> = {
   // Verify panel
   "verify.title": "Bir iddiayı doğrula",
   "verify.selectFirst":
-    "Değiştirmek üzere olduğunuz ayarları Ayarlar sekmesinden seçin. Bir tur ancak değiştiğini bildiği ayarlar hakkında anlamlıdır — bu yüzden uygulananlardan tahmin etmek yerine hangileri olduğunu sorar.",
+    "Değiştirmek üzere olduğunuz ayarları Optimize Et sekmesinden seçin. Bir tur ancak değiştiğini bildiği ayarlar hakkında anlamlıdır — bu yüzden uygulananlardan tahmin etmek yerine hangileri olduğunu sorar.",
   "verify.selectedSummary":
     "{count} ayar seçili. Ölçün, uygulayın, tekrar ölçün; bu, ayarların iddia ettiğini makinenin yaptığıyla yargılar.",
   "verify.couldShow": "Bunun gösterebilecekleri",
@@ -463,9 +458,7 @@ export const tr: Record<keyof typeof en, string> = {
   "activity.open": "Etkinlik günlüğünü aç",
   "activity.close": "Etkinlik günlüğünü kapat",
 
-  // Software Tweaks tab
-
-  // Game Tweaks tab
+  // Optimize tab
   "games.reading": "Oyun yapılandırmalarınız okunuyor…",
   "games.noneFound":
     "Bu makinede desteklenen bir oyun yapılandırması bulunamadı. fpstune bir oyunun yapılandırmasını yalnızca oyun kuruluysa okur.",

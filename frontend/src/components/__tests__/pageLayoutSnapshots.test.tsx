@@ -21,7 +21,6 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { fireEvent, render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { layoutOutline, setViewport } from "../../test/layoutOutline";
 import { OptimizeTab } from "../OptimizeTab";
-import { HardwarePanel } from "../HardwarePanel";
 import { useStore } from "../../store";
 import type { HardwareInfo } from "../../lib/api";
 import type { CategoryMetadata, Setting } from "../../types/setting";
@@ -187,16 +186,6 @@ interface Page {
 }
 
 const PAGES: Page[] = [
-  {
-    name: "Hardware",
-    adapts: true,
-    mount: async () => {
-      setStore([]);
-      const view = render(<HardwarePanel />);
-      await screen.findByRole("region", { name: "Example Monitor" });
-      return view;
-    },
-  },
   {
     name: "Optimize",
     // One column of closed sections and one-line rows at every width.

@@ -24,7 +24,6 @@ vi.mock("../components/CleanupRunnerProvider", () => ({
 }));
 vi.mock("../components/OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../components/DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
-vi.mock("../components/HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
 vi.mock("../components/BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
 
 const SOURCES = import.meta.glob("../**/*.tsx", {
@@ -55,7 +54,7 @@ describe("DetectionNotice mount", () => {
   describe("at app level", () => {
     beforeEach(() => {
       useStore.setState({
-        activeTab: "benchmarks",
+        activeTab: "measure",
         settings: new Map([[FAILED.id, FAILED]]),
       } as never);
     });

@@ -94,6 +94,7 @@ _CATEGORY_KEYS: Final[dict[str, frozenset[str]]] = {
     "thermal": frozenset(
         {
             "gpu_temp_c",
+            "thermal_zone_c",
             "power_watts",
             "battery_life",
             "fps_menu_ceiling",

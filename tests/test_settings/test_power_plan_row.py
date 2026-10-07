@@ -186,6 +186,22 @@ class TestRowContract:
         """`create()` writes the powercfg rows onto the new plan; recursing into itself is a loop."""
         assert FPS_BALANCED_PLAN.detect_type is not DetectType.POWERCFG
 
+    def test_it_claims_a_measurable_heat_gain_rather_than_a_zero_placeholder(self) -> None:
+        """C2 + C11: the claim names a metric an instrument reads, and says a real number.
+
+        The row once carried `power_watts: 0.0`, a padding entry the GPU sensor
+        could never have confirmed for a CPU-side change.
+        """
+        from fpstune.benchmark.sources import source_for
+        from fpstune.settings.impact_categories import derive_impact_categories
+
+        claims = {k: v for k, v in FPS_BALANCED_PLAN.impact_scores.items() if k != "stability"}
+        assert claims, "C2: at least one performance or resource metric"
+        for metric, value in claims.items():
+            assert value not in (0, 0.0, "0", "0%"), metric
+            assert source_for(metric) is not None, metric
+        assert "thermal" in derive_impact_categories(FPS_BALANCED_PLAN.impact_scores)
+
     def test_every_choice_label_exists_in_both_catalogues(self) -> None:
         i18n = Path(__file__).resolve().parents[2] / "frontend" / "src" / "i18n"
         assert set(FPS_BALANCED_PLAN.choice_labels) == set(FPS_BALANCED_PLAN.choices)

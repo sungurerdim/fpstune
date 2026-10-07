@@ -99,7 +99,7 @@ class TestKnowingWhichWayIsBetter:
         """
         assert direction_of(ceiling) is None
 
-    @pytest.mark.parametrize("metric", ["gpu_temp_c", "power_watts"])
+    @pytest.mark.parametrize("metric", ["gpu_temp_c", "power_watts", "thermal_zone_c"])
     def test_the_heat_a_cap_avoids_is_measurable_even_when_the_cap_is_not(
         self, metric: str
     ) -> None:

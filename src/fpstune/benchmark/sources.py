@@ -162,8 +162,12 @@ SOURCES: tuple[Source, ...] = (
             # once a second, with no power virus and no kernel driver.
             "gpu_temp_c": "gpu_temp_c",
             "power_watts": "power_watts",
+            # The ACPI zone: machine-wide and vendor-neutral, so it is the one
+            # heat reading a CPU-side claim (idle cores clocking down) can be
+            # checked against — the GPU board's own sensor never sees it.
+            "thermal_zone_c": "thermal_zone_c",
         },
-        units={"gpu_temp_c": "C", "power_watts": "W"},
+        units={"gpu_temp_c": "C", "power_watts": "W", "thermal_zone_c": "C"},
     ),
     Source(
         name="dpc",

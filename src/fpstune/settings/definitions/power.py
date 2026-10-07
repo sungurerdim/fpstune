@@ -1332,9 +1332,12 @@ FPS_BALANCED_PLAN = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=0,
     effect="Switches to a copy of Balanced that holds fpstune's power tweaks",
-    # What the plan is worth is the sum of the power:* rows it carries, each
-    # with its own claim; this row adds no number of its own to that.
-    impact_scores={"power_watts": 0.0, "stability": "high"},
+    # Heat, not frames (consequence 4): the claim is the machine-wide ACPI zone
+    # temperature while the cores idle, the one sensor a CPU-side change moves
+    # (the GPU board's own `gpu_temp_c`/`power_watts` never see it). It is a
+    # claim, not a total of the rows the plan carries (C11 rule 1); the verify
+    # round measures it.
+    impact_scores={"thermal_zone_c": "-1-3", "stability": "high"},
     choice_labels={
         "fps_balanced": "choice.fps_balanced",
         "balanced": "choice.windows_balanced",

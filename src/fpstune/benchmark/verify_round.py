@@ -65,6 +65,7 @@ _LOWER_IS_BETTER: frozenset[str] = frozenset(
         "vram_mb",
         "power_watts",
         "gpu_temp_c",
+        "thermal_zone_c",
         # Failures and the time the machine spends not being usable. Each is a
         # count or a duration the machine produced, so fewer and shorter is the
         # improvement — including `shutdown_speed`, whose name says speed and

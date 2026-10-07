@@ -244,7 +244,7 @@ class TestTheMappingStillPointsAtSomethingReal:
         """Heat is a performance category (consequence 4), so it has to be
         readable under the load a bench actually applies. FurMark answers "how
         hot under a load nobody plays at", which is a different question."""
-        for metric in ("gpu_temp_c", "power_watts"):
+        for metric in ("gpu_temp_c", "power_watts", "thermal_zone_c"):
             source = source_for(metric)
             assert source is not None
             assert source.name == "sensors", metric

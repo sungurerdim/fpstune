@@ -33,7 +33,6 @@ export interface CategoryMetadata {
   id: string;
   displayName: string;
   description: string;
-  icon: string; // Lucide icon name: "Clock", "Zap", "Wifi"
   color: string; // Tailwind class: "text-blue-500"
   isActionOnly: boolean; // True for categories shown in Maintenance tab only
   order: number;
@@ -46,7 +45,6 @@ export interface CategoryMetadataResponse {
   id: string;
   display_name: string;
   description: string;
-  icon: string;
   color: string;
   order: number;
   is_action_only: boolean;
@@ -62,7 +60,6 @@ export function categoryResponseToMetadata(
     id: response.id,
     displayName: response.display_name,
     description: response.description,
-    icon: response.icon,
     color: response.color,
     isActionOnly: response.is_action_only,
     order: response.order,
@@ -220,7 +217,6 @@ export interface Setting {
   domain: TweakDomain;
   /** The physical component a hardware tweak acts on; absent for software and games. */
   component?: HardwareComponent;
-  icon?: string; // Lucide icon name (from backend)
   color?: string; // Tailwind color class (from backend)
   categoryOrder: number; // Sort order within category
   minValue?: number; // Minimum value for INT/FLOAT types
@@ -309,7 +305,6 @@ export interface SettingDefinition {
   subject?: string;
   component?: HardwareComponent | null;
   domain: TweakDomain;
-  icon?: string;
   color?: string;
   category_order?: number;
   applicable_conditions: Record<string, unknown>;
@@ -481,7 +476,6 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     subject: def.subject || undefined,
     domain: def.domain,
     component: def.component ?? undefined,
-    icon: def.icon,
     color: def.color,
     categoryOrder: def.category_order ?? 0,
     minValue: def.min_value,

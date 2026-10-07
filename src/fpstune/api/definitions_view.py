@@ -40,7 +40,6 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         subject=s.subject,
         component=s.component,
         domain=s.domain,
-        icon=s.icon,
         color=s.color,
         category_order=s.category_order,
         min_value=s.min_value,

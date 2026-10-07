@@ -169,7 +169,6 @@ const SYSTEM_CATEGORY = {
   id: "system",
   displayName: "System",
   description: "System tweaks",
-  icon: "Settings",
   order: 1,
 } as CategoryMetadata;
 

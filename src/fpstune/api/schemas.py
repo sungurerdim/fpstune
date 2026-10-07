@@ -254,7 +254,6 @@ class CategoryMetadataResponse(BaseModel):
     id: str
     display_name: str
     description: str
-    icon: str
     color: str
     order: int
     is_action_only: bool = False
@@ -284,7 +283,6 @@ class SettingDefinitionResponse(BaseModel):
     component: str | None = None
     # Which page owns the tweak: "hardware", "software" or "game".
     domain: Literal["hardware", "software", "game"] = "software"
-    icon: str = ""
     color: str = ""
     category_order: int = 0
     min_value: int | float | None = None

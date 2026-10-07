@@ -545,7 +545,6 @@ def _fallback_category_metadata(category_id: str) -> CategoryMetadataResponse:
         id=category_id,
         display_name=category_id.replace("_", " ").replace("-", " ").title(),
         description="",
-        icon="Settings",
         color="text-gray-500",
         order=99,
     )
@@ -555,7 +554,7 @@ def _fallback_category_metadata(category_id: str) -> CategoryMetadataResponse:
 async def get_categories_metadata() -> list[CategoryMetadataResponse]:
     """Get full category metadata for UI rendering.
 
-    Returns all categories with display names, icons, colors, and order.
+    Returns all categories with display names, colors, and order.
     This is the SSOT for category UI - frontend should not hardcode any of this.
     """
     registry = await _get_registry_async()
@@ -566,7 +565,6 @@ async def get_categories_metadata() -> list[CategoryMetadataResponse]:
             id=meta.id,
             display_name=meta.display_name,
             description=meta.description,
-            icon=meta.icon,
             color=meta.color,
             order=meta.order,
             is_action_only=meta.is_action_only,

@@ -59,13 +59,12 @@ class CategoryMetadata:
     """Rich metadata for setting categories - Single Source of Truth for UI.
 
     All category display information is defined here and sent to frontend.
-    Frontend should never hardcode category names, icons, or colors.
+    Frontend should never hardcode category names or colors.
     """
 
     id: str  # Matches SettingCategory value: "timer", "power", etc.
     display_name: str  # "Timer & Latency"
     description: str  # "System timer and latency optimizations..."
-    icon: str  # Lucide icon name: "Clock", "Zap", "Wifi"
     color: str  # Tailwind color class: "text-yellow-500"
     order: int  # Sort order for UI (1 = first)
     is_action_only: bool = False  # True for categories shown in Maintenance tab only
@@ -76,7 +75,6 @@ class CategoryMetadata:
             "id": self.id,
             "display_name": self.display_name,
             "description": self.description,
-            "icon": self.icon,
             "color": self.color,
             "order": self.order,
             "is_action_only": self.is_action_only,
@@ -90,7 +88,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="core",
         display_name="Core Performance",
         description="Essential CPU priority and memory settings for maximum FPS",
-        icon="Cpu",
         color="text-red-500",
         order=1,  # Highest impact: CPU/memory fundamentals
     ),
@@ -98,7 +95,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="timer",
         display_name="Timer & Latency",
         description="System timer and input latency optimizations",
-        icon="Clock",
         color="text-orange-500",
         order=2,  # Input latency crucial for competitive gaming
     ),
@@ -106,7 +102,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="gpu",
         display_name="GPU Optimization",
         description="Graphics card specific settings",
-        icon="MonitorPlay",
         color="text-green-500",
         order=3,  # Direct FPS impact
     ),
@@ -114,7 +109,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="power",
         display_name="Power Management",
         description="Power plan, USB, and PCIe power settings",
-        icon="Zap",
         color="text-yellow-500",
         order=4,  # Power plan affects CPU/GPU performance
     ),
@@ -122,7 +116,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="game",
         display_name="Game Mode",
         description="Windows Game Bar and Game Mode settings",
-        icon="Gamepad2",
         color="text-indigo-500",
         order=5,  # Game-specific Windows settings
     ),
@@ -130,7 +123,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="network",
         display_name="Network",
         description="TCP/IP and network adapter optimizations",
-        icon="Wifi",
         color="text-blue-500",
         order=6,  # Important for online games
     ),
@@ -138,7 +130,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="system",
         display_name="System Tuning",
         description="Services and background process settings",
-        icon="Settings",
         color="text-gray-500",
         order=7,  # Background processes
     ),
@@ -146,7 +137,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="visual",
         display_name="Visual Effects",
         description="Windows animations and transparency settings",
-        icon="Palette",
         color="text-purple-500",
         order=8,  # UI effects
     ),
@@ -154,7 +144,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="storage",
         display_name="Storage",
         description="Disk and file system optimizations",
-        icon="HardDrive",
         color="text-cyan-500",
         order=9,  # Disk optimizations
     ),
@@ -162,7 +151,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="audio",
         display_name="Audio",
         description="Audio latency and enhancement settings",
-        icon="Volume2",
         color="text-pink-500",
         order=10,  # Audio latency
     ),
@@ -170,7 +158,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="maintenance",
         display_name="Maintenance",
         description="System cleanup and repair utilities",
-        icon="Wrench",
         color="text-amber-500",
         order=11,  # Optional cleanup utilities
         is_action_only=True,
@@ -179,7 +166,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="launcher",
         display_name="Game Launchers",
         description="Steam and Battle.net optimization settings",
-        icon="Gamepad2",
         color="text-sky-500",
         order=12,  # Game launcher tweaks
     ),
@@ -187,7 +173,6 @@ CATEGORY_METADATA: dict[str, CategoryMetadata] = {
         id="game_config",
         display_name="Game Configs",
         description="In-game config file tweaks for CS2, MW3, and other FPS titles",
-        icon="FileCode",
         color="text-emerald-500",
         order=13,  # Game-specific file tweaks
     ),
@@ -654,7 +639,6 @@ class SettingExecutor:
     # None in a definition, it is filled from the module (`_MODULE_COMPONENTS`)
     # or, for a per-adapter `network:<key>:<name>` id, `network_adapter`.
     component: Component | None = None
-    icon: str = ""  # Lucide icon name for UI (e.g., "Clock", "Zap")
     color: str = ""  # Tailwind color class (e.g., "text-yellow-500")
     category_order: int = 0  # Sort order within category (0 = use definition order)
 
@@ -848,7 +832,6 @@ class SettingExecutor:
             "short_name": self.short_name,
             "component": self.component,
             "domain": self.domain,
-            "icon": self.icon,
             "color": self.color,
             "category_order": self.category_order,
             "applicable_conditions": self.applicable_conditions,

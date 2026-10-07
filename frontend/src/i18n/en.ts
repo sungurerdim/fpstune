@@ -50,8 +50,6 @@ export const en = {
   "bulk.requestFailed": "Nothing was applied: {reason}",
   "hw.notControllable": "Not controllable",
   "hw.displaysFailed": "Could not change every display: {reason}",
-  "hw.gsyncApplyFailed": "Could not apply the G-Sync settings: {reason}",
-  "hw.gsyncResetFailed": "Could not reset the G-Sync settings: {reason}",
   "hw.displayModeFailed": "Could not change the display mode: {reason}",
   "hw.adapterToggleFailed": "Could not switch the adapter: {reason}",
   "hw.adapterRestartNote": "Changing these settings reconnects the adapter once, a few seconds after the last change.",
@@ -59,8 +57,6 @@ export const en = {
   "hw.disconnectFailed": "Could not disconnect: {reason}",
   "hw.audioDeviceFailed": "Could not switch the audio device: {reason}",
   "hw.loudnessFailed": "Could not change loudness equalization: {reason}",
-  "hw.powerPlanActivateFailed": "Could not activate the power plan: {reason}",
-  "hw.powerPlanRevertFailed": "Could not revert the power plan: {reason}",
   // Version and update (header)
   "update.version": "v{version}",
   "update.check": "Check for updates",
@@ -221,6 +217,9 @@ export const en = {
   // Advisory values, in words
   "choice.native": "Native",
   "choice.not_native": "Below native",
+  "choice.fps_balanced": "FPS Balanced plan",
+  "choice.windows_balanced": "Windows Balanced plan",
+  "choice.other_plan": "Another power plan",
   "choice.at_capability": "At the adapter's maximum",
   "choice.below_capability": "Below the adapter's maximum",
   "choice.good": "Good",
@@ -376,7 +375,6 @@ export const en = {
   "hw.buses": "USB & PCIe",
   "hw.storage": "Storage",
   "hw.network": "Network",
-  "hw.powerPlan": "Power plan",
   "hw.audio": "Audio",
   "hw.audioOutput": "Audio Output",
   "hw.audioInput": "Audio Input",
@@ -422,14 +420,6 @@ export const en = {
   "monitor.refresh": "Refresh:",
   "monitor.primary": "Primary",
   "monitor.disconnected": "Disconnected",
-  "monitor.noCap": "no cap",
-  "monitor.fpsCap": "{count} fps cap",
-  "monitor.recommendedPrefix": "recommended:",
-  "monitor.unknown": "unknown",
-  "monitor.notApplicable": "not applicable",
-  "monitor.optimizeGsync": "Optimize G-Sync",
-  "monitor.resetDriver": "Reset to driver defaults",
-  "monitor.resetting": "Resetting…",
 
   // Network adapter card
   "adapter.connect": "Connect",
@@ -442,14 +432,6 @@ export const en = {
   "adapter.disconnected": "Disconnected",
   "adapter.notConnected": "Not Connected",
 
-  // Power plan card
-  "power.activeHint":
-    "FPS Balanced is active — full power when a game asks, idle cores allowed to clock down.",
-  "power.inactiveHint":
-    "FPS Balanced gives full power under load and lets idle cores clock down — less heat for the same frames.",
-  "power.activate": "Activate FPS Balanced",
-  "power.revert": "Revert to Windows Balanced",
-  "power.reverting": "Reverting…",
 
   // Storage card
   "storage.retrim": "Retrim",

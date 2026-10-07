@@ -343,6 +343,7 @@ power:cpu_parking_increase_time
 power:cpu_perf_check_interval
 power:cpu_throttle_states
 power:disk_timeout
+power:fps_balanced_plan
 power:hibernation
 power:pcie_link_state
 power:power_throttling

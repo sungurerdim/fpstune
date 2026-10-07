@@ -218,8 +218,7 @@ under `/api`, exist so the UI never has to shell out for anything:
 
 | Surface | What it covers |
 |---------|----------------|
-| Display | `/display/refresh`, `/display/{index}/auto` and `/display/{index}/confirm`, and `/display/vrr-optimization` (read, apply, reset) |
-| Power profile | `/power-profile/status`, `/power-profile/activate`, `/power-profile/revert` |
+| Display | `/display/refresh`, `/display/{index}/auto` and `/display/{index}/confirm` |
 | Network | `/network/refresh`, plus per-adapter enable/disable and connection toggle |
 | Audio | `/audio/refresh`, per-device enable/disable, and per-device loudness EQ |
 | Storage | `/storage/{drive}/optimize` — trim or defragment one drive |

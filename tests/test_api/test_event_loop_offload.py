@@ -185,32 +185,6 @@ class TestDisplayDetectionOffload:
         assert record["on_event_loop"] is False
 
 
-class TestVrrGpuWaitOffload:
-    """PERF-21: get_gpu_info(wait=True) sleep-polls up to 15 s."""
-
-    def test_vrr_info_gpu_wait_runs_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.get_gpu_info = MagicMock(side_effect=_loop_recorder(record, (None, False)))
-            response = client.get("/api/display/vrr-optimization")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-    def test_vrr_apply_gpu_wait_runs_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        with patch("fpstune.api.routes.display.hardware_manager") as mock_hw:
-            mock_hw.get_gpu_info = MagicMock(side_effect=_loop_recorder(record, (None, False)))
-            response = client.post(
-                "/api/display/vrr-optimization/apply",
-                json={"fps_limit": 0, "vrr_mode": "off", "vsync": "off"},
-            )
-
-        # No GPU → 400, but the wait still must have happened off the loop.
-        assert response.status_code == 400
-        assert record["on_event_loop"] is False
-
-
 class TestSettingHardwareContextOffload:
     """apply/reset/verify built the hardware context on the loop.
 

@@ -3,7 +3,7 @@
 Covers: constant/GUID values, PowerPlan/PowerProfileResult dataclasses,
 list_plans output parsing (regex), find_fps_balanced cache, get_active_plan,
 is_fps_balanced_active, create/activate/revert/delete command builders and
-error paths, status dict shape, and the singleton accessor.
+error paths, and the singleton accessor.
 
 All subprocess.run calls are mocked.  Windows-only code is guarded with
 skipif where the platform check cannot be patched cleanly.
@@ -12,7 +12,6 @@ skipif where the platform check cannot be patched cleanly.
 from __future__ import annotations
 
 import sys
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -812,76 +811,6 @@ class TestDelete:
             result = mgr.delete()
         assert result.success is False
         assert "Error" in result.message
-
-
-# ---------------------------------------------------------------------------
-# status
-# ---------------------------------------------------------------------------
-
-
-class TestStatus:
-    @pytest.mark.skipif(sys.platform != "win32", reason="get_active_plan only on win32")
-    def test_status_when_fps_balanced_active(self) -> None:
-        mgr = PowerProfileManager()
-        fps_plan = PowerPlan(
-            guid="deadbeef-dead-beef-dead-beefdeadbeef", name=FPS_BALANCED_NAME, is_active=True
-        )
-        fake_settings = [SimpleNamespace(effect="Tweak A"), SimpleNamespace(effect="Tweak B")]
-        with (
-            patch.object(mgr, "get_active_plan", return_value=fps_plan),
-            patch.object(mgr, "find_fps_balanced", return_value=fps_plan.guid),
-            patch(
-                "fpstune.core.power_profile._registry_powercfg_settings",
-                return_value=fake_settings,
-            ),
-        ):
-            s = mgr.status()
-        assert s["active_plan"] == FPS_BALANCED_NAME
-        assert s["fps_balanced_active"] is True
-        assert s["fps_balanced_exists"] is True
-        assert s["optimizations"] == ["Tweak A", "Tweak B"]
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="get_active_plan only on win32")
-    def test_status_when_balanced_active(self) -> None:
-        mgr = PowerProfileManager()
-        balanced_plan = PowerPlan(guid=BALANCED_GUID, name="Balanced", is_active=True)
-        with (
-            patch.object(mgr, "get_active_plan", return_value=balanced_plan),
-            patch.object(mgr, "find_fps_balanced", return_value=None),
-        ):
-            s = mgr.status()
-        assert s["active_plan"] == "Balanced"
-        assert s["fps_balanced_active"] is False
-        assert s["fps_balanced_exists"] is False
-        assert s["optimizations"] == []
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="get_active_plan only on win32")
-    def test_status_when_no_active_plan(self) -> None:
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "get_active_plan", return_value=None),
-            patch.object(mgr, "find_fps_balanced", return_value=None),
-        ):
-            s = mgr.status()
-        assert s["active_plan"] == "Unknown"
-        assert s["active_guid"] == ""
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="get_active_plan only on win32")
-    def test_status_keys_present(self) -> None:
-        mgr = PowerProfileManager()
-        balanced_plan = PowerPlan(guid=BALANCED_GUID, name="Balanced", is_active=True)
-        with (
-            patch.object(mgr, "get_active_plan", return_value=balanced_plan),
-            patch.object(mgr, "find_fps_balanced", return_value=None),
-        ):
-            s = mgr.status()
-        assert set(s.keys()) == {
-            "active_plan",
-            "active_guid",
-            "fps_balanced_exists",
-            "fps_balanced_active",
-            "optimizations",
-        }
 
 
 # ---------------------------------------------------------------------------

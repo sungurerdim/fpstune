@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -1306,6 +1307,50 @@ POWER_CPU_DUTY_CYCLING = _cpu_power_setting(
 )
 
 
+# === FPS Balanced power plan ===
+# One setting over the three states of "which plan is active". Windows stock is
+# its own Balanced plan (a well-known GUID, so the same on every machine), which
+# is what reset restores; `other` is a reading only (another vendor's plan, High
+# performance, the user's own) and is never written.
+FPS_BALANCED_PLAN = SettingExecutor(
+    id="power:fps_balanced_plan",
+    category=SettingCategory.POWER,
+    display_name="FPS Balanced Power Plan",
+    short_name="FPS Balanced plan",
+    description="Whether the active plan is fpstune's copy of Windows' Balanced, carrying these power "
+    "tweaks. Full power when a game asks, idle cores clock down, so the same frames cost less heat.",
+    value_type=SettingValueType.CHOICE,
+    choices=("fps_balanced", "balanced", "other"),
+    default_value="balanced",
+    default_source=DefaultSource.WINDOWS_STOCK,
+    recommended_value="fps_balanced",
+    unwritable_values=("other",),
+    requires_reboot=False,
+    evidence_level="likely",
+    current_impact="Another plan: Windows' own tuning decides when cores clock up and down",
+    recommended_impact="FPS Balanced: Full power under load, idle cores clock down, less heat per frame",
+    scope=SettingScope.COMPLETE,
+    category_order=0,
+    effect="Switches to a copy of Balanced that holds fpstune's power tweaks",
+    # What the plan is worth is the sum of the power:* rows it carries, each
+    # with its own claim; this row adds no number of its own to that.
+    impact_scores={"power_watts": 0.0, "stability": "high"},
+    choice_labels={
+        "fps_balanced": "choice.fps_balanced",
+        "balanced": "choice.windows_balanced",
+        "other": "choice.other_plan",
+    },
+    detect_type=DetectType.POWERSHELL,
+    detect_command="power_plan_status",
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="power_plan_switch",
+    apply_args={},
+    apply_value_map={},
+)
+
+
 POWER_SETTINGS: list[SettingExecutor] = [
     # CPU core parking and scheduling (highest impact)
     POWER_CPU_MIN_PARKING,
@@ -1347,6 +1392,8 @@ POWER_SETTINGS: list[SettingExecutor] = [
     POWER_HIBERNATION,
     # Advisory
     RYZEN_BALANCED_PLAN,
+    # The plan that carries the rows above
+    FPS_BALANCED_PLAN,
 ]
 
 

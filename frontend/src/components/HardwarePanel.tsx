@@ -15,7 +15,6 @@ import { useHardware } from "./hardware/useHardware";
 import { SelectionToolbar } from "./SelectionToolbar";
 import { NetworkAdapterCard } from "./hardware/NetworkAdapterCard";
 import { AudioSection } from "./hardware/AudioSection";
-import { PowerProfileCard } from "./hardware/PowerProfileCard";
 import { StorageDriveCard } from "./hardware/StorageDriveCard";
 import { DeviceCard } from "./hardware/DeviceCard";
 import { describeDevices, type DeviceDescriptor } from "./hardware/devices";
@@ -88,9 +87,6 @@ export function HardwarePanel() {
         /* Page scope: exactly the tweaks the cards below draw. */
         actions={<ScopeActions settings={pageSettings} name={t("tab.hardware")} />}
       />
-
-      {/* Power plan — the FPS Balanced profile's status and switch. */}
-      <PowerProfileCard />
 
       {(isLoading || hardware?.detecting) && (
         <p className="mb-2 flex items-center gap-1.5 text-xs text-muted-foreground">

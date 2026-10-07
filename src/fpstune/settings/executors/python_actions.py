@@ -157,9 +157,22 @@ def _display_mode_status(args: dict[str, Any]) -> str | Reading:
     return display_mode_status(args)
 
 
+def _power_plan_switch(args: dict[str, Any]) -> tuple[bool, str | None]:
+    from fpstune.core.power_profile import power_plan_switch
+
+    return power_plan_switch(args)
+
+
+def _power_plan_status(args: dict[str, Any]) -> str:
+    from fpstune.core.power_profile import power_plan_status
+
+    return power_plan_status(args)
+
+
 PYTHON_ACTIONS: dict[str, PythonAction] = {
     "purge_standby": purge_standby,
     "display_mode_native": _display_mode_native,
+    "power_plan_switch": _power_plan_switch,
     "mouse_acceleration_toggle": mouse_acceleration,
     "accessibility_popups_toggle": accessibility_popups,
     "animations_toggle": animations,
@@ -302,6 +315,7 @@ def animations_status(_args: dict[str, Any]) -> str:
 PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "animations_status": animations_status,
     "display_mode_status": _display_mode_status,
+    "power_plan_status": _power_plan_status,
     "bnet_config_read": bnet_config_read,
     "steam_vdf_read": steam_vdf_read,
     "game_ini_read": game_ini_read,

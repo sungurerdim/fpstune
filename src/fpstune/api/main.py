@@ -31,7 +31,6 @@ from fpstune.api.routes import (
     settings_stream_router,
     system_audio_router,
     system_network_router,
-    system_power_router,
     system_router,
     system_storage_router,
     updates_router,
@@ -46,7 +45,6 @@ _SYSTEM_ROUTERS = (
     system_router,
     system_network_router,
     system_audio_router,
-    system_power_router,
     system_storage_router,
 )
 

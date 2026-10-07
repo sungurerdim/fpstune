@@ -35,7 +35,6 @@ vi.mock("../../lib/hardware-manager", () => ({
   },
 }));
 vi.mock("../hardware/useRefreshOnFocus", () => ({ useRefreshOnFocus: () => undefined }));
-vi.mock("../hardware/PowerProfileCard", () => ({ PowerProfileCard: () => null }));
 vi.mock("../../hooks/useApplySingle", () => ({
   useApplySingle: () => ({ applySingle: vi.fn(), isPending: () => false }),
 }));

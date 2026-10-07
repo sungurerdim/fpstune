@@ -46,8 +46,6 @@ export const tr: Record<keyof typeof en, string> = {
   "bulk.requestFailed": "Hiçbir şey uygulanmadı: {reason}",
   "hw.notControllable": "Denetlenemiyor",
   "hw.displaysFailed": "Ekranların hepsi değiştirilemedi: {reason}",
-  "hw.gsyncApplyFailed": "G-Sync ayarları uygulanamadı: {reason}",
-  "hw.gsyncResetFailed": "G-Sync ayarları sıfırlanamadı: {reason}",
   "hw.displayModeFailed": "Ekran modu değiştirilemedi: {reason}",
   "hw.adapterToggleFailed": "Ağ bağdaştırıcısı açılıp kapatılamadı: {reason}",
   "hw.adapterRestartNote": "Bu ayarları değiştirmek, son değişiklikten birkaç saniye sonra bağdaştırıcıyı bir kez yeniden bağlar.",
@@ -55,8 +53,6 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.disconnectFailed": "Bağlantı kesilemedi: {reason}",
   "hw.audioDeviceFailed": "Ses aygıtı açılıp kapatılamadı: {reason}",
   "hw.loudnessFailed": "Ses normalleştirme değiştirilemedi: {reason}",
-  "hw.powerPlanActivateFailed": "Güç planı etkinleştirilemedi: {reason}",
-  "hw.powerPlanRevertFailed": "Güç planı geri alınamadı: {reason}",
   // Version and update (header)
   "update.version": "v{version}",
   "update.check": "Güncellemeleri denetle",
@@ -211,6 +207,9 @@ export const tr: Record<keyof typeof en, string> = {
     "Uygulamak doğal modu ayarlar; siz korumazsanız 15 saniye sonra kendiliğinden geri döner.",
   "choice.native": "Doğal",
   "choice.not_native": "Doğalın altında",
+  "choice.fps_balanced": "FPS Balanced planı",
+  "choice.windows_balanced": "Windows Balanced planı",
+  "choice.other_plan": "Başka bir güç planı",
   "choice.at_capability": "Azami hızda",
   "choice.below_capability": "Azami hızın altında",
   "choice.good": "İyi",
@@ -354,7 +353,6 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.buses": "USB ve PCIe",
   "hw.storage": "Depolama",
   "hw.network": "Ağ",
-  "hw.powerPlan": "Güç planı",
   "hw.audio": "Ses",
   "hw.audioOutput": "Ses Çıkışı",
   "hw.audioInput": "Ses Girişi",
@@ -400,14 +398,6 @@ export const tr: Record<keyof typeof en, string> = {
   "monitor.refresh": "Yenileme:",
   "monitor.primary": "Birincil",
   "monitor.disconnected": "Bağlı değil",
-  "monitor.noCap": "sınır yok",
-  "monitor.fpsCap": "{count} fps sınırı",
-  "monitor.recommendedPrefix": "önerilen:",
-  "monitor.unknown": "bilinmiyor",
-  "monitor.notApplicable": "uygulanamaz",
-  "monitor.optimizeGsync": "G-Sync'i Optimize Et",
-  "monitor.resetDriver": "Sürücü varsayılanlarına döndür",
-  "monitor.resetting": "Sıfırlanıyor…",
 
   // Network adapter card
   "adapter.connect": "Bağlan",
@@ -420,14 +410,6 @@ export const tr: Record<keyof typeof en, string> = {
   "adapter.disconnected": "Bağlı değil",
   "adapter.notConnected": "Bağlantı Yok",
 
-  // Power plan card
-  "power.activeHint":
-    "FPS Balanced etkin — oyun istediğinde tam güç, boştaki çekirdekler yavaşlayabilir.",
-  "power.inactiveHint":
-    "FPS Balanced yük altında tam güç verir, boştaki çekirdeklerin yavaşlamasına izin verir — aynı kare hızına daha az ısı.",
-  "power.activate": "FPS Balanced'ı Etkinleştir",
-  "power.revert": "Windows Balanced'a Dön",
-  "power.reverting": "Geri dönülüyor…",
 
   // Storage card
   "storage.retrim": "Retrim",

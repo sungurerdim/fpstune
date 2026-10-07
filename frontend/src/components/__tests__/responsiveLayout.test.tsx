@@ -77,7 +77,6 @@ vi.mock("../hardware/NetworkAdapterCard", () => ({
   NetworkAdapterCard: () => null,
 }));
 vi.mock("../hardware/StorageDriveCard", () => ({ StorageDriveCard: () => null }));
-vi.mock("../hardware/PowerProfileCard", () => ({ PowerProfileCard: () => null }));
 vi.mock("../hardware/AudioSection", () => ({ AudioSection: () => null }));
 vi.mock("../../lib/hardware-manager", () => ({
   hardwareManager: {

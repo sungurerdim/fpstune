@@ -23,8 +23,9 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
+from typing import Any
 
-from fpstune.settings.applicability import ApplicabilityChecker
+from fpstune.settings.applicability import NOT_AVAILABLE, ApplicabilityChecker
 from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.definitions.power import POWER_SETTINGS
 from fpstune.settings.executors.powercfg import PowerCfgExecutor
@@ -42,6 +43,13 @@ POWER_SAVER_GUID = "a1841308-3541-4fab-bc81-f71556f20b4a"
 # FPS Balanced profile name and identifier
 FPS_BALANCED_NAME = "FPS Balanced"
 FPS_BALANCED_DESCRIPTION = "Balanced + gaming optimizations (AC only)"
+
+# The three states `power:fps_balanced_plan` reads. `PLAN_OTHER` is only ever a
+# reading (a plan this module did not make and is not Windows' Balanced); no
+# write produces it.
+PLAN_FPS_BALANCED = "fps_balanced"
+PLAN_WINDOWS_BALANCED = "balanced"
+PLAN_OTHER = "other"
 
 
 def _registry_powercfg_settings() -> list[SettingExecutor]:
@@ -413,27 +421,6 @@ class PowerProfileManager:
                 message=f"Error deleting profile: {e}",
             )
 
-    def status(self) -> dict[str, str | bool | list[str]]:
-        """Get current power profile status.
-
-        Returns:
-            Dictionary with status information.
-        """
-        active = self.get_active_plan()
-        fps_balanced_exists = self.find_fps_balanced() is not None
-
-        optimizations_applied: list[str] = []
-        if fps_balanced_exists and active and active.name == FPS_BALANCED_NAME:
-            optimizations_applied = [s.effect for s in _registry_powercfg_settings()]
-
-        return {
-            "active_plan": active.name if active else "Unknown",
-            "active_guid": active.guid if active else "",
-            "fps_balanced_exists": fps_balanced_exists,
-            "fps_balanced_active": self.is_fps_balanced_active(),
-            "optimizations": optimizations_applied,
-        }
-
 
 # Singleton instance
 _power_profile_manager: PowerProfileManager | None = None
@@ -445,3 +432,35 @@ def get_power_profile_manager() -> PowerProfileManager:
     if _power_profile_manager is None:
         _power_profile_manager = PowerProfileManager()
     return _power_profile_manager
+
+
+def power_plan_status(_args: dict[str, Any]) -> str:
+    """PYTHON_DETECTORS entry: which of the three plan states is active.
+
+    Windows' Balanced is told by its well-known GUID, never by its name, which
+    Windows localizes; the FPS Balanced plan is told by the name this module gave
+    it. No active plan reported means no reading, not "other".
+    """
+    if sys.platform != "win32":
+        return NOT_AVAILABLE
+    active = get_power_profile_manager().get_active_plan()
+    if active is None:
+        return NOT_AVAILABLE
+    if active.name == FPS_BALANCED_NAME:
+        return PLAN_FPS_BALANCED
+    if active.guid == BALANCED_GUID:
+        return PLAN_WINDOWS_BALANCED
+    return PLAN_OTHER
+
+
+def power_plan_switch(args: dict[str, Any]) -> tuple[bool, str | None]:
+    """PYTHON_ACTIONS entry: activate FPS Balanced (creating it) or return to Balanced."""
+    manager = get_power_profile_manager()
+    value = args.get("value")
+    if value == PLAN_FPS_BALANCED:
+        result = manager.activate()
+    elif value == PLAN_WINDOWS_BALANCED:
+        result = manager.revert()
+    else:
+        return False, f"A power plan state of {value!r} cannot be written"
+    return result.success, result.message

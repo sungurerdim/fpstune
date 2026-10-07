@@ -146,6 +146,11 @@ export const settingsTr: Record<
     description:
       "Wi-Fi bağdaştırıcısını paketler arasında uyutur. Oyun sırasında ping sıçramalarına yol açar.",
   },
+  "power:fps_balanced_plan": {
+    name: "FPS Balanced güç planı",
+    description:
+      "Etkin planın, bu güç ayarlarını taşıyan fpstune'un Windows Balanced kopyası olup olmadığı. Oyun isteyince tam güç, boştaki çekirdekler yavaşlar; aynı kareler daha az ısıya mal olur.",
+  },
   "power:hibernation": {
     name: "Hazırda beklet",
     description:

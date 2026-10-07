@@ -9,7 +9,6 @@ from fpstune.api.routes.settings_stream import router as settings_stream_router
 from fpstune.api.routes.system import router as system_router
 from fpstune.api.routes.system_audio import router as system_audio_router
 from fpstune.api.routes.system_network import router as system_network_router
-from fpstune.api.routes.system_power import router as system_power_router
 from fpstune.api.routes.system_storage import router as system_storage_router
 from fpstune.api.routes.updates import router as updates_router
 
@@ -22,7 +21,6 @@ __all__ = [
     "settings_stream_router",
     "system_audio_router",
     "system_network_router",
-    "system_power_router",
     "system_storage_router",
     "display_router",
     "updates_router",

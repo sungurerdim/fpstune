@@ -39,6 +39,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from fpstune.core import power_profile
 from fpstune.core.nvapi import NvapiError, NvapiUnavailable
 from fpstune.settings import display_mode
 from fpstune.settings.base import DetectType, SettingExecutor
@@ -297,6 +298,15 @@ def _display(stack: ExitStack, *, kind: str) -> None:
     stack.enter_context(patch.object(display_mode, "write_native", lambda _m, _s=None: outcome))
 
 
+def _power_plan(stack: ExitStack, *, succeeds: bool) -> None:
+    result = power_profile.PowerProfileResult(
+        success=succeeds, message="" if succeeds else "powercfg refused the plan switch"
+    )
+    stack.enter_context(
+        patch.object(power_profile.PowerProfileManager, "revert", lambda _s: result)
+    )
+
+
 _ACCESS_DENIED = PermissionError(5, "Access is denied")
 _DISK_FULL = OSError(112, "There is not enough space on the disk")
 
@@ -509,6 +519,12 @@ CASES: dict[str, Case] = {
             "change fails": lambda s, _t: _display(s, kind="error"),
         },
         control=lambda s, _t: _display(s, kind="written"),
+    ),
+    "power_plan_switch": Case(
+        pick=lambda r: _by_id(r, "power:fps_balanced_plan"),
+        value="balanced",
+        refusals={"powercfg refuses the switch": lambda s, _t: _power_plan(s, succeeds=False)},
+        control=lambda s, _t: _power_plan(s, succeeds=True),
     ),
 }
 

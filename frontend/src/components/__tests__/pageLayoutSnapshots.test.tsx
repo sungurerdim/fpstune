@@ -112,7 +112,6 @@ vi.mock("../../lib/hardware-manager", () => ({
 vi.mock("../hardware/useRefreshOnFocus", () => ({
   useRefreshOnFocus: () => undefined,
 }));
-vi.mock("../hardware/PowerProfileCard", () => ({ PowerProfileCard: () => null }));
 vi.mock("../CleanupRunnerProvider", () => ({ CleanupRunnerProvider: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({

@@ -24,10 +24,14 @@ import type { CategoryMetadata, ModuleMetadata, Setting } from "../../types/sett
 import { Wifi } from "lucide-react";
 
 const runMock = vi.fn();
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
     run: (action: string, ids: string[]) => runMock(action, ids),
+    apply: vi.fn(),
+    reset: vi.fn(),
     stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
     isRunning: false,
   }),
 }));

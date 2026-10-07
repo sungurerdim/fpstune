@@ -10,9 +10,10 @@
  * `false`, which the backend reads as "do not run" and reports as success.
  */
 
-import { settingsApi, type ApplyResponse } from "./api";
+import type { ApplyResponse } from "./api";
+import { isTweakSuboptimal } from "./tweakStatus";
 import { useStore, type BulkAction } from "../store";
-import type { SettingId } from "../types/setting";
+import { canResetSetting, type Setting, type SettingId } from "../types/setting";
 
 /** The outcome of a bulk run, assembled from the events it streamed. */
 export interface BulkApplyResponse {
@@ -54,85 +55,52 @@ export function bulkTargets(
   return targets;
 }
 
-/**
- * Apply the map through the stream and answer once it is done.
- *
- * For the caller that wants the outcome rather than the live rows (Home's
- * "apply what is left"). Rejects when the stream itself dies: a promise waiting
- * for a `done` that is never coming would leave its button busy for the rest of
- * the session.
- */
-export function applyStreamed(
-  settings: Record<string, unknown>,
-): Promise<BulkApplyResponse> {
-  return new Promise<BulkApplyResponse>((resolve, reject) => {
-    const results: Record<string, ApplyResponse> = {};
-    let requiresReboot = false;
+/** The settings each bulk action would touch in one scope. */
+export interface ScopeTargets {
+  /** Not optimized (the backend's `is_optimized`), and writable. */
+  apply: Setting[];
+  /** Writable, has a default of its own, and is not already at it. */
+  reset: Setting[];
+}
 
-    settingsApi.bulkStreamApply(
-      settings,
-      (event) => {
-        const id = typeof event.id === "string" ? event.id : "";
-        if (!id) return;
-        switch (event.event) {
-          case "applied":
-            requiresReboot = requiresReboot || event.requires_reboot === true;
-            results[id] = {
-              setting_id: id,
-              success: true,
-              error: null,
-              state: null,
-              requires_reboot: event.requires_reboot === true,
-              skipped: false,
-              verified: null,
-            };
-            return;
-          case "verified":
-            if (results[id] !== undefined) {
-              results[id].verified =
-                typeof event.matches === "boolean" ? event.matches : null;
-            }
-            return;
-          case "skipped":
-            results[id] = {
-              setting_id: id,
-              success: true,
-              error: null,
-              state: null,
-              requires_reboot: false,
-              skipped: true,
-              verified: null,
-            };
-            return;
-          case "failed":
-            results[id] = {
-              setting_id: id,
-              success: false,
-              error:
-                typeof event.error === "string" && event.error
-                  ? event.error
-                  : "Unknown error",
-              state: null,
-              requires_reboot: false,
-              skipped: false,
-              verified: null,
-            };
-            return;
-          default:
-            return;
-        }
-      },
-      () => {
-        const values = Object.values(results);
-        resolve({
-          results,
-          success_count: values.filter((r) => r.success && !r.skipped).length,
-          error_count: values.filter((r) => !r.success).length,
-          requires_reboot: requiresReboot,
-        });
-      },
-      (error) =>
-        reject(error instanceof Error ? error : new Error(String(error))),
-    );
-  });
+/**
+ * Which settings in a scope each action would touch.
+ *
+ * Pure so the rule has one copy: a row, a device, a category heading, a page
+ * header and a selection all ask the same question of a different set.
+ * Advisories (`isReadonly`) are never targeted — fpstune can read them and
+ * cannot write them, so counting one into a button would promise a write.
+ */
+export function scopeTargets(settings: Iterable<Setting>): ScopeTargets {
+  const apply: Setting[] = [];
+  const reset: Setting[] = [];
+  for (const s of settings) {
+    if (!s.isApplicable || s.isAction || s.isReadonly || s.currentValue === null) continue;
+    if (isTweakSuboptimal(s)) apply.push(s);
+    if (canResetSetting(s)) reset.push(s);
+  }
+  return { apply, reset };
+}
+
+/** The three bulk levels: each includes the ones before it. */
+export type ScopeLevel = "essential" | "recommended" | "complete";
+
+const LEVEL_SCOPES: Record<ScopeLevel, readonly Setting["scope"][]> = {
+  essential: ["essential"],
+  recommended: ["essential", "recommended"],
+  complete: ["essential", "recommended", "complete"],
+};
+
+/**
+ * What "apply <level>" would write in a scope: the not-optimized, writable
+ * settings whose own `scope` is at or below the level. "Recommended" is
+ * essential + recommended; "complete" adds the settings whose cost the player
+ * reads in the setting's own copy.
+ */
+export function levelTargets(
+  settings: Iterable<Setting>,
+  level: ScopeLevel,
+): Setting[] {
+  const allowed = LEVEL_SCOPES[level];
+  return scopeTargets(settings).apply.filter((s) => allowed.includes(s.scope));
 }

@@ -4,7 +4,7 @@ import { useT } from "../i18n";
 import { localizedDescription, localizedName } from "../i18n/settings";
 import { cn } from "../lib/utils";
 import { formatBenefit } from "../lib/impact";
-import { useApplySingle } from "../hooks/useApplySingle";
+import { useApply } from "../hooks/useApply";
 import { SettingInfoTooltip } from "./SettingInfoTooltip";
 import {
   ImpactCategoryTags,
@@ -29,7 +29,7 @@ export function TweakListRow({
   categoryLabel?: string;
 }) {
   const { t } = useT();
-  const { applySingle, resetSingle, isPending } = useApplySingle();
+  const { apply: applySingle, reset: resetSingle, isPending } = useApply();
   const pending = isPending(setting.id);
   const benefit = formatBenefit(setting);
   // A change made from Home must be reversible from Home — the one screen a

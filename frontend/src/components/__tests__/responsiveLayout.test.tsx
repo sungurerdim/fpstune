@@ -49,8 +49,16 @@ vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
   useCleanupRunner: () => makeRunner(),
 }));
 
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false, lastResult: null }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    reset: vi.fn(),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 
 // Home mounts the whole device inventory; the hardware page asserts that itself.

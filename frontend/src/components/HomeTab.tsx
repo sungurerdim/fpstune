@@ -16,7 +16,7 @@ import {
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
 import { useImpactSummary } from "../hooks/useImpactSummary";
-import { useBulkApply } from "../hooks/useBulkApply";
+import { useApply } from "../hooks/useApply";
 import { useHardware } from "./hardware/useHardware";
 import { describeDevices } from "./hardware/devices";
 import { DeviceCardCompact } from "./hardware/DeviceCard";
@@ -96,7 +96,7 @@ export function HomeTab() {
     [headroom],
   );
 
-  const { apply, isApplying } = useBulkApply();
+  const { run, isRunning: isApplying } = useApply();
   const { hardware } = useHardware();
   const devices = useMemo(() => describeDevices(hardware, t), [hardware, t]);
   // Maintenance is in scope because Home's to-do card lists upkeep that is
@@ -281,12 +281,11 @@ export function HomeTab() {
     [suboptimal],
   );
 
-  const applyGroup = async (group: Setting[]) => {
-    const payload: Record<string, unknown> = {};
-    for (const s of group) payload[s.id] = s.recommendedValue;
-    if (Object.keys(payload).length === 0) return;
-    await apply(payload);
-  };
+  const applyGroup = (group: Setting[]) =>
+    run(
+      "apply",
+      group.map((s) => s.id),
+    );
 
   // The two buttons (D2). They are the scope enum made visible: Competitive Max
   // is essential + recommended — the most frames without touching what the
@@ -329,7 +328,7 @@ export function HomeTab() {
         return;
       }
     }
-    await applyGroup(targets);
+    applyGroup(targets);
   };
 
   const restoreFirstCheckbox = (

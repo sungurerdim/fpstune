@@ -22,8 +22,16 @@ import type { BenchLedger, LedgerArea, LedgerJob } from "../../lib/api";
 vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
 vi.mock("../MaintenancePanel", () => ({ MaintenancePanel: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    reset: vi.fn(),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),

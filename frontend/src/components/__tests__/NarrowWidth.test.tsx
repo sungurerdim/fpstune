@@ -47,11 +47,16 @@ vi.mock("../hardware/useHardware", () => ({
   useHardware: () => ({ hardware: null, isLoading: false }),
 }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
-}));
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({ run: vi.fn(), stop: vi.fn(), isRunning: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    run: vi.fn(),
+    reset: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),

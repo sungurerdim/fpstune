@@ -15,7 +15,6 @@ import { settingsApi } from "./api";
 import type { DetectResponse } from "./api";
 import { createLogger } from "./logger";
 import { useStore } from "../store";
-import type { DetectionResultUpdate } from "../store/settings";
 import type { SettingCategory } from "../types/setting";
 
 const log = createLogger("DetectionManager");
@@ -42,29 +41,15 @@ class DetectionManager {
    * Every caller finalises through here, because the copy that did not — the
    * post-apply re-detect — mapped four of the six fields and skipped the
    * version bump, so `recommended_value` was blanked and
-   * eleven subscribers kept rendering the values from before the apply.
-   *
-   * The response speaks the `SettingState` contract (`current`, `applicable`,
-   * `recommended`, ...); the store's update type keeps its older spelling, and
-   * this is the one place that translates between them.
+   * eleven subscribers kept rendering the values from before the apply. The
+   * `SettingState` → store translation itself lives in `store/settings.ts`,
+   * shared with the state an apply answers with.
    */
   private static finalize(
     response: DetectResponse,
     doneCategories: SettingCategory[],
   ): void {
-    const results: Record<string, DetectionResultUpdate> = {};
-    for (const [id, result] of Object.entries(response.results)) {
-      results[id] = {
-        value: result.current,
-        is_optimized: result.is_optimized,
-        is_applicable: result.applicable,
-        applicable_reason: result.applicable_reason,
-        error: result.error,
-        recommended_value: result.recommended,
-        finding: result.finding,
-      };
-    }
-    useStore.getState().finalizeDetection(results, doneCategories);
+    useStore.getState().applySettingStates(response.results, doneCategories);
   }
 
   static getInstance(): DetectionManager {

@@ -57,7 +57,7 @@ describe("a value is printed by valueLabel and nothing else", () => {
     const names = Object.keys(SOURCES);
     expect(names.some((n) => n.endsWith("/TweakSetting.tsx"))).toBe(true);
     expect(names.some((n) => n.endsWith("/ui/PillSelector.tsx"))).toBe(true);
-    expect(names.some((n) => n.endsWith("/hooks/useApplySingle.ts"))).toBe(true);
+    expect(names.some((n) => n.endsWith("/hooks/useApply.ts"))).toBe(true);
   });
 
   it("recognises the hand-formatting it forbids", () => {
@@ -84,7 +84,7 @@ describe("a value is printed by valueLabel and nothing else", () => {
     const fine = [
       "const x = valueLabel(setting, setting.defaultValue);",
       'labelFor={(option) => valueLabel(setting, option)}',
-      "const isOptimized = valuesEqual(response.new_value, setting.recommendedValue);",
+      "const label = valueLabel(setting, response.new_value);",
       "payload[s.id] = s.recommendedValue;",
       "// String(setting.choices[0]) was the bug",
     ];

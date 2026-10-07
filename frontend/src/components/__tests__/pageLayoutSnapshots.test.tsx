@@ -99,14 +99,16 @@ vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
   useCleanupRunner: () => makeRunner(),
 }));
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false, lastResult: null }),
-}));
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({ applySingle: vi.fn(), isPending: () => false }),
-}));
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({ run: vi.fn(), stop: vi.fn(), isRunning: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    run: vi.fn(),
+    apply: vi.fn(),
+    reset: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();

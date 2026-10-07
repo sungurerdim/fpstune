@@ -28,8 +28,16 @@ vi.mock("../SelfCheckNotice", () => ({
   SelfCheckNotice: () => null,
 }));
 
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: applySpy, isApplying: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    reset: vi.fn(),
+    run: applySpy,
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 
 // Only the runner: `isDockerCleanup` is a pure predicate the rows call, and a
@@ -129,8 +137,9 @@ describe("the two buttons", () => {
     fireEvent.click(screen.getByText(/Competitive Max/));
     fireEvent.click(await screen.findByRole("button", { name: "Apply" }));
     await vi.waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1));
-    const payload = applySpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(Object.keys(payload).sort()).toEqual([
+    // One streamed run: the action, then the ids it writes.
+    expect(applySpy.mock.calls[0][0]).toBe("apply");
+    expect([...(applySpy.mock.calls[0][1] as string[])].sort()).toEqual([
       "network:nagle",
       "timer:resolution",
     ]);
@@ -146,8 +155,9 @@ describe("the two buttons", () => {
     expect(applySpy).not.toHaveBeenCalled();
     fireEvent.click(screen.getByText("Spend it"));
     await vi.waitFor(() => expect(applySpy).toHaveBeenCalledTimes(1));
-    const payload = applySpy.mock.calls[0][0] as Record<string, unknown>;
-    expect(Object.keys(payload).sort()).toEqual([
+    // One streamed run: the action, then the ids it writes.
+    expect(applySpy.mock.calls[0][0]).toBe("apply");
+    expect([...(applySpy.mock.calls[0][1] as string[])].sort()).toEqual([
       "game_config:mw4:model_quality",
       "network:nagle",
       "timer:resolution",

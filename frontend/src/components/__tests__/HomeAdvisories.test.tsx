@@ -42,8 +42,16 @@ vi.mock("../../lib/api", async (importOriginal) => {
   };
 });
 
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    reset: vi.fn(),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 
 // Only the runner: `isDockerCleanup` is a pure predicate the rows call, and a

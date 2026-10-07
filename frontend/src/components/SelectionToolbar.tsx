@@ -10,7 +10,7 @@ import { useMemo } from "react";
 import { X } from "lucide-react";
 import { cn } from "../lib/utils";
 import { useStore } from "../store";
-import { useBulkStream } from "../hooks/useBulkStream";
+import { useApply } from "../hooks/useApply";
 import type { Setting, SettingId } from "../types/setting";
 import { ScopeActions } from "./ScopeActions";
 
@@ -20,7 +20,7 @@ export function SelectionToolbar() {
   const clearSelection = useStore((s) => s.clearSelection);
   const settings = useStore((s) => s.settings);
   const settingsVersion = useStore((s) => s._settingsVersion);
-  const { isRunning } = useBulkStream();
+  const { isRunning } = useApply();
 
   const selected = useMemo(
     () =>

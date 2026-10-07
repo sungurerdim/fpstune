@@ -21,17 +21,18 @@ import { HomeTab } from "../HomeTab";
 import { useStore } from "../../store";
 import type { Setting } from "../../types/setting";
 
-vi.mock("../../hooks/useBulkApply", () => ({
-  useBulkApply: () => ({ apply: vi.fn(), isApplying: false }),
-}));
-
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({
-    applySingle: vi.fn(),
-    resetSingle: vi.fn(),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    reset: vi.fn(),
+    apply: vi.fn(),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
     isPending: () => false,
+    isRunning: false,
   }),
 }));
+
 
 // Only the runner: `isDockerCleanup` is a pure predicate the rows call, and a
 // mock that dropped it would fail on the export rather than on the behaviour.

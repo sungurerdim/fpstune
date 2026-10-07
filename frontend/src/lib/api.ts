@@ -1,6 +1,7 @@
 import { createLogger } from "./logger";
 import type {
   CategoryMetadataResponse,
+  DefaultSource,
   ModuleMetadataResponse,
   SettingDefinition,
 } from "../types/setting";
@@ -446,7 +447,7 @@ export interface SettingState {
   applicable_reason: string;
   recommended: unknown | null;
   default: unknown | null;
-  default_source: "windows_stock" | "driver" | "scheme" | "game" | "none" | null;
+  default_source: DefaultSource | null;
   is_optimized: boolean;
   error: string | null;
   /**

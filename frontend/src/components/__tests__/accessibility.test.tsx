@@ -27,8 +27,16 @@ import { TweakListRow } from "../TweakListRow";
 import { SettingValueState } from "../SettingStateDisplay";
 import type { Setting } from "../../types/setting";
 
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({ applySingle: vi.fn(), isPending: () => false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    reset: vi.fn(),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 
 function makeSetting(overrides: Partial<Setting> = {}): Setting {

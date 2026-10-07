@@ -17,11 +17,15 @@ import type { Setting } from "../../types/setting";
 const applySingle = vi.fn();
 const resetSingle = vi.fn();
 
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({
-    applySingle: (...args: unknown[]) => applySingle(...args),
-    resetSingle: (...args: unknown[]) => resetSingle(...args),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: (...args: unknown[]) => applySingle(...args),
+    reset: (...args: unknown[]) => resetSingle(...args),
+    run: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
     isPending: () => false,
+    isRunning: false,
   }),
 }));
 

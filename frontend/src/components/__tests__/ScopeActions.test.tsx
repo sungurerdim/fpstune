@@ -14,8 +14,16 @@ import type { Setting } from "../../types/setting";
 
 const run = vi.fn();
 
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({ run, stop: vi.fn(), isRunning: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    run,
+    apply: vi.fn(),
+    reset: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 
 beforeEach(() => run.mockReset());

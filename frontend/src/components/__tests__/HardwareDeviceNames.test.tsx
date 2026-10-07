@@ -85,11 +85,16 @@ vi.mock("../../lib/hardware-manager", () => ({
 vi.mock("../hardware/useRefreshOnFocus", () => ({
   useRefreshOnFocus: () => undefined,
 }));
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({ applySingle: vi.fn(), isPending: () => false }),
-}));
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({ run: vi.fn(), stop: vi.fn(), isRunning: false }),
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: vi.fn(),
+    run: vi.fn(),
+    reset: vi.fn(),
+    stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
+    isRunning: false,
+  }),
 }));
 vi.mock("../../lib/api", async (importOriginal) => ({
   ...(await importOriginal<object>()),

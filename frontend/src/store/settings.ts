@@ -6,7 +6,9 @@
  */
 
 import type { StateCreator } from "zustand";
+import type { SettingState } from "../lib/api";
 import type {
+  DefaultSource,
   Finding,
   Setting,
   SettingId,
@@ -57,6 +59,31 @@ export interface DetectionResultUpdate {
   recommended_value?: unknown;
   // The numbers behind an advisory's word; absent = no news, null = none.
   finding?: Record<string, unknown> | null;
+  // The default a reset writes and whose stock it is; absent = no news, null =
+  // none derivable (a reset is then not offered for the row).
+  default_value?: unknown;
+  default_source?: DefaultSource | null;
+}
+
+/**
+ * The backend's `SettingState` in the store's update spelling.
+ *
+ * The one translation between the two: `is_optimized` is the backend's verdict
+ * and is carried as it came, never re-derived from `current` and `recommended`
+ * on this side (#107 U0).
+ */
+export function updateFromState(state: SettingState): DetectionResultUpdate {
+  return {
+    value: state.current,
+    is_optimized: state.is_optimized,
+    is_applicable: state.applicable,
+    applicable_reason: state.applicable_reason,
+    error: state.error,
+    recommended_value: state.recommended,
+    finding: state.finding,
+    default_value: state.default,
+    default_source: state.default_source,
+  };
 }
 
 function isFinding(value: unknown): value is Finding {
@@ -104,6 +131,13 @@ export interface SettingsSlice {
     isOptimized: boolean,
     isApplicable: boolean,
     applicableReason?: string,
+  ) => void;
+
+  // The one entry for a backend `SettingState` — a detect result or the state an
+  // apply answers with — into the store.
+  applySettingStates: (
+    states: Record<string, SettingState>,
+    doneCategories?: string[],
   ) => void;
 
   // === Atomic Detection Finalization ===
@@ -202,6 +236,14 @@ export const createSettingsSlice: StateCreator<
     );
   },
 
+  applySettingStates: (states, doneCategories = []) => {
+    const results: Record<string, DetectionResultUpdate> = {};
+    for (const [id, state] of Object.entries(states)) {
+      results[id] = updateFromState(state);
+    }
+    get().finalizeDetection(results, doneCategories);
+  },
+
   // Atomic finalization: updates all detection results + marks categories done in one set() call.
   finalizeDetection: (results, doneCategories) => {
     const settings = get().settings;
@@ -221,6 +263,12 @@ export const createSettingsSlice: StateCreator<
           }),
           ...(result.recommended_value !== undefined && {
             recommendedValue: result.recommended_value,
+          }),
+          ...(result.default_value !== undefined && {
+            defaultValue: result.default_value,
+          }),
+          ...(result.default_source !== undefined && {
+            defaultSource: result.default_source,
           }),
           // Absent leaves the last finding standing,
           // null (a detect that measured nothing this time) clears it.

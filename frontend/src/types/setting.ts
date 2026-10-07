@@ -170,6 +170,9 @@ export type SettingCategory = string;
  * Optimization scope for profile filtering.
  * Settings are categorized by impact level, not risk.
  */
+/** Whose stock a setting's default is (mirrors schemas.SettingState.default_source). */
+export type DefaultSource = "windows_stock" | "driver" | "scheme" | "game" | "none";
+
 type SettingScope = "essential" | "recommended" | "complete";
 
 /**
@@ -213,6 +216,8 @@ export interface Setting {
   valueType: SettingValueType; // "choice"
   choices: string[]; // ["enabled", "disabled", "default"]
   defaultValue: unknown; // "enabled"
+  /** Whose stock the default is; the detect state refreshes it. Null/absent = none derivable. */
+  defaultSource?: DefaultSource | null;
   recommendedValue: unknown; // "disabled"
 
   // === Behavior (static) ===

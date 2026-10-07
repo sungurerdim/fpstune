@@ -30,17 +30,18 @@ import type { Setting } from "../../types/setting";
 const applySingle = vi.fn();
 const bulkRun = vi.fn();
 
-vi.mock("../../hooks/useApplySingle", () => ({
-  useApplySingle: () => ({ applySingle: (...a: unknown[]) => applySingle(...a), isPending: () => false }),
-}));
-
-vi.mock("../../hooks/useBulkStream", () => ({
-  useBulkStream: () => ({
+vi.mock("../../hooks/useApply", () => ({
+  useApply: () => ({
+    apply: (...a: unknown[]) => applySingle(...a),
     run: (...a: unknown[]) => bulkRun(...a),
+    reset: vi.fn(),
     stop: vi.fn(),
+    pendingIds: new Set<string>(),
+    isPending: () => false,
     isRunning: false,
   }),
 }));
+
 
 function setting(overrides: Partial<Setting> & { id: string }): Setting {
   return {

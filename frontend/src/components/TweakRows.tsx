@@ -1,6 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import { useStore, type OperationStatus } from "../store";
-import { useApplySingle } from "../hooks/useApplySingle";
+import { useApply } from "../hooks/useApply";
 import { detectionManager } from "../lib/detection-manager";
 import type { Setting } from "../types/setting";
 import { TweakSetting } from "./TweakSetting";
@@ -92,7 +92,7 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
     (state) => state.toggleSelectedSetting,
   );
   const operationStatus = useStore((state) => state.operationStatus);
-  const { applySingle, resetSingle, isPending } = useApplySingle();
+  const { apply: applySingle, reset: resetSingle, isPending } = useApply();
   const [verifyingIds, setVerifyingIds] = useState<Set<string>>(new Set());
 
   const verify = useCallback(async (setting: Setting) => {

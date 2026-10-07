@@ -1,8 +1,9 @@
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { Loader2, RotateCcw, Square, Zap } from "lucide-react";
 import { useT } from "../i18n";
 import { cn } from "../lib/utils";
-import { useScopedActions } from "../hooks/useScopedActions";
+import { useApply } from "../hooks/useApply";
+import { scopeTargets } from "../lib/bulkStream";
 import { scopeDomain } from "../lib/tweakDomain";
 import type { BulkAction } from "../store";
 import type { Setting } from "../types/setting";
@@ -37,7 +38,13 @@ export function ScopeActions({
   className?: string;
 }) {
   const { t } = useT();
-  const { targets, start, stop, isRunning } = useScopedActions(settings);
+  const { run, stop, isRunning } = useApply();
+  const targets = useMemo(() => scopeTargets(settings), [settings]);
+  const start = (action: BulkAction) =>
+    run(
+      action,
+      targets[action].map((s) => s.id),
+    );
   const [pending, setPending] = useState<BulkAction | null>(null);
   const resetDomain = scopeDomain(targets.reset);
 

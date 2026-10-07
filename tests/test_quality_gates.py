@@ -896,15 +896,10 @@ class TestNoLocalizedTextParsing:
     _FOLD_OR_PARAM = re.compile(r"\.To(?:Lower|Upper)\(\)|-DisplayName\s+[\"']")
     _INVARIANT = re.compile(r"VEN_|\b(?:PCI|USB|ACPI|SWD|ROOT)(?:\\|\*)|UID\(|===fpstune-")
 
-    _ADAPTER_STRINGS = (
-        "inbox INF description strings, verified English on a Turkish Windows "
-        "(2026-09-02); -not $_.Virtual is the primary filter"
-    )
     _GAME_TEXT = "the subject is a game's own config text, which Windows does not localize"
     _ENUM_802 = "MSFT_NetAdapter MediaType enum string, not MUI text"
     # (relative path, substring on the same line) -> why it cannot be localized.
     _ALLOWED: dict[tuple[str, str], str] = {
-        ("src/fpstune/api/hardware/network_adapters.py", "-notlike '*"): _ADAPTER_STRINGS,
         ("src/fpstune/benchmark/event_scan.py", "$_.ProviderName -match"): (
             "an event provider's registered id — the name the driver published to ETW, "
             "not the sentence the event renders into, so no Windows language changes it"
@@ -942,7 +937,6 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/definitions/launchers.py", "cef-disable-gpu"): (
             "Steam's own launch option"
         ),
-        ("src/fpstune/settings/definitions/network.py", "-notlike '*"): _ADAPTER_STRINGS,
         ("src/fpstune/settings/definitions/network.py", ".ToString().ToLower()"): (
             ".NET enum name of a Get-NetTCPSetting property"
         ),
@@ -954,7 +948,6 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/definitions/power.py", "'AMD Ryzen'"): (
             "AMD's plan name, installed verbatim by the chipset driver"
         ),
-        ("src/fpstune/settings/discovery/probes.py", "-notlike '*"): _ADAPTER_STRINGS,
         ("src/fpstune/settings/executors/powershell_actions.py", '-match "`r`n"'): (
             "line-ending probe on fpstune's own file content"
         ),

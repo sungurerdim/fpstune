@@ -114,6 +114,10 @@ def fake_adapters(*adapters: dict[str, Any]) -> list[dict[str, Any]]:
             "InterfaceGuid": adapter.get("guid", f"{{guid-{adapter['ifIndex']}}}"),
             "InterfaceOperationalStatus": adapter.get("status", 1),
             "Virtual": adapter.get("virtual", False),
+            # What the driver itself declares, as Get-NetAdapter reports it: a
+            # software adapter is not a hardware interface, and 14 is 802.3.
+            "HardwareInterface": adapter.get("hardware", not adapter.get("virtual", False)),
+            "NdisPhysicalMedium": adapter.get("medium", 14),
             "InterfaceDescription": adapter.get("description", "Realtek Gaming Ethernet"),
         }
         for index, adapter in enumerate(adapters)

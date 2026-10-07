@@ -176,7 +176,15 @@ def test_virtual_adapters_are_excluded_from_the_verdict() -> None:
     physical adapter read as unapplied.
     """
     answer = _detect(
-        [ETHERNET, {"ifIndex": 7, "name": "vEthernet", "description": "Hyper-V Virtual Switch"}],
+        [
+            ETHERNET,
+            {
+                "ifIndex": 7,
+                "name": "vEthernet",
+                "description": "Hyper-V Virtual Switch",
+                "virtual": True,
+            },
+        ],
         {"19": SECURITY_PAIR, "7": [ROUTER]},
     )
     assert answer == "cloudflare_security"
@@ -194,4 +202,33 @@ def test_a_router_ipv6_resolver_is_not_reported_as_applied() -> None:
 
 def test_both_families_on_the_chosen_resolver_is_applied() -> None:
     answer = _detect([ETHERNET], {"19": SECURITY_PAIR}, {"19": SECURITY_PAIR_V6})
+    assert answer == "cloudflare_security"
+
+
+def test_a_bluetooth_pan_and_a_flagless_software_adapter_do_not_decide_the_verdict() -> None:
+    """Neither says "Virtual" in any language: only the NDIS medium and the hardware flag do.
+
+    A Bluetooth PAN is hardware-backed (`Virtual` false, medium 10) and a software
+    bridge may leave the virtual flag unset; both carried the router's DNS here, and
+    both used to make a correctly configured physical adapter read as unapplied
+    whenever their translated description missed the old word list.
+    """
+    answer = _detect(
+        [
+            ETHERNET,
+            {
+                "ifIndex": 9,
+                "name": "Bluetooth Ağ Bağlantısı",
+                "description": "Kişisel Alan Ağı Aygıtı",
+                "medium": 10,
+            },
+            {
+                "ifIndex": 12,
+                "name": "Köprü",
+                "description": "Ağ Köprüsü Bağdaycısı",
+                "hardware": False,
+            },
+        ],
+        {"19": SECURITY_PAIR, "9": [ROUTER], "12": [ROUTER]},
+    )
     assert answer == "cloudflare_security"

@@ -78,6 +78,7 @@ def _harness(
         "function Get-NetAdapter { [CmdletBinding()] param() "
         "[pscustomobject]@{ ifIndex = 7; InterfaceGuid = '" + GUID + "'; "
         "InterfaceOperationalStatus = 1; Virtual = $false; "
+        "HardwareInterface = $true; NdisPhysicalMedium = 14; "
         "InterfaceDescription = 'Intel(R) Ethernet Controller' } }; "
         "function Get-DnsClientServerAddress { [CmdletBinding()] param($InterfaceIndex) "
         f"[pscustomobject]@{{ ServerAddresses = {_ps_list(servers)} }} }}; "

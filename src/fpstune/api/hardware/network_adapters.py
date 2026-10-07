@@ -26,6 +26,7 @@ import logging
 from typing import Any
 
 from fpstune.api.schemas import NetworkAdapterInfo
+from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER
 from fpstune.utils.debug import debug_log
 from fpstune.utils.powershell import run_powershell
 from fpstune.utils.winapi import wlan
@@ -41,16 +42,15 @@ _ADAPTER_INVENTORY_SCRIPT = """
     $seenIds = @{}
 
     # Method 1: Get adapters from Get-NetAdapter (has detailed info for active adapters)
-    $netAdapters = Get-NetAdapter -IncludeHidden -EA SilentlyContinue | Where-Object {
-        -not $_.Virtual -and
-        $_.Name -notlike '*vEthernet*' -and
-        $_.InterfaceDescription -notlike '*Loopback*' -and
-        $_.InterfaceDescription -notlike '*Miniport*' -and
-        $_.InterfaceDescription -notlike '*Virtual*' -and
-        $_.InterfaceDescription -notlike '*Hyper-V*' -and
-        $_.InterfaceDescription -notlike '*Wi-Fi Direct*' -and
-        $_.InterfaceDescription -notlike '*Bluetooth*'
-    }
+    # Real hardware is told from software by the driver's own flags and medium
+    # number (HardwareInterface, Virtual, NdisPhysicalMedium), never by a word in
+    # the description, which every Windows language translates.
+    $allNetAdapters = @(Get-NetAdapter -IncludeHidden -EA SilentlyContinue)
+    $netAdapters = $allNetAdapters | Where-Object { @PHYSICAL_ADAPTER@ }
+    # The PnP ids of the adapters that were just refused, so the PnP pass below
+    # cannot list a virtual or Bluetooth adapter again under its own name.
+    $refusedIds = @($allNetAdapters | Where-Object { -not (@PHYSICAL_ADAPTER@) } |
+        ForEach-Object { $_.PnPDeviceID } | Where-Object { $_ })
 
     # Cache all network PnpDevices and WMI adapters once for efficiency
     $allNetPnp = Get-PnpDevice -Class Net -EA SilentlyContinue
@@ -119,16 +119,12 @@ _ADAPTER_INVENTORY_SCRIPT = """
     }
 
     # Method 2: Get disabled/unknown adapters from PnpDevice (not in Get-NetAdapter)
+    # Physical means a PCI or USB bus id (software adapters sit on ROOT, SWD, BTH,
+    # VMBUS), and not an id Get-NetAdapter already refused as virtual or Bluetooth.
     $pnpDevices = $allNetPnp | Where-Object {
         $_.FriendlyName -and
-        $_.FriendlyName -notlike '*Miniport*' -and
-        $_.FriendlyName -notlike '*Virtual*' -and
-        $_.FriendlyName -notlike '*Hyper-V*' -and
-        $_.FriendlyName -notlike '*Wi-Fi Direct*' -and
-        $_.FriendlyName -notlike '*Bluetooth*' -and
-        $_.FriendlyName -notlike '*Debug*' -and
-        $_.FriendlyName -notlike '*Extension*' -and
-        ($_.InstanceId -like 'PCI\\*' -or $_.InstanceId -like 'USB\\*')
+        ($_.InstanceId -like 'PCI\\*' -or $_.InstanceId -like 'USB\\*') -and
+        $refusedIds -notcontains $_.InstanceId
     }
 
     foreach ($pnp in $pnpDevices) {
@@ -210,7 +206,7 @@ _ADAPTER_INVENTORY_SCRIPT = """
     }
 
     $results | ConvertTo-Json -Depth 2
-    """
+    """.replace("@PHYSICAL_ADAPTER@", PHYSICAL_ADAPTER)
 
 
 # WiFi facts come from wlanapi.dll, never from netsh text: netsh's interface

@@ -36,6 +36,7 @@ function Get-NetAdapter {
         [pscustomobject]@{
             Name = $a.name; InterfaceDescription = $a.description; InterfaceIndex = $a.ifIndex
             PnPDeviceID = $a.pnpId; Virtual = $a.virtual; AdminStatus = 1; Status = 'Up'
+            HardwareInterface = $a.hardware; NdisPhysicalMedium = $a.medium
             InterfaceGuid = $a.guid; MediaType = $a.mediaType; MacAddress = $a.mac; LinkSpeed = '1 Gbps'
         }
     }
@@ -88,13 +89,30 @@ OLD_INTEL_WIFI_PCI = "PCI\\VEN_8086&DEV_24FD&SUBSYS_90108086&REV_78\\4&2B0C1E0&0
 OLD_REALTEK_PCI = "PCI\\VEN_10EC&DEV_8168&SUBSYS_816810EC&REV_15\\4&1C2A5D1&0&00F0"
 
 
-def net(name: str, description: str, index: int, pnp_id: str, media: str = "802.3") -> dict:
+def net(
+    name: str,
+    description: str,
+    index: int,
+    pnp_id: str,
+    media: str = "802.3",
+    *,
+    virtual: bool = False,
+    hardware: bool | None = None,
+    medium: int | None = None,
+) -> dict:
+    """A Get-NetAdapter row: the driver's flags and NDIS medium, not its words.
+
+    Defaults describe real hardware (`HardwareInterface` true unless virtual; medium
+    14 = 802.3, 9 = native 802.11).
+    """
     return {
         "name": name,
         "description": description,
         "ifIndex": index,
         "pnpId": pnp_id,
-        "virtual": False,
+        "virtual": virtual,
+        "hardware": (not virtual) if hardware is None else hardware,
+        "medium": (9 if media == "Native 802.11" else 14) if medium is None else medium,
         "guid": f"{{guid-{index}}}",
         "mediaType": media,
         "mac": f"00-11-22-33-44-{index:02d}",
@@ -258,3 +276,78 @@ class TestMediumComesFromTheDriversNumbers:
             "problem": 22,
         }
         assert inventory({"pnp": [card]})[0]["MediaType"] == ""
+
+
+class TestHardwareIsToldFromSoftwareByTheDriversNumbers:
+    """Method 1 and the PnP pass refuse software adapters without reading a word of text.
+
+    Every description below is Turkish and none carries a word the old filters knew
+    ("Virtual", "Miniport", "Hyper-V", "Bluetooth", "Wi-Fi Direct"): the flags and the
+    NDIS medium are all the script has to go on.
+    """
+
+    HYPER_V = net(
+        "vEthernet (Varsayılan Anahtar)",
+        "Sanal Ethernet Bağdaştırıcısı",
+        20,
+        "ROOT\\VMS_MP\\0000",
+        virtual=True,
+    )
+    BLUETOOTH_PAN = net(
+        "Bluetooth Ağ Bağlantısı",
+        "Kişisel Alan Ağı Aygıtı",
+        21,
+        "BTH\\MS_BTHPAN\\6&2A",
+        medium=10,
+    )
+    SOFTWARE_BRIDGE = net("Köprü", "Ağ Köprüsü Bağdaycısı", 22, SOFTWARE_BRIDGE, hardware=False)
+    PHYSICAL = net("Ethernet", "Realtek PCIe GbE Aile Denetleyicisi", 19, REALTEK_PCI)
+
+    def test_only_the_physical_nic_is_listed(self) -> None:
+        host = {
+            "netAdapters": [self.HYPER_V, self.BLUETOOTH_PAN, self.SOFTWARE_BRIDGE, self.PHYSICAL],
+            "pnp": [
+                {"friendlyName": "Realtek PCIe GbE Aile Denetleyicisi", "id": REALTEK_PCI},
+            ],
+        }
+        assert list(by_name(inventory(host))) == ["Ethernet"]
+
+    def test_a_refused_adapter_is_not_listed_again_by_the_pnp_pass(self) -> None:
+        """A virtual adapter on a PCI id is still not hardware, whatever its PnP name says.
+
+        The PnP pass exists for disabled and unplugged cards that Get-NetAdapter no
+        longer lists; it must not resurrect one Get-NetAdapter listed and refused.
+        """
+        refused = net(
+            "Sanal Anahtar",
+            "Sanal Anahtar Bağdaştırıcısı",
+            23,
+            "PCI\\VEN_15AD&DEV_07B0\\4&1A2B3C&0&00A8",
+            virtual=True,
+        )
+        host = {
+            "netAdapters": [refused, self.PHYSICAL],
+            "pnp": [
+                {"friendlyName": "Sanal Anahtar Bağdaştırıcısı", "id": refused["pnpId"]},
+                {"friendlyName": "Realtek PCIe GbE Aile Denetleyicisi", "id": REALTEK_PCI},
+            ],
+        }
+        assert [r["InstanceId"] for r in inventory(host)] == [REALTEK_PCI]
+
+    def test_a_disabled_card_only_the_pnp_pass_sees_is_still_listed(self) -> None:
+        """The refusal list must not swallow the very devices the PnP pass exists for."""
+        host = {
+            "netAdapters": [self.HYPER_V],
+            "pnp": [
+                {
+                    "friendlyName": "Intel(R) Dual Band Kablosuz-AC 8265",
+                    "id": OLD_INTEL_WIFI_PCI,
+                    "status": "Error",
+                    "problem": 22,
+                    "driverKey": "{4d36e972-e325-11ce-bfc1-08002be10318}\0007",
+                    "physicalMedium": 9,
+                    "ifType": 71,
+                }
+            ],
+        }
+        assert [r["InstanceId"] for r in inventory(host)] == [OLD_INTEL_WIFI_PCI]

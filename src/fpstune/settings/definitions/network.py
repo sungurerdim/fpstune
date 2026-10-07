@@ -21,6 +21,7 @@ from fpstune.settings.base import (
     SettingValueType,
 )
 from fpstune.settings.discovery.keyword_resolver import concept as keyword_concept
+from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER_UP
 
 
 def adapter_key(instance_id: str) -> str:
@@ -709,12 +710,7 @@ DNS_SECURITY = SettingExecutor(
         "$result = 'isp'; "
         # Must match the apply filter exactly: physical adapters only.
         "$adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { "
-        "[int]$_.InterfaceOperationalStatus -eq 1 -and "
-        "-not $_.Virtual -and "
-        "$_.InterfaceDescription -notlike '*Virtual*' -and "
-        "$_.InterfaceDescription -notlike '*Hyper-V*' -and "
-        "$_.InterfaceDescription -notlike '*VPN*' -and "
-        "$_.InterfaceDescription -notlike '*Tunnel*' "
+        f"{PHYSICAL_ADAPTER_UP} "
         "}); "
         "if ($adapters.Count -gt 0) { "
         # Values are pre-sorted so they can be compared against Sort-Object output.
@@ -756,12 +752,7 @@ DNS_SECURITY = SettingExecutor(
         # A refused write ends the script with its reason, not with 'ok'.
         "try { "
         "$adapters = Get-NetAdapter | Where-Object { "
-        "[int]$_.InterfaceOperationalStatus -eq 1 -and "
-        "-not $_.Virtual -and "
-        "$_.InterfaceDescription -notlike '*Virtual*' -and "
-        "$_.InterfaceDescription -notlike '*Hyper-V*' -and "
-        "$_.InterfaceDescription -notlike '*VPN*' -and "
-        "$_.InterfaceDescription -notlike '*Tunnel*' "
+        f"{PHYSICAL_ADAPTER_UP} "
         "}; "
         "$changed = 0; "
         "foreach ($adapter in $adapters) { "
@@ -866,14 +857,7 @@ _DOH_TEMPLATES = {
 # settings disagreeing about which adapters count, which is the defect fixed in
 # dns_security's own detect (it read one adapter while apply wrote all of them).
 _PHYSICAL_ADAPTER_FILTER = (
-    "Get-NetAdapter -ErrorAction Stop | Where-Object { "
-    "[int]$_.InterfaceOperationalStatus -eq 1 -and "
-    "-not $_.Virtual -and "
-    "$_.InterfaceDescription -notlike '*Virtual*' -and "
-    "$_.InterfaceDescription -notlike '*Hyper-V*' -and "
-    "$_.InterfaceDescription -notlike '*VPN*' -and "
-    "$_.InterfaceDescription -notlike '*Tunnel*' "
-    "}"
+    f"Get-NetAdapter -ErrorAction Stop | Where-Object {{ {PHYSICAL_ADAPTER_UP} }}"
 )
 
 _DOH_TEMPLATE_TABLE_PS = "; ".join(

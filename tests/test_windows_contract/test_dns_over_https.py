@@ -31,6 +31,7 @@ from tests.test_windows_contract.conftest import (
 )
 
 from fpstune.settings.definitions.network import DNS_OVER_HTTPS, DNS_SECURITY
+from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER_UP
 
 pytestmark = pytest.mark.skipif(
     sys.platform != "win32", reason="Runs the shipped PowerShell detect command"
@@ -229,7 +230,15 @@ def test_no_matching_adapter_reads_as_not_supported() -> None:
 def test_virtual_adapters_do_not_decide_the_verdict() -> None:
     """The filter must stay identical to dns_security's, or the two disagree."""
     answer = _detect(
-        [ETHERNET, {"ifIndex": 7, "guid": "{hv}", "description": "Hyper-V Virtual Switch"}],
+        [
+            ETHERNET,
+            {
+                "ifIndex": 7,
+                "guid": "{hv}",
+                "description": "Hyper-V Virtual Switch",
+                "virtual": True,
+            },
+        ],
         {"19": SECURITY_PAIR, "7": ["192.168.1.1"]},
         _flagged("{eth-guid}", "1.1.1.2", "1.0.0.2"),
     )
@@ -244,14 +253,7 @@ def test_the_two_dns_settings_share_one_adapter_filter() -> None:
     apart on which adapters count, encrypted DNS can be reported enabled for a set
     that does not match the resolvers actually configured.
     """
-    filter_text = (
-        "[int]$_.InterfaceOperationalStatus -eq 1 -and "
-        "-not $_.Virtual -and "
-        "$_.InterfaceDescription -notlike '*Virtual*' -and "
-        "$_.InterfaceDescription -notlike '*Hyper-V*' -and "
-        "$_.InterfaceDescription -notlike '*VPN*' -and "
-        "$_.InterfaceDescription -notlike '*Tunnel*'"
-    )
+    filter_text = PHYSICAL_ADAPTER_UP
     for command in (
         DNS_OVER_HTTPS.detect_command,
         DNS_OVER_HTTPS.apply_command,

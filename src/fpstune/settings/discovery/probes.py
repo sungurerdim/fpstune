@@ -25,6 +25,7 @@ from typing import Any, NamedTuple, TypeVar, cast
 
 from fpstune.settings.discovery.keyword_resolver import AdapterProperty
 from fpstune.utils import process_watch
+from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER
 from fpstune.utils.system_tools import powershell_exe
 
 logger = logging.getLogger(__name__)
@@ -265,13 +266,10 @@ class HardwareProbes:
                     powershell_exe(),
                     "-NoProfile",
                     "-Command",
-                    # Get all physical adapters - exclude only true virtual adapters
-                    # Use $_.Virtual property (boolean) instead of pattern matching
-                    # This correctly identifies USB/Docking station ethernet as physical
-                    "Get-NetAdapter | Where-Object {"
-                    "-not $_.Virtual -and "
-                    "$_.Name -notlike '*vEthernet*' -and "
-                    "$_.InterfaceDescription -notlike '*Loopback*'"
+                    # Real hardware by the driver's own flags and medium number, not
+                    # by a word in a name that Windows translates; a USB or docking
+                    # station NIC still counts as physical.
+                    f"Get-NetAdapter | Where-Object {{ {PHYSICAL_ADAPTER} "
                     # The name goes last: it is the one field Windows lets a
                     # user type, so it is the one that may contain the separator.
                     "} | ForEach-Object { "

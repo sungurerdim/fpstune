@@ -12,7 +12,7 @@ Reference guide for implementing locale-independent, reliable tweak detection an
 | **BCD Settings** | WMI BcdStore element type IDs | bcdedit text parsing |
 | **Power Settings** | GUIDs + hex values | powercfg text output |
 | **Network Adapters** | RegistryKeyword (`*FlowControl`) + InterfaceIndex | DisplayName, adapter Name |
-| **Network Virtual Filter** | `$_.Virtual` property (boolean) | Pattern matching `*Virtual*` |
+| **Network Virtual Filter** | `HardwareInterface` / `Virtual` / `NdisPhysicalMedium` (`fpstune.utils.adapter_filter`) | Pattern matching `*Virtual*` |
 | **Command Placeholders** | `%value%` syntax | `{value}` (conflicts with PowerShell braces) |
 | **Audio Effects** | Check both HKLM and HKCU | HKLM only |
 
@@ -567,14 +567,22 @@ Many USB ethernet adapters (especially through docking stations) use NDIS Virtua
 
 ### Recommended Filter
 
+One predicate, `PHYSICAL_ADAPTER` in `fpstune.utils.adapter_filter`, shared by every
+site that lists adapters (the inventory, the discovery probe and the DNS settings):
+
 ```powershell
-# Keep it simple - use Virtual property for primary filter
 Get-NetAdapter | Where-Object {
-    -not $_.Virtual -and
-    $_.Name -notlike '*vEthernet*' -and           # Hyper-V virtual switches
-    $_.InterfaceDescription -notlike '*Loopback*'  # Loopback adapters
+    $_.HardwareInterface -and          # the driver declares NCF_PHYSICAL
+    -not $_.Virtual -and               # the NDIS virtual flag
+    $_.NdisPhysicalMedium -ne 10       # 10 = Bluetooth: hardware-backed, but not a NIC to tune
 }
 ```
+
+All three are a boolean or an enum, so they hold on every Windows language. A name
+filter (`-notlike '*Hyper-V*'`, `'*Bluetooth*'`, `'*vEthernet*'`) stops filtering the
+moment the description is translated. `-Physical` is not used because a disabled
+adapter drops out of it entirely. Contract tests with Turkish names:
+`tests/test_windows_contract/test_adapter_classification.py`.
 
 ### Anti-Patterns
 

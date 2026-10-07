@@ -35,7 +35,7 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**412 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**413 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
@@ -44,7 +44,7 @@ this rule raises a setting as readily as it lowers one.
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
 | GPU | 28 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
 | Network | 26 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
-| Power | 29 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
+| Power | 30 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
 | Launchers | 9 | Steam, Battle.net overlay/GPU/shader settings |
 | Core | 4 | Priority separation and MMCSS, held at Windows' own values |
 | Game | 5 | Game Mode, Game Bar, HAGS |
@@ -352,7 +352,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (apply/reset/verify, SSE bulk),
                     system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
-    definitions/    16 category files producing the 412 settings in 13 categories —
+    definitions/    16 category files producing the 413 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal

@@ -72,13 +72,29 @@ function makeWrapper() {
   return { Wrapper, queryClient };
 }
 
+/** The detect shape an apply answers with after its re-detect (schemas.SettingState). */
+function stateOf(current: unknown) {
+  return {
+    setting_id: "timer:hpet",
+    current,
+    applicable: true,
+    applicable_reason: "",
+    recommended: "disabled",
+    default: "enabled",
+    default_source: "windows_stock",
+    is_optimized: current === "disabled",
+    error: null,
+    finding: null,
+  };
+}
+
 // MSW uses decoded URL patterns; colons are literal in path patterns
 const applyHandler = http.post("/api/settings/:id/apply", () =>
   HttpResponse.json({
     setting_id: "timer:hpet",
     success: true,
     error: null,
-    new_value: "disabled",
+    state: stateOf("disabled"),
     requires_reboot: false,
   }),
 );
@@ -148,7 +164,7 @@ describe("useApplySingle", () => {
           setting_id: "timer:hpet",
           success: false,
           error: "registry key is access-denied",
-          new_value: null,
+          state: null,
           requires_reboot: false,
         }),
       ),
@@ -170,7 +186,7 @@ describe("useApplySingle", () => {
     ).toBe(true);
   });
 
-  it("updates store with new_value on successful apply", async () => {
+  it("updates store with state.current on successful apply", async () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });
     const setting = makeSetting();
@@ -195,7 +211,10 @@ describe("useApplySingle", () => {
       response = await result.current.applySingle(setting, "disabled");
     });
 
-    expect(response).toMatchObject({ success: true, new_value: "disabled" });
+    expect(response).toMatchObject({
+      success: true,
+      state: { current: "disabled" },
+    });
   });
 
   it("still clears pending on API failure", async () => {
@@ -233,7 +252,7 @@ describe("useApplySingle", () => {
           setting_id: "timer:hpet",
           success: true,
           error: null,
-          new_value: "enabled",
+          state: stateOf("enabled"),
           requires_reboot: false,
           verified: true,
         });

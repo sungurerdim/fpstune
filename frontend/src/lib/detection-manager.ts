@@ -43,6 +43,10 @@ class DetectionManager {
    * post-apply re-detect — mapped four of the six fields and skipped the
    * version bump, so `recommended_value` was blanked and
    * eleven subscribers kept rendering the values from before the apply.
+   *
+   * The response speaks the `SettingState` contract (`current`, `applicable`,
+   * `recommended`, ...); the store's update type keeps its older spelling, and
+   * this is the one place that translates between them.
    */
   private static finalize(
     response: DetectResponse,
@@ -51,12 +55,13 @@ class DetectionManager {
     const results: Record<string, DetectionResultUpdate> = {};
     for (const [id, result] of Object.entries(response.results)) {
       results[id] = {
-        value: result.value,
+        value: result.current,
         is_optimized: result.is_optimized,
-        is_applicable: result.is_applicable,
+        is_applicable: result.applicable,
         applicable_reason: result.applicable_reason,
         error: result.error,
-        recommended_value: result.recommended_value,
+        recommended_value: result.recommended,
+        finding: result.finding,
       };
     }
     useStore.getState().finalizeDetection(results, doneCategories);

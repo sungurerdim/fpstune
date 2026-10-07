@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
+from fpstune.settings.base import DefaultSource
+
 if TYPE_CHECKING:
     from fpstune.utils.detect import MonitorInfo as DetectedMonitorInfo
 
@@ -339,18 +341,32 @@ class ModuleMetadataResponse(BaseModel):
     order: int
 
 
-class DetectionResultResponse(BaseModel):
-    """Detection result for a single setting."""
+class SettingState(BaseModel):
+    """What one setting looks like right now: the one shape a state travels in.
+
+    `POST /settings/detect` returns one per id, and `POST /settings/{id}/apply`
+    returns the same object after its re-detect, so a client never reads a
+    setting's value out of two different spellings. Reset is not a shape of its
+    own: `default` is what a reset writes, `default_source` says whose stock it
+    is, and the write is an apply of that value.
+    """
 
     setting_id: str
-    value: Any | None
-    error: str | None
-    time_ms: int
-    success: bool
-    is_optimized: bool = False
-    is_applicable: bool = True
+    # The value read from this machine; None when it could not be read (see `error`).
+    current: Any | None = None
+    # False = the setting does not exist on this machine (`applicable_reason` says why).
+    applicable: bool = True
     applicable_reason: str = ""
-    recommended_value: Any | None = None
+    # What fpstune advises, and what a reset writes. None for an advisory that has
+    # no value to write, and for a row whose default could not be derived.
+    recommended: Any | None = None
+    default: Any | None = None
+    # Whose stock `default` is ("Windows default", "Driver default", "Game default").
+    default_source: DefaultSource | None = None
+    # `current` equals `recommended` under values_equal, the one comparison truth.
+    is_optimized: bool = False
+    # Why this detection could not read the setting; None = it read cleanly.
+    error: str | None = None
     # The numbers behind an advisory's value, keyed by a `kind` the frontend
     # has a sentence for ("linked at 100 Mbps, adapter supports 2500 Mbps").
     # Read on this machine during this detect; None for an ordinary setting.
@@ -369,7 +385,7 @@ class DetectRequest(BaseModel):
 class DetectResponse(BaseModel):
     """Response with detection results."""
 
-    results: dict[str, DetectionResultResponse]
+    results: dict[str, SettingState]
     total_time_ms: int
     success_count: int
     error_count: int
@@ -387,7 +403,10 @@ class ApplyResponse(BaseModel):
     setting_id: str
     success: bool
     error: str | None
-    new_value: Any | None
+    # The setting as it reads after the write — the detect shape, produced by the
+    # same re-detect that verified the apply. None when no re-detect happened:
+    # the command failed, the value was refused, or the setting was skipped.
+    state: SettingState | None = None
     requires_reboot: bool
     skipped: bool = False  # True if setting was not applicable (not an error)
     # Verification outcome, kept distinct from `success` so a skipped check is

@@ -11,6 +11,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
+from fpstune.api.schemas import SettingState
 from tests.conftest import neutral_hardware_context
 
 
@@ -36,7 +37,7 @@ def _parse_sse(text: str) -> list[dict]:
 def _make_apply_response(
     *,
     success: bool = True,
-    new_value: str = "1",
+    current: str = "1",
     requires_reboot: bool = False,
     skipped: bool = False,
     error: str | None = None,
@@ -46,7 +47,7 @@ def _make_apply_response(
 ) -> MagicMock:
     r = MagicMock()
     r.success = success
-    r.new_value = new_value
+    r.state = SettingState(setting_id="test:setting", current=current)
     r.requires_reboot = requires_reboot
     r.skipped = skipped
     r.error = error
@@ -145,7 +146,7 @@ class TestBulkStreamApply:
 
     def test_successful_apply_emits_applied_and_verified(self, client: TestClient) -> None:
         setting = _make_setting("core:game_mode", recommended_value="1", default_value="0")
-        apply_resp = _make_apply_response(success=True, new_value="1")
+        apply_resp = _make_apply_response(success=True, current="1")
 
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
@@ -242,7 +243,7 @@ class TestBulkStreamApply:
     def test_multiple_settings_all_succeed(self, client: TestClient) -> None:
         ids = ["core:setting_a", "core:setting_b", "timer:hpet"]
         settings = {sid: _make_setting(sid) for sid in ids}
-        apply_resp = _make_apply_response(success=True, new_value="1")
+        apply_resp = _make_apply_response(success=True, current="1")
 
         mock_registry = MagicMock()
         mock_registry.get.side_effect = lambda sid: settings.get(sid)
@@ -320,7 +321,7 @@ class TestBulkStreamReset:
 
     def test_successful_reset_emits_applied_and_verified(self, client: TestClient) -> None:
         setting = _make_setting("core:game_mode", recommended_value="1", default_value="0")
-        reset_resp = _make_apply_response(success=True, new_value="0")
+        reset_resp = _make_apply_response(success=True, current="0")
 
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
@@ -396,7 +397,7 @@ class TestNvidiaSettingsAreNotBatched:
             default_value="off",
         )
         setting.is_action = False
-        apply_resp = _make_apply_response(success=True, new_value="on")
+        apply_resp = _make_apply_response(success=True, current="on")
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
 
@@ -436,7 +437,7 @@ class TestNvidiaSettingsAreNotBatched:
         def apply(setting, *_a, **_k):
             if setting is bad:
                 return setting, _make_apply_response(success=False, error="driver refused")
-            return setting, _make_apply_response(success=True, new_value="1")
+            return setting, _make_apply_response(success=True, current="1")
 
         with (
             patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
@@ -480,7 +481,7 @@ class TestStopStopsTheServer:
         def slow_apply(setting, *_args, **_kwargs):
             release.wait(timeout=5)
             applied.append(setting.id)
-            return setting, _make_apply_response(success=True, new_value="1")
+            return setting, _make_apply_response(success=True, current="1")
 
         tally = settings_stream._Tally()
         with patch.object(settings_stream, "_apply_single_setting", side_effect=slow_apply):
@@ -543,7 +544,7 @@ class _Probe:
             setting_id=setting.id,
             success=True,
             error=None,
-            new_value="b",
+            state=SettingState(setting_id=setting.id, current="b"),
             requires_reboot=False,
             verified=True,
         )

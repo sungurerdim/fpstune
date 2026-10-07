@@ -133,7 +133,7 @@ class TestApplyTwiceEqualsApplyOnce:
         assert second["success"] is True and second["verified"] is True
         # Apply twice equals apply once: same machine state, same read-back.
         assert machine.state["system:h6_probe"] == "tuned"
-        assert second["new_value"] == first["new_value"] == "tuned"
+        assert second["state"]["current"] == first["state"]["current"] == "tuned"
 
     def test_the_gate_catches_an_accumulating_writer(self, client) -> None:
         """The in-suite red proof: handed the defect class this gate exists

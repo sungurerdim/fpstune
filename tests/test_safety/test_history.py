@@ -18,7 +18,7 @@ from fastapi.testclient import TestClient
 from fpstune.api.main import create_app, lifespan
 from fpstune.safety import history
 from fpstune.safety.history import ChangeJournal, remove_retired_files
-from fpstune.settings.base import DetectionResult
+from fpstune.settings.base import DefaultSource, DetectionResult
 from fpstune.utils.config import get_config_dir
 from tests.conftest import neutral_hardware_context
 
@@ -149,6 +149,7 @@ class TestNothingWritesThemAgain:
         s.default_value = "stock"
         s.recommended_value = "tuned"
         s.choices = ("stock", "tuned")
+        s.default_source = DefaultSource.WINDOWS_STOCK
         s.requires_reboot = False
         s.is_action = False
         s.is_readonly = False

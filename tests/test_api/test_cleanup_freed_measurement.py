@@ -34,6 +34,7 @@ from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
 from fpstune.settings.base import (
+    DetectionResult,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -142,7 +143,9 @@ def _run(
         if detected is _NOT_STUBBED
         else patch(
             "fpstune.api.routes.settings.DetectionEngine.detect_one",
-            return_value=SimpleNamespace(value=detected),
+            return_value=DetectionResult(
+                setting_id=setting.id, value=detected, error=None, time_ms=1
+            ),
         )
     )
 
@@ -328,7 +331,7 @@ class TestTheAfterReadingIsWhatTheRowThenShows:
         # And the post-apply detect served it, so the row updates on the response.
         # Lower-cased on the way out by the detection engine's own
         # normalisation; the size is the after reading either way.
-        assert str(body["new_value"]).lower() == "ready|96 mb"
+        assert str(body["state"]["current"]).lower() == "ready|96 mb"
 
     def test_an_unreadable_after_measurement_drops_the_stale_size(
         self, client: TestClient, cache: CleanupSizeCache

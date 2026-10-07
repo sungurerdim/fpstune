@@ -29,11 +29,11 @@ from fpstune.api.schemas import (
     BulkApplyRequest,
     BulkApplyResponse,
     CategoryMetadataResponse,
-    DetectionResultResponse,
     DetectRequest,
     DetectResponse,
     ModuleMetadataResponse,
     SettingDefinitionResponse,
+    SettingState,
 )
 from fpstune.safety import restore
 from fpstune.safety.history import ACTION_FOR_LABEL, get_change_journal
@@ -50,6 +50,7 @@ from fpstune.settings.applicability import (
 from fpstune.settings.base import (
     CATEGORY_METADATA,
     MODULE_METADATA,
+    DetectionResult,
     SettingExecutor,
     SettingValueType,
     get_all_categories_metadata,
@@ -84,6 +85,27 @@ def _get_hardware_context() -> HardwareContext:
 
 
 router = APIRouter()
+
+
+def setting_state(setting: SettingExecutor, result: DetectionResult) -> SettingState:
+    """One setting's detection, in the one shape `/detect` and `/apply` both answer in.
+
+    The only place a `SettingState` is built: `default` and `default_source` come
+    from the definition, never from a reading, so a reset's target is the same
+    value whether the client learned it from a detect or from an apply.
+    """
+    return SettingState(
+        setting_id=setting.id,
+        current=result.value,
+        applicable=result.is_applicable,
+        applicable_reason=result.applicable_reason,
+        recommended=setting.recommended_value,
+        default=setting.default_value,
+        default_source=setting.default_source,
+        is_optimized=result.is_optimized,
+        error=result.error,
+        finding=result.finding,
+    )
 
 
 def _get_registry() -> SettingsRegistry:
@@ -195,23 +217,11 @@ async def detect_settings(request: DetectRequest) -> DetectResponse:
     settings_map = {s.id: s for s in settings}
 
     # Convert to response
-    response_results: dict[str, DetectionResultResponse] = {}
+    response_results: dict[str, SettingState] = {}
     success_count = error_count = 0
 
     for setting_id, result in results.items():
-        setting_obj = settings_map.get(setting_id)
-        response_results[setting_id] = DetectionResultResponse(
-            setting_id=result.setting_id,
-            value=result.value,
-            error=result.error,
-            time_ms=result.time_ms,
-            success=result.success,
-            is_optimized=result.is_optimized,
-            is_applicable=result.is_applicable,
-            applicable_reason=result.applicable_reason,
-            recommended_value=setting_obj.recommended_value if setting_obj else None,
-            finding=result.finding,
-        )
+        response_results[setting_id] = setting_state(settings_map[setting_id], result)
         if result.success:
             success_count += 1
         else:
@@ -380,36 +390,38 @@ def _finalize_apply_response(
     freed_bytes: int | None = None,
     size_after_bytes: int | None = None,
 ) -> ApplyResponse:
-    """Post-apply: detect new value, verify, log, and return ApplyResponse.
+    """Post-apply: re-detect, verify, log, and return ApplyResponse.
 
-    Single source of truth for all apply/reset/optimize paths.
+    Single source of truth for every apply path (reset is an apply of the
+    default). The response carries the re-detected `SettingState` — the object
+    `/detect` returns — so a write and a read report one shape.
 
     `freed_bytes` and `size_after_bytes` are what a cleanup's own size
     instrument read around the command, and they are only ever carried through
     here — this function runs *after* the command, so it could not take the
     before reading itself. `settings_apply.apply_and_finalize` measures the pair.
     """
-    new_value = None
+    state: SettingState | None = None
     success = cmd_success
     error = cmd_error
     verify_outcome: bool | None = None
 
     if success:
         result = engine.detect_one(setting)
-        new_value = result.value
+        state = setting_state(setting, result)
         verified, verify_error, verify_outcome = _verify_setting_applied(
-            setting, requested_value, new_value
+            setting, requested_value, result.value
         )
         if not verified:
             success = False
             error = verify_error
             log_activity(
-                f"VERIFY FAILED {setting.display_name}: expected={requested_value!r}, detected={new_value!r}",
+                f"VERIFY FAILED {setting.display_name}: expected={requested_value!r}, detected={result.value!r}",
                 "error",
             )
         else:
             log_activity(
-                f"{activity_label} {setting.display_name}: {requested_value!r} → detected={new_value!r}",
+                f"{activity_label} {setting.display_name}: {requested_value!r} → detected={result.value!r}",
                 "success",
             )
             _record_change(setting, activity_label, requested_value)
@@ -421,7 +433,7 @@ def _finalize_apply_response(
         setting_id=setting.id,
         success=success,
         error=error,
-        new_value=new_value,
+        state=state,
         requires_reboot=setting.requires_reboot,
         verified=verify_outcome,
         freed_bytes=freed_bytes,
@@ -523,7 +535,6 @@ def _apply_one(
                     setting_id=setting.id,
                     success=True,
                     error=None,
-                    new_value=None,
                     requires_reboot=False,
                     skipped=True,
                 )
@@ -531,7 +542,6 @@ def _apply_one(
                 setting_id=setting.id,
                 success=False,
                 error=reason or "Setting not applicable to this system",
-                new_value=None,
                 requires_reboot=False,
             )
 
@@ -541,7 +551,6 @@ def _apply_one(
             setting_id=setting.id,
             success=False,
             error=invalid,
-            new_value=None,
             requires_reboot=False,
         )
 
@@ -578,7 +587,6 @@ def _no_default_refusal(setting: SettingExecutor) -> ApplyResponse | None:
         setting_id=setting.id,
         success=False,
         error=f"{setting.display_name} has no default fpstune could derive, so it cannot be reset.",
-        new_value=None,
         requires_reboot=False,
     )
 
@@ -625,7 +633,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
                 setting_id=setting_id,
                 success=False,
                 error=f"Unknown setting: {setting_id}",
-                new_value=None,
                 requires_reboot=False,
             )
             error_count += 1
@@ -656,7 +663,6 @@ def _run_bulk_apply(request: BulkApplyRequest) -> BulkApplyResponse:
                 setting_id=setting.id,
                 success=False,
                 error=str(outcome),
-                new_value=None,
                 requires_reboot=False,
             )
             log_activity(f"APPLY ERROR {setting.id}: {outcome}", "error")
@@ -822,7 +828,6 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
             setting_id=setting_id,
             success=False,
             error=reason or "Setting not applicable to this system",
-            new_value=None,
             requires_reboot=False,
         )
 

@@ -18,7 +18,7 @@ import { detectionManager } from "../detection-manager";
 import { settingsApi } from "../api";
 import { useStore } from "../../store";
 import type { SettingDefinition } from "../../types/setting";
-import type { DetectResponse } from "../api";
+import type { DetectResponse, SettingState } from "../api";
 
 vi.mock("../api", () => ({
   settingsApi: {
@@ -48,26 +48,23 @@ const HPET: SettingDefinition = {
   applicable_conditions: {},
 };
 
-/** One result in the backend's own field spelling, every field present. */
+/** One result in the backend's `SettingState` shape, every field present. */
 function detectResponse(
-  overrides: Partial<{
-    value: unknown;
-    is_optimized: boolean;
-    recommended_value: unknown;
-  }> = {},
+  overrides: Partial<SettingState> = {},
 ): DetectResponse {
   return {
     results: {
       "timer:hpet": {
         setting_id: "timer:hpet",
-        value: "disabled",
-        error: null,
-        time_ms: 4,
-        success: true,
-        is_optimized: true,
-        is_applicable: true,
+        current: "disabled",
+        applicable: true,
         applicable_reason: "",
-        recommended_value: "disabled",
+        recommended: "disabled",
+        default: "enabled",
+        default_source: "windows_stock",
+        is_optimized: true,
+        error: null,
+        finding: null,
         ...overrides,
       },
     },
@@ -96,6 +93,40 @@ describe("redetectSettings", () => {
     const setting = useStore.getState().settings.get("timer:hpet");
     expect(setting?.currentValue).toBe("disabled");
     expect(setting?.recommendedValue).toBe("disabled");
+  });
+
+  it("carries an advisory's finding into the store", async () => {
+    // The mapping dropped `finding`, so the numbers behind an advisory's word
+    // were measured by the backend and never reached the row that shows them.
+    const finding = { kind: "link_speed", linked_mbps: 100, supported_mbps: 2500 };
+    mockedDetect.mockResolvedValue(detectResponse({ finding }));
+
+    await detectionManager.redetectSettings(["timer:hpet"]);
+
+    expect(useStore.getState().settings.get("timer:hpet")?.finding).toEqual(
+      finding,
+    );
+  });
+
+  it("reads the contract's names: current, applicable, recommended", async () => {
+    mockedDetect.mockResolvedValue(
+      detectResponse({
+        current: "enabled",
+        applicable: false,
+        applicable_reason: "not on this machine",
+        recommended: "disabled",
+        is_optimized: false,
+      }),
+    );
+
+    await detectionManager.redetectSettings(["timer:hpet"]);
+
+    const setting = useStore.getState().settings.get("timer:hpet");
+    expect(setting?.currentValue).toBe("enabled");
+    expect(setting?.isApplicable).toBe(false);
+    expect(setting?.applicableReason).toBe("not on this machine");
+    expect(setting?.recommendedValue).toBe("disabled");
+    expect(setting?.isOptimized).toBe(false);
   });
 
   it("bumps the version the subscribed components render on", async () => {

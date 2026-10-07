@@ -11,7 +11,7 @@ import { isDisplaySetting, valuesEqual, type Setting } from "../types/setting";
 /**
  * Shared single-setting apply. Extracted from ModuleCard so the list rows and
  * the cards apply identically: POST apply, then update the store from the
- * backend-detected new_value (fallback: re-detect). Always invalidates
+ * backend-detected `state.current` (fallback: re-detect). Always invalidates
  * ["activity"] so successes AND failures surface in the drawer.
  */
 /** A failed response for a request that never got one, so callers never see a rejection. */
@@ -20,7 +20,7 @@ function failedResponse(setting: Setting, error: string): ApplyResponse {
     setting_id: setting.id,
     success: false,
     error,
-    new_value: null,
+    state: null,
     requires_reboot: false,
     verified: null,
   };
@@ -48,17 +48,10 @@ export function useApplySingle() {
         const name = localizedName(setting);
         if (response.success) {
           addNotification(t("apply.applied", { name }), "success");
-          if (response.new_value !== null && response.new_value !== undefined) {
-            const isOptimized = valuesEqual(
-              response.new_value,
-              setting.recommendedValue,
-            );
-            setSettingDetectionResult(
-              setting.id,
-              response.new_value,
-              isOptimized,
-              true,
-            );
+          const current = response.state?.current;
+          if (current !== null && current !== undefined) {
+            const isOptimized = valuesEqual(current, setting.recommendedValue);
+            setSettingDetectionResult(setting.id, current, isOptimized, true);
           } else {
             await detectionManager.redetectSettings([setting.id]);
           }
@@ -101,17 +94,10 @@ export function useApplySingle() {
         const name = localizedName(setting);
         if (response.success) {
           addNotification(t("apply.reset", { name }), "success");
-          if (response.new_value !== null && response.new_value !== undefined) {
-            const isOptimized = valuesEqual(
-              response.new_value,
-              setting.recommendedValue,
-            );
-            setSettingDetectionResult(
-              setting.id,
-              response.new_value,
-              isOptimized,
-              true,
-            );
+          const current = response.state?.current;
+          if (current !== null && current !== undefined) {
+            const isOptimized = valuesEqual(current, setting.recommendedValue);
+            setSettingDetectionResult(setting.id, current, isOptimized, true);
           } else {
             await detectionManager.redetectSettings([setting.id]);
           }

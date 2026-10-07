@@ -132,7 +132,7 @@ class TestResetIsAnApplyOfTheDefault:
         body = response.json()
         assert body["success"] is True
         assert body["verified"] is True
-        assert body["new_value"] == "off"
+        assert body["state"]["current"] == "off"
         write.assert_called_once_with(setting, "off", None)
 
     def test_a_reset_that_did_not_land_reports_the_mismatch(self, client: TestClient) -> None:

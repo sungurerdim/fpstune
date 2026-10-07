@@ -159,6 +159,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
     misses the DNS-propagation and service-absent tolerances), so the stream
     could report success=True beside matches=False.
     """
+    current_value = response.state.current if response.state is not None else None
     if response.skipped:
         return [_sse({"event": "skipped", "id": setting_id})]
     if not response.success:
@@ -177,7 +178,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
                 "event": "applied",
                 "id": setting_id,
                 "success": True,
-                "current_value": response.new_value,
+                "current_value": current_value,
                 "requires_reboot": response.requires_reboot,
                 # What a cleanup reclaimed, measured around its own command by
                 # `_apply_and_finalize`, and null for everything else — including
@@ -193,7 +194,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
                 "event": "verified",
                 "id": setting_id,
                 "matches": response.verified,
-                "current_value": response.new_value,
+                "current_value": current_value,
             }
         ),
     ]

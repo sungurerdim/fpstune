@@ -40,6 +40,7 @@ from fpstune.api.schemas import (
     ApplyResponse,
     BulkApplyRequest,
     BulkApplyResponse,
+    SettingState,
 )
 from fpstune.settings.base import (
     DetectType,
@@ -95,7 +96,7 @@ def _success_response(setting_id: str, value: Any) -> ApplyResponse:
         setting_id=setting_id,
         success=True,
         error=None,
-        new_value=value,
+        state=SettingState(setting_id=setting_id, current=value),
         requires_reboot=False,
         verified=True,
     )

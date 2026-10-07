@@ -433,21 +433,27 @@ export const api = {
 // backend before it was noticed, and the store was already importing the
 // canonical one.
 
-interface DetectionResultResponse {
+/**
+ * What one setting looks like right now: the one shape `/settings/detect`
+ * returns per id and `/settings/{id}/apply` returns after its re-detect
+ * (mirrors schemas.SettingState). `default` is what a reset writes and
+ * `default_source` says whose stock it is.
+ */
+export interface SettingState {
   setting_id: string;
-  value: unknown | null;
-  error: string | null;
-  time_ms: number;
-  success: boolean;
-  is_optimized: boolean;
-  is_applicable: boolean;
+  current: unknown | null;
+  applicable: boolean;
   applicable_reason: string;
-  recommended_value?: unknown;
+  recommended: unknown | null;
+  default: unknown | null;
+  default_source: "windows_stock" | "driver" | "scheme" | "game" | "none" | null;
+  is_optimized: boolean;
+  error: string | null;
   /**
    * The numbers behind an advisory's value, keyed by a `kind` the frontend has
    * a sentence for (lib/finding.ts). Read on this machine during this detect.
    */
-  finding?: Record<string, unknown> | null;
+  finding: Record<string, unknown> | null;
 }
 
 export interface DetectRequest {
@@ -456,7 +462,7 @@ export interface DetectRequest {
 }
 
 export interface DetectResponse {
-  results: Record<string, DetectionResultResponse>;
+  results: Record<string, SettingState>;
   total_time_ms: number;
   success_count: number;
   error_count: number;
@@ -466,7 +472,12 @@ export interface ApplyResponse {
   setting_id: string;
   success: boolean;
   error: string | null;
-  new_value: unknown | null;
+  /**
+   * The setting as it reads after the write — the detect shape, from the same
+   * re-detect that verified the apply. Null when nothing was re-detected: the
+   * command failed, the value was refused, or the setting was skipped.
+   */
+  state: SettingState | null;
   requires_reboot: boolean;
   skipped?: boolean; // True if setting was not applicable (not counted as error)
   // Verification outcome, kept distinct from `success` so a skipped check is

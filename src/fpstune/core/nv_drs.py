@@ -15,12 +15,22 @@ A key the installed driver does not define is a capability fact, not a failure
 ``supports(missing)`` — whether the setting means anything on this driver — and
 ``changes_for`` leaves a missing key out of what it writes, refusing a choice
 whose meaning lived in that key.
+
+A key the driver defines is also checked against the values the driver itself lists
+for it (``nvapi.available_setting_values``): ``refused_writes`` names every write
+that falls outside that list, with the list, so a value the table carries from a
+header that a driver generation has since changed is refused in words instead of
+being written and misread. The driver's list is the authority only where it gave one.
 """
 
 from __future__ import annotations
 
 from collections.abc import Collection, Mapping
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from fpstune.core.nvapi import AvailableValues
 
 # NvApiDriverSettings.h setting IDs.
 PREFERRED_PSTATE = 0x1057EB71
@@ -76,6 +86,10 @@ class EnumKey:
     labels: Mapping[str, str] = field(default_factory=dict)
     labels_without: Mapping[int, Mapping[str, str]] = field(default_factory=dict)
     label_reason: str = ""
+    # Ids whose header enum is a range (`_MIN` / `_MAX` entries), not a set of
+    # choices: the driver lists the range's two ends, and any value between them is
+    # one it takes.
+    ranged: frozenset[int] = field(default_factory=frozenset)
 
     @property
     def ids(self) -> tuple[int, ...]:
@@ -167,6 +181,11 @@ class NumberKey:
         return (self.setting_id,)
 
     @property
+    def ranged(self) -> frozenset[int]:
+        """A number setting is a range by definition."""
+        return frozenset({self.setting_id})
+
+    @property
     def read_ids(self) -> tuple[int, ...]:
         return self.ids
 
@@ -225,6 +244,9 @@ _KEYS: tuple[DrsKey, ...] = (
         write_only=frozenset({ULL_CPL_STATE}),
         labels={"off": "tier.off", "on": "tier.on", "ultra": "tier.ultra"},
         labels_without={ULL_ENABLED: {"off": "tier.off", "on": "tier.ultra"}},
+        # EValues_PRERENDERLIMIT: _MIN 0, _MAX 0xff, _APP_CONTROLLED 0 — a range, so
+        # the driver lists 0, 255, 0 and a pre-render limit of 1 is inside it.
+        ranged=frozenset({PRERENDERLIMIT}),
     ),
     EnumKey(
         # NVIDIA Control Panel's "Threaded optimization". The key is named OGL_
@@ -324,6 +346,64 @@ KEYS: dict[str, DrsKey] = {k.key: k for k in _KEYS}
 
 def lookup(key: str) -> DrsKey | None:
     return KEYS.get(key)
+
+
+@dataclass(frozen=True)
+class Refusal:
+    """One write the driver's own list rules out, and the list it would take."""
+
+    setting_id: int
+    value: int
+    accepted: str
+
+    @property
+    def message(self) -> str:
+        return (
+            f"the NVIDIA driver does not accept {self.value:#x} for setting "
+            f"{self.setting_id:#010x}; its own values are {self.accepted}"
+        )
+
+
+def accepts(available: AvailableValues, value: int, *, ranged: bool) -> bool:
+    """Whether the driver's own list allows ``value``.
+
+    The default always counts: it is what applies with nothing set, and the driver
+    need not list it (threaded optimization lists 1 and 2 and defaults to 0). A
+    ranged setting takes anything between the smallest and largest listed value;
+    any other setting takes exactly what it lists.
+    """
+    wanted = value & 0xFFFFFFFF
+    if wanted == available.default or not available.values:
+        return True
+    if ranged:
+        return min(available.values) <= wanted <= max(available.values)
+    return wanted in available.values
+
+
+def _describe_accepted(available: AvailableValues, *, ranged: bool) -> str:
+    if ranged:
+        return f"{min(available.values)} to {max(available.values)} (default {available.default})"
+    listed = ", ".join(f"{v:#x}" for v in dict.fromkeys(available.values))
+    return f"{listed} (default {available.default:#x})"
+
+
+def refused_writes(
+    key: DrsKey, changes: Mapping[int, int | None], available: Mapping[int, AvailableValues]
+) -> list[Refusal]:
+    """The writes in ``changes`` that fall outside what the driver lists for them.
+
+    A deletion (``None``, the driver's own stock) is never refused, and neither is a
+    write to an id the driver gave no list for: nothing contradicts it.
+    """
+    refused: list[Refusal] = []
+    for setting_id, value in changes.items():
+        listed = available.get(setting_id)
+        if value is None or listed is None:
+            continue
+        ranged = setting_id in key.ranged
+        if not accepts(listed, value, ranged=ranged):
+            refused.append(Refusal(setting_id, value, _describe_accepted(listed, ranged=ranged)))
+    return refused
 
 
 def mapped_ids() -> frozenset[int]:

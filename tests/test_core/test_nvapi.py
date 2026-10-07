@@ -46,6 +46,35 @@ class TestStructLayout:
         ]
 
 
+class TestAvailableValuesLayout:
+    """NVDRS_SETTING_VALUES: a wrong size is rejected by the driver as -9."""
+
+    def test_the_struct_is_the_size_the_header_gives_it(self) -> None:
+        # version, count, type (12) + default union (4100) + 100 value unions (4100 each).
+        assert ctypes.sizeof(nvapi.NvdrsSettingValues) == 12 + 4100 + 100 * 4100
+
+    def test_version_is_the_headers_macro_applied_to_the_size(self) -> None:
+        """MAKE_NVAPI_VERSION ORs the version into the size. This struct is larger than
+        16 bits, so the macro's own result is what the driver computes and expects;
+        a driver given this value answered NVAPI_OK."""
+        size = ctypes.sizeof(nvapi.NvdrsSettingValues)
+        assert size > 0xFFFF
+        assert (size | (1 << 16)) & 0xFFFFFFFF == nvapi.NVDRS_SETTING_VALUES_VER
+
+    def test_field_order_matches_header(self) -> None:
+        names = [name for name, _ in nvapi.NvdrsSettingValues._fields_]
+        assert names == [
+            "version",
+            "numSettingValues",
+            "settingType",
+            "defaultValue",
+            "settingValues",
+        ]
+
+    def test_the_interface_id_is_the_one_in_nvapi_interface_h(self) -> None:
+        assert nvapi._FN_DRS_ENUM_AVAILABLE_SETTING_VALUES == 0x2EC39F90
+
+
 class FakeDrs:
     """The DRS calls nvapi.py makes, over a dict instead of the driver."""
 
@@ -67,6 +96,9 @@ class FakeDrs:
         self.refuse = refuse or set()
         self.profiles = {"fpstune_gaming"}
         self.saves = 0
+        # `lists` is what the driver prints as each setting's available values:
+        # id -> (values, default, settingType). An id not in it has no list.
+        self.lists: dict[int, tuple[tuple[int, ...], int, int]] = {}
 
     def initialize(self) -> int:
         return 0
@@ -143,6 +175,19 @@ class FakeDrs:
 
     def delete_profile(self, _h: Any, _profile: Any) -> int:
         self.profiles.clear()
+        return 0
+
+    def enum_available_setting_values(self, setting_id: Any, capacity: Any, block: Any) -> int:
+        if setting_id.value not in self.lists:
+            return nvapi.NVAPI_SETTING_NOT_FOUND
+        values, default, setting_type = self.lists[setting_id.value]
+        listing = block._obj
+        listing.numSettingValues = len(values)
+        listing.settingType = setting_type
+        listing.defaultValue.u32Value = default
+        for slot, value in zip(listing.settingValues, values, strict=False):
+            slot.u32Value = value
+        capacity._obj.value = len(values)
         return 0
 
 
@@ -384,3 +429,82 @@ class TestKeysTheDriverLacks:
         ok, error = executor.apply(low_latency, "ultra")
 
         assert (ok, error) == (True, None)
+
+
+class TestAvailableValues:
+    """The driver's own list for a setting, read without a session."""
+
+    THREADED = 0x20C1221E
+    PRERENDER = 0x007BA09E
+
+    def test_the_list_and_the_default_come_back_as_the_driver_printed_them(
+        self, drs: FakeDrs
+    ) -> None:
+        # Threaded optimization as a real driver prints it: 1 and 2, default 0.
+        drs.lists = {self.THREADED: ((1, 2), 0, 0)}
+
+        assert nvapi.available_setting_values([self.THREADED]) == {
+            self.THREADED: nvapi.AvailableValues(values=(1, 2), default=0)
+        }
+
+    def test_a_range_is_returned_as_the_listed_ends_not_interpreted(self, drs: FakeDrs) -> None:
+        drs.lists = {self.PRERENDER: ((0, 255, 0), 0, 0)}
+
+        listed = nvapi.available_setting_values([self.PRERENDER])
+
+        assert listed == {self.PRERENDER: nvapi.AvailableValues(values=(0, 255, 0), default=0)}
+
+    def test_values_above_31_bits_are_unsigned(self, drs: FakeDrs) -> None:
+        drs.lists = {0x00CE2691: ((0xFFFFFFF6, 0, 0xA, 0x14), 0, 0)}
+
+        listed = nvapi.available_setting_values([0x00CE2691])
+
+        assert listed is not None
+        assert listed[0x00CE2691].values[0] == 0xFFFFFFF6
+
+    def test_an_id_the_driver_gives_no_list_for_is_left_out_not_emptied(self, drs: FakeDrs) -> None:
+        drs.lists = {self.THREADED: ((1, 2), 0, 0)}
+
+        listed = nvapi.available_setting_values([self.THREADED, 0x10835000])
+
+        assert listed is not None
+        assert set(listed) == {self.THREADED}
+
+    def test_a_setting_that_is_not_a_dword_is_left_out(self, drs: FakeDrs) -> None:
+        drs.lists = {0x20C1221E: ((1, 2), 0, 2)}  # NVDRS_STRING_TYPE
+
+        assert nvapi.available_setting_values([0x20C1221E]) == {}
+
+    def test_a_setting_listing_nothing_is_left_out(self, drs: FakeDrs) -> None:
+        drs.lists = {0x20C1221E: ((), 0, 0)}
+
+        assert nvapi.available_setting_values([0x20C1221E]) == {}
+
+    def test_no_session_is_opened_and_nothing_is_saved(self, drs: FakeDrs) -> None:
+        drs.lists = {self.THREADED: ((1, 2), 0, 0)}
+
+        nvapi.available_setting_values([self.THREADED])
+
+        assert drs.saves == 0
+        assert drs.working == {}
+
+    def test_an_unreachable_driver_is_unknown_not_empty(self, monkeypatch) -> None:
+        def boom():
+            raise nvapi.NvapiUnavailable("no driver")
+
+        monkeypatch.setattr(nvapi._Nvapi, "get", staticmethod(boom))
+
+        assert nvapi.available_setting_values([self.THREADED]) is None
+
+    def test_a_driver_without_the_call_is_unknown_not_empty(self, drs: FakeDrs) -> None:
+        drs.enum_available_setting_values = None  # type: ignore[assignment]
+
+        assert nvapi.available_setting_values([self.THREADED]) is None
+
+    def test_a_driver_fault_is_unknown_instead_of_raising(self, monkeypatch) -> None:
+        def boom():
+            raise OSError("access violation")
+
+        monkeypatch.setattr(nvapi._Nvapi, "get", staticmethod(boom))
+
+        assert nvapi.available_setting_values([self.THREADED]) is None

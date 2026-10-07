@@ -191,6 +191,8 @@ def _powercfg(stack: ExitStack, *, schemes: list[str], answer: tuple[bool, str])
 
 def _nvidia(stack: ExitStack, *, writes: Any) -> None:
     stack.enter_context(patch.object(nvprofile, "missing_driver_ids", lambda _drs: frozenset()))
+    # No list from the driver: the write is the thing under test, not this machine's driver.
+    stack.enter_context(patch("fpstune.core.nvapi.available_setting_values", lambda _ids: None))
     stack.enter_context(patch("fpstune.core.nvapi.write_driver_settings", writes))
 
 
@@ -654,6 +656,9 @@ class TestNoRegisteredSettingCanSucceedWhenNothingCanBeWritten:
             stack.enter_context(patch("winreg.OpenKey", _raises(_ACCESS_DENIED)))
             stack.enter_context(
                 patch.object(nvprofile, "missing_driver_ids", lambda _d: frozenset())
+            )
+            stack.enter_context(
+                patch("fpstune.core.nvapi.available_setting_values", lambda _ids: None)
             )
             stack.enter_context(
                 patch("fpstune.core.nvapi.write_driver_settings", _raises(NvapiError("call", -1)))

@@ -10,8 +10,9 @@ from __future__ import annotations
 
 import pytest
 
-from fpstune.core import nv_drs
-from fpstune.core.nv_drs import KEYS, EnumKey, NumberKey
+from fpstune.core import nv_drs, nvapi
+from fpstune.core.nv_drs import KEYS, EnumKey, NumberKey, accepts, refused_writes
+from fpstune.core.nvapi import AvailableValues
 
 
 class TestIdsMatchTheHeader:
@@ -234,3 +235,151 @@ class TestKeysTheDriverLacks:
         key = KEYS[name]
 
         assert not key.supports(set(key.ids))
+
+
+# What a real NVIDIA driver prints for NvAPI_DRS_EnumAvailableSettingValues, id ->
+# (values in the driver's order, default). Ranges list their `_MIN` and `_MAX` among
+# the values (the pre-render limit prints 0, 255, 0; the frame limiter 0, 0, 1023),
+# and a default need not be listed (threaded optimization prints 1, 2 and defaults to 0).
+REAL_DRIVER: dict[int, AvailableValues] = {
+    nv_drs.PREFERRED_PSTATE: AvailableValues((0, 1, 2, 3, 4, 5, 0, 5), 5),
+    nv_drs.PRERENDERLIMIT: AvailableValues((0, 0xFF, 0), 0),
+    nv_drs.OGL_THREAD_CONTROL: AvailableValues((1, 2), 0),
+    nv_drs.VSYNCMODE: AvailableValues(
+        (0x60925292, 0x08416747, 0x47814940, 0x32610244, 0x71271021, 0x13245256, 0x18888888),
+        0x60925292,
+    ),
+    nv_drs.PS_SHADERDISKCACHE: AvailableValues((0, 1), 1),
+    nv_drs.QUALITY_ENHANCEMENTS: AvailableValues((0xFFFFFFF6, 0, 0xA, 0x14), 0),
+    nv_drs.OGL_TRIPLE_BUFFER: AvailableValues((0, 1), 0),
+    nv_drs.FRL_FPS: AvailableValues((0, 0, 0x3FF), 0),
+    nv_drs.VRR_MODE: AvailableValues((0, 1, 2), 1),
+    nv_drs.VRR_APP_OVERRIDE: AvailableValues((0, 1, 2, 3, 4), 0),
+    nv_drs.PS_TEXFILTER_ANISO_OPTS2: AvailableValues((0, 1), 0),
+    nv_drs.PS_TEXFILTER_NO_NEG_LODBIAS: AvailableValues((0, 1), 0),
+}
+# That driver does not define these four (it is the generation without the ULL keys).
+REAL_DRIVER_LACKS = frozenset(
+    {nv_drs.ULL_ENABLED, nv_drs.ULL_CPL_STATE, nv_drs.FRL_BACKGROUND, nv_drs.CUDA_FORCE_P2}
+)
+
+
+def _write(name: str, choice: int | str) -> dict[int, int | None]:
+    key = KEYS[name]
+    if isinstance(key, NumberKey):
+        return key.changes_for(int(choice), REAL_DRIVER_LACKS)
+    return key.changes_for(str(choice), REAL_DRIVER_LACKS)
+
+
+class TestTheTableAgreesWithTheDriversOwnLists:
+    """A value the table writes is one the driver lists, so apply never sends one it refuses."""
+
+    @pytest.mark.parametrize("name", sorted(n for n, k in KEYS.items() if isinstance(k, EnumKey)))
+    def test_every_choice_the_driver_can_hold_is_accepted(self, name: str) -> None:
+        key = KEYS[name]
+        assert isinstance(key, EnumKey)
+        for choice in key.choices(REAL_DRIVER_LACKS):
+            changes = key.changes_for(choice, REAL_DRIVER_LACKS)
+            assert refused_writes(key, changes, REAL_DRIVER) == [], (name, choice)
+
+    @pytest.mark.parametrize("fps", [0, 1, 141, 360, 1023])
+    def test_every_frame_cap_inside_the_drivers_range_is_accepted(self, fps: int) -> None:
+        assert refused_writes(KEYS["fps_limit"], _write("fps_limit", fps), REAL_DRIVER) == []
+
+    def test_every_mapped_id_is_in_the_real_lists_or_declared_absent(self) -> None:
+        assert nv_drs.mapped_ids() == set(REAL_DRIVER) | REAL_DRIVER_LACKS
+
+
+class TestAValueOutsideTheDriversListIsRefused:
+    def test_an_enum_value_the_driver_does_not_list(self) -> None:
+        changes = {nv_drs.OGL_THREAD_CONTROL: 3}
+
+        refused = refused_writes(KEYS["threaded_opt"], changes, REAL_DRIVER)
+
+        assert [(r.setting_id, r.value) for r in refused] == [(nv_drs.OGL_THREAD_CONTROL, 3)]
+
+    def test_the_message_quotes_the_drivers_own_list(self) -> None:
+        refused = refused_writes(KEYS["power_mode"], {nv_drs.PREFERRED_PSTATE: 6}, REAL_DRIVER)
+
+        assert len(refused) == 1
+        assert "does not accept 0x6" in refused[0].message
+        assert "0x1057eb71" in refused[0].message
+        assert "0x0, 0x1, 0x2, 0x3, 0x4, 0x5 (default 0x5)" in refused[0].message
+
+    def test_a_ranged_value_past_the_drivers_maximum(self) -> None:
+        refused = refused_writes(KEYS["low_latency"], {nv_drs.PRERENDERLIMIT: 256}, REAL_DRIVER)
+
+        assert len(refused) == 1
+        assert "0 to 255 (default 0)" in refused[0].message
+
+    def test_a_frame_cap_past_the_drivers_maximum(self) -> None:
+        refused = refused_writes(KEYS["fps_limit"], {nv_drs.FRL_FPS: 1024}, REAL_DRIVER)
+
+        assert len(refused) == 1
+        assert "0 to 1023" in refused[0].message
+
+    def test_every_refused_write_is_reported_not_just_the_first(self) -> None:
+        changes = {nv_drs.VSYNCMODE: 0x1, nv_drs.PS_SHADERDISKCACHE: 7}
+
+        refused = refused_writes(KEYS["vsync"], changes, REAL_DRIVER)
+
+        assert {r.setting_id for r in refused} == {nv_drs.VSYNCMODE, nv_drs.PS_SHADERDISKCACHE}
+
+    def test_a_ranged_id_is_tight_only_where_the_key_says_it_is_a_range(self) -> None:
+        """Between the ends of an enum's list is not enough: 4 is no vsync value."""
+        assert not accepts(REAL_DRIVER[nv_drs.VSYNCMODE], 0x10000000, ranged=False)
+        assert accepts(REAL_DRIVER[nv_drs.VSYNCMODE], 0x10000000, ranged=True)
+
+
+class TestWhatTheDriverDoesNotContradictIsNotRefused:
+    def test_the_default_is_accepted_though_the_driver_does_not_list_it(self) -> None:
+        """Threaded optimization lists 1 and 2; 0 is its own auto choice and default."""
+        assert 0 not in REAL_DRIVER[nv_drs.OGL_THREAD_CONTROL].values
+        assert accepts(REAL_DRIVER[nv_drs.OGL_THREAD_CONTROL], 0, ranged=False)
+
+    def test_a_deletion_is_never_refused(self) -> None:
+        changes: dict[int, int | None] = {nv_drs.OGL_THREAD_CONTROL: None}
+
+        assert refused_writes(KEYS["threaded_opt"], changes, REAL_DRIVER) == []
+
+    def test_an_id_the_driver_gave_no_list_for_is_never_refused(self) -> None:
+        changes: dict[int, int | None] = {nv_drs.ULL_ENABLED: 12345}
+
+        assert refused_writes(KEYS["low_latency"], changes, {}) == []
+
+    def test_a_signed_spelling_of_an_unsigned_value_is_the_same_value(self) -> None:
+        assert accepts(REAL_DRIVER[nv_drs.QUALITY_ENHANCEMENTS], -10, ranged=False)
+
+    def test_an_empty_list_is_not_a_list(self) -> None:
+        assert accepts(AvailableValues((), 0), 7, ranged=False)
+        assert accepts(AvailableValues((), 0), 7, ranged=True)
+
+
+class TestRangedIdsAreTheOnesTheHeaderDeclaresAsRanges:
+    def test_the_pre_render_limit_and_the_frame_limiters_are_ranges(self) -> None:
+        assert KEYS["low_latency"].ranged == {nv_drs.PRERENDERLIMIT}
+        assert KEYS["fps_limit"].ranged == {nv_drs.FRL_FPS}
+        assert KEYS["bg_app_fps"].ranged == {nv_drs.FRL_BACKGROUND}
+
+    def test_no_enum_key_other_than_low_latency_declares_a_range(self) -> None:
+        declaring = {name for name, key in KEYS.items() if isinstance(key, EnumKey) and key.ranged}
+        assert declaring == {"low_latency"}
+
+
+class TestTheTableAgainstTheInstalledDriver:
+    """The same agreement, asked of the driver that is actually installed."""
+
+    def test_every_choice_the_installed_driver_can_hold_is_one_it_lists(self) -> None:
+        ids = sorted(nv_drs.mapped_ids())
+        available = nvapi.available_setting_values(ids)
+        known = nvapi.known_setting_ids(ids)
+        if not available or known is None:
+            pytest.skip("no NVIDIA driver answering on this machine")
+        missing = frozenset(ids) - known
+        for name, key in KEYS.items():
+            if not key.supports(missing):
+                continue
+            if isinstance(key, EnumKey):
+                for choice in key.choices(missing):
+                    changes = key.changes_for(choice, missing)
+                    assert refused_writes(key, changes, available) == [], (name, choice)

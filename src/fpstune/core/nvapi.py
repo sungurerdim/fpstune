@@ -74,10 +74,12 @@ _FN_DRS_ENUM_SETTINGS = 0xAE3039DA
 _FN_DRS_FIND_PROFILE_BY_NAME = 0x7E4A9A0B
 _FN_DRS_DELETE_PROFILE = 0x17093206
 _FN_DRS_GET_SETTING_NAME_FROM_ID = 0xD61CBE6E
+_FN_DRS_ENUM_AVAILABLE_SETTING_VALUES = 0x2EC39F90
 
 # From nvapi.h.
 _NVAPI_UNICODE_STRING_MAX = 2048
 _NVAPI_BINARY_DATA_MAX = 4096
+_NVAPI_SETTING_MAX_VALUES = 100
 
 # fpstune 0.1.0 imported its settings into a custom profile of this name, with
 # no executables attached — a profile that applied to nothing. It is deleted the
@@ -124,6 +126,27 @@ def _make_version(struct_type: type[Structure], version: int) -> int:
 
 NVDRS_SETTING_VER = _make_version(NvdrsSetting, 1)
 
+
+class NvdrsSettingValues(Structure):
+    """NVDRS_SETTING_VALUES: what the driver lists as one setting's available values.
+
+    The header packs it to 4 bytes and its value unions also carry a QWORD, which at
+    that packing does not widen the 4100-byte binary variant, so the union below is
+    the same size. The driver rejects a wrong size as an incompatible struct version.
+    """
+
+    _pack_ = 4
+    _fields_ = [
+        ("version", c_uint32),
+        ("numSettingValues", c_uint32),
+        ("settingType", c_uint32),
+        ("defaultValue", _NvdrsSettingValue),
+        ("settingValues", _NvdrsSettingValue * _NVAPI_SETTING_MAX_VALUES),
+    ]
+
+
+NVDRS_SETTING_VALUES_VER = _make_version(NvdrsSettingValues, 1)
+
 # NVDRS_SETTING_TYPE.
 _NVDRS_DWORD_TYPE = 0
 
@@ -167,6 +190,22 @@ def _describe(status: int) -> str:
     return _STATUS_MESSAGES.get(
         status, "the NVIDIA driver returned a status this version of fpstune does not name"
     )
+
+
+@dataclass(frozen=True)
+class AvailableValues:
+    """What the driver itself lists as one DWORD setting's available values.
+
+    ``values`` is the list as the driver prints it, in its order. A setting whose
+    header enum is a range lists its ``_MIN`` and ``_MAX`` among them (the pre-render
+    limit lists 0, 255 and 0), so whether the list is a set of choices or the ends
+    of a range is the key table's to say (``core/nv_drs.py``), never a guess made
+    here. ``default`` is the value that applies when nothing is set; the driver need
+    not list it (threaded optimization lists 1 and 2, its default is 0).
+    """
+
+    values: tuple[int, ...]
+    default: int
 
 
 @dataclass(frozen=True)
@@ -249,6 +288,16 @@ class _Nvapi:
                 probe_address
             )
             if probe_address
+            else None
+        )
+        # Optional for the same reason: a driver that does not export it leaves a
+        # value's validity unknown, never refused.
+        enum_values_address = query(_FN_DRS_ENUM_AVAILABLE_SETTING_VALUES)
+        self.enum_available_setting_values: Callable[..., int] | None = (
+            ctypes.CFUNCTYPE(
+                ctypes.c_int, c_uint32, POINTER(c_uint32), POINTER(NvdrsSettingValues)
+            )(enum_values_address)
+            if enum_values_address
             else None
         )
 
@@ -446,6 +495,51 @@ def known_setting_ids(setting_ids: Iterable[int]) -> frozenset[int] | None:
         return None
     except (NvapiError, OSError) as exc:
         logger.warning("NVAPI capability probe failed: %s", exc)
+        return None
+
+
+def available_setting_values(setting_ids: Iterable[int]) -> dict[int, AvailableValues] | None:
+    """The values the driver itself lists for each of the given DWORD settings.
+
+    An ID missing from the result is one the driver gave no list for: it does not
+    define the setting, answered an error, holds a non-DWORD type, or lists nothing.
+    That is "unknown", not "anything goes" and not "nothing goes" — callers refuse a
+    value only against a list the driver actually gave. None means the driver could
+    not be asked at all (NVAPI missing, refused, or not exporting the call), which
+    callers must not read as an empty list.
+
+    The call needs no session: it describes the setting, not the profile.
+    """
+    try:
+        enumerate_values = _Nvapi.get().enum_available_setting_values
+        if enumerate_values is None:
+            return None
+        found: dict[int, AvailableValues] = {}
+        for setting_id in dict.fromkeys(setting_ids):
+            block = NvdrsSettingValues()
+            block.version = NVDRS_SETTING_VALUES_VER
+            capacity = c_uint32(_NVAPI_SETTING_MAX_VALUES)
+            status = enumerate_values(c_uint32(setting_id), byref(capacity), byref(block))
+            if status != NVAPI_OK:
+                logger.debug(
+                    "No available-values list for DRS setting %#010x: %s",
+                    setting_id,
+                    _describe(status),
+                )
+                continue
+            listed = min(int(block.numSettingValues), _NVAPI_SETTING_MAX_VALUES)
+            if block.settingType != _NVDRS_DWORD_TYPE or listed == 0:
+                continue
+            found[setting_id] = AvailableValues(
+                values=tuple(int(block.settingValues[i].u32Value) for i in range(listed)),
+                default=int(block.defaultValue.u32Value),
+            )
+        return found
+    except NvapiUnavailable as exc:
+        logger.debug("NVAPI available-values query unavailable: %s", exc)
+        return None
+    except (NvapiError, OSError) as exc:
+        logger.warning("NVAPI available-values query failed: %s", exc)
         return None
 
 

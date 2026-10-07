@@ -197,7 +197,23 @@ class NvProfileExecutor(BaseExecutor):
         except (TypeError, ValueError) as exc:
             return False, f"Invalid value for {setting.id}: {exc}"
 
-        from fpstune.core.nvapi import NvapiError, NvapiUnavailable, write_driver_settings
+        from fpstune.core.nv_drs import refused_writes
+        from fpstune.core.nvapi import (
+            NvapiError,
+            NvapiUnavailable,
+            available_setting_values,
+            write_driver_settings,
+        )
+
+        # Every write is checked against the values the driver itself lists for the
+        # setting before it is sent. A driver that gives no list (or cannot be asked)
+        # contradicts nothing; one that does refuses a value outside it, in words.
+        written = [setting_id for setting_id, value in changes.items() if value is not None]
+        available = available_setting_values(written) if written else None
+        refusals = refused_writes(drs, changes, available or {})
+        if refusals:
+            reasons = "; ".join(refusal.message for refusal in refusals)
+            return False, f"Invalid value for {setting.id}: {reasons}"
 
         try:
             write_driver_settings(changes)

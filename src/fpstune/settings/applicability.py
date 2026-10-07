@@ -7,6 +7,12 @@ from typing import TYPE_CHECKING, Any
 
 from fpstune.settings.base import DriverGate, parse_driver_version, version_at_least
 from fpstune.settings.os_protection import blocked_write
+from fpstune.utils.gpu_vendor_ids import (
+    AMD_VENDOR_ID,
+    INTEL_VENDOR_ID,
+    NVIDIA_VENDOR_ID,
+    has_vendor,
+)
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
@@ -78,10 +84,8 @@ def absent_reason(setting: SettingExecutor | None = None, reading: object = None
 # `.Name`: names are localised, renamed per driver release and invented per
 # board partner, and a pattern over them (`Intel|UHD|Iris`, `GeForce|Radeon`)
 # silently misreads every product line it did not list (C10: capability, not
-# model lists). The IDs below are the PCI-SIG vendor registrations.
-INTEL_VENDOR_ID = "8086"
-NVIDIA_VENDOR_ID = "10DE"
-AMD_VENDOR_ID = "1002"
+# model lists). The IDs are the PCI-SIG vendor registrations, defined once in
+# `utils/gpu_vendor_ids.py` (also what `utils/detect.py` reads for the vendor).
 
 # Vendors whose adapters count as the *discrete* side of a hybrid pair. Intel is
 # the integrated side: a lone Intel Arc card is therefore never "hybrid", and an
@@ -89,11 +93,6 @@ AMD_VENDOR_ID = "1002"
 # ("not on offer"), whereas calling the wrong chip discrete would point games at it.
 _DGPU_VENDOR_IDS = (NVIDIA_VENDOR_ID, AMD_VENDOR_ID)
 _IGPU_VENDOR_IDS = (INTEL_VENDOR_ID,)
-
-
-def _has_vendor(pnp_device_id: str, vendor_ids: tuple[str, ...]) -> bool:
-    upper = pnp_device_id.upper()
-    return any(f"VEN_{vendor}&" in upper for vendor in vendor_ids)
 
 
 def classify_gpu_adapters(pnp_device_ids: list[str]) -> tuple[bool, bool]:
@@ -104,8 +103,8 @@ def classify_gpu_adapters(pnp_device_ids: list[str]) -> tuple[bool, bool]:
     the same adapters, so the two spellings cannot drift apart.
     """
     return (
-        any(_has_vendor(i, _IGPU_VENDOR_IDS) for i in pnp_device_ids),
-        any(_has_vendor(i, _DGPU_VENDOR_IDS) for i in pnp_device_ids),
+        any(has_vendor(i, _IGPU_VENDOR_IDS) for i in pnp_device_ids),
+        any(has_vendor(i, _DGPU_VENDOR_IDS) for i in pnp_device_ids),
     )
 
 

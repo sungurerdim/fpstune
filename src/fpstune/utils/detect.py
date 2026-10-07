@@ -15,6 +15,12 @@ from enum import StrEnum
 
 from fpstune.utils import process_watch
 from fpstune.utils.edid import parse_edid
+from fpstune.utils.gpu_vendor_ids import (
+    AMD_VENDOR_ID,
+    INTEL_VENDOR_ID,
+    NVIDIA_VENDOR_ID,
+    vendor_id_of,
+)
 from fpstune.utils.monitor_topology import (
     MonitorRow,
     build_monitor_rows,
@@ -61,6 +67,23 @@ class GpuVendor(StrEnum):
     AMD = "amd"
     INTEL = "intel"
     UNKNOWN = "unknown"
+
+
+_VENDOR_BY_PCI_ID = {
+    NVIDIA_VENDOR_ID: GpuVendor.NVIDIA,
+    AMD_VENDOR_ID: GpuVendor.AMD,
+    INTEL_VENDOR_ID: GpuVendor.INTEL,
+}
+
+
+def gpu_vendor_from_pnp(pnp_device_id: str) -> GpuVendor:
+    """The GPU vendor named by the PCI vendor ID in a ``PNPDeviceID``.
+
+    Never the adapter's name: that string is localised and board-partner
+    branded. No ID, or an ID that is not NVIDIA / AMD / Intel, is UNKNOWN.
+    """
+    vendor_id = vendor_id_of(pnp_device_id)
+    return _VENDOR_BY_PCI_ID.get(vendor_id, GpuVendor.UNKNOWN) if vendor_id else GpuVendor.UNKNOWN
 
 
 @dataclass
@@ -540,15 +563,10 @@ def _detect_gpu_sync() -> GpuInfo | None:
         logger.warning("GPU detection: No GPU found")
         return None
 
-    # Determine vendor from name if not already set
+    # The vendor is the PCI vendor ID of the adapter, not a word in its name.
+    # nvidia-smi only enumerates NVIDIA boards, so that path has already set it.
     if vendor == GpuVendor.UNKNOWN:
-        name_lower = name.lower()
-        if "nvidia" in name_lower or "geforce" in name_lower or "quadro" in name_lower:
-            vendor = GpuVendor.NVIDIA
-        elif "amd" in name_lower or "radeon" in name_lower or "rx " in name_lower:
-            vendor = GpuVendor.AMD
-        elif "intel" in name_lower:
-            vendor = GpuVendor.INTEL
+        vendor = gpu_vendor_from_pnp(pnp_raw)
 
     # Extract stable VEN+DEV portion from PNPDeviceID (e.g. "PCI\VEN_10DE&DEV_2204&...")
     pnp_stable = ""

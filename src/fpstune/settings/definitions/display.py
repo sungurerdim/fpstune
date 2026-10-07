@@ -96,6 +96,16 @@ WINDOWED_FLIP_MODEL = SettingExecutor(
 # 24H2 is 26100, 25H2 is 26200; 23H2 is 22631. From 24H2 on, builds have been
 # seen honouring either value depending on the servicing update, so both are
 # written there; before 24H2 only the DWM value exists.
+#
+# Why this build comparison is not a declared gate (`min_os_build`): a gate
+# answers "applicable or not" for one fixed setting, and MPO is applicable on
+# every build. The build here chooses WHICH registry values the one setting's
+# detect and apply scripts address, and those scripts are assembled when the
+# setting is registered, before any HardwareContext exists. Discovery hands in
+# the detected build (the same `hardware_manager.detect_os()` reading that
+# `build_hardware_context` stores as `windows_build`), so there is one source
+# for the number and this is the one place a build selects a value.
+# `test_declared_gates.py::TestOnlyKnownPlacesCompareTheBuild` names it.
 _MPO_BOTH_VALUES_BUILD = 26100
 
 _DWM_VALUE = (r"SOFTWARE\Microsoft\Windows\Dwm", "OverlayTestMode", 5)

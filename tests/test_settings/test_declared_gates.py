@@ -221,5 +221,62 @@ class TestEveryBuildOrDriverRuleIsDeclared:
                     else None
                 )
                 if name == "windows_build":
-                    offenders.append(f"{path.relative_to(SRC).as_posix()}:{node.lineno}")
+                    offenders.append(
+                        f"{path.relative_to(SRC).as_posix()}:{getattr(node, 'lineno', 0)}"
+                    )
         assert not offenders, f"windows_build read outside the applicability check: {offenders}"
+
+
+class TestOnlyKnownPlacesCompareTheBuild:
+    """Every ordered comparison of a Windows build number, and why it is allowed.
+
+    A build floor that decides *applicability* is `min_os_build`, checked in
+    `ApplicabilityChecker`. Two other comparisons are not gates and stay, each
+    named here: the OS probe classifying itself (Windows 10 / 11, supported
+    floor), and MPO's `_mpo_values`, where the build selects which registry
+    values one always-applicable setting writes (see the comment above
+    `_MPO_BOTH_VALUES_BUILD` for why that cannot be a declared gate).
+    """
+
+    ALLOWED = {
+        ("settings/applicability.py", "_declared_gates"),
+        ("utils/detect.py", "is_supported"),
+        ("utils/detect.py", "get_os_info"),
+        ("settings/definitions/display.py", "_mpo_values"),
+    }
+
+    @staticmethod
+    def _enclosing(tree: ast.AST) -> dict[ast.AST, str]:
+        owner: dict[ast.AST, str] = {}
+        for fn in ast.walk(tree):
+            if isinstance(fn, ast.FunctionDef | ast.AsyncFunctionDef):
+                for node in ast.walk(fn):
+                    owner[node] = fn.name  # innermost wins: nested defs walk later
+        return owner
+
+    def _comparisons(self) -> set[tuple[str, str]]:
+        found: set[tuple[str, str]] = set()
+        for path in SRC.rglob("*.py"):
+            if "__pycache__" in path.parts:
+                continue
+            tree = ast.parse(path.read_text(encoding="utf-8"))
+            owner = self._enclosing(tree)
+            for node in ast.walk(tree):
+                if not isinstance(node, ast.Compare):
+                    continue
+                if not any(isinstance(op, ast.Gt | ast.GtE | ast.Lt | ast.LtE) for op in node.ops):
+                    continue
+                if "build" in ast.unparse(node).lower():
+                    found.add((path.relative_to(SRC).as_posix(), owner.get(node, "<module>")))
+        return found
+
+    def test_no_build_comparison_exists_outside_the_named_places(self) -> None:
+        unknown = self._comparisons() - self.ALLOWED
+        assert not unknown, (
+            f"ad-hoc Windows-build comparison, declare it or name it here: {unknown}"
+        )
+
+    def test_every_named_place_still_compares_a_build(self) -> None:
+        """An allow-list entry whose comparison is gone is stale and must go too."""
+        stale = self.ALLOWED - self._comparisons()
+        assert not stale, f"allow-listed but no longer comparing a build: {stale}"

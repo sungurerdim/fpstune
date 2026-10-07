@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from fpstune.settings.base import DriverGate, parse_driver_version, version_at_least
 from fpstune.settings.os_protection import blocked_write
 
 if TYPE_CHECKING:
@@ -135,6 +136,10 @@ class HardwareContext:
     gpu_vendor: str | None = None  # "nvidia", "amd", "intel", None
     gpu_vendors: list[str] = field(default_factory=list)  # All detected vendors
     gpu_name: str | None = None
+    # The driver in the form `DriverGate` ranges are written in (see
+    # `hardware_context.comparable_driver_version`). None = not read, which a gate
+    # treats as unknown, never as an old or a new driver.
+    gpu_driver_version: str | None = None
 
     # Windows information
     windows_build: int = 0  # e.g., 22631 for Win11 23H2
@@ -183,6 +188,7 @@ class HardwareContext:
             "gpu_vendor": self.gpu_vendor,
             "gpu_vendors": self.gpu_vendors,
             "gpu_name": self.gpu_name,
+            "gpu_driver_version": self.gpu_driver_version,
             "windows_build": self.windows_build,
             "windows_version": self.windows_version,
             "is_windows_11": self.is_windows_11,
@@ -200,8 +206,6 @@ class ApplicabilityChecker:
     - cpu_vendor: str - Must match detected CPU vendor ("amd", "intel")
     - gpu_vendor: str - Must match detected GPU vendor ("nvidia", "amd", "intel")
     - gpu_vendors: list[str] - Must match any of the listed vendors
-    - min_windows_build: int - Windows build must be >= this value
-    - max_windows_build: int - Windows build must be <= this value
     - is_windows_11: bool - Must be Windows 11
     - requires_admin: bool - Must be running as admin
     - requires_vrr: bool - True needs a VRR panel; False rules one out
@@ -209,6 +213,10 @@ class ApplicabilityChecker:
     - feature_absent: str - Feature must NOT be present (e.g., "docker" absent = safe to disable Hyper-V)
     - features_any: list[str] - Any of these features must be available
     - features_all: list[str] - All of these features must be available
+
+    Two gates are fields on the setting rather than conditions, because they are
+    typed, not free-form: `SettingExecutor.min_os_build` and
+    `SettingExecutor.driver_gate`. Both are checked here and nowhere else.
     """
 
     def __init__(self, context: HardwareContext) -> None:
@@ -218,6 +226,46 @@ class ApplicabilityChecker:
             context: Detected hardware context.
         """
         self.context = context
+
+    def _declared_gates(self, setting: SettingExecutor) -> str:
+        """Why `min_os_build` / `driver_gate` rule this machine out, or "" when neither does."""
+        floor = setting.min_os_build
+        # An unreadable build is 0 and fails every floor: hold back, never assume
+        # the newest Windows.
+        if (
+            isinstance(floor, int)
+            and not isinstance(floor, bool)
+            and self.context.windows_build < floor
+        ):
+            return f"Requires Windows build {floor}+"
+        gate = setting.driver_gate
+        if isinstance(gate, DriverGate):
+            return self._driver_gate_reason(gate)
+        return ""
+
+    def _driver_gate_reason(self, gate: DriverGate) -> str:
+        vendor = gate.vendor.upper()
+        context_vendor = self.context.gpu_vendor
+        if context_vendor is None or context_vendor.lower() != gate.vendor:
+            return f"Requires {vendor} GPU"
+        installed = parse_driver_version(self.context.gpu_driver_version)
+        if installed is None:
+            # Unknown is neither "old" nor "new": a driver we could not read is a
+            # fact about detection, not about the hardware. Held back, because
+            # offering a setting that a driver outside its range rejects is the
+            # costlier mistake (C1); the reason says so, so the row is not mistaken
+            # for an absent feature.
+            return (
+                f"The {vendor} driver version could not be read, "
+                "so whether this works with it is unknown"
+            )
+        low = parse_driver_version(gate.min_version) if gate.min_version else None
+        high = parse_driver_version(gate.max_version) if gate.max_version else None
+        if low is not None and not version_at_least(installed, low):
+            return f"Requires {vendor} driver {gate.min_version}+"
+        if high is not None and not version_at_least(high, installed):
+            return f"Requires {vendor} driver {gate.max_version} or earlier"
+        return ""
 
     def is_applicable(self, setting: SettingExecutor) -> tuple[bool, str]:
         """Check if a setting applies to the current hardware.
@@ -236,6 +284,13 @@ class ApplicabilityChecker:
         protected = blocked_write(setting, guard_up=self.context.ucpd_guard_up)
         if protected:
             return False, protected
+
+        # The declared gates. `isinstance` is the declaration test: a field left at
+        # its default (None) is no gate, and a double that answers every attribute
+        # (a bare MagicMock) is not a gate either.
+        gated = self._declared_gates(setting)
+        if gated:
+            return False, gated
 
         conditions = setting.applicable_conditions
         if not conditions:
@@ -264,17 +319,6 @@ class ApplicabilityChecker:
                 return False, f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
             if self.context.gpu_vendor.lower() not in required_vendors:
                 return False, f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
-
-        # Windows build checks
-        if "min_windows_build" in conditions:
-            min_build = conditions["min_windows_build"]
-            if self.context.windows_build < min_build:
-                return False, f"Requires Windows build {min_build}+"
-
-        if "max_windows_build" in conditions:
-            max_build = conditions["max_windows_build"]
-            if self.context.windows_build > max_build:
-                return False, f"Requires Windows build {max_build} or earlier"
 
         # Windows 11 check
         if (

@@ -322,19 +322,19 @@ class TestApplicabilityChecker:
         is_applicable, _ = checker.is_applicable(setting)
         assert is_applicable is True
 
-    def test_min_windows_build(self, nvidia_intel_context: HardwareContext) -> None:
-        """Setting with min_windows_build should check build number."""
+    def test_min_os_build(self, nvidia_intel_context: HardwareContext) -> None:
+        """A setting whose min_os_build the machine meets stays on offer."""
         checker = ApplicabilityChecker(nvidia_intel_context)  # build 22631
-        setting = self._make_setting({"min_windows_build": 22000})
-        is_applicable, _ = checker.is_applicable(setting)
-        assert is_applicable is True
+        setting = self._make_setting({})
+        setting.min_os_build = 22000
+        assert checker.is_applicable(setting) == (True, "")
 
-    def test_min_windows_build_too_low(self, nvidia_intel_context: HardwareContext) -> None:
-        """Setting with min_windows_build above current should reject."""
+    def test_min_os_build_too_low(self, nvidia_intel_context: HardwareContext) -> None:
+        """A setting whose min_os_build is above the machine's build is not applicable."""
         checker = ApplicabilityChecker(nvidia_intel_context)  # build 22631
-        setting = self._make_setting({"min_windows_build": 99999})
-        is_applicable, _ = checker.is_applicable(setting)
-        assert is_applicable is False
+        setting = self._make_setting({})
+        setting.min_os_build = 99999
+        assert checker.is_applicable(setting) == (False, "Requires Windows build 99999+")
 
     def test_requires_admin_when_admin(self, nvidia_intel_context: HardwareContext) -> None:
         """Setting requiring admin should pass when running as admin."""

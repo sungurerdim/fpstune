@@ -24,6 +24,7 @@ import logging
 import sys
 
 from fpstune.settings.applicability import HardwareContext
+from fpstune.settings.base import parse_driver_version
 from fpstune.settings.os_protection import ucpd_active
 from fpstune.settings.virtualization import virtualization_features
 from fpstune.utils.admin import is_admin
@@ -94,6 +95,27 @@ def has_battery() -> bool:
         return False
 
 
+def comparable_driver_version(vendor: str | None, reported: str | None) -> str | None:
+    """The driver version in the form a `DriverGate` for this vendor is written in.
+
+    GPU detection answers in one of two spellings for the same NVIDIA driver:
+    ``nvidia-smi`` prints the marketing number (``591.59``), and the WMI fallback
+    prints Windows' four-part version (``32.0.15.9159``) whose last digit of the
+    third part and four-part tail *are* that number. A gate written as ``"591.59"``
+    must hold on both paths, so the Windows form is converted; AMD and Intel are
+    compared in Windows' own form. Anything that is not a dotted version is None:
+    unknown, never guessed.
+    """
+    parsed = parse_driver_version(reported)
+    if parsed is None or reported is None:
+        return None
+    text = reported.strip()
+    if vendor == "nvidia" and len(parsed) == 4 and len(str(parsed[3])) == 4:
+        digits = f"{str(parsed[2])[-1]}{parsed[3]:04d}"
+        return f"{int(digits[:-2])}.{digits[-2:]}"
+    return text
+
+
 def build_hardware_context() -> HardwareContext:
     """Describe this machine for applicability checks.
 
@@ -147,6 +169,9 @@ def build_hardware_context() -> HardwareContext:
         gpu_vendor=gpu_vendor if gpu_vendor != "unknown" else None,
         gpu_vendors=gpu_vendors,
         gpu_name=gpu_info.name if gpu_info else None,
+        gpu_driver_version=(
+            comparable_driver_version(gpu_vendor, gpu_info.driver_version) if gpu_info else None
+        ),
         windows_build=int(os_info.build) if os_info and os_info.build.isdigit() else 0,
         windows_version=os_info.display_version if os_info else "",
         is_windows_11=os_info.is_windows_11 if os_info else False,

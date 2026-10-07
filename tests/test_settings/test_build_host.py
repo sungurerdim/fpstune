@@ -89,7 +89,7 @@ def shipped():
 
 @pytest.fixture(scope="module")
 def min_build_settings(shipped):
-    found = [s for s in shipped if "min_windows_build" in (s.applicable_conditions or {})]
+    found = [s for s in shipped if s.min_os_build is not None]
     assert found, "no build-gated setting is shipped; this suite would prove nothing"
     return found
 
@@ -121,7 +121,7 @@ class TestBuildGatedSettingsOnEveryBuild:
     def test_windows_10_is_told_which_settings_need_11_and_why(
         self, windows_11_only_settings, min_build_settings
     ) -> None:
-        """22H2 (19045) is above every min_windows_build fpstune ships, so those
+        """22H2 (19045) is above every min_os_build fpstune ships, so those
         still apply; the Windows-11-only ones say so in words the user can read."""
         checker = _checker(19045, windows_11=False)
         for setting in windows_11_only_settings:
@@ -131,7 +131,7 @@ class TestBuildGatedSettingsOnEveryBuild:
 
     def test_a_build_below_the_floor_names_the_floor(self, min_build_settings) -> None:
         for setting in min_build_settings:
-            floor = setting.applicable_conditions["min_windows_build"]
+            floor = setting.min_os_build
             ok, reason = _checker(floor - 1, windows_11=False).is_applicable(setting)
             assert (ok, reason) == (False, f"Requires Windows build {floor}+"), setting.id
 

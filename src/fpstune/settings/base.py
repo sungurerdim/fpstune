@@ -486,6 +486,65 @@ MASK = _ValueMapRule("MASK")
 UNMAPPED = _ValueMapRule("UNMAPPED")
 
 
+# The GPU vendors a driver gate can name: the same spellings as
+# `HardwareContext.gpu_vendor`.
+DRIVER_GATE_VENDORS = ("nvidia", "amd", "intel")
+
+
+def parse_driver_version(text: str | None) -> tuple[int, ...] | None:
+    """A dotted driver version as comparable numbers, or None when it is not one.
+
+    ``"591.59"`` -> ``(591, 59)``; ``"32.0.15.9159"`` -> ``(32, 0, 15, 9159)``. Anything
+    that is not purely dot-separated digits (empty, ``"Unknown"``, a beta suffix) is
+    None: a version that cannot be read is *unknown*, and is never compared as if it
+    were zero or infinity.
+    """
+    if not text:
+        return None
+    parts = text.strip().split(".")
+    if not all(part.isascii() and part.isdigit() for part in parts):
+        return None
+    return tuple(int(part) for part in parts)
+
+
+def version_at_least(version: tuple[int, ...], floor: tuple[int, ...]) -> bool:
+    """``version >= floor``, the shorter tuple padded with zeros (576.80 == 576.80.0)."""
+    width = max(len(version), len(floor))
+    return version + (0,) * (width - len(version)) >= floor + (0,) * (width - len(floor))
+
+
+@dataclass(frozen=True)
+class DriverGate:
+    """The GPU driver range a setting works with.
+
+    ``vendor`` is whose driver the range is about: a machine whose GPU is another
+    vendor's is out of range. ``min_version`` / ``max_version`` are both inclusive
+    and optional (at least one is required), written in the form the hardware
+    context reports for that vendor: NVIDIA's marketing number (``"576.80"``), AMD
+    and Intel's Windows driver version (``"32.0.15.7602"``). A malformed or inverted
+    declaration raises when the registry builds, never when a user's machine is
+    checked.
+    """
+
+    vendor: str
+    min_version: str | None = None
+    max_version: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.vendor not in DRIVER_GATE_VENDORS:
+            raise ValueError(f"driver gate vendor {self.vendor!r} is not in {DRIVER_GATE_VENDORS}")
+        if self.min_version is None and self.max_version is None:
+            raise ValueError("a driver gate needs min_version, max_version or both")
+        low = parse_driver_version(self.min_version) if self.min_version is not None else None
+        high = parse_driver_version(self.max_version) if self.max_version is not None else None
+        if (self.min_version is not None and low is None) or (
+            self.max_version is not None and high is None
+        ):
+            raise ValueError(f"driver gate versions must be dotted numbers: {self!r}")
+        if low is not None and high is not None and not version_at_least(high, low):
+            raise ValueError(f"driver gate range is empty: {self!r}")
+
+
 @dataclass
 class SettingExecutor:
     """Self-contained setting definition with string-based commands.
@@ -572,8 +631,16 @@ class SettingExecutor:
 
     # === Applicability System ===
     # Conditions that must be met for this setting to be applicable
-    # Examples: {"gpu_vendor": "nvidia"}, {"min_windows_build": 22000}
+    # Examples: {"gpu_vendor": "nvidia"}, {"requires_vrr": True}
     applicable_conditions: dict[str, Any] = field(default_factory=dict)
+    # Lowest Windows build this setting works on. Declared here, never tested in a
+    # detect/apply command or a definition's own `if build >= ...`: the one check is
+    # `ApplicabilityChecker.is_applicable`. An unreadable build (0) holds the setting
+    # back rather than assuming the newest Windows.
+    min_os_build: int | None = None
+    # The GPU driver range this setting works with. Same rule: one declaration,
+    # one check, in `ApplicabilityChecker.is_applicable`.
+    driver_gate: DriverGate | None = None
     # Human-readable reason when not applicable (set at runtime)
     applicable_reason: str = ""
 

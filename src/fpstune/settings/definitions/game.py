@@ -190,7 +190,7 @@ HAGS = SettingExecutor(
         "latency_ms": -1.5,
         "stability": "high",
     },
-    applicable_conditions={"min_windows_build": 19041},  # WDDM 2.7, Windows 10 2004+
+    min_os_build=19041,  # WDDM 2.7, Windows 10 2004+
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={

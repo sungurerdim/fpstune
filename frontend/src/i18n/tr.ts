@@ -135,6 +135,8 @@ export const tr: Record<keyof typeof en, string> = {
   "toolbar.stopped": "Durduruldu. Henüz başlamamış ayarlara dokunulmadı.",
   "row.queued": "sırada",
   "row.notApplicable": "N/A",
+  "row.detecting": "Okunuyor…",
+  "row.chooseNamed": "{name} için bir değer seç",
   "row.setTo": "{value} yap",
   "row.resetTo": "{value} değerine sıfırla",
   "row.resetChoice": "{value} (sıfırla)",
@@ -347,6 +349,8 @@ export const tr: Record<keyof typeof en, string> = {
   "hw.notDetected": "Algılanamadı",
   "hw.copy": "Panoya kopyala",
   "device.toApply": "Uygulanacak {count}",
+  "device.notOptimized": "{count} iyileştirilmemiş",
+  "devices.listLabel": "Cihazlar",
   "device.ideal": "İdeal",
   "device.noTweaks": "Bu cihazda ayarlanacak bir şey yok",
   "device.nothingToDo": "Bu cihazda yapılacak bir şey yok.",
@@ -559,6 +563,14 @@ export const tr: Record<keyof typeof en, string> = {
     "FPSTune bunu kendiliğinden uygulayamaz — yalnızca izler.",
   "tooltip.sources": "Kaynaklar:",
   "tooltip.requiresRestart": "Sistemin yeniden başlatılması gerekir",
+
+  // Satır ayrıntısı ((i) arkasında) ve kategori bölümleri
+  "detail.cost": "Bedeli:",
+  "detail.defaultIs": "{kind}: {value}",
+  "category.notOptimized": "{count} / {total} optimize edilmedi",
+  "category.allOptimized": "{total} ayarın tamamı optimize",
+  "category.detecting": "Okunuyor…",
+  "category.manualSteps": "Elle yapılacaklar ({count})",
 
   // fpstune neyi değiştirdi, ölçüldü (ölçüm defteri)
   "ledger.homeTitle": "fpstune neyi değiştirdi, ölçüldü",

@@ -141,6 +141,8 @@ export const en = {
   "toolbar.stopped": "Stopped. Settings not yet started were left as they were.",
   "row.queued": "queued",
   "row.notApplicable": "N/A",
+  "row.detecting": "Reading…",
+  "row.chooseNamed": "Choose a value for {name}",
   "row.setTo": "Set to {value}",
   "row.resetTo": "Reset to {value}",
   "row.resetChoice": "{value} (reset)",
@@ -369,6 +371,8 @@ export const en = {
   "hw.notDetected": "Not detected",
   "hw.copy": "Copy to clipboard",
   "device.toApply": "{count} to apply",
+  "device.notOptimized": "{count} not optimized",
+  "devices.listLabel": "Devices",
   "device.ideal": "Ideal",
   "device.noTweaks": "Nothing to tune on this device",
   "device.nothingToDo": "Nothing to do on this device.",
@@ -583,6 +587,14 @@ export const en = {
     "FPSTune cannot apply this automatically — monitor only.",
   "tooltip.sources": "Sources:",
   "tooltip.requiresRestart": "Requires system restart",
+
+  // Row detail (behind the (i)) and category sections
+  "detail.cost": "Cost:",
+  "detail.defaultIs": "{kind}: {value}",
+  "category.notOptimized": "{count} of {total} not optimized",
+  "category.allOptimized": "All {total} optimized",
+  "category.detecting": "Reading…",
+  "category.manualSteps": "Manual steps ({count})",
 
   // What fpstune changed, measured (the benchmark ledger)
   "ledger.homeTitle": "What fpstune changed, measured",

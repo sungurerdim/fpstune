@@ -19,6 +19,7 @@ import type {
   StorageDriveInfo,
 } from "../../lib/api";
 import { isComponentTweak } from "../../lib/tweakDomain";
+import { isTweakAdvisory, isTweakListable, isTweakSuboptimal } from "../../lib/tweakStatus";
 import type { Setting } from "../../types/setting";
 import type { useT } from "../../i18n";
 
@@ -210,4 +211,86 @@ export function describeDevices(hardware: HardwareInfo | null, t: T): DeviceDesc
     sharedOnly: true,
   });
   return out;
+}
+
+/** The tweaks one device owns and what they add up to. */
+export interface DeviceTweakSet {
+  /** Every listed row: writable ones with a reading, plus unresolved advisories. */
+  settings: Setting[];
+  /** Writable rows the backend reports as not optimized (never recomputed here). */
+  notOptimized: number;
+  /** Findings only the user can act on; kept out of `notOptimized`. */
+  advisories: number;
+}
+
+/**
+ * The one mapping from a device to its tweaks: the device's own `match`
+ * predicate, over the rows worth listing. Pure — same settings, same answer.
+ */
+export function tweaksOfDevice(
+  device: Pick<DeviceDescriptor, "match">,
+  settings: Iterable<Setting>,
+): DeviceTweakSet {
+  const listed: Setting[] = [];
+  if (device.match) {
+    for (const s of settings) {
+      if (device.match(s) && (isTweakListable(s) || isTweakAdvisory(s))) listed.push(s);
+    }
+  }
+  listed.sort((a, b) => a.categoryOrder - b.categoryOrder);
+  return {
+    settings: listed,
+    notOptimized: listed.filter(isTweakSuboptimal).length,
+    advisories: listed.filter(isTweakAdvisory).length,
+  };
+}
+
+/** `tweaksOfDevice` for every device in one pass over the registry, keyed by `deviceKey`. */
+export function tweaksByDevice(
+  devices: readonly DeviceDescriptor[],
+  settings: Iterable<Setting>,
+): Map<string, DeviceTweakSet> {
+  const all = Array.from(settings);
+  return new Map(devices.map((d) => [d.deviceKey, tweaksOfDevice(d, all)]));
+}
+
+/** Where a device sits in the device list: one component after another. */
+function listRank(device: DeviceDescriptor): number {
+  const key = device.deviceKey;
+  if (key === "cpu") return 0;
+  if (key === "memory") return 1;
+  if (key.startsWith("gpu-")) return 2;
+  if (key.startsWith("monitor-")) return 3;
+  if (key === "displays") return 4;
+  if (key.startsWith("adapter-")) return 5;
+  if (key === "adapters") return 6;
+  if (key.startsWith("drive-")) return 7;
+  if (key === "storage") return 8;
+  if (key === "audio") return 9;
+  return 10;
+}
+
+/**
+ * The devices in list order: CPU, memory, GPU, Monitor 1, Monitor 2, network
+ * adapters, storage, audio, buses. Stable inside a component, so Monitor 1 stays
+ * above Monitor 2.
+ */
+export function listDevices(hardware: HardwareInfo | null, t: T): DeviceDescriptor[] {
+  return describeDevices(hardware, t)
+    .map((device, index) => ({ device, index }))
+    .sort((a, b) => listRank(a.device) - listRank(b.device) || a.index - b.index)
+    .map(({ device }) => device);
+}
+
+/** The one-line key spec a device header shows next to its name. */
+export function deviceSpec(device: DeviceDescriptor): string {
+  const body = device.body;
+  const parts: Array<string | undefined> = [device.kind, device.summary];
+  if (body.type === "gpu" && body.gpu.vram_mb) {
+    parts.push(`${Math.round(body.gpu.vram_mb / 1024)} GB`);
+  }
+  if (body.type === "drive" && body.drive.size_gb) {
+    parts.push(`${Math.round(body.drive.size_gb)} GB`);
+  }
+  return parts.filter(Boolean).join(" · ");
 }

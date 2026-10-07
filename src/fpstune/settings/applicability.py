@@ -70,6 +70,56 @@ def absent_reason(setting: SettingExecutor | None = None, reading: object = None
     return "Feature not available on this system"
 
 
+# === GPU identity from PCI vendor IDs =======================================
+#
+# Which chip is integrated and which is discrete is a fact about the PCI vendor
+# ID in `Win32_VideoController.PNPDeviceID`, never about the marketing string in
+# `.Name`: names are localised, renamed per driver release and invented per
+# board partner, and a pattern over them (`Intel|UHD|Iris`, `GeForce|Radeon`)
+# silently misreads every product line it did not list (C10: capability, not
+# model lists). The IDs below are the PCI-SIG vendor registrations.
+INTEL_VENDOR_ID = "8086"
+NVIDIA_VENDOR_ID = "10DE"
+AMD_VENDOR_ID = "1002"
+
+# Vendors whose adapters count as the *discrete* side of a hybrid pair. Intel is
+# the integrated side: a lone Intel Arc card is therefore never "hybrid", and an
+# Arc card beside an Intel iGPU reads as single-vendor — both are the safe answer
+# ("not on offer"), whereas calling the wrong chip discrete would point games at it.
+_DGPU_VENDOR_IDS = (NVIDIA_VENDOR_ID, AMD_VENDOR_ID)
+_IGPU_VENDOR_IDS = (INTEL_VENDOR_ID,)
+
+
+def _has_vendor(pnp_device_id: str, vendor_ids: tuple[str, ...]) -> bool:
+    upper = pnp_device_id.upper()
+    return any(f"VEN_{vendor}&" in upper for vendor in vendor_ids)
+
+
+def classify_gpu_adapters(pnp_device_ids: list[str]) -> tuple[bool, bool]:
+    """Return ``(has_integrated, has_discrete)`` for these ``PNPDeviceID`` strings.
+
+    The PowerShell probe in `definitions/gpu.py` is built from the same
+    constants (`HYBRID_GPU_CLASSIFY_PS`); `test_gpu_identity.py` runs both over
+    the same adapters, so the two spellings cannot drift apart.
+    """
+    return (
+        any(_has_vendor(i, _IGPU_VENDOR_IDS) for i in pnp_device_ids),
+        any(_has_vendor(i, _DGPU_VENDOR_IDS) for i in pnp_device_ids),
+    )
+
+
+def _ps_vendor_pattern(vendor_ids: tuple[str, ...]) -> str:
+    return "|".join(f"VEN_{vendor}&" for vendor in vendor_ids)
+
+
+# The same classification as `classify_gpu_adapters`, as PowerShell over `$gpus`
+# (Win32_VideoController objects). Defines `$igpu` and `$dgpu`.
+HYBRID_GPU_CLASSIFY_PS = (
+    f"$igpu = $gpus | Where-Object {{ $_.PNPDeviceID -match '{_ps_vendor_pattern(_IGPU_VENDOR_IDS)}' }}; "
+    f"$dgpu = $gpus | Where-Object {{ $_.PNPDeviceID -match '{_ps_vendor_pattern(_DGPU_VENDOR_IDS)}' }}; "
+)
+
+
 @dataclass
 class HardwareContext:
     """Detected hardware context for applicability checks.

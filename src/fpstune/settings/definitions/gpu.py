@@ -7,6 +7,7 @@ through NVAPI's driver settings database (executors/nvprofile.py, core/nv_drs.py
 
 from __future__ import annotations
 
+from fpstune.settings.applicability import HYBRID_GPU_CLASSIFY_PS
 from fpstune.settings.base import (
     DetectType,
     SettingCategory,
@@ -792,9 +793,7 @@ _GAME_EXE_SCAN = (
 # on a system where the question does not arise.
 _HYBRID_GUARD = (
     "$gpus = Get-CimInstance Win32_VideoController -ErrorAction SilentlyContinue; "
-    "$igpu = $gpus | Where-Object { $_.Name -match 'Intel|UHD|Iris' }; "
-    "$dgpu = $gpus | Where-Object { $_.Name -match 'NVIDIA|GeForce|Radeon' -and "
-    "$_.Name -notmatch 'Intel' }; "
+    + HYBRID_GPU_CLASSIFY_PS
 )
 
 GPU_LAPTOP_ASSIGNMENT = SettingExecutor(

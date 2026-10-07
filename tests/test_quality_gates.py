@@ -944,9 +944,9 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/definitions/gpu.py", "GpuPreference="): (
             "the registry value's own token format"
         ),
-        ("src/fpstune/settings/definitions/gpu.py", "'Intel|UHD|Iris'"): "vendor names (C5)",
-        ("src/fpstune/settings/definitions/gpu.py", "'NVIDIA|GeForce|Radeon'"): "vendor names (C5)",
-        ("src/fpstune/settings/definitions/gpu.py", "-notmatch 'Intel'"): "vendor names (C5)",
+        ("src/fpstune/settings/applicability.py", "$_.PNPDeviceID -match"): (
+            "PCI vendor ids inside PNPDeviceID, a hardware identifier, not MUI text"
+        ),
         ("src/fpstune/settings/definitions/game_configs.py", "$c -match"): _GAME_TEXT,
         ("src/fpstune/settings/definitions/game_configs.py", "mw3fix_backup"): (
             "fpstune's own backup folder name"

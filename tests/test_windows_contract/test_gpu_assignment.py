@@ -42,8 +42,16 @@ $script:FpsFakeWrites = @{}
 
 function Get-CimInstance {
     [CmdletBinding()] param([Parameter(Position = 0)]$ClassName)
-    [pscustomobject]@{ Name = 'NVIDIA GeForce RTX 4070 Laptop GPU' }
-    if ($FpsFake.hybrid) { [pscustomobject]@{ Name = 'Intel(R) UHD Graphics' } }
+    [pscustomobject]@{
+        Name = 'NVIDIA GeForce RTX 4070 Laptop GPU'
+        PNPDeviceID = 'PCI\VEN_10DE&DEV_2860&SUBSYS_0A9A1028&REV_A1&2F8C5A4&0&0008'
+    }
+    if ($FpsFake.hybrid) {
+        [pscustomobject]@{
+            Name = 'Intel(R) UHD Graphics'
+            PNPDeviceID = 'PCI\VEN_8086&DEV_46A6&SUBSYS_0A9A1028&REV_0C&11583659&0&10'
+        }
+    }
 }
 
 function Get-ChildItem {

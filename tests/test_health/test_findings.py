@@ -80,6 +80,7 @@ _CLEAN_EVENTS: dict[str, Any] = {
     "bugcheck": 0,
     "unexpected_shutdown": 0,
     "tdr": 0,
+    "cpu_limited": 0,
     "disk_errors": 0,
     "disk_providers": "",
     "log_from": 0,
@@ -213,7 +214,7 @@ class TestEvents:
 
     def test_each_kind_lands_under_the_component_it_names_with_no_device(self) -> None:
         result = event_findings(
-            _events(whea=3, tdr=2, disk_errors=5, unexpected_shutdown=1, bugcheck=1)
+            _events(whea=3, tdr=2, disk_errors=5, unexpected_shutdown=1, bugcheck=1, cpu_limited=4)
         )
 
         by_key = {f.title_key: f for f in result.findings}
@@ -222,6 +223,7 @@ class TestEvents:
             "health.system.unexpected_shutdowns": ("system", Quantity(1.0, "events")),
             "health.system.hardware_errors": ("system", Quantity(3.0, "events")),
             "health.gpu.driver_resets": ("gpu", Quantity(2.0, "events")),
+            "health.cpu.firmware_limited": ("cpu", Quantity(4.0, "events")),
             "health.storage.io_errors": ("storage", Quantity(5.0, "events")),
         }
         assert all(f.device_id is None and f.limit is None for f in result.findings)
@@ -309,7 +311,13 @@ class TestCollect:
         assert report.unmeasured == (Gap("broken", "the check failed (OSError)"),)
 
     def test_the_registry_names_every_source(self) -> None:
-        assert set(health.SOURCES) == {"storage_health", "pcie_link", "event_scan", "thermal"}
+        assert set(health.SOURCES) == {
+            "storage_health",
+            "pcie_link",
+            "event_scan",
+            "thermal",
+            "throttle",
+        }
 
 
 class TestTheCache:

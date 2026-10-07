@@ -57,6 +57,7 @@ from fpstune.health.model import (
     stable_pci_id,
 )
 from fpstune.health.thermal_source import thermal_source
+from fpstune.health.throttle import throttle_source
 from fpstune.utils.logger import get_logger
 
 logger = get_logger()
@@ -170,6 +171,7 @@ _EVENT_KINDS: tuple[tuple[str, Component, str], ...] = (
     ("unexpected_shutdown_count", "system", "health.system.unexpected_shutdowns"),
     ("whea_error_count", "system", "health.system.hardware_errors"),
     ("tdr_count", "gpu", "health.gpu.driver_resets"),
+    ("cpu_firmware_limit_count", "cpu", "health.cpu.firmware_limited"),
     ("disk_error_count", "storage", "health.storage.io_errors"),
 )
 
@@ -180,7 +182,9 @@ def event_findings(result: BenchResult) -> SourceResult:
     These are history, not a reading against a limit, so every one is a `warning`
     with no `limit`. None of them carries a `device_id`: the events name a driver
     or a class of hardware, not which disk or which adapter, and a guessed device
-    would put the finding under the wrong heading.
+    would put the finding under the wrong heading. Event 37 (the firmware held the
+    processor below its speed) lands under the CPU and says nothing about why: the
+    event does not, so neither does the finding.
     """
     if not result.ran:
         return _gap(result)
@@ -228,6 +232,7 @@ SOURCES: dict[str, Source] = {
     "pcie_link": _from_bench(PcieLinkBench, pcie_findings),
     "event_scan": _from_bench(EventScanBench, event_findings),
     "thermal": thermal_source,
+    "throttle": throttle_source,
 }
 """Every source `collect` asks, by the name a gap is reported under."""
 

@@ -26,8 +26,11 @@ from fpstune.benchmark.event_scan import (
     MINIMUM_COVERED_DAYS,
     SECONDS_PER_DAY,
     EventScanBench,
+    FirmwareLimit,
+    build_limit_script,
     build_script,
     covered_days,
+    firmware_limits,
     minidump_count,
 )
 from fpstune.benchmark.suite import Bench, SuiteRun, compare_runs
@@ -37,6 +40,7 @@ _CLEAN = {
     "bugcheck": 0,
     "unexpected_shutdown": 0,
     "tdr": 0,
+    "cpu_limited": 0,
     "disk_errors": 0,
     "disk_providers": "",
     "log_from": 0,
@@ -227,3 +231,87 @@ class TestCountingDumpsOffDisk:
         (tmp_path / "notes.txt").write_text("not a crash", encoding="utf-8")
 
         assert minidump_count(0.0, tmp_path) == 0
+
+
+class TestFirmwareLimitEvents:
+    """Event 37 says the firmware held the processor down, and for how long — not why.
+
+    The provider's own manifest (`Get-WinEvent -ListProvider`) lists the event's data as
+    `Group`, `Number`, `CapDurationInSeconds`, `PpcChanges`, `TpcChanges`, `PccChanges`.
+    Nothing there separates heat from power, so nothing here claims to.
+    """
+
+    def test_it_is_counted_beside_the_other_failures(self) -> None:
+        result = _run(EventScanBench(window_days=1), cpu_limited=4)
+
+        assert result.readings["cpu_firmware_limit_count"].median == 4
+
+    def test_a_machine_that_never_logged_it_counts_zero_not_nothing(self) -> None:
+        result = _run(EventScanBench(window_days=1))
+
+        assert result.readings["cpu_firmware_limit_count"].median == 0
+
+    def test_the_count_asks_for_event_37_from_the_processor_power_provider(self) -> None:
+        script = build_script(0)
+
+        assert "Id=37" in script
+        assert "Microsoft-Windows-Kernel-Processor-Power" in script
+
+    def test_the_limit_query_reads_the_duration_by_its_data_name_not_by_text(self) -> None:
+        """The message is translated; `CapDurationInSeconds` is the same on every Windows."""
+        script = build_limit_script(1_700_000_000)
+
+        assert "CapDurationInSeconds" in script
+        assert "FromUnixTimeSeconds(1700000000)" in script
+        assert "Id=37" in script
+
+    def test_each_event_carries_when_it_was_written_and_how_long_the_cap_had_lasted(self) -> None:
+        rows = [{"ended": 1_790_000_600, "seconds": "420"}, {"ended": 1_790_001_000, "seconds": 30}]
+        with patch("fpstune.benchmark.event_scan.query_rows", return_value=(rows, "")):
+            limits, reason = firmware_limits(1_790_000_000)
+
+        assert reason == ""
+        assert [(e.ended_at, e.duration_seconds, e.started_at) for e in limits] == [
+            (1_790_000_600.0, 420.0, 1_790_000_180.0),
+            (1_790_001_000.0, 30.0, 1_790_000_970.0),
+        ]
+
+    def test_an_event_with_no_usable_duration_is_skipped_not_made_a_zero_second_cap(self) -> None:
+        rows = [{"ended": 1_790_000_600, "seconds": None}, {"ended": 1_790_000_700}]
+        with patch("fpstune.benchmark.event_scan.query_rows", return_value=(rows, "")):
+            limits, reason = firmware_limits(0)
+
+        assert (limits, reason) == ([], "")
+
+    def test_no_event_is_an_answer_and_a_refused_query_is_a_different_one(self) -> None:
+        with patch("fpstune.benchmark.event_scan.query_rows", return_value=([], "")):
+            assert firmware_limits(0) == ([], "")
+        with patch(
+            "fpstune.benchmark.event_scan.query_rows",
+            return_value=([], "Windows did not answer this query"),
+        ):
+            assert firmware_limits(0) == ([], "Windows did not answer this query")
+
+    def test_a_turkish_refusal_from_powershell_is_an_english_reason(self) -> None:
+        """Through the real `query_rows`: localised text must not become the reason."""
+        refusal = "Get-WinEvent : Erişim engellendi (Satır:1 karakter:1)"
+        with patch("fpstune.benchmark.win_query.run_powershell", return_value=(False, refusal)):
+            limits, reason = firmware_limits(0)
+
+        assert limits == []
+        assert reason.isascii() and "Erişim" not in reason
+
+    def test_the_cap_is_in_force_for_the_interval_before_the_event_was_written(self) -> None:
+        event = FirmwareLimit(ended_at=1000.0, duration_seconds=100.0)
+
+        assert event.overlaps(950.0, 960.0)
+        assert event.overlaps(1000.0, 1100.0)
+        assert not event.overlaps(1001.0, 1100.0)
+        assert not event.overlaps(0.0, 899.0)
+
+    def test_a_window_that_ended_before_the_event_was_written_is_still_covered(self) -> None:
+        """The event is late evidence: written after the window, covering it."""
+        window_start, window_end = 1000.0, 1006.0
+        written_later = FirmwareLimit(ended_at=1300.0, duration_seconds=400.0)
+
+        assert written_later.overlaps(window_start, window_end)

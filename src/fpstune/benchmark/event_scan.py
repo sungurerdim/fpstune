@@ -8,7 +8,7 @@ round"*. The answer to that is not a longer round. It is that Windows has been
 counting for weeks already, in the System event log, and reading the count is a
 measurement of exactly the thing the claim is about.
 
-Six kinds of event, each a different failure and never blended into one score:
+Seven kinds of event, each a different failure and never blended into one score:
 
 | Reading | Event | What it means |
 |---|---|---|
@@ -18,6 +18,7 @@ Six kinds of event, each a different failure and never blended into one score:
 | `tdr_count` | Display 4101 | the graphics driver was reset mid-frame |
 | `disk_error_count` | 7, 11, 51, 129, 153 from a storage driver | a disk request failed or timed out |
 | `minidump_count` | files on disk | the same crashes, counted a second way |
+| `cpu_firmware_limit_count` | Kernel-Processor-Power 37 | the platform firmware held the processor below its own speed; the event does not say whether heat or power did it |
 
 Three decisions worth knowing about.
 
@@ -51,6 +52,7 @@ from __future__ import annotations
 
 import os
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +94,15 @@ registered, not the sentence the event renders into — so this survives a
 localised machine, which a message match would not.
 """
 
+PROCESSOR_POWER_PROVIDER = "Microsoft-Windows-Kernel-Processor-Power"
+FIRMWARE_LIMIT_EVENT_ID = 37
+"""Event 37: "the speed of processor N is being limited by system firmware".
+
+Its template (read from this provider's manifest with `Get-WinEvent -ListProvider`) is
+`Group`, `Number`, `CapDurationInSeconds`, `PpcChanges`, `TpcChanges`, `PccChanges`.
+Nothing in it says whether the cap was thermal or power, so nothing here claims to.
+"""
+
 COUNT_KEYS = (
     "minidump_count",
     "bugcheck_count",
@@ -99,6 +110,7 @@ COUNT_KEYS = (
     "whea_error_count",
     "tdr_count",
     "disk_error_count",
+    "cpu_firmware_limit_count",
 )
 """Every count this bench publishes beside the rate, in reading order."""
 
@@ -133,6 +145,8 @@ def build_script(since_epoch: int) -> str:
         "unexpected_shutdown=(& $count @{LogName='System';Id=41;"
         "ProviderName='Microsoft-Windows-Kernel-Power'});"
         "tdr=(& $count @{LogName='System';Id=4101;ProviderName='Display'});"
+        f"cpu_limited=(& $count @{{LogName='System';Id={FIRMWARE_LIMIT_EVENT_ID};"
+        f"ProviderName='{PROCESSOR_POWER_PROVIDER}'}});"
         "disk_errors=$disk.Count;"
         "disk_providers=((@($disk | Select-Object -ExpandProperty ProviderName -Unique)) -join ',');"
         "log_from=$(if($oldest){[datetimeoffset]::new($oldest.TimeCreated).ToUnixTimeSeconds()}"
@@ -239,6 +253,7 @@ class EventScanBench:
                 "whea_error_count": float(row.get("whea") or 0),
                 "tdr_count": float(row.get("tdr") or 0),
                 "disk_error_count": float(row.get("disk_errors") or 0),
+                "cpu_firmware_limit_count": float(row.get("cpu_limited") or 0),
                 "log_from": float(row.get("log_from") or 0),
             },
             str(row.get("disk_providers") or ""),
@@ -335,3 +350,65 @@ def baseline_started_at() -> float | None:
         logger.debug("Could not read the baseline timestamp: %s", exc)
         return None
     return None if run is None else run.started_at
+
+
+@dataclass(frozen=True)
+class FirmwareLimit:
+    """One event 37: when it was written, and how long the cap had been in force."""
+
+    ended_at: float
+    duration_seconds: float
+
+    @property
+    def started_at(self) -> float:
+        return self.ended_at - self.duration_seconds
+
+    def overlaps(self, start: float, end: float) -> bool:
+        """Whether the cap was in force at any moment of [start, end].
+
+        The event is written when the cap has already lasted `duration_seconds`, so
+        it covers the interval *before* its timestamp — and a window that ended a
+        minute ago can be covered by an event written a minute from now.
+        """
+        return self.started_at <= end and self.ended_at >= start
+
+
+def build_limit_script(since_epoch: int) -> str:
+    """Every event 37 written since a moment, with the duration its data carries.
+
+    The duration is read by the data's own name (`CapDurationInSeconds`), which is the
+    same on every Windows; the event text is translated and is never read.
+    """
+    return (
+        f"$since=[datetimeoffset]::FromUnixTimeSeconds({int(since_epoch)}).LocalDateTime; "
+        "Get-WinEvent -FilterHashtable @{LogName='System';"
+        f"ProviderName='{PROCESSOR_POWER_PROVIDER}';Id={FIRMWARE_LIMIT_EVENT_ID};"
+        "StartTime=$since} -ErrorAction SilentlyContinue | ForEach-Object { "
+        "$d=@{}; foreach($n in ([xml]$_.ToXml()).Event.EventData.Data){ "
+        "$d[[string]$n.Name]=$n.'#text' }; "
+        "[pscustomobject]@{"
+        "ended=[datetimeoffset]::new($_.TimeCreated).ToUnixTimeSeconds();"
+        "seconds=$d['CapDurationInSeconds']"
+        "} }"
+    )
+
+
+def firmware_limits(since_epoch: float) -> tuple[list[FirmwareLimit], str]:
+    """Event 37 since a moment, or an empty list and the reason the log could not be read.
+
+    "No event" and "could not look" are different answers: the first is `([], "")`.
+    """
+    rows, reason = query_rows(
+        build_limit_script(int(since_epoch)), component="benchmark.event_scan"
+    )
+    if reason:
+        return [], reason
+    limits = []
+    for row in rows:
+        try:
+            limits.append(FirmwareLimit(float(row["ended"]), float(row["seconds"])))
+        except (KeyError, TypeError, ValueError):
+            # An event whose duration did not survive is still evidence that a cap
+            # existed, but not of *when*, and a window cannot be attributed without it.
+            logger.debug("Skipping an event 37 with no usable duration: %r", row)
+    return limits, ""

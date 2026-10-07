@@ -38,6 +38,8 @@ TITLE_KEYS = frozenset(
         "health.system.unexpected_shutdowns",
         "health.system.hardware_errors",
         "health.gpu.driver_resets",
+        # Event 37: the firmware held the processor below its speed. Heat or power, not said.
+        "health.cpu.firmware_limited",
         "health.storage.io_errors",
         # A temperature near or past the device's own published limit, and a
         # device reporting that it is slowing itself down because of heat.
@@ -45,6 +47,13 @@ TITLE_KEYS = frozenset(
         "health.gpu.thermal_throttle",
         "health.storage.temperature",
         "health.cpu.thermal_zone",
+        # What a game window showed: the CPU or GPU held below its own performance,
+        # and the part whose cause nothing readable gives. About the latest game
+        # watched in this session, not about the machine at rest.
+        "health.cpu.throttled_thermal",
+        "health.cpu.throttled_power",
+        "health.cpu.throttled_unknown_cause",
+        "health.gpu.throttled",
         # An NVMe drive's own critical-warning flags (NVMe spec, SMART/Health log byte 0).
         "health.storage.spare_low",
         "health.storage.reliability_degraded",

@@ -327,6 +327,13 @@ export const tr: Record<keyof typeof en, string> = {
   "toolbar.selected": "{count} seçili",
   "toolbar.clear": "Temizle",
   "toolbar.stop": "Durdur",
+  "toolbar.applySelected": "Seçilenleri uygula ({count})",
+  "toolbar.resetSelected": "Seçilenleri varsayılana döndür ({count})",
+  "toolbar.apply.essential": "Temel olanları uygula ({count})",
+  "toolbar.apply.recommended": "Önerilenleri uygula ({count})",
+  "toolbar.apply.complete": "Tümünü uygula ({count})",
+  "toolbar.none.apply": "{name} içinde uygulanacak bir şey yok",
+  "toolbar.none.reset": "{name} içindeki her şey zaten varsayılanında",
   // Hardware surfaces
   "hw.ramSummary": "{total} GB RAM • {available} GB boş",
   "hw.title": "Donanım",

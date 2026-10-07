@@ -62,6 +62,10 @@ function makeSetting(id: string, riskLevel: Setting["riskLevel"]): Setting {
   } as Setting;
 }
 
+function makeScoped(id: string, scope: Setting["scope"], over: Partial<Setting> = {}): Setting {
+  return { ...makeSetting(id, "low"), scope, ...over } as Setting;
+}
+
 function select(setting: Setting) {
   useStore.setState({
     settings: new Map([[setting.id, setting]]),
@@ -81,7 +85,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply selected \(1\)/ }));
 
     expect(
       screen.getByRole("dialog", { name: "Advanced tweaks selected" }),
@@ -93,7 +97,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply selected \(1\)/ }));
     fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
@@ -104,7 +108,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:experimental", "advanced"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply selected \(1\)/ }));
     fireEvent.click(screen.getByRole("button", { name: "Apply anyway" }));
 
     expect(bulkStreamApply).toHaveBeenCalledTimes(1);
@@ -118,7 +122,7 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:ordinary", "low"));
     render(<SelectionToolbar />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Apply 1 tweaks/ }));
+    fireEvent.click(screen.getByRole("button", { name: /^Apply selected \(1\)/ }));
     expect(screen.getByRole("dialog", { name: "Apply 1 tweaks on 1 selected?" })).toBeTruthy();
     expect(bulkStreamApply).not.toHaveBeenCalled();
 
@@ -132,9 +136,12 @@ describe("SelectionToolbar's advanced gate", () => {
 
     // No overflow menu and no second way back: one button, named by the domain.
     expect(screen.queryByRole("button", { name: /^More actions/ })).toBeNull();
-    fireEvent.click(
-      screen.getByRole("button", { name: "Reset 1 settings to the Windows default: 1 selected" }),
+    const resetButton = screen.getByRole("button", { name: "Reset selected to default (1)" });
+    expect(resetButton).toHaveAttribute(
+      "title",
+      "Reset 1 settings to the Windows default: 1 selected",
     );
+    fireEvent.click(resetButton);
     expect(bulkStreamApply).not.toHaveBeenCalled();
 
     // Reset is the same stream with each row's own default as its value.
@@ -149,11 +156,9 @@ describe("SelectionToolbar's advanced gate", () => {
     select(makeSetting("system:ordinary", "low"));
     render(<SelectionToolbar />);
 
-    expect(
-      screen.getByRole("button", {
-        name: "Reset to default: everything in 1 selected is already at its default",
-      }),
-    ).toBeDisabled();
+    const resetButton = screen.getByRole("button", { name: "Reset selected to default (0)" });
+    expect(resetButton).toBeDisabled();
+    expect(resetButton).toHaveAttribute("title", "Everything in 1 selected is already at its default");
   });
 });
 
@@ -168,7 +173,86 @@ describe("SelectionToolbar's run", () => {
     useStore.setState({ bulkRun: { action: "apply", cancel: () => {} } } as never);
     render(<SelectionToolbar />);
 
-    expect(screen.queryByRole("button", { name: /^Apply 1 tweaks/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: /^Apply selected \(1\)/ })).toBeNull();
     expect(screen.getByRole("button", { name: /Stop/ })).toBeTruthy();
+  });
+});
+
+
+describe("SelectionToolbar's scope buttons", () => {
+  const rows = [
+    makeScoped("system:essential_row", "essential"),
+    makeScoped("system:recommended_row", "recommended"),
+    makeScoped("system:complete_row", "complete"),
+    // Not written: already optimized, and an advisory fpstune cannot write.
+    makeScoped("system:already_row", "essential", { status: "optimal", isOptimized: true }),
+    makeScoped("system:advisory_row", "essential", { isReadonly: true }),
+  ];
+
+  beforeEach(() => {
+    bulkStreamApply.mockClear();
+    useStore.setState({
+      settings: new Map(rows.map((s) => [s.id, s])),
+      selectedSettingIds: new Set(),
+      operationStatus: {},
+      operationError: {},
+      bulkRun: null,
+    } as never);
+  });
+
+  it("is hidden without a selection or a scope", () => {
+    const { container } = render(<SelectionToolbar />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it("counts each level over the not-optimized, writable rows only", () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    expect(screen.getByRole("button", { name: "Apply essential (1)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply recommended (2)" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Apply complete (3)" })).toBeEnabled();
+  });
+
+  it("Apply recommended asks, then sends one stream request with essential + recommended, never complete", () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply recommended (2)" }));
+    expect(screen.getByRole("dialog", { name: "Apply 2 tweaks on Software?" })).toBeTruthy();
+    expect(bulkStreamApply).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply" }));
+    expect(bulkStreamApply).toHaveBeenCalledTimes(1);
+    expect(bulkStreamApply.mock.calls[0][0]).toEqual({
+      "system:essential_row": "disabled",
+      "system:recommended_row": "disabled",
+    });
+  });
+
+  it("makes Apply recommended the primary button", () => {
+    render(<SelectionToolbar settings={rows} name="Software" />);
+
+    expect(screen.getByRole("button", { name: "Apply recommended (2)" }).className).toMatch(
+      /bg-primary/,
+    );
+    expect(screen.getByRole("button", { name: "Apply essential (1)" }).className).not.toMatch(
+      /bg-primary/,
+    );
+  });
+
+  it("disables a level with nothing to write, saying why", () => {
+    render(<SelectionToolbar settings={[rows[3], rows[4]]} name="Software" />);
+
+    const button = screen.getByRole("button", { name: "Apply essential (0)" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", "Nothing to apply in Software");
+  });
+
+  it("asks the advanced question for a level that includes an Advanced row", () => {
+    const advanced = makeScoped("system:risky_row", "complete", { riskLevel: "advanced" });
+    render(<SelectionToolbar settings={[advanced]} name="Software" />);
+
+    fireEvent.click(screen.getByRole("button", { name: "Apply complete (1)" }));
+    expect(screen.getByRole("dialog", { name: "Advanced tweaks selected" })).toBeTruthy();
+    expect(bulkStreamApply).not.toHaveBeenCalled();
   });
 });

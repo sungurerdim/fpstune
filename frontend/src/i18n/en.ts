@@ -348,6 +348,13 @@ export const en = {
   "toolbar.selected": "{count} selected",
   "toolbar.clear": "Clear",
   "toolbar.stop": "Stop",
+  "toolbar.applySelected": "Apply selected ({count})",
+  "toolbar.resetSelected": "Reset selected to default ({count})",
+  "toolbar.apply.essential": "Apply essential ({count})",
+  "toolbar.apply.recommended": "Apply recommended ({count})",
+  "toolbar.apply.complete": "Apply complete ({count})",
+  "toolbar.none.apply": "Nothing to apply in {name}",
+  "toolbar.none.reset": "Everything in {name} is already at its default",
 
   // Hardware surfaces
   "hw.ramSummary": "{total} GB RAM • {available} GB available",

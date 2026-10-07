@@ -2,8 +2,8 @@
 
 Covers: constant/GUID values, PowerPlan/PowerProfileResult dataclasses,
 list_plans output parsing (regex), find_fps_balanced cache, get_active_plan,
-is_fps_balanced_active, create/activate/revert/delete command builders and
-error paths, and the singleton accessor.
+create/activate/revert command builders and error paths, and the singleton
+accessor.
 
 All subprocess.run calls are mocked.  Windows-only code is guarded with
 skipif where the platform check cannot be patched cleanly.
@@ -300,35 +300,6 @@ class TestFindFpsBalanced:
             guid = mgr.find_fps_balanced()
         assert guid == "cached-guid-value"
         mock_run.assert_not_called()
-
-
-# ---------------------------------------------------------------------------
-# is_fps_balanced_active
-# ---------------------------------------------------------------------------
-
-
-class TestIsFpsBalancedActive:
-    @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
-    def test_true_when_fps_balanced_active(self) -> None:
-        mgr = PowerProfileManager()
-        with patch(
-            "fpstune.utils.process_watch.run",
-            return_value=_mock_run(stdout=POWERCFG_LIST_WITH_FPS_BALANCED),
-        ):
-            assert mgr.is_fps_balanced_active() is True
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="list_plans only runs on win32")
-    def test_false_when_balanced_is_active(self) -> None:
-        mgr = PowerProfileManager()
-        with patch(
-            "fpstune.utils.process_watch.run", return_value=_mock_run(stdout=POWERCFG_LIST_OUTPUT)
-        ):
-            assert mgr.is_fps_balanced_active() is False
-
-    def test_false_on_non_windows(self) -> None:
-        mgr = PowerProfileManager()
-        with patch("sys.platform", "linux"):
-            assert mgr.is_fps_balanced_active() is False
 
 
 # ---------------------------------------------------------------------------
@@ -708,109 +679,6 @@ class TestRevert:
         with patch("fpstune.utils.process_watch.run", return_value=_mock_run()):
             result = mgr.revert()
         assert "Balanced" in result.message
-
-
-# ---------------------------------------------------------------------------
-# delete
-# ---------------------------------------------------------------------------
-
-
-class TestDelete:
-    def test_returns_failure_on_non_windows(self) -> None:
-        mgr = PowerProfileManager()
-        with patch("sys.platform", "linux"):
-            result = mgr.delete()
-        assert result.success is False
-        assert "Windows" in result.message
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_returns_success_when_profile_not_found(self) -> None:
-        mgr = PowerProfileManager()
-        with patch.object(mgr, "find_fps_balanced", return_value=None):
-            result = mgr.delete()
-        assert result.success is True
-        assert "does not exist" in result.message
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_calls_powercfg_delete_with_guid(self) -> None:
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("fpstune.utils.process_watch.run", return_value=_mock_run()) as mock_run,
-        ):
-            result = mgr.delete()
-        assert result.success is True
-        called_cmd = mock_run.call_args[0][0]
-        assert "/delete" in called_cmd
-        assert NEW_GUID in called_cmd
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_reverts_when_fps_balanced_is_active(self) -> None:
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=True),
-            patch.object(mgr, "revert") as mock_revert,
-            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
-        ):
-            mgr.delete()
-        mock_revert.assert_called_once()
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_does_not_revert_when_fps_balanced_not_active(self) -> None:
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch.object(mgr, "revert") as mock_revert,
-            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
-        ):
-            mgr.delete()
-        mock_revert.assert_not_called()
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_clears_cached_guid_on_success(self) -> None:
-        mgr = PowerProfileManager()
-        mgr._fps_balanced_guid = NEW_GUID
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch("fpstune.utils.process_watch.run", return_value=_mock_run()),
-        ):
-            result = mgr.delete()
-        assert result.success is True
-        assert mgr._fps_balanced_guid is None
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_returns_failure_on_nonzero_returncode(self) -> None:
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch(
-                "fpstune.utils.process_watch.run", return_value=_mock_run(returncode=1, stdout="")
-            ),
-        ):
-            result = mgr.delete()
-        assert result.success is False
-        assert "Failed to delete" in result.message
-
-    @pytest.mark.skipif(sys.platform != "win32", reason="win32 only")
-    def test_delete_subprocess_error_returns_failure(self) -> None:
-        import subprocess
-
-        mgr = PowerProfileManager()
-        with (
-            patch.object(mgr, "find_fps_balanced", return_value=NEW_GUID),
-            patch.object(mgr, "is_fps_balanced_active", return_value=False),
-            patch(
-                "fpstune.utils.process_watch.run", side_effect=subprocess.SubprocessError("boom")
-            ),
-        ):
-            result = mgr.delete()
-        assert result.success is False
-        assert "Error" in result.message
 
 
 # ---------------------------------------------------------------------------

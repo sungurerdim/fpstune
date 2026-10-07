@@ -164,15 +164,6 @@ class PowerProfileManager:
 
         return None
 
-    def is_fps_balanced_active(self) -> bool:
-        """Check if FPS Balanced is the active power plan.
-
-        Returns:
-            True if FPS Balanced is active.
-        """
-        active = self.get_active_plan()
-        return bool(active and active.name == FPS_BALANCED_NAME)
-
     def create(self) -> PowerProfileResult:
         """Create FPS Balanced power profile.
 
@@ -370,55 +361,6 @@ class PowerProfileManager:
             return PowerProfileResult(
                 success=False,
                 message=f"Error reverting profile: {e}",
-            )
-
-    def delete(self) -> PowerProfileResult:
-        """Delete FPS Balanced power profile.
-
-        Reverts to Balanced first if FPS Balanced is active.
-
-        Returns:
-            PowerProfileResult with success status.
-        """
-        if sys.platform != "win32":
-            return PowerProfileResult(
-                success=False,
-                message="Power profiles are only available on Windows",
-            )
-
-        guid = self.find_fps_balanced()
-        if not guid:
-            return PowerProfileResult(
-                success=True,
-                message="FPS Balanced profile does not exist",
-            )
-
-        # Revert to Balanced if FPS Balanced is active
-        if self.is_fps_balanced_active():
-            self.revert()
-
-        try:
-            result = process_watch.run(
-                [system_tool("powercfg.exe"), "/delete", guid], process_watch.QUERY
-            )
-
-            if result.returncode == 0:
-                self._fps_balanced_guid = None
-                logger.info("Deleted FPS Balanced profile")
-                return PowerProfileResult(
-                    success=True,
-                    message="FPS Balanced profile deleted",
-                )
-            else:
-                return PowerProfileResult(
-                    success=False,
-                    message=f"Failed to delete profile: {result.stderr}",
-                )
-
-        except (subprocess.SubprocessError, OSError) as e:
-            return PowerProfileResult(
-                success=False,
-                message=f"Error deleting profile: {e}",
             )
 
 

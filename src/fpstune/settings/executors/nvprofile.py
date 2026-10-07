@@ -71,24 +71,6 @@ def answers_are_holdable(setting: SettingExecutor, drs: EnumKey, missing: Collec
     )
 
 
-def read_setting_from_driver(setting_key: str) -> Any | None:
-    """The setting's current value as the driver reports it, or None.
-
-    None means no observation: the key is unknown, NVAPI is unusable here, or
-    the driver holds a state none of the setting's choices describes.
-    """
-    drs = lookup(setting_key)
-    if drs is None:
-        return None
-
-    from fpstune.core.nvapi import read_driver_settings
-
-    raw = read_driver_settings(list(drs.read_ids))
-    if raw is None:
-        return None
-    return drs.decode(raw)
-
-
 class NvProfileExecutor(BaseExecutor):
     """Executor for NVIDIA Control Panel global settings."""
 

@@ -3,10 +3,10 @@ their state through a cmdlet or a keyword search.
 
 ``with_driver_default`` only ever saw settings declaring ``batch_adapter_keyword``.
 LSO, checksum offload, Wake-on-LAN, U-APSD and Throughput Booster find their
-property another way (a cmdlet, two keywords, a regex over keyword and display
-name), so their ``default_value`` stayed one vendor's ``Enabled`` and reset wrote it
-to a driver that ships the feature off. The driver publishes every default in the
-same table the flow-control and EEE settings already read.
+property another way (a cmdlet, two keywords, a keyword stem), so their
+``default_value`` stayed one vendor's ``Enabled`` and reset wrote it to a driver that
+ships the feature off. The driver publishes every default in the same table the
+flow-control and EEE settings already read.
 """
 
 from __future__ import annotations
@@ -30,6 +30,8 @@ from fpstune.settings.definitions.network import (
     create_uapsd_setting,
     create_wake_on_lan_setting,
 )
+from fpstune.settings.discovery import keyword_resolver
+from fpstune.settings.discovery.keyword_resolver import AdapterProperty
 from fpstune.settings.discovery.network import (
     discover_network_adapter_settings,
     with_driver_default,
@@ -104,18 +106,33 @@ class TestMatchTracksTheCommand:
         assert re.search(pattern, keyword, re.IGNORECASE)
 
     @pytest.mark.parametrize(
-        ("factory", "ps_pattern"),
+        ("factory", "concept_name", "published"),
         [
-            (create_uapsd_setting, "UAPSD|APSD"),
-            (create_throughput_booster_setting, "ThroughputBoost"),
+            (create_uapsd_setting, "uapsd", ("uAPSDSupport", "UAPSD")),
+            (
+                create_throughput_booster_setting,
+                "throughput_booster",
+                ("ThroughputBoosterEnabled",),
+            ),
         ],
     )
     def test_the_search_is_the_one_the_detect_script_runs(
-        self, factory: Factory, ps_pattern: str
+        self, factory: Factory, concept_name: str, published: tuple[str, ...]
     ) -> None:
+        """The keywords the default is read from are the ones detect and apply pick.
+
+        Both halves come from one concept, so a keyword the detect script finds is
+        a keyword whose published default is read, and the reverse.
+        """
         setting = factory(14, "Ethernet")
-        assert setting.detect_args["driver_default_match"] == ps_pattern
-        assert f"-match '{ps_pattern}'" in setting.detect_command
+        concept = keyword_resolver.concept(concept_name)
+        assert setting.detect_args["keyword_concept"] == concept_name
+        assert concept.ps_select() in setting.detect_command
+        assert concept.ps_select() in setting.apply_command
+        for keyword in published:
+            assert concept.matches(keyword)
+            adopted = with_driver_default(setting, {keyword.lower(): "0"})
+            assert adopted.default_value == "Disabled", keyword
 
     def test_lso_does_not_borrow_the_v1_keyword(self) -> None:
         """Detection reads IPv4Enabled/IPv6Enabled, the V2 pair; V1 is a different knob."""
@@ -129,81 +146,81 @@ class TestMatchTracksTheCommand:
         assert with_driver_default(declared, siblings).default_value == "Enabled"
 
 
-class TestFoundOnlyByDisplayName:
-    """U-APSD and Throughput Booster are found by keyword *or* by display name.
+class TestFoundByKeywordNeverByDisplayName:
+    """U-APSD and Throughput Booster are found by ``RegistryKeyword`` alone.
 
-    A driver that spells the keyword its own way is matched only through the
-    name its control panel shows, and its default used to be ignored: reset
-    wrote the declared ``Enabled`` to a driver that ships the feature off.
+    They used to match the control-panel label as well, as a fallback for a driver
+    that spells its keyword its own way. That label is translated: the fallback
+    worked on an English Windows and read nothing on a Turkish or German one, so
+    the same driver gave a different answer depending on the OS language.
     """
 
     @pytest.mark.parametrize(
-        ("factory", "keyword", "display_name"),
+        ("factory", "keyword"),
         [
-            (create_uapsd_setting, "vendorpowersavepoll", "WMM U-APSD Support"),
-            (create_throughput_booster_setting, "vendorburstmode", "Throughput Booster"),
+            (create_uapsd_setting, "vendorpowersavepoll"),
+            (create_throughput_booster_setting, "vendorburstmode"),
         ],
     )
-    def test_the_default_of_a_name_matched_property_is_the_stock_value(
-        self, factory: Factory, keyword: str, display_name: str
+    def test_a_keyword_that_names_nothing_known_is_not_borrowed_by_its_label(
+        self, factory: Factory, keyword: str
     ) -> None:
+        """An English label on an unknown keyword no longer claims the setting."""
         declared = factory(14, "Wi-Fi")
-        adopted = with_driver_default(declared, {keyword: "0"}, {keyword: display_name})
-        assert adopted.default_value == "Disabled"
-
-    def test_a_property_the_name_does_not_match_is_not_borrowed(self) -> None:
-        declared = create_uapsd_setting(14, "Wi-Fi")
-        names = {"vendorfragmentation": "Fragmentation Threshold"}
-        adopted = with_driver_default(declared, {"vendorfragmentation": "0"}, names)
+        adopted = with_driver_default(declared, {keyword: "0"})
         assert adopted.default_value == declared.default_value
+
+    def test_no_script_reads_a_display_name(self) -> None:
+        for factory in (create_uapsd_setting, create_throughput_booster_setting):
+            setting = factory(14, "Wi-Fi")
+            assert "DisplayName" not in setting.detect_command
+            assert "DisplayName" not in setting.apply_command
 
     def test_no_published_default_writes_no_invented_value(self) -> None:
         """The keyword path leaves the declared default when the driver names none; so does this."""
         declared = create_uapsd_setting(14, "Wi-Fi")
-        adopted = with_driver_default(declared, {}, {"vendorpowersavepoll": "WMM U-APSD Support"})
-        assert adopted.default_value == declared.default_value
+        assert with_driver_default(declared, {}).default_value == declared.default_value
 
     def test_a_default_that_is_not_a_number_is_not_a_reading_here_either(self) -> None:
         declared = create_uapsd_setting(14, "Wi-Fi")
-        adopted = with_driver_default(
-            declared, {"vendorpowersavepoll": "n/a"}, {"vendorpowersavepoll": "WMM U-APSD"}
-        )
+        adopted = with_driver_default(declared, {"uapsdsupport": "n/a"})
         assert adopted.default_value == declared.default_value
 
-    @pytest.mark.parametrize(
-        ("factory", "ps_pattern"),
-        [
-            (create_uapsd_setting, "U.?APSD"),
-            (create_throughput_booster_setting, "Throughput.?Booster"),
-        ],
-    )
-    def test_the_name_search_is_the_one_the_detect_script_runs(
-        self, factory: Factory, ps_pattern: str
-    ) -> None:
-        setting = factory(14, "Wi-Fi")
-        assert setting.detect_args["driver_default_display_match"] == ps_pattern
-        assert f"$_.DisplayName -match '{ps_pattern}'" in setting.detect_command
-
-    def test_the_probe_reads_every_keywords_display_name(self) -> None:
+    def test_the_probe_reads_every_keywords_accepted_values_and_no_label(self) -> None:
         registry = SettingsRegistry(discover_dynamic=False)
         payload = {
-            "7": {"names": {"*FlowControl": "Flow Control", "Empty": "", "UAPSD": " U-APSD "}}
+            "7": {
+                "props": {
+                    "*FlowControl": {"valid": ["0", "1", "2", "3"], "min": None, "max": None},
+                    "uAPSDSupport": {"valid": "0", "min": 0, "max": 0},
+                    "*NumRssQueues": {"valid": [], "min": 1, "max": 16},
+                    "Blank": {"valid": [" ", None], "min": "", "max": None},
+                }
+            }
         }
         completed = subprocess.CompletedProcess(
             args=["powershell"], returncode=0, stdout=json.dumps(payload), stderr=""
         )
-        with patch("fpstune.utils.process_watch.run", return_value=completed):
-            assert registry._probes.adapter_property_names() == {
-                7: {"*flowcontrol": "Flow Control", "uapsd": "U-APSD"}
+        with patch("fpstune.utils.process_watch.run", return_value=completed) as run:
+            tables = registry._probes.adapter_properties()
+        assert tables == {
+            7: {
+                "*flowcontrol": AdapterProperty("*FlowControl", ("0", "1", "2", "3")),
+                "uapsdsupport": AdapterProperty("uAPSDSupport", ("0",), 0, 0),
+                "*numrssqueues": AdapterProperty("*NumRssQueues", (), 1, 16),
+                "blank": AdapterProperty("Blank"),
             }
+        }
+        sent = " ".join(str(part) for part in run.call_args.args[0])
+        assert "DisplayName" not in sent
 
-    def test_discovery_hands_the_names_to_the_derivation(self) -> None:
+    def test_discovery_hands_the_defaults_to_the_derivation(self) -> None:
         """End to end: what the probe reads reaches the registered setting."""
         registry = SettingsRegistry(discover_dynamic=False)
         payload = {
             "7": {
-                "defaults": {"VendorPowerSavePoll": "0"},
-                "names": {"VendorPowerSavePoll": "WMM U-APSD Support"},
+                "defaults": {"uAPSDSupport": "0"},
+                "props": {"uAPSDSupport": {"valid": ["0", "1"], "min": None, "max": None}},
             }
         }
         instance_id = "PCI\\VEN_8086&DEV_2725&SUBSYS_00248086&REV_1A\\4&2B0C1E0&0&00E0"

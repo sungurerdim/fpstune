@@ -20,6 +20,7 @@ from fpstune.settings.base import (
     SettingScope,
     SettingValueType,
 )
+from fpstune.settings.discovery.keyword_resolver import concept as keyword_concept
 
 
 def adapter_key(instance_id: str) -> str:
@@ -302,16 +303,13 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         impact_scores={"latency_ms": -3.0, "cpu_usage": 5.0, "stability": "high"},
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            # The standardised '*' spelling first, then the bare vendor one,
-            # the same order apply picks from.
-            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*InterruptModeration','InterruptModeration' -ErrorAction SilentlyContinue)[0]; "
-            "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
-        ),
+        # Every spelling a driver is known to publish this under comes from the
+        # keyword resolver, the one table detect, apply and discovery all read.
+        detect_command=keyword_concept("interrupt_moderation").ps_detect(),
         detect_args={
             "ifindex": interface_index,
-            "batch_adapter_keyword": ["*InterruptModeration", "InterruptModeration"],
+            "batch_adapter_keyword": list(keyword_concept("interrupt_moderation").spellings),
+            "keyword_concept": "interrupt_moderation",
         },
         # Map numeric registry values to choice names
         value_map={
@@ -325,19 +323,9 @@ def create_interrupt_moderation_setting(interface_index: int, display_name: str)
         # The '*' prefix marks a standardised NDIS keyword; vendor keywords
         # are bare, and drivers disagree about which spelling they expose for
         # the same feature (the advanced_eee lesson). The spelling is picked
-        # out of the adapter's own property list before writing.
-        apply_command=(
-            "try { "
-            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-AllProperties -ErrorAction SilentlyContinue; "
-            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
-            "@('*InterruptModeration','InterruptModeration') } | Select-Object -First 1; "
-            "if (-not $prop) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' } "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
+        # out of the adapter's own property list, and the value checked against
+        # the driver's own list, before writing.
+        apply_command=keyword_concept("interrupt_moderation").ps_apply("interrupt-moderation"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={"Enabled": 1, "Disabled": 0},
     )
@@ -382,16 +370,11 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         impact_scores={"latency_ms": -1.0, "stability": "medium"},
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            # The standardised '*' spelling first, then the bare vendor one,
-            # the same order apply picks from.
-            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*FlowControl','FlowControl' -ErrorAction SilentlyContinue)[0]; "
-            "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
-        ),
+        detect_command=keyword_concept("flow_control").ps_detect(),
         detect_args={
             "ifindex": interface_index,
-            "batch_adapter_keyword": ["*FlowControl", "FlowControl"],
+            "batch_adapter_keyword": list(keyword_concept("flow_control").spellings),
+            "keyword_concept": "flow_control",
         },
         # Map numeric registry values to choice names
         # Per Microsoft docs: 0=Disabled, 1=Tx Enabled, 2=Rx Enabled, 3=Rx & Tx Enabled
@@ -413,22 +396,7 @@ def create_flow_control_setting(interface_index: int, display_name: str) -> Sett
         # from Microsoft's map refuses loudly with its own list quoted, the
         # same escape hatch speed_duplex's Forced_Other path uses, instead of
         # writing a value the hardware will reject or misread.
-        apply_command=(
-            "try { "
-            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-AllProperties -ErrorAction SilentlyContinue; "
-            "$prop = $all | Where-Object { $_.RegistryKeyword -in "
-            "@('*FlowControl','FlowControl') } | Select-Object -First 1; "
-            "if (-not $prop) { 'not_supported' } else { "
-            "$valid = @($prop.ValidRegistryValues); "
-            "if ($valid.Count -gt 0 -and -not ($valid -contains ([string][int]%value%))) { "
-            "'error: this driver does not accept flow-control value %value%; "
-            "its own list is ' + ($valid -join ',') } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $prop.RegistryKeyword -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' } } "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
+        apply_command=keyword_concept("flow_control").ps_apply("flow-control"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
         # Per Microsoft docs: 0=Disabled, 1=Tx Enabled, 2=Rx Enabled, 3=Rx & Tx Enabled
         apply_value_map={
@@ -483,25 +451,17 @@ def create_eee_setting(interface_index: int, display_name: str) -> SettingExecut
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         # Intel: *EEE, Realtek: EEE, Broadcom: EEEControl
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            "$keywords = @('*EEE', 'EEE', 'EEEControl', 'EnergyEfficientEthernet'); "
-            "$result = $null; "
-            "foreach ($kw in $keywords) { "
-            "$prop = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword $kw -ErrorAction SilentlyContinue; "
-            "if ($prop) { $result = [int]$prop.RegistryValue; break } "
-            "}; "
-            "if ($null -ne $result) { $result } else { 'not_supported' }"
-        ),
-        # The live command above probes four fixed spellings, one PowerShell call each
-        # — measured at ~3.3 s. The prefetched snapshot already holds every keyword the
-        # adapter publishes, so it can answer all four for free. Safe to batch
+        detect_command=keyword_concept("eee").ps_detect(),
+        # The live command above used to probe four fixed spellings, one PowerShell call
+        # each — measured at ~3.3 s. The prefetched snapshot already holds every keyword
+        # the adapter publishes, so it answers all four for free. Safe to batch
         # precisely because the candidates are a closed literal set: a setting whose
-        # keyword is found by regex must stay on the live path, or a spelling missing
+        # keyword is found by a stem must stay on the live path, or a spelling missing
         # from the list would report "not supported" for hardware that has it.
         detect_args={
             "ifindex": interface_index,
-            "batch_adapter_keyword": ["*EEE", "EEE", "EEEControl", "EnergyEfficientEthernet"],
+            "batch_adapter_keyword": list(keyword_concept("eee").spellings),
+            "keyword_concept": "eee",
         },
         # Map numeric registry values to choice names
         value_map={
@@ -510,23 +470,12 @@ def create_eee_setting(interface_index: int, display_name: str) -> SettingExecut
             1: "Enabled",
             "1": "Enabled",
         },
-        # Apply - Try each keyword until one works
+        # Apply - the spelling this adapter publishes is picked from its own list;
+        # a blind try of each spelling swallowed every failure, a refusal included
         apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            "$keywords = @('*EEE', 'EEE', 'EEEControl', 'EnergyEfficientEthernet'); "
-            "$regVal = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "$success = $false; "
-            "foreach ($kw in $keywords) { "
-            "try { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $kw -RegistryValue $regVal -ErrorAction Stop; "
-            "$success = $true; break "
-            "} catch { }"
-            "}; "
-            "if ($success) { 'ok' } else { 'not_supported' }"
-        ),
+        apply_command=keyword_concept("eee").ps_apply("EEE"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
-        apply_value_map={},  # PowerShell handles conversion
+        apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
 
@@ -1710,16 +1659,11 @@ def create_roaming_aggressiveness_setting(
         impact_scores={"latency_ms": -100.0, "stability": "high"},
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            # The standardised '*' spelling first, then the bare vendor one,
-            # the same order apply picks from.
-            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*RoamAggressiveness','RoamAggressiveness' -ErrorAction SilentlyContinue)[0]; "
-            "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
-        ),
+        detect_command=keyword_concept("roaming_aggressiveness").ps_detect(),
         detect_args={
             "ifindex": interface_index,
-            "batch_adapter_keyword": ["*RoamAggressiveness", "RoamAggressiveness"],
+            "batch_adapter_keyword": list(keyword_concept("roaming_aggressiveness").spellings),
+            "keyword_concept": "roaming_aggressiveness",
         },
         # Map numeric registry values (0-4) to choice names
         value_map={
@@ -1736,24 +1680,12 @@ def create_roaming_aggressiveness_setting(
         },
         # Apply - Use InterfaceIndex with explicit int cast
         apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            # Third occurrence of the same class (see advanced_eee): the Intel
-            # driver publishes the bare vendor keyword "RoamAggressiveness" while
-            # this asked for "*RoamAggressiveness". The write reported success and
-            # changed nothing. Resolve the spelling from the adapter's own list —
-            # probing with an unsupported keyword raises a terminating CIM error.
-            "try { "
-            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-AllProperties -ErrorAction SilentlyContinue; "
-            "$kw = ($all | Where-Object { $_.RegistryKeyword -in "
-            "@('*RoamAggressiveness','RoamAggressiveness') } "
-            "| Select-Object -First 1).RegistryKeyword; "
-            "if (-not $kw) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $kw -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' } "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
+        # Third occurrence of the same class (see advanced_eee): the Intel
+        # driver publishes the bare vendor keyword "RoamAggressiveness" while
+        # this asked for "*RoamAggressiveness". The write reported success and
+        # changed nothing. The resolver picks the spelling from the adapter's own
+        # list — probing with an unsupported keyword raises a terminating CIM error.
+        apply_command=keyword_concept("roaming_aggressiveness").ps_apply("roaming-aggressiveness"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={
             "Lowest": 0,
@@ -2621,16 +2553,11 @@ def create_advanced_eee_setting(interface_index: int, display_name: str) -> Sett
         impact_scores={"latency_ms": -2.0, "power_watts": 0.5, "stability": "high"},
         # Intel-specific keyword: *AdvancedEEE
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            # The standardised '*' spelling first, then the bare vendor one,
-            # the same order apply picks from.
-            "$prop = @(Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-RegistryKeyword '*AdvancedEEE','AdvancedEEE' -ErrorAction SilentlyContinue)[0]; "
-            "if ($prop) { [int](@($prop.RegistryValue)[0]) } else { 'not_supported' }"
-        ),
+        detect_command=keyword_concept("advanced_eee").ps_detect(),
         detect_args={
             "ifindex": interface_index,
-            "batch_adapter_keyword": ["*AdvancedEEE", "AdvancedEEE"],
+            "batch_adapter_keyword": list(keyword_concept("advanced_eee").spellings),
+            "keyword_concept": "advanced_eee",
         },
         value_map={
             0: "Disabled",
@@ -2645,22 +2572,11 @@ def create_advanced_eee_setting(interface_index: int, display_name: str) -> Sett
         # the value stayed Enabled while apply reported success, and only the
         # verify step caught it. Pick whichever spelling this adapter actually
         # exposes before writing.
-        apply_command=(
-            "try { "
-            # Probing with an unsupported keyword raises a terminating CIM error
-            # ("No matching MSFT_NetAdapterAdvancedPropertySettingData objects
-            # found"), so the spelling is picked out of the adapter's own
-            # property list instead of by trial query.
-            "$all = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-AllProperties -ErrorAction SilentlyContinue; "
-            "$kw = ($all | Where-Object { $_.RegistryKeyword -in "
-            "@('*AdvancedEEE','AdvancedEEE') } | Select-Object -First 1).RegistryKeyword; "
-            "if (-not $kw) { 'not_supported' } else { "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $kw -RegistryValue ([int]%value%) -ErrorAction Stop; "
-            "'ok' } "
-            "} catch { 'error:' + $_.Exception.Message }"
-        ),
+        # Probing with an unsupported keyword raises a terminating CIM error
+        # ("No matching MSFT_NetAdapterAdvancedPropertySettingData objects
+        # found"), so the resolver picks the spelling out of the adapter's own
+        # property list instead of by trial query.
+        apply_command=keyword_concept("advanced_eee").ps_apply("advanced-EEE"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
         apply_value_map={"Enabled": 1, "Disabled": 0},
     )
@@ -2981,39 +2897,20 @@ def create_uapsd_setting(interface_index: int, display_name: str) -> SettingExec
         category_order=23,
         effect="Disabling U-APSD removes WiFi power-save delivery latency",
         impact_scores={"latency_ms": -2.0, "stability": "high"},
-        # Detection - discover by RegistryKeyword or localized DisplayName (driver-specific)
+        # Detection - found by RegistryKeyword alone, through the keyword resolver.
+        # The control panel's own label for it is translated, so it is never read.
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'UAPSD|APSD' -or $_.DisplayName -match 'U.?APSD' "
-            "} | Select-Object -First 1; "
-            "if ($p) { if ([int](@($p.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' } } "
-            "else { 'not_supported' }"
+        detect_command=keyword_concept("uapsd").ps_detect(
+            "if ([int](@($prop.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' }"
         ),
-        detect_args={
-            "ifindex": interface_index,
-            # Both halves of the search above. A driver found only by the name its
-            # control panel shows is matched through the keyword -> display name
-            # table, so its own default is read the same way.
-            "driver_default_match": "UAPSD|APSD",
-            "driver_default_display_match": "U.?APSD",
-        },
+        # The keyword is found by a stem, not a closed list, so this setting stays on
+        # the live path: the prefetched snapshot answers exact keywords only.
+        detect_args={"ifindex": interface_index, "keyword_concept": "uapsd"},
         value_map={},
         apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'UAPSD|APSD' -or $_.DisplayName -match 'U.?APSD' "
-            "} | Select-Object -First 1; "
-            "if ($p) { "
-            "$val = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $p.RegistryKeyword -RegistryValue $val -ErrorAction Stop; 'ok' "
-            "} else { 'not_supported' }"
-        ),
+        apply_command=keyword_concept("uapsd").ps_apply("U-APSD"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
-        apply_value_map={},
+        apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
 
@@ -3059,35 +2956,16 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
         effect="Disabling Throughput Booster removes WiFi bursting jitter",
         impact_scores={"latency_ms": -1.0, "stability": "high"},
         detect_type=DetectType.POWERSHELL,
-        detect_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'ThroughputBoost' -or $_.DisplayName -match 'Throughput.?Booster' "
-            "} | Select-Object -First 1; "
-            "if ($p) { if ([int](@($p.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' } } "
-            "else { 'not_supported' }"
+        detect_command=keyword_concept("throughput_booster").ps_detect(
+            "if ([int](@($prop.RegistryValue)[0]) -eq 0) { 'Disabled' } else { 'Enabled' }"
         ),
-        detect_args={
-            "ifindex": interface_index,
-            # Both halves of the search above; see the U-APSD setting.
-            "driver_default_match": "ThroughputBoost",
-            "driver_default_display_match": "Throughput.?Booster",
-        },
+        # Found by keyword stem, like U-APSD, so it stays on the live path.
+        detect_args={"ifindex": interface_index, "keyword_concept": "throughput_booster"},
         value_map={},
         apply_type=DetectType.POWERSHELL,
-        apply_command=(
-            "$p = Get-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% "
-            "-ErrorAction SilentlyContinue | Where-Object { "
-            "$_.RegistryKeyword -match 'ThroughputBoost' -or $_.DisplayName -match 'Throughput.?Booster' "
-            "} | Select-Object -First 1; "
-            "if ($p) { "
-            "$val = if ('%value%' -eq 'Enabled') { 1 } else { 0 }; "
-            "Set-NetAdapterAdvancedProperty -InterfaceIndex %ifindex% -NoRestart "
-            "-RegistryKeyword $p.RegistryKeyword -RegistryValue $val -ErrorAction Stop; 'ok' "
-            "} else { 'not_supported' }"
-        ),
+        apply_command=keyword_concept("throughput_booster").ps_apply("throughput-booster"),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
-        apply_value_map={},
+        apply_value_map={"Enabled": 1, "Disabled": 0},
     )
 
 

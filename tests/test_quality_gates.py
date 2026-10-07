@@ -961,11 +961,9 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/definitions/network.py", ".ToString().ToLower()"): (
             ".NET enum name of a Get-NetTCPSetting property"
         ),
-        ("src/fpstune/settings/definitions/network.py", "$_.RegistryKeyword -match"): (
-            "the driver's INF keyword, which no Windows language changes"
-        ),
-        ("src/fpstune/settings/definitions/network.py", "$_.DisplayName -match"): (
-            "secondary to the RegistryKeyword test; both are the driver's own strings"
+        ("src/fpstune/settings/discovery/keyword_resolver.py", "$_.RegistryKeyword -match"): (
+            "the driver's INF keyword, which no Windows language changes; the control "
+            "panel's DisplayName, which does change, is never matched"
         ),
         ("src/fpstune/settings/definitions/network.py", "'*802.11*'"): _ENUM_802,
         ("src/fpstune/settings/definitions/power.py", "'AMD Ryzen'"): (

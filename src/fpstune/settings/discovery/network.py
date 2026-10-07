@@ -11,13 +11,16 @@ from __future__ import annotations
 
 import logging
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import replace
 from typing import TYPE_CHECKING
+
+from fpstune.settings.discovery import keyword_resolver
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
     from fpstune.settings.discovery import Registrar
+    from fpstune.settings.discovery.keyword_resolver import AdapterProperty
     from fpstune.settings.discovery.probes import HardwareProbes, NetworkAdapter
 
 logger = logging.getLogger(__name__)
@@ -26,7 +29,6 @@ logger = logging.getLogger(__name__)
 def with_driver_default(
     setting: SettingExecutor,
     defaults: Mapping[str, str],
-    display_names: Mapping[str, str] | None = None,
 ) -> SettingExecutor:
     """``setting`` whose ``default_value`` is this driver's own default.
 
@@ -37,9 +39,9 @@ def with_driver_default(
     keyword, an unpublished default, a raw value outside the table — leaves the
     declared default in place.
 
-    ``display_names`` is the same adapter's ``{lowercase keyword: DisplayName}``,
-    for the settings whose detect command also finds the property by the name its
-    control panel shows.
+    A property is found by its ``RegistryKeyword`` alone, never by the label the
+    control panel shows: that label is translated, so a lookup through it works on
+    one Windows language and silently reads nothing on another.
     """
     from fpstune.settings.applicability import values_equal
     from fpstune.settings.base import UNMAPPED
@@ -47,16 +49,18 @@ def with_driver_default(
 
     match = setting.detect_args.get("driver_default_match")
     if match:
-        display_match = setting.detect_args.get("driver_default_display_match")
+        pattern = re.compile(str(match), re.IGNORECASE)
         return _with_switch_default(
-            setting,
-            defaults,
-            str(match),
-            str(display_match) if display_match else None,
-            display_names or {},
+            setting, defaults, lambda keyword: pattern.search(keyword) is not None
         )
 
     keywords = setting.detect_args.get("batch_adapter_keyword")
+    if not keywords:
+        concept_name = setting.detect_args.get("keyword_concept")
+        if concept_name:
+            return _with_switch_default(
+                setting, defaults, keyword_resolver.concept(str(concept_name)).matches
+            )
     # A catch-all row ("changed") is a reading, never a stock value.
     if not keywords or not defaults or UNMAPPED in setting.value_map:
         return setting
@@ -74,17 +78,16 @@ def with_driver_default(
 def _with_switch_default(
     setting: SettingExecutor,
     defaults: Mapping[str, str],
-    pattern: str,
-    display_pattern: str | None = None,
-    display_names: Mapping[str, str] | None = None,
+    is_ours: Callable[[str], bool],
 ) -> SettingExecutor:
     """An Enabled/Disabled ``setting`` whose stock value is read from the driver.
 
     These settings find their property through a cmdlet or a keyword search, so
-    ``detect_args["driver_default_match"]`` names the keywords the detect command
-    reads, as a pattern over the property table's keywords; where the command also
-    matches the display name, ``driver_default_display_match`` is that half, looked
-    up through ``display_names``. The state is read the way detection reads it:
+    ``is_ours`` says which of the property table's keywords the detect command
+    reads: a pattern named by ``detect_args["driver_default_match"]``, or a keyword
+    concept named by ``detect_args["keyword_concept"]`` (the keyword resolver, the
+    same table the detect command is generated from). The state is read the way
+    detection reads it:
     Disabled only when every matching keyword is 0. So the stock value is Disabled
     only when the driver publishes at least one matching default and every one of
     them is 0; any other answer — nothing published, a default that is not a
@@ -97,14 +100,7 @@ def _with_switch_default(
     """
     if setting.choices != ("Enabled", "Disabled") or not defaults:
         return setting
-    matcher = re.compile(pattern, re.IGNORECASE)
-    name_matcher = re.compile(display_pattern, re.IGNORECASE) if display_pattern else None
-    names = display_names or {}
-    matched = {
-        keyword: raw
-        for keyword, raw in defaults.items()
-        if matcher.search(keyword) or (name_matcher and name_matcher.search(names.get(keyword, "")))
-    }
+    matched = {keyword: raw for keyword, raw in defaults.items() if is_ours(keyword)}
     if not matched:
         return setting
     try:
@@ -147,6 +143,52 @@ def filter_valid_adapters(adapters: list[NetworkAdapter]) -> list[NetworkAdapter
     return valid
 
 
+def offer_accepted_choices(
+    setting: SettingExecutor,
+    properties: Mapping[str, AdapterProperty],
+    adapter_name: str = "",
+) -> SettingExecutor | None:
+    """``setting`` narrowed to the values this adapter's driver itself accepts.
+
+    A setting that declares a ``keyword_concept`` is resolved against the driver's
+    own published list or range (``keyword_resolver``): a choice whose written
+    number the driver refuses is not offered, because writing it either fails or is
+    misread by the hardware (C1, C10). When that removes the recommended or the
+    default choice there is nothing left to tune or to reset to, so the setting is
+    not offered at all (``None``).
+
+    A driver that does not publish the concept, or an adapter whose table could not
+    be read, leaves the setting untouched: absence is still answered at detect time
+    with the ``not_supported`` sentinel, and an unread table is not a refusal.
+    """
+    concept_name = setting.detect_args.get("keyword_concept")
+    if not concept_name or not properties:
+        return setting
+
+    written = {
+        choice: number
+        for choice, number in setting.apply_value_map.items()
+        if isinstance(number, int) and not isinstance(number, bool)
+    }
+    resolution = keyword_resolver.resolve(
+        keyword_resolver.concept(str(concept_name)), properties, written.values()
+    )
+    if not resolution.refused:
+        return setting
+
+    refused_choices = {choice for choice, number in written.items() if number in resolution.refused}
+    kept = tuple(choice for choice in setting.choices if choice not in refused_choices)
+    if setting.recommended_value not in kept or setting.default_value not in kept:
+        logger.info(
+            "%s not offered on %s: the driver refuses %s",
+            setting.id,
+            adapter_name or "adapter",
+            ", ".join(sorted(refused_choices)),
+        )
+        return None
+    return replace(setting, choices=kept)
+
+
 def register_adapter_settings(
     registry: Registrar,
     interface_index: int,
@@ -156,7 +198,7 @@ def register_adapter_settings(
     *,
     instance_id: str,
     property_defaults: Mapping[str, str] | None = None,
-    property_names: Mapping[str, str] | None = None,
+    properties: Mapping[str, AdapterProperty] | None = None,
 ) -> int:
     """Register per-adapter network settings, gated by adapter medium.
 
@@ -176,8 +218,10 @@ def register_adapter_settings(
         instance_id: The adapter's PnP device id; the settings are named by it.
         property_defaults: This adapter's ``{lowercase keyword: DefaultRegistryValue}``;
             a setting's default becomes the driver's own wherever it publishes one.
-        property_names: This adapter's ``{lowercase keyword: DisplayName}``, for the
-            settings whose property is also found by the name the driver shows.
+        properties: This adapter's ``{lowercase keyword: AdapterProperty}``, the
+            driver's own accepted values; a setting is offered only with choices the
+            driver itself accepts, and not at all when the driver refuses its
+            recommended or its default value.
         rss_queue_options: This adapter's own ``(queue_counts, driver_default)``
             for ``*NumRssQueues``, or None when its driver does not expose the
             keyword. There is no fallback: a queue count this driver does not
@@ -277,14 +321,41 @@ def register_adapter_settings(
         settings_to_register.append(create_speed_duplex_setting(interface_index, display_name))
         settings_to_register.append(create_link_capability_setting(interface_index, display_name))
 
+    return _register_derived(
+        registry,
+        settings_to_register,
+        (interface_index, instance_id, display_name),
+        property_defaults or {},
+        properties or {},
+    )
+
+
+def _register_derived(
+    registry: Registrar,
+    settings: list[SettingExecutor],
+    adapter: tuple[int, str, str],
+    property_defaults: Mapping[str, str],
+    properties: Mapping[str, AdapterProperty],
+) -> int:
+    """Register ``settings`` for one adapter, each valued from its own driver.
+
+    The default is the driver's own and the choices are the ones its driver
+    accepts; a setting the driver leaves nothing to tune on is not registered.
+    Returns how many were.
+    """
     from fpstune.settings.definitions.network import adapter_key, keyed_to_adapter
 
+    interface_index, instance_id, display_name = adapter
     key = adapter_key(instance_id)
-    for setting in settings_to_register:
-        setting = with_driver_default(setting, property_defaults or {}, property_names)
-        registry.register(keyed_to_adapter(setting, interface_index, key, display_name))
-
-    return len(settings_to_register)
+    registered = 0
+    for setting in settings:
+        setting = with_driver_default(setting, property_defaults)
+        offered = offer_accepted_choices(setting, properties, display_name)
+        if offered is None:
+            continue
+        registry.register(keyed_to_adapter(offered, interface_index, key, display_name))
+        registered += 1
+    return registered
 
 
 def register_path_mtu_setting(
@@ -358,7 +429,7 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
     # Step 3: read what each driver says about itself, once for the machine.
     rss_queue_options = probes.rss_queue_options()
     property_defaults = probes.adapter_property_defaults()
-    property_names = probes.adapter_property_names()
+    properties = probes.adapter_properties()
 
     # Step 4: Register settings for each adapter using InterfaceIndex.
     # media_type gates medium-exclusive settings (single detection, no per-tweak probe).
@@ -371,7 +442,7 @@ def discover_network_adapter_settings(registry: Registrar, probes: HardwareProbe
             rss_queue_options.get(adapter.interface_index),
             instance_id=adapter.instance_id,
             property_defaults=property_defaults.get(adapter.interface_index),
-            property_names=property_names.get(adapter.interface_index),
+            properties=properties.get(adapter.interface_index),
         )
 
     # Step 5: the MTU setting, on the one adapter the measurement applies to.

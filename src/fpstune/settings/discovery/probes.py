@@ -23,6 +23,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, NamedTuple, TypeVar, cast
 
+from fpstune.settings.discovery.keyword_resolver import AdapterProperty
 from fpstune.utils import process_watch
 from fpstune.utils.system_tools import powershell_exe
 
@@ -88,6 +89,26 @@ def powers_of_two_between(minimum: Any, maximum: Any) -> list[int]:
             counts.append(count)
         count *= 2
     return counts
+
+
+def _bound(raw: Any) -> int | None:
+    """A numeric bound as the driver published it, or None when it published none."""
+    try:
+        return int(str(raw).strip())
+    except (TypeError, ValueError):
+        return None
+
+
+def _parse_property(keyword: str, raw: dict[str, Any]) -> AdapterProperty:
+    """One advanced property's accepted values, from the probe's JSON.
+
+    A one-value enum arrives as a scalar rather than a list (PowerShell unwraps
+    it), so both shapes are read; blanks are not values.
+    """
+    listed = raw.get("valid")
+    items = listed if isinstance(listed, list) else [listed]
+    valid = tuple(text for item in items if item is not None and (text := str(item).strip()))
+    return AdapterProperty(keyword, valid, _bound(raw.get("min")), _bound(raw.get("max")))
 
 
 class HardwareProbes:
@@ -208,14 +229,16 @@ class HardwareProbes:
         """
         return self.probe_once("adapter_defaults", self._parse_adapter_property_defaults)
 
-    def adapter_property_names(self) -> dict[int, dict[str, str]]:
-        """``{interface_index: {lowercase keyword: DisplayName}}``.
+    def adapter_properties(self) -> dict[int, dict[str, AdapterProperty]]:
+        """``{interface_index: {lowercase keyword: what the driver accepts}}``.
 
-        The name each property shows in the driver's control panel. Some detect
-        commands find their property by it as well as by keyword, so the default
-        that belongs to such a property is only reachable through this table.
+        Every advanced property each adapter publishes, with the driver's own enum
+        list or numeric bounds. This is what the keyword resolver answers from: a
+        property is found by its ``RegistryKeyword``, and a value is accepted only
+        when the driver itself lists it. The control panel's label for the
+        property is translated and is deliberately not read.
         """
-        return self.probe_once("adapter_names", self._parse_adapter_property_names)
+        return self.probe_once("adapter_properties", self._parse_adapter_properties)
 
     def default_route_interface_index(self) -> int | None:
         """Memoised; the real query is _query_default_route_interface_index."""
@@ -293,9 +316,10 @@ class HardwareProbes:
     def _query_adapter_advanced(self) -> dict[str, Any]:
         """Every adapter's advanced properties, in one PowerShell for the machine.
 
-        Returns ``{"<interface_index>": {"defaults": {keyword: default}, "names":
-        {keyword: display name}, "rss": {...}}}``; ``rss`` is present only where
-        the driver publishes ``*NumRssQueues``. An empty dict when the query fails.
+        Returns ``{"<interface_index>": {"defaults": {keyword: default}, "props":
+        {keyword: {valid, min, max}}, "rss": {...}}}``; ``rss`` is present only
+        where the driver publishes ``*NumRssQueues``. An empty dict when the query
+        fails.
         """
         try:
             result = process_watch.run(
@@ -316,15 +340,20 @@ class HardwareProbes:
                     "if ($null -ne $idx -and $_.RegistryKeyword) { "
                     "$k = [string]$idx; "
                     "if (-not $out.ContainsKey($k)) { "
-                    "$out[$k] = @{ defaults = @{}; names = @{} } }; "
+                    "$out[$k] = @{ defaults = @{}; props = @{} } }; "
                     "$out[$k].defaults[$_.RegistryKeyword] = [string]$_.DefaultRegistryValue; "
-                    "$out[$k].names[$_.RegistryKeyword] = [string]$_.DisplayName; "
+                    # `@($null)` has one element, so an unpublished list is filtered.
+                    "$out[$k].props[$_.RegistryKeyword] = @{ "
+                    "valid = @($_.ValidRegistryValues | Where-Object "
+                    "{ $null -ne $_ -and [string]$_ -ne '' } | ForEach-Object { [string]$_ }); "
+                    "min = $_.NumericParameterMinValue; "
+                    "max = $_.NumericParameterMaxValue }; "
                     "if ($_.RegistryKeyword -eq '*NumRssQueues') { $out[$k].rss = @{ "
                     "valid = @($_.ValidRegistryValues); "
                     "default = [string]$_.DefaultRegistryValue; "
                     "min = $_.NumericParameterMinValue; "
                     "max = $_.NumericParameterMaxValue } } } }; "
-                    "$out | ConvertTo-Json -Compress -Depth 5",
+                    "$out | ConvertTo-Json -Compress -Depth 6",
                 ],
                 process_watch.QUERY,
             )
@@ -352,20 +381,20 @@ class HardwareProbes:
             }
         return defaults
 
-    def _parse_adapter_property_names(self) -> dict[int, dict[str, str]]:
-        names: dict[int, dict[str, str]] = {}
+    def _parse_adapter_properties(self) -> dict[int, dict[str, AdapterProperty]]:
+        tables: dict[int, dict[str, AdapterProperty]] = {}
         for raw_index, entry in self.adapter_advanced().items():
             if not str(raw_index).isdigit() or not isinstance(entry, dict):
                 continue
-            table = entry.get("names")
+            table = entry.get("props")
             if not isinstance(table, dict):
                 continue
-            names[int(raw_index)] = {
-                str(keyword).lower(): str(value).strip()
-                for keyword, value in table.items()
-                if str(value).strip()
+            tables[int(raw_index)] = {
+                str(keyword).lower(): _parse_property(str(keyword), raw)
+                for keyword, raw in table.items()
+                if str(keyword).strip() and isinstance(raw, dict)
             }
-        return names
+        return tables
 
     def _parse_rss_queue_options(self) -> dict[int, tuple[tuple[str, ...], str]]:
         """Read each adapter's own accepted ``*NumRssQueues`` values.

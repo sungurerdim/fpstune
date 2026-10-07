@@ -1,7 +1,6 @@
 import { memo, useState, useCallback } from "react";
 import { useStore, type OperationStatus } from "../store";
 import { useApplySingle } from "../hooks/useApplySingle";
-import { settingsApi } from "../lib/api";
 import { detectionManager } from "../lib/detection-manager";
 import type { Setting } from "../types/setting";
 import { TweakSetting } from "./TweakSetting";
@@ -53,8 +52,6 @@ const TweakRowItem = memo(
         isPending={isPending}
         isModuleLoading={false}
         onApplyValue={(value) => applySingle(setting, value)}
-        // The dedicated endpoint, not apply-with-defaultValue: the backend
-        // logs and verifies a reset as one.
         onReset={() => resetSingle(setting)}
         onVerify={() => verify(setting)}
         isSelected={isSelected}
@@ -101,25 +98,10 @@ export function TweakRows({ rows }: { rows: TweakRow[] }) {
   const verify = useCallback(async (setting: Setting) => {
     setVerifyingIds((prev) => new Set(prev).add(setting.id));
     try {
-      // The dedicated detect-only endpoint: it answers "does the machine
-      // match the recommended value?" and names the question in its reply.
-      // A bulk re-detect answered the same question by side effect, and left
-      // POST /settings/{id}/verify a route nobody called.
-      const result = await settingsApi.verifySetting(setting.id);
-      if (result.error) {
-        // A verify that could not read falls back to the full re-detect
-        // path, which also carries applicability and the error text.
-        await detectionManager.redetectSettings([setting.id]);
-      } else {
-        useStore
-          .getState()
-          .setSettingDetectionResult(
-            setting.id,
-            result.current_value,
-            result.matches,
-            true,
-          );
-      }
+      // Verify is a detect: there is no verify endpoint. The re-read carries
+      // the value, whether it is the recommended one, applicability and the
+      // error text through the one path every detect takes into the store.
+      await detectionManager.redetectSettings([setting.id]);
     } finally {
       setVerifyingIds((prev) => {
         const next = new Set(prev);

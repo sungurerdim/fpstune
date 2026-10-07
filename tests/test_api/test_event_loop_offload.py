@@ -186,7 +186,7 @@ class TestDisplayDetectionOffload:
 
 
 class TestSettingHardwareContextOffload:
-    """apply/reset/verify built the hardware context on the loop.
+    """apply built the hardware context on the loop.
 
     It is cached, so the warm path was cheap — but the build enumerates adapters
     and reads driver metadata through subprocesses, and the request that pays
@@ -222,31 +222,6 @@ class TestSettingHardwareContextOffload:
 
         assert response.status_code == 200
         assert response.json()["success"] is False  # short-circuited before any write
-        assert record["on_event_loop"] is False
-
-    def test_reset_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        ctx, checker, rp = self._patched(record)
-        with ctx, checker, rp:
-            response = client.post("/api/settings/network:nagle_algorithm/reset")
-
-        assert response.status_code == 200
-        assert record["on_event_loop"] is False
-
-    def test_verify_builds_the_context_off_the_event_loop(self, client: TestClient) -> None:
-        record: dict[str, bool] = {}
-        engine = MagicMock()
-        engine.detect_one.return_value = MagicMock(is_applicable=True, error=None, value="enabled")
-        with (
-            patch(
-                "fpstune.api.routes.settings._get_hardware_context",
-                side_effect=_loop_recorder(record, neutral_hardware_context()),
-            ),
-            patch("fpstune.api.routes.settings.DetectionEngine", return_value=engine),
-        ):
-            response = client.post("/api/settings/network:nagle_algorithm/verify")
-
-        assert response.status_code == 200
         assert record["on_event_loop"] is False
 
 

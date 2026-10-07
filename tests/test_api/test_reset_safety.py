@@ -1,8 +1,9 @@
-"""Reset must carry the same rollback safety net as apply.
+"""Reset is an apply of the row's default, and carries apply's rollback safety net.
 
 Reset writes to the registry / powercfg / BCD exactly like apply does, so a bad
-reset is just as hard to undo. The apply paths created a system restore point;
-the reset paths did not.
+reset is just as hard to undo. There is no reset endpoint: the client posts the
+row's `default_value` to `/apply`, so the restore point, the validation and the
+re-detect are the apply path's own.
 """
 
 from __future__ import annotations
@@ -29,7 +30,10 @@ def _fake_setting(setting_id: str = "core:fake_reset"):
     s.display_name = "Fake Reset"
     s.default_value = "0"
     s.recommended_value = "1"
+    s.choices = ("0", "1")
     s.requires_reboot = False
+    s.is_action = False
+    s.is_readonly = False
     s.apply_type = MagicMock()
     s.apply_type.value = "registry"
     s.apply_args = {}
@@ -37,7 +41,7 @@ def _fake_setting(setting_id: str = "core:fake_reset"):
 
 
 class TestResetCreatesRestorePoint:
-    def test_single_reset_creates_restore_point(self, client: TestClient) -> None:
+    def test_applying_the_default_creates_a_restore_point(self, client: TestClient) -> None:
         setting = _fake_setting()
         mock_registry = MagicMock()
         mock_registry.get.return_value = setting
@@ -63,7 +67,8 @@ class TestResetCreatesRestorePoint:
             ),
             patch(
                 "fpstune.api.routes.settings_apply.CommandExecutor.apply", return_value=(True, None)
-            ),
+            ) as write,
+            patch("fpstune.utils.self_check.ensure_checked_before_first_apply"),
             patch("fpstune.api.routes.settings.sys.platform", "win32"),
             # No bench holds the machine. Patching ``sys.platform`` is global, so
             # without this the operation lock would reach for kernel32, which
@@ -71,9 +76,13 @@ class TestResetCreatesRestorePoint:
             patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
             patch("fpstune.api.routes.settings._ensure_restore_point") as mock_rp,
         ):
-            result = client.post(f"/api/settings/{setting.id}/reset")
+            result = client.post(
+                f"/api/settings/{setting.id}/apply", json={"value": setting.default_value}
+            )
 
         assert result.status_code == 200
+        assert result.json()["success"] is True
+        write.assert_called_once_with(setting, "0", None)
         mock_rp.assert_called_once()
 
     def test_bulk_stream_reset_creates_restore_point(self, client: TestClient) -> None:
@@ -119,7 +128,12 @@ class TestResetCreatesRestorePoint:
 class TestResetWithoutADerivedDefault:
     """A row with no derivable default (DefaultSource.NONE) used to reach the write with None."""
 
-    def test_single_reset_is_refused_and_nothing_is_written(self, client: TestClient) -> None:
+    def test_a_null_value_is_refused_and_nothing_is_written(self, client: TestClient) -> None:
+        """Reset is `apply(default_value)`; a row with no default has `None` to send.
+
+        The refusal moved from the reset route to the one validation every apply
+        path shares, so a client that posts the null anyway reaches no write.
+        """
         setting = _fake_setting()
         setting.default_value = None
         mock_registry = MagicMock()
@@ -130,12 +144,12 @@ class TestResetWithoutADerivedDefault:
             patch("fpstune.api.routes.settings.apply_and_finalize") as write,
             patch("fpstune.api.routes.settings._ensure_restore_point") as restore_point,
         ):
-            response = client.post(f"/api/settings/{setting.id}/reset")
+            response = client.post(
+                f"/api/settings/{setting.id}/apply", json={"value": setting.default_value}
+            )
 
-        assert response.status_code == 200
-        body = response.json()
-        assert body["success"] is False
-        assert "cannot be reset" in body["error"]
+        assert response.status_code == 400
+        assert "needs a value" in response.json()["detail"]
         write.assert_not_called()
         restore_point.assert_not_called()
 

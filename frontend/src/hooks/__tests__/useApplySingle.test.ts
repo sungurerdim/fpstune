@@ -222,6 +222,38 @@ describe("useApplySingle", () => {
     });
   });
 
+  it("resetSingle applies the setting's own default through /apply — there is no reset endpoint", async () => {
+    // The defect this guards: a reset posted to its own route, so the backend
+    // carried a second write path (and a second idea of "correct") beside apply.
+    const seen: { url: string; body: unknown }[] = [];
+    server.use(
+      http.post("/api/settings/:id/apply", async ({ request }) => {
+        seen.push({ url: new URL(request.url).pathname, body: await request.json() });
+        return HttpResponse.json({
+          setting_id: "timer:hpet",
+          success: true,
+          error: null,
+          new_value: "enabled",
+          requires_reboot: false,
+          verified: true,
+        });
+      }),
+    );
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.resetSingle(makeSetting({ defaultValue: "enabled" }));
+    });
+
+    expect(seen).toEqual([
+      { url: "/api/settings/timer:hpet/apply", body: { value: "enabled" } },
+    ]);
+    const updated = useStore.getState().settings.get("timer:hpet");
+    expect(updated?.currentValue).toBe("enabled");
+    expect(updated?.isOptimized).toBe(false);
+  });
+
   it("isPending is false for unrelated setting id", () => {
     const { Wrapper } = makeWrapper();
     const { result } = renderHook(() => useApplySingle(), { wrapper: Wrapper });

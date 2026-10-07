@@ -284,7 +284,7 @@ class TestFreedIsTheDifferenceBetweenTwoReadings:
     def test_a_cleanup_told_not_to_run_is_never_sized(
         self, client: TestClient, cache: CleanupSizeCache
     ) -> None:
-        """A cleanup's reset writes False, which an action reads as "do not run".
+        """A cleanup's reset applies its default, False, which an action reads as "do not run".
 
         Sizing a folder twice around a command that never happens costs two
         scans -- up to 42 s each -- to report that nothing was freed, which is
@@ -294,7 +294,9 @@ class TestFreedIsTheDifferenceBetweenTwoReadings:
         cache.set_result(setting.id, 500 * MB)
 
         with _run(setting, cache, []) as run:
-            result = client.post(f"/api/settings/{setting.id}/reset")
+            result = client.post(
+                f"/api/settings/{setting.id}/apply", json={"value": setting.default_value}
+            )
 
         assert result.status_code == 200
         body = result.json()

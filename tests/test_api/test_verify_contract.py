@@ -154,16 +154,22 @@ class TestDeprecatedIdCompatLayerIsGone:
     into a different setting's."""
 
     def test_the_split_compound_id_is_now_unknown(self, test_client):
-        response = test_client.post("/api/settings/system:network_afd_buffers/verify")
+        response = test_client.post(
+            "/api/settings/system:network_afd_buffers/apply", json={"value": "default"}
+        )
 
         assert response.status_code == 404
 
     def test_the_replacement_id_still_resolves(self, test_client):
         """The removal must take the alias, not the setting it pointed at."""
-        response = test_client.post("/api/settings/system:network_afd_receive_window/verify")
+        response = test_client.post(
+            "/api/settings/system:network_afd_receive_window/apply", json={"value": "not-a-value"}
+        )
 
-        assert response.status_code == 200
-        assert response.json()["setting_id"] == "system:network_afd_receive_window"
+        # Resolved: the registry knows the id, so the answer is the apply
+        # path's own value refusal (400), not the unknown-id 404.
+        assert response.status_code == 400
+        assert "system:network_afd_receive_window" in response.json()["detail"]
 
 
 class TestSlowResetTolerancesAreWiredToRealSettings:

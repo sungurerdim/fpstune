@@ -428,25 +428,3 @@ class BulkStreamRequest(BaseModel):
     """Request for sequential SSE bulk operations."""
 
     ids: list[str] = Field(..., description="Setting IDs to process sequentially")
-
-
-class VerifyRequest(BaseModel):
-    """Which value to check a setting against."""
-
-    # "recommended" — what fpstune advises (the drift check, and the default)
-    # "default"     — the Windows stock value, i.e. "did a reset land"
-    target: Literal["recommended", "default"] = "recommended"
-
-
-class VerifyResponse(BaseModel):
-    """Response after verifying a setting's current state."""
-
-    setting_id: str
-    matches: bool  # True if current value equals expected_value
-    current_value: Any | None
-    expected_value: Any | None
-    # Which question was answered. Echoed back because this endpoint used to
-    # answer only one and never said so, and a caller that assumed a different
-    # one read a correct machine as a failed operation.
-    target: Literal["recommended", "default"] = "recommended"
-    error: str | None = None

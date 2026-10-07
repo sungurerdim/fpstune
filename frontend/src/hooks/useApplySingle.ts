@@ -86,12 +86,9 @@ export function useApplySingle() {
 
   /**
    * Write the setting's own default (Windows stock, the driver's default or the
-   * game's default, by domain) through the dedicated endpoint.
-   *
-   * Not `applySingle(setting, setting.defaultValue)`: the write is the same,
-   * but through /apply the backend never knew it was a reset — the activity
-   * log recorded an apply, and the /reset route (which detects, writes the
-   * default, and verifies against it) sat uncalled.
+   * game's default, by domain). Reset is an apply of `defaultValue`: there is
+   * no reset endpoint, so the write, the read-back and the verification are
+   * the apply path's own. Only the notification wording differs.
    */
   const resetSingle = useCallback(
     async (setting: Setting): Promise<ApplyResponse> => {
@@ -99,7 +96,7 @@ export function useApplySingle() {
       useStore.getState().beginOperation();
       try {
         const response = await settingsApi
-          .resetSetting(setting.id)
+          .applySetting(setting.id, setting.defaultValue)
           .catch((error: unknown) => failedResponse(setting, errorMessage(error)));
         const name = localizedName(setting);
         if (response.success) {

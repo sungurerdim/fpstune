@@ -148,6 +148,7 @@ class TestNothingWritesThemAgain:
         s.display_name = "Fake"
         s.default_value = "stock"
         s.recommended_value = "tuned"
+        s.choices = ("stock", "tuned")
         s.requires_reboot = False
         s.is_action = False
         s.is_readonly = False
@@ -190,15 +191,16 @@ class TestNothingWritesThemAgain:
                 return_value=(True, None),
             ),
             patch("fpstune.api.routes.settings_apply.is_free", return_value=True),
+            patch("fpstune.utils.self_check.ensure_checked_before_first_apply"),
         ):
             scan = client.post("/api/settings/detect", json={})
-            reset = client.post("/api/settings/core:fake/reset")
+            reset = client.post("/api/settings/core:fake/apply", json={"value": "stock"})
 
         assert scan.status_code == 200
         assert reset.status_code == 200 and reset.json()["success"] is True
-        # The reset did land on the in-memory journal...
+        # The reset (an apply of the default) did land on the in-memory journal...
         assert [(c.setting_id, c.action) for c in history.get_change_journal().entries()] == [
-            ("core:fake", "reset")
+            ("core:fake", "apply")
         ]
         # ...and nothing reached the disk.
         assert _stored_state_files(get_config_dir()) == []

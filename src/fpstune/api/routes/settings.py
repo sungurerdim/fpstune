@@ -34,8 +34,6 @@ from fpstune.api.schemas import (
     DetectResponse,
     ModuleMetadataResponse,
     SettingDefinitionResponse,
-    VerifyRequest,
-    VerifyResponse,
 )
 from fpstune.safety import restore
 from fpstune.safety.history import ACTION_FOR_LABEL, get_change_journal
@@ -109,17 +107,6 @@ async def _get_registry_async() -> SettingsRegistry:
     an async route that wait must happen on a worker thread, not on the loop.
     """
     return await asyncio.to_thread(_get_registry)
-
-
-async def _get_hardware_context_async() -> HardwareContext:
-    """The hardware context, built off the event loop.
-
-    Cached after the first build, so most calls are free — but the first one is
-    not, and cold start is exactly when a request is most likely to arrive: it
-    enumerates adapters and reads driver metadata through subprocesses. Cheap
-    on the warm path is not the same as safe on the loop.
-    """
-    return await asyncio.to_thread(_get_hardware_context)
 
 
 async def _context_and_applicability(
@@ -466,12 +453,23 @@ def _validate_apply_value(setting: SettingExecutor, value: Any) -> str | None:
     request can no longer hand an arbitrary body straight to an elevated
     command slot that the single-setting route would have refused.
 
+    A state setting takes a value, never ``None``: reset is an apply of the row's
+    ``default_value``, and a row whose default could not be derived has none
+    (C6: "a default that cannot be derived is not invented"), so a null write
+    is refused here, where the write happens, whatever the client sent. An
+    action takes ``None`` as "do not run" and is left alone.
+
     Three shapes, each derived from the setting itself, never a global list:
       choices     — an enumerated setting takes one of its declared values
       INT/FLOAT   — the declared numeric type, inside any configured range
       free STRING — the setting's own ``validate_pattern``, or a conservative
                     token allowlist when it declares none (SEC-12)
     """
+    if value is None and not setting.is_action:
+        return (
+            f"{setting.display_name} needs a value to write; "
+            "a row with no derivable default has no reset."
+        )
     if setting.choices and value not in setting.choices and not _in_apply_value_map(setting, value):
         return f"Value {value!r} is not valid for {setting.id}. Allowed: {list(setting.choices)}"
     if setting.value_type == SettingValueType.CHOICE and not setting.can_write(value):
@@ -798,7 +796,7 @@ async def get_modules_metadata() -> list[ModuleMetadataResponse]:
 
 
 # =============================================================================
-# Individual Apply/Reset/Disable/Verify/Revert Endpoints
+# Individual Apply Endpoint
 # (declared after bulk routes to avoid path conflicts)
 # =============================================================================
 
@@ -844,107 +842,3 @@ async def apply_setting(setting_id: str, request: ApplyRequest) -> ApplyResponse
         return apply_and_finalize(setting, request.value, engine, "Applied")
 
     return await asyncio.to_thread(_apply)
-
-
-@router.post("/{setting_id}/reset", response_model=ApplyResponse)
-async def reset_setting(setting_id: str) -> ApplyResponse:
-    """Reset a specific setting to its default value with verification."""
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    refused = _no_default_refusal(setting)
-    if refused is not None:
-        return refused
-
-    hardware_context, is_applicable, reason = await _context_and_applicability(setting)
-    if not is_applicable:
-        return ApplyResponse(
-            setting_id=setting_id,
-            success=False,
-            error=reason or "Setting not applicable to this system",
-            new_value=None,
-            requires_reboot=False,
-        )
-
-    # Reset mutates system state exactly like apply does, so it gets the same
-    # rollback safety net — previously only the apply paths created one.
-    if sys.platform == "win32":
-        await asyncio.to_thread(_ensure_restore_point)
-
-    engine = DetectionEngine(hardware_context=hardware_context)
-
-    def _reset() -> ApplyResponse:
-        return apply_and_finalize(setting, setting.default_value, engine, "Reset")
-
-    return await asyncio.to_thread(_reset)
-
-
-@router.post("/{setting_id}/verify", response_model=VerifyResponse)
-async def verify_setting(setting_id: str, request: VerifyRequest | None = None) -> VerifyResponse:
-    """Read a setting and report whether it holds the value asked about.
-
-    The question defaults to "is this at the recommended value" — a drift check
-    — which is what this endpoint always answered and never said. That silence
-    was a defect: after a ``/reset`` the setting correctly holds its
-    ``default_value``, and verifying it reported ``matches=false`` as though the
-    reset had failed. The apply and reset responses were never wrong about this;
-    they verify against whatever they wrote. Only this endpoint had one fixed
-    idea of what "correct" meant.
-
-    ``target`` now names the question, and the answer echoes it back in
-    ``target`` and ``expected_value`` so a caller cannot misread which
-    comparison it got:
-
-      ``recommended``  is it at the value fpstune advises (default)
-      ``default``      is it at the Windows stock value, i.e. did a reset land
-
-    Does not modify any system state.
-    """
-    registry = await _get_registry_async()
-    setting = registry.get(setting_id)
-
-    if not setting:
-        raise HTTPException(404, f"Unknown setting: {setting_id}")
-
-    target = (request.target if request else None) or "recommended"
-    if target == "default":
-        expected: Any = setting.default_value
-    else:
-        expected = setting.recommended_value
-
-    hardware_context = await _get_hardware_context_async()
-    engine = DetectionEngine(hardware_context=hardware_context)
-    # detect_one runs a synchronous subprocess — keep it off the event loop (PERF-08).
-    result = await asyncio.to_thread(engine.detect_one, setting)
-
-    if not result.is_applicable:
-        return VerifyResponse(
-            setting_id=setting_id,
-            matches=False,
-            current_value=None,
-            expected_value=expected,
-            target=target,
-            error=result.applicable_reason or "Setting not applicable to this system",
-        )
-
-    if result.error:
-        return VerifyResponse(
-            setting_id=setting_id,
-            matches=False,
-            current_value=None,
-            expected_value=expected,
-            target=target,
-            error=result.error,
-        )
-
-    matches = values_equal(result.value, expected)
-    return VerifyResponse(
-        setting_id=setting_id,
-        matches=matches,
-        current_value=result.value,
-        expected_value=expected,
-        target=target,
-    )

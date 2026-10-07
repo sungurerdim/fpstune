@@ -206,9 +206,7 @@ uv run ruff check src tests
 |----------|--------|-------------|
 | `/api/settings/definitions` | GET | All setting definitions. Includes the per-adapter settings discovered from your hardware, so the registry is built once at startup in the background — the request itself is instant unless it beats that warm-up |
 | `/api/settings/detect` | POST | Parallel detection of all settings (empty body) |
-| `/api/settings/{id}/apply` | POST | Apply a value, detect, verify |
-| `/api/settings/{id}/reset` | POST | Write the setting's own default (Windows, driver or game), detect, verify |
-| `/api/settings/{id}/verify` | POST | Detect only — `{matches, current_value, expected_value, target}`; `target` picks `recommended` (default) or `default` |
+| `/api/settings/{id}/apply` | POST | Apply a value, detect, verify. Reset is this call with the setting's own default (Windows, driver or game) as the value |
 | `/api/settings/bulk/apply` | POST | Parallel bulk apply of a `{id: value}` map |
 | `/api/settings/bulk/stream-apply` | POST | Sequential SSE bulk apply (per-setting events) |
 | `/api/settings/bulk/stream-reset` | POST | Sequential SSE bulk reset (per-setting events) |

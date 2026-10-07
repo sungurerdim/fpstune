@@ -16,9 +16,7 @@ from pathlib import Path
 TESTS_ROOT = Path(__file__).resolve().parent
 
 # Functions that return a HardwareContext and never None.
-CONTEXT_PROVIDERS = frozenset(
-    {"_get_hardware_context", "_get_hardware_context_async", "build_hardware_context"}
-)
+CONTEXT_PROVIDERS = frozenset({"_get_hardware_context", "build_hardware_context"})
 
 
 def _is_patch(func: ast.expr) -> tuple[bool, bool]:
@@ -110,7 +108,7 @@ class TestGuardSeesTheShapes:
         assert none_context_stubs(source) == [1]
 
     def test_patch_object_target(self) -> None:
-        source = 'x = patch.object(route, "_get_hardware_context_async", return_value=None)\n'
+        source = 'x = patch.object(route, "_get_hardware_context", return_value=None)\n'
         assert none_context_stubs(source) == [1]
 
     def test_build_hardware_context_target(self) -> None:

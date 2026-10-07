@@ -23,7 +23,6 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentType, ReactElement } from "react";
 import { setLocale } from "../../i18n";
 import { useStore } from "../../store";
-import { makeRunner } from "../../test/runner";
 import {
   CATALOGUE,
   UNBROKEN,
@@ -36,8 +35,7 @@ import { discoverSurfaces, genericProps } from "../../test/surfaces";
 import type { Setting } from "../../types/setting";
 import { TweakRows } from "../TweakRows";
 import { TweakListRow } from "../TweakListRow";
-import { ActionRow } from "../ActionRow";
-import { CleanupPanel } from "../CleanupPanel";
+import { DiskCleanupTab } from "../DiskCleanupTab";
 import { HomeTab } from "../HomeTab";
 import { SettingInfoTooltip } from "../SettingInfoTooltip";
 
@@ -56,19 +54,6 @@ vi.mock("../../hooks/useApply", () => ({
     pendingIds: new Set<string>(),
     isPending: () => false,
     isRunning: false,
-  }),
-}));
-vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
-  useCleanupRunner: () => ({
-    selectedIds: [],
-    selectedCount: 0,
-    hasSelection: false,
-    isRunning: false,
-    run: vi.fn(),
-    confirmIds: null,
-    confirmRun: vi.fn(),
-    cancelConfirm: vi.fn(),
   }),
 }));
 vi.mock("../../lib/api", async (importOriginal) => {
@@ -183,7 +168,7 @@ const SURFACES: Surface[] = [
     },
   },
   {
-    name: "ActionRow",
+    name: "DiskCleanupTab (group heading, row, run and outcome)",
     mount: (kind, long) => {
       const setting = fixture(kind, {
         id: "cleanup:narrow_probe" as Setting["id"],
@@ -192,8 +177,12 @@ const SURFACES: Surface[] = [
         valueType: "bool",
         choices: [],
         currentValue: "ready|4096 MB",
+        groupId: "narrow",
+        groupLabel: long,
+        groupOrder: 1,
       });
       seed([setting], {
+        maintenanceSelection: { [setting.id]: true },
         runSteps: [
           {
             id: setting.id,
@@ -208,6 +197,8 @@ const SURFACES: Surface[] = [
             endedAt: 2,
           },
         ],
+        operationStatus: { [setting.id]: "failed" },
+        operationError: { [setting.id]: long },
         cleanupResults: {
           [setting.id]: {
             id: setting.id,
@@ -219,32 +210,19 @@ const SURFACES: Surface[] = [
           },
         },
       });
-      return { ui: <ActionRow setting={setting} runner={makeRunner()} selectable /> };
-    },
-    expects: { unbroken: ["token"], catalogue: ["description"] },
-  },
-  {
-    name: "CleanupPanel (group heading and rows)",
-    mount: (kind, long) => {
-      const setting = fixture(kind, {
-        id: "cleanup:narrow_probe" as Setting["id"],
-        module: "cleanup",
-        isAction: true,
-        valueType: "bool",
-        choices: [],
-        currentValue: "ready|4096 MB",
-        groupId: "narrow",
-        groupLabel: long,
-        groupOrder: 1,
-      });
-      seed([setting]);
       return {
-        // The panel's own title and description are static catalogue copy; the
-        // text that varies is the backend's group label and each row's.
-        ui: <CleanupPanel runner={makeRunner()} initialCollapsed={false} />,
+        ui: <DiskCleanupTab />,
+        // Sections are collapsed and a row's text is behind its (i): open both.
+        ready: async () => {
+          for (let pass = 0; pass < 2; pass += 1) {
+            for (const closed of document.querySelectorAll('[aria-expanded="false"]')) {
+              fireEvent.click(closed);
+            }
+          }
+        },
       };
     },
-    expects: { unbroken: ["token"], catalogue: ["description"] },
+    expects: { unbroken: ["token"], catalogue: ["description", "name"] },
   },
   {
     name: "HomeTab groups",
@@ -348,6 +326,8 @@ describe.each(["en", "tr"] as const)("long text at narrow widths (%s)", (locale)
  * so does one naming a component that no longer exists.
  */
 const NOT_GENERIC: Record<string, string> = {
+  "components/ActionNote.tsx#ActionNote":
+    "Draws a reclaimable size, a TRIM age and measured figures; a setting's own text never reaches it. Its place on the row is held by the DiskCleanupTab surface above.",
   "components/ScopeActions.tsx#ScopeActions":
     "Icon buttons: the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
   "components/SelectionToolbar.tsx#SelectionToolbar":
@@ -362,8 +342,7 @@ const NOT_GENERIC: Record<string, string> = {
 const BESPOKE = new Set([
   "TweakRows",
   "TweakListRow",
-  "ActionRow",
-  "CleanupPanel",
+  "DiskCleanupTab",
   "HomeTab",
   "SettingInfoTooltip",
 ]);

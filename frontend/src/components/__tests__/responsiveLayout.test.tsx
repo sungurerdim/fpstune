@@ -25,11 +25,8 @@ import App from "../../App";
 import { HomeTab } from "../HomeTab";
 import { SettingsTab } from "../SettingsTab";
 import { GameTweaksTab } from "../GameTweaksTab";
-import { DiskCleanupTab } from "../DiskCleanupTab";
 import { HardwarePanel } from "../HardwarePanel";
 import { BenchmarksTab } from "../BenchmarksTab";
-import { MaintenancePanel } from "../MaintenancePanel";
-import { makeRunner } from "../../test/runner";
 import { useStore } from "../../store";
 import { Settings as SettingsIcon } from "lucide-react";
 import type { CategoryMetadata, Setting } from "../../types/setting";
@@ -44,10 +41,6 @@ vi.mock("../HomeTab", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../HomeTab")>()),
 }));
 
-vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
-  useCleanupRunner: () => makeRunner(),
-}));
 
 vi.mock("../../hooks/useApply", () => ({
   useApply: () => ({
@@ -281,41 +274,6 @@ describe("every page lays its content out across the width it is given", () => {
 
     const [list] = screen.getAllByTestId("tweak-rows");
     expectRespondsToWidth(list, "2xl:grid-cols-2");
-  });
-
-  it("Cleanup: the two panels split the width, and their rows split it again", () => {
-    setStore(
-      pair("cleanup:junk", {
-        isAction: true,
-        category: "maintenance",
-        currentValue: "ready|1229 MB",
-        groupId: "windows",
-        groupLabel: "Windows",
-        groupOrder: 1,
-      }),
-    );
-
-    const { container } = render(<DiskCleanupTab />);
-
-    const panels = container.querySelector(".grid.grid-cols-1.lg\\:grid-cols-2");
-    expect(panels).not.toBeNull();
-
-    const [group] = screen.getAllByTestId("cleanup-group-rows");
-    expectRespondsToWidth(group, "3xl:grid-cols-2");
-  });
-
-  it("Cleanup: the two repairs sit side by side rather than stacked", () => {
-    setStore(
-      pair("maintenance:repair", {
-        isAction: true,
-        category: "maintenance",
-        currentValue: "ready",
-      }),
-    );
-
-    render(<MaintenancePanel />);
-
-    expectRespondsToWidth(screen.getByTestId("maintenance-rows"), "lg:grid-cols-2");
   });
 
   it("Hardware: device cards sit two abreast on a wide window, one on a narrow one", () => {

@@ -109,7 +109,6 @@ export const en = {
   // Common actions
   "action.apply": "Apply",
   "action.cancel": "Cancel",
-  "action.run": "Run",
   "action.runAll": "Run All",
   "action.keep": "Keep",
   "action.reset": "Reset to default",
@@ -284,24 +283,10 @@ export const en = {
   "home.diskToReclaim": "disk to reclaim",
 
   // Cleanup & maintenance surfaces
-  "cleanup.systemTitle": "System Cleanup",
-  "cleanup.systemDescription":
-    "Select which items to clean. Deleted files cannot be recovered.",
-  "cleanup.gameTitle": "Game Maintenance",
-  "cleanup.gameDescription":
-    "Clear game, GPU shader, and launcher caches. Deleted files cannot be recovered; games and drivers rebuild caches on next launch.",
   "run.percent": "{value}%",
-  "run.queued": "queued",
-  "run.skipped": "Not applicable",
   "run.elapsed": "{seconds}s elapsed",
-  "run.showOutput": "show output",
-  "run.hideOutput": "hide output",
-  "run.commandLabel": "Command being run",
-  "run.stepProgress": "Progress of {name}",
-  "run.noOutputYet": "No output yet.",
   "cleanup.calculating": "Calculating…",
   "cleanup.freed": "Freed {amount}",
-  "cleanup.failed": "Failed",
   "cleanup.done": "Done",
   "cleanup.serviceDown":
     "Service not running and could not be started. Start it, then reopen this tab.",
@@ -326,13 +311,12 @@ export const en = {
     "Anything not listed above once this finishes has nothing to reclaim, or its software is not installed.",
   "cleanup.runCleanup": "Run Cleanup",
   "cleanup.runCleanupCount": "Run Cleanup ({count})",
+  "cleanup.groupOther": "Other",
+  "cleanup.selectGroup": "Select all in {group}",
   "maintenance.title": "System Maintenance",
-  "maintenance.description": "Repair and troubleshoot Windows system issues.",
   "maintenance.running": "Running...",
   "maintenance.dismHealthWarning":
     "May require internet connection to download repair files.",
-  "maintenance.run": "Run",
-  "maintenance.runCount": "Run ({count})",
   "docker.title": "Restart Docker & WSL?",
   "docker.confirm": "Prune & compact",
   "docker.body":

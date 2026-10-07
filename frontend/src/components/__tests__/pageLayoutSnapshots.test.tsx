@@ -20,7 +20,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { layoutOutline, setViewport } from "../../test/layoutOutline";
-import { makeRunner } from "../../test/runner";
 import { HomeTab } from "../HomeTab";
 import { SettingsTab } from "../SettingsTab";
 import { GameTweaksTab } from "../GameTweaksTab";
@@ -95,10 +94,6 @@ vi.mock("../hardware/useRefreshOnFocus", () => ({
 }));
 vi.mock("../CleanupRunnerProvider", () => ({ CleanupRunnerProvider: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
-vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
-  useCleanupRunner: () => makeRunner(),
-}));
 vi.mock("../../hooks/useApply", () => ({
   useApply: () => ({
     run: vi.fn(),

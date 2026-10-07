@@ -20,7 +20,6 @@ import { useStore } from "../../store";
 import type { BenchLedger, LedgerArea, LedgerJob } from "../../lib/api";
 
 vi.mock("../HardwarePanel", () => ({ HardwarePanel: () => null }));
-vi.mock("../MaintenancePanel", () => ({ MaintenancePanel: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../../hooks/useApply", () => ({
   useApply: () => ({
@@ -31,19 +30,6 @@ vi.mock("../../hooks/useApply", () => ({
     pendingIds: new Set<string>(),
     isPending: () => false,
     isRunning: false,
-  }),
-}));
-vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
-  useCleanupRunner: () => ({
-    selectedIds: [],
-    selectedCount: 0,
-    hasSelection: false,
-    isRunning: false,
-    run: vi.fn(),
-    confirmIds: null,
-    confirmRun: vi.fn(),
-    cancelConfirm: vi.fn(),
   }),
 }));
 

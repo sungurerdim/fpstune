@@ -34,6 +34,8 @@ export interface CategorySectionProps {
   onSelect?: (setting: Setting) => void;
   statuses?: Readonly<Record<string, RowStatus>>;
   errors?: Readonly<Record<string, string>>;
+  /** Extra text a row carries on its line, from the page that owns what it means. */
+  rowNote?: (setting: Setting) => ReactNode;
 }
 
 /**
@@ -69,6 +71,7 @@ export function CategorySection({
   onSelect,
   statuses,
   errors,
+  rowNote,
 }: CategorySectionProps) {
   const { t } = useT();
   const [open, setOpen] = useState(defaultOpen);
@@ -100,6 +103,7 @@ export function CategorySection({
       onSelect={selectable && onSelect ? () => onSelect(setting) : undefined}
       status={statuses?.[setting.id]}
       error={errors?.[setting.id]}
+      note={rowNote?.(setting)}
     />
   );
 

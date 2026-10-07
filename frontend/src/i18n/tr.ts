@@ -106,7 +106,6 @@ export const tr: Record<keyof typeof en, string> = {
   // Common actions
   "action.apply": "Uygula",
   "action.cancel": "Vazgeç",
-  "action.run": "Çalıştır",
   "action.runAll": "Tümünü Çalıştır",
   "action.keep": "Koru",
   "action.reset": "Varsayılana dön",
@@ -270,24 +269,10 @@ export const tr: Record<keyof typeof en, string> = {
   "home.memoryTweaks": "bellek ayarı",
   "home.diskToReclaim": "geri kazanılabilir disk",
   // Cleanup & maintenance surfaces
-  "cleanup.systemTitle": "Sistem Temizliği",
-  "cleanup.systemDescription":
-    "Temizlenecek öğeleri seçin. Silinen dosyalar geri getirilemez.",
-  "cleanup.gameTitle": "Oyun Bakımı",
-  "cleanup.gameDescription":
-    "Oyun, GPU shader ve başlatıcı önbelleklerini temizler. Silinen dosyalar geri getirilemez; oyunlar ve sürücüler önbellekleri bir sonraki açılışta yeniden oluşturur.",
   "run.percent": "%{value}",
-  "run.queued": "sırada",
-  "run.skipped": "Uygulanmıyor",
   "run.elapsed": "{seconds} sn geçti",
-  "run.showOutput": "çıktıyı göster",
-  "run.hideOutput": "çıktıyı gizle",
-  "run.commandLabel": "Çalıştırılan komut",
-  "run.stepProgress": "{name} ilerlemesi",
-  "run.noOutputYet": "Henüz çıktı yok.",
   "cleanup.calculating": "Hesaplanıyor…",
   "cleanup.freed": "{amount} boşaltıldı",
-  "cleanup.failed": "Başarısız",
   "cleanup.done": "Tamamlandı",
   "cleanup.serviceDown":
     "Hizmet çalışmıyor ve başlatılamadı. Hizmeti başlatıp bu sekmeyi yeniden açın.",
@@ -307,13 +292,12 @@ export const tr: Record<keyof typeof en, string> = {
     "Bu bittiğinde yukarıda listelenmeyenlerin geri kazanılacak bir şeyi yoktur ya da yazılımı kurulu değildir.",
   "cleanup.runCleanup": "Temizliği Çalıştır",
   "cleanup.runCleanupCount": "Temizliği Çalıştır ({count})",
+  "cleanup.groupOther": "Diğer",
+  "cleanup.selectGroup": "{group} grubunun tümünü seç",
   "maintenance.title": "Sistem Bakımı",
-  "maintenance.description": "Windows sistem sorunlarını onarır ve giderir.",
   "maintenance.running": "Çalışıyor...",
   "maintenance.dismHealthWarning":
     "Onarım dosyalarını indirmek için internet bağlantısı gerekebilir.",
-  "maintenance.run": "Çalıştır",
-  "maintenance.runCount": "Çalıştır ({count})",
   "docker.title": "Docker ve WSL yeniden başlatılsın mı?",
   "docker.confirm": "Buda ve sıkıştır",
   "docker.body":

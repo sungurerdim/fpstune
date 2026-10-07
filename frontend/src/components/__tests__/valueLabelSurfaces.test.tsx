@@ -38,19 +38,6 @@ vi.mock("../../hooks/useApply", () => ({
     isRunning: false,
   }),
 }));
-vi.mock("../../hooks/useCleanupRunner", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../hooks/useCleanupRunner")>()),
-  useCleanupRunner: () => ({
-    selectedIds: [],
-    selectedCount: 0,
-    hasSelection: false,
-    isRunning: false,
-    run: vi.fn(),
-    confirmIds: null,
-    confirmRun: vi.fn(),
-    cancelConfirm: vi.fn(),
-  }),
-}));
 vi.mock("../../lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../../lib/api")>();
   return {

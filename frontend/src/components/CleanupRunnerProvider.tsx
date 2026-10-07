@@ -1,4 +1,4 @@
-import { useCleanupSizePolling } from "../hooks/useCleanupRunner";
+import { useCleanupSizePolling } from "../hooks/useCleanupSizePolling";
 
 /**
  * Always-rendered, headless host for the cleanup size polling + freed-space

@@ -15,6 +15,7 @@
  * (`setting.isOptimized`), never recomputed here.
  */
 
+import type { ReactNode } from "react";
 import { Check, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
@@ -43,6 +44,8 @@ export interface TweakRowProps {
   status?: RowStatus;
   /** Why the last run of this row failed. */
   error?: string;
+  /** What the row's owner has to say beside its name (a cleanup's size), on the same line. */
+  note?: ReactNode;
 }
 
 /** A choice of three or more is picked in the row; fewer is just Apply. */
@@ -263,6 +266,7 @@ export function TweakRow({
   onSelect,
   status,
   error,
+  note,
 }: TweakRowProps) {
   const { t } = useT();
   const name = localizedName(setting);
@@ -332,6 +336,8 @@ export function TweakRow({
                 {t("badge.risk")}
               </span>
             )}
+
+            {note}
 
             <RowState
               setting={setting}

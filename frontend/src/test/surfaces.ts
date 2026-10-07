@@ -13,7 +13,6 @@
 import { createElement, type ComponentType } from "react";
 import type { HardwareInfo } from "../lib/api";
 import type { Setting } from "../types/setting";
-import { makeRunner } from "./runner";
 
 const SOURCES = import.meta.glob(["../components/**/*.tsx", "!../components/**/__tests__/**"], {
   query: "?raw",
@@ -28,7 +27,7 @@ const MODULES = import.meta.glob(["../components/**/*.tsx", "!../components/**/_
 const IMPORTS_SETTING = /from\s+"\.\.\/(?:\.\.\/)?types\/setting"/;
 
 export interface DiscoveredSurface {
-  /** `components/ActionRow.tsx#ActionRow`: unique and stable. */
+  /** `components/DiskCleanupTab.tsx#DiskCleanupTab`: unique and stable. */
   id: string;
   /** The exported component's name. */
   name: string;
@@ -78,7 +77,6 @@ export function genericProps(settings: Setting[], long: string): Record<string, 
     setting: settings[0],
     settings,
     rows: settings.map((setting) => ({ setting })),
-    runner: makeRunner(),
     name: long,
     title: long,
     subtitle: long,

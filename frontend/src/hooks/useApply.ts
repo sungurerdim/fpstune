@@ -3,6 +3,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import { errorMessage, settingsApi, type ApplyResponse } from "../lib/api";
+import { applyActionEvent, beginActionRun } from "../lib/actionRun";
 import { bulkTargets, verifiedState } from "../lib/bulkStream";
 import { detectionManager } from "../lib/detection-manager";
 import { hardwareManager } from "../lib/hardware-manager";
@@ -34,7 +35,9 @@ function failedResponse(setting: Setting, error: string): ApplyResponse {
  *   `{id: value}` (`bulkTargets`), each row's outcome as it streams. A `verified`
  *   event carries the row's whole `SettingState` (the backend's verdict,
  *   `is_optimized` included), which goes into the store as it arrives, so a row
- *   is live before `done`. At the end, one batched re-detect of every id still runs:
+ *   is live before `done`. An action in the run (a cleanup, a repair) also gets
+ *   its live step, its freed bytes and its post-run reading (`lib/actionRun.ts`).
+ *   At the end, one batched re-detect of every id still runs:
  *   the rows with no state (failed, skipped, never reached) need it, and a
  *   verified row's state predates the writes that ran beside it. The run lives in the store, so
  *   switching tabs neither loses its Stop nor lets a second run start over it.
@@ -115,6 +118,7 @@ export function useApply() {
       if (store.bulkRun || ids.length === 0) return;
       store.clearOperationStatus();
       ids.forEach((id) => store.setOperationStatus(id, "queued"));
+      beginActionRun(ids);
       // The machine is being changed: the hardware re-read on window focus
       // stays off the same PowerShell for the length of the run.
       store.beginOperation();
@@ -146,6 +150,7 @@ export function useApply() {
         (event) => {
           const id = event.id as string | undefined;
           if (!id) return;
+          applyActionEvent(event);
           const state = useStore.getState();
           if (event.event === "started" || event.event === "applied") {
             state.setOperationStatus(id, "running");

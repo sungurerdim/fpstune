@@ -512,9 +512,10 @@ Module contracts — what the tree does not tell you:
   `SettingDefinitionResponse`. `frontend/src/lib/tweakDomain.ts` holds the predicates over those
   fields and every surface asks it, so the three partition the registry and nothing lands twice.
   Gate: `tests/test_settings/test_domain.py`. Each list surface excludes the domains it does
-  not own: Software Tweaks (category headings + chip bar), Game Tweaks (one section per game), Home's
-  three groups and the tab badges all filter by predicate. Proven by `SettingsTab.test.tsx`
-  ("leaves a game's config line to the Game Tweaks tab") and `GameTweaksTab.test.tsx`.
+  not own: the Optimize tab's three categories (Software by backend category, Hardware by device,
+  Games one section per game) and the tab badge all filter by predicate. Proven by
+  `OptimizeTab.test.tsx` ("leaves a game's config line to Games, and a hardware key to Hardware"
+  and "renders every setting once across all three categories").
 - **A heading is the backend's word, never the frontend's.** `settings/groups.py` resolves each
   setting's group — id-derived for a game (`game_config:mw4:x` → the label in
   `game_processes.GAME_LABELS`), declared for a cleanup — and `SettingDefinitionResponse`

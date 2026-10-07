@@ -7,9 +7,8 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 // the tab is gone; nothing persists the active tab, so no stored value can point
 // at a route that no longer exists.
 export type TabId =
-  | "settings"
+  | "optimize"
   | "hardware"
-  | "games"
   | "cleanup"
   | "benchmarks";
 /** What a streamed bulk run does to each row: apply, or reset to its default. */
@@ -292,7 +291,7 @@ export const useStore = create<FpstuneStore>()((...args) => {
       }),
     clearMaintenanceSelection: () => set({ maintenanceSelection: {} }),
 
-    activeTab: "settings",
+    activeTab: "optimize",
     setActiveTab: (tab) => set({ activeTab: tab }),
 
     isApplying: false,

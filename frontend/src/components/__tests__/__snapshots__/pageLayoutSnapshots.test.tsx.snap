@@ -1,51 +1,5 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`'Games' page layout > at a narrow window (390px) 1`] = `
-"viewport 390px
-div [flex-wrap]
-  div [max-w-xs]
-  div [flex-wrap]
-div [flex-wrap]
-  h2 "Modern Warfare IV"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-div#tweak-rows [grid-cols-1]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]"
-`;
-
-exports[`'Games' page layout > at a wide window (2560px) 1`] = `
-"viewport 2560px
-div [flex-wrap]
-  div [max-w-xs]
-  div [flex-wrap]
-div [flex-wrap]
-  h2 "Modern Warfare IV"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-div#tweak-rows [grid-cols-3]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]"
-`;
-
 exports[`'Hardware' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
 div [flex-wrap]
@@ -134,54 +88,74 @@ div#hardware-columns [grid-cols-2]
   h4 "Audio Input""
 `;
 
-exports[`'Software' page layout > at a narrow window (390px) 1`] = `
+exports[`'Optimize' page layout > at a narrow window (390px) 1`] = `
 "viewport 390px
+div [max-w-xs]
+div#category-section
+  h2 "Software 2 of 2 not optimized"
+    span#category-count
+  div#category-section
+    h3 "System 2 of 2 not optimized"
+      span#category-count
+    div#tweak-row
+      span [max-w-[55%]]
+    div#tweak-row
+      span [max-w-[55%]]
+div#category-section
+  h2 "Hardware 2 of 2 not optimized"
+    span#category-count
+  h3 "Example CPU 8-CoreCPU"
+  h3 "Memory"
+  h3 "Example GPUGPU · 8 GB2 not optimized"
+  h3 "Example MonitorMonitor 1 · primary · 2560×1440 @"
+  h3 "EthernetEthernet"
+  h3 "Audio"
+div#category-section
+  h2 "Games 2 of 2 not optimized"
+    span#category-count
+  div#category-section
+    h3 "Modern Warfare IV 2 of 2 not optimized"
+      span#category-count
+    div#tweak-row
+      span [max-w-[55%]]
+    div#tweak-row
+      span [max-w-[55%]]
 div [flex-wrap]
-  div [max-w-xs]
-  div [flex-wrap]
-div[group] [flex-wrap]
-  button [max-w-full]
-  button [max-w-full]
-div [flex-wrap]
-  h2 "System"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-div#tweak-rows [grid-cols-1]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]"
+  div [flex-wrap]"
 `;
 
-exports[`'Software' page layout > at a wide window (2560px) 1`] = `
+exports[`'Optimize' page layout > at a wide window (2560px) 1`] = `
 "viewport 2560px
+div [max-w-xs]
+div#category-section
+  h2 "Software 2 of 2 not optimized"
+    span#category-count
+  div#category-section
+    h3 "System 2 of 2 not optimized"
+      span#category-count
+    div#tweak-row
+      span [max-w-[55%]]
+    div#tweak-row
+      span [max-w-[55%]]
+div#category-section
+  h2 "Hardware 2 of 2 not optimized"
+    span#category-count
+  h3 "Example CPU 8-CoreCPU"
+  h3 "Memory"
+  h3 "Example GPUGPU · 8 GB2 not optimized"
+  h3 "Example MonitorMonitor 1 · primary · 2560×1440 @"
+  h3 "EthernetEthernet"
+  h3 "Audio"
+div#category-section
+  h2 "Games 2 of 2 not optimized"
+    span#category-count
+  div#category-section
+    h3 "Modern Warfare IV 2 of 2 not optimized"
+      span#category-count
+    div#tweak-row
+      span [max-w-[55%]]
+    div#tweak-row
+      span [max-w-[55%]]
 div [flex-wrap]
-  div [max-w-xs]
-  div [flex-wrap]
-div[group] [flex-wrap]
-  button [max-w-full]
-  button [max-w-full]
-div [flex-wrap]
-  h2 "System"
-  div [max-w-full]
-    div [flex-wrap]
-  ul [flex-wrap]
-div#tweak-rows [grid-cols-3]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]
-  div#tweak-row
-    div [flex-wrap]
-      div [max-w-full flex-wrap]
-        span#setting-value-state [flex-wrap max-w-56]
-    div [flex-wrap]"
+  div [flex-wrap]"
 `;

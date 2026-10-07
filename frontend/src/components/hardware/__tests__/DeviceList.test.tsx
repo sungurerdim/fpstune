@@ -267,6 +267,30 @@ describe("tweaksOfDevice", () => {
     expect(tweaksOfDevice(device("gpu-0"), [absent, unread]).settings).toEqual([]);
   });
 
+  it("keeps a read-only check that found nothing, or read nothing, on the device without counting it", () => {
+    // The evidence a check ran: dropping it makes a silent detector look like a
+    // missing one. Neither is a finding, so neither is in a count.
+    const clear = setting({
+      id: "gpu-hardware:rebar_ok",
+      component: "gpu",
+      isReadonly: true,
+      status: "optimal",
+      isOptimized: true,
+    });
+    const unread = setting({
+      id: "gpu-hardware:link_unread",
+      component: "gpu",
+      isReadonly: true,
+      currentValue: null,
+      status: "default",
+    });
+    const gpu = tweaksOfDevice(device("gpu-0"), [clear, unread]);
+
+    expect(gpu.settings).toEqual([clear, unread]);
+    expect(gpu.notOptimized).toBe(0);
+    expect(gpu.advisories).toBe(0);
+  });
+
   it("is the same answer for the same input", () => {
     expect(tweaksOfDevice(device("gpu-0"), ALL)).toEqual(tweaksOfDevice(device("gpu-0"), ALL));
   });

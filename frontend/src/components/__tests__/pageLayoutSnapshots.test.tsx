@@ -18,13 +18,11 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, unmeasuredHeadroom } from "../../test/utils";
+import { fireEvent, render, screen, unmeasuredHeadroom } from "../../test/utils";
 import { layoutOutline, setViewport } from "../../test/layoutOutline";
-import { SettingsTab } from "../SettingsTab";
-import { GameTweaksTab } from "../GameTweaksTab";
+import { OptimizeTab } from "../OptimizeTab";
 import { HardwarePanel } from "../HardwarePanel";
 import { useStore } from "../../store";
-import { Settings as SettingsIcon } from "lucide-react";
 import type { HardwareInfo } from "../../lib/api";
 import type { CategoryMetadata, Setting } from "../../types/setting";
 
@@ -190,26 +188,6 @@ interface Page {
 
 const PAGES: Page[] = [
   {
-    name: "Software",
-    adapts: true,
-    mount: async () => {
-      const settings = pair("system:software");
-      setStore(settings);
-      const view = render(
-        <SettingsTab
-          categoriesWithSettings={[{ category: SYSTEM_CATEGORY, settings }]}
-          moduleMetaMap={new Map()}
-          definitionsLoading={false}
-          gpuCategoryStatus="done"
-          hasGpuSettings={false}
-          getIconByName={() => SettingsIcon}
-        />,
-      );
-      await screen.findAllByTestId("tweak-rows");
-      return view;
-    },
-  },
-  {
     name: "Hardware",
     adapts: true,
     mount: async () => {
@@ -220,19 +198,31 @@ const PAGES: Page[] = [
     },
   },
   {
-    name: "Games",
-    adapts: true,
+    name: "Optimize",
+    // One column of closed sections and one-line rows at every width.
+    adapts: false,
     mount: async () => {
-      setStore(
-        pair("game_config:mw4:quality", {
+      setStore([
+        ...pair("system:software"),
+        ...pair("gpu-hardware:driver", { domain: "hardware", component: "gpu" }),
+        ...pair("game_config:mw4:quality", {
           category: "game_config",
           groupId: "mw4",
           groupLabel: "Modern Warfare IV",
           groupOrder: 10,
         }),
-      );
-      const view = render(<GameTweaksTab />);
-      await screen.findAllByTestId("tweak-rows");
+      ]);
+      useStore.setState({ categories: new Map([[SYSTEM_CATEGORY.id, SYSTEM_CATEGORY]]) } as never);
+      const view = render(<OptimizeTab />);
+      // Closed sections hide their rows: open every category, device and game,
+      // level after level, so the snapshot holds the rows of a category inside
+      // a category.
+      for (let pass = 0; pass < 3; pass += 1) {
+        for (const closed of view.container.querySelectorAll('h2 [aria-expanded="false"], h3 [aria-expanded="false"]')) {
+          fireEvent.click(closed);
+        }
+      }
+      await screen.findAllByTestId("tweak-row");
       return view;
     },
   },

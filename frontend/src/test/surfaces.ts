@@ -89,25 +89,6 @@ export function genericProps(settings: Setting[], long: string): Record<string, 
     categoryLabel: () => long,
     initialCollapsed: false,
     match: () => true,
-    categoriesWithSettings: [
-      {
-        category: {
-          id: "network",
-          displayName: long,
-          description: long,
-          icon: "Wifi",
-          color: "text-blue-500",
-          isActionOnly: false,
-          order: 1,
-        },
-        settings,
-      },
-    ],
-    moduleMetaMap: new Map(),
-    definitionsLoading: false,
-    gpuCategoryStatus: "success",
-    hasGpuSettings: false,
-    getIconByName: () => Icon,
   };
 }
 

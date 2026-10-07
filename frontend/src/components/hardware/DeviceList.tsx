@@ -20,19 +20,23 @@ import {
  *
  * One device is open at a time. The row list is a slot (`renderRows`), so this
  * component knows which tweaks belong to a device and nothing about how a tweak
- * is drawn. Each header is a real button (Enter and Space select, `aria-expanded`
- * and `aria-controls` say what it opens), and a machine-wide group with no
- * tweaks is not listed at all.
+ * is drawn; the device's own controls (`renderBody`) are the caller's too. Each
+ * header is a real button (Enter and Space select, `aria-expanded` and
+ * `aria-controls` say what it opens), and a machine-wide group with no tweaks is
+ * not listed at all.
  */
 export function DeviceList({
   hardware,
   renderRows,
+  renderBody,
   selectedKey,
   onSelect,
 }: {
   hardware: HardwareInfo | null;
   /** The device's tweaks, drawn by the caller. */
   renderRows: (device: DeviceDescriptor, settings: Setting[]) => ReactNode;
+  /** The device's own controls (not tweaks), drawn above its rows even when it has none. */
+  renderBody?: (device: DeviceDescriptor) => ReactNode;
   /** Controlled selection; omit for an uncontrolled list that starts closed. */
   selectedKey?: string | null;
   onSelect?: (key: string | null) => void;
@@ -105,6 +109,7 @@ export function DeviceList({
                 aria-labelledby={buttonId}
                 className="border-t border-border px-3 py-2"
               >
+                {renderBody?.(device)}
                 {set.settings.length > 0 ? (
                   renderRows(device, set.settings)
                 ) : (

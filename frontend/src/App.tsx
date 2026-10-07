@@ -1,10 +1,7 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { TabNavigation } from "./components/TabNavigation";
-import { SettingsTab } from "./components/SettingsTab";
+import { OptimizeTab } from "./components/OptimizeTab";
 import { DiskCleanupTab } from "./components/DiskCleanupTab";
 import { HardwareTab } from "./components/HardwareTab";
-import { GameTweaksTab } from "./components/GameTweaksTab";
 import { BenchmarksTab } from "./components/BenchmarksTab";
 import { CleanupRunnerProvider } from "./components/CleanupRunnerProvider";
 import { NotificationToasts } from "./components/ui/NotificationToasts";
@@ -14,83 +11,10 @@ import { FirstRunNotice } from "./components/FirstRunNotice";
 import { OsUpdateNotice } from "./components/OsUpdateNotice";
 import { SelfCheckNotice } from "./components/SelfCheckNotice";
 import { tabButtonId, tabPanelId } from "./components/ui/tabIds";
-import { settingsApi } from "./lib/api";
-import { getIconByName } from "./lib/categoryIcons";
 import { useStore } from "./store";
-import type {
-  Setting,
-  CategoryMetadata,
-  ModuleMetadata,
-} from "./types/setting";
-import { moduleResponseToMetadata } from "./types/setting";
 
 function App() {
-  // Module metadata from backend (SSOT)
-  const { data: moduleMetadataRaw } = useQuery({
-    queryKey: ["modules-metadata"],
-    queryFn: settingsApi.getModulesMetadata,
-    staleTime: Infinity,
-  });
-
-  // Build lookup map for module metadata
-  const moduleMetaMap = useMemo(() => {
-    const map = new Map<string, ModuleMetadata>();
-    if (moduleMetadataRaw) {
-      for (const raw of moduleMetadataRaw) {
-        map.set(raw.id, moduleResponseToMetadata(raw));
-      }
-    }
-    return map;
-  }, [moduleMetadataRaw]);
-
-  // Store is initialized by DetectionManager in main.tsx before App renders
-  const isStoreInitialized = useStore((state) => state.settings.size > 0);
-  const definitionsLoading = !isStoreInitialized;
-
-  // Get raw data from store
-  const settings = useStore((state) => state.settings);
-  const categories = useStore((state) => state.categories);
-  const settingsVersion = useStore((state) => state._settingsVersion);
-  const gpuCategoryStatus = useStore(
-    (state) => state.categoryDetectionStatus.gpu,
-  );
   const activeTab = useStore((state) => state.activeTab);
-
-  // Compute categories with settings
-  const categoriesWithSettings = useMemo(() => {
-    const settingsArray = Array.from(settings.values());
-
-    const settingsByCategory = new Map<string, Setting[]>();
-    for (const setting of settingsArray) {
-      if (!setting.isApplicable) continue;
-      const categorySettings = settingsByCategory.get(setting.category) || [];
-      categorySettings.push(setting);
-      settingsByCategory.set(setting.category, categorySettings);
-    }
-
-    const result: Array<{ category: CategoryMetadata; settings: Setting[] }> =
-      [];
-
-    for (const [categoryId, categorySettings] of settingsByCategory) {
-      const categoryMeta = categories.get(categoryId);
-      if (categoryMeta && categorySettings.length > 0) {
-        categorySettings.sort((a, b) => a.categoryOrder - b.categoryOrder);
-        result.push({ category: categoryMeta, settings: categorySettings });
-      }
-    }
-
-    result.sort((a, b) => a.category.order - b.category.order);
-    return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion used for cache busting
-  }, [settings, categories, settingsVersion]);
-
-  // Check if GPU settings exist
-  const hasGpuSettings = useMemo(() => {
-    for (const { category, settings } of categoriesWithSettings) {
-      if (category.id === "gpu" && settings.length > 0) return true;
-    }
-    return false;
-  }, [categoriesWithSettings]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -128,17 +52,7 @@ function App() {
           id={tabPanelId(activeTab)}
           aria-labelledby={tabButtonId(activeTab)}
         >
-          {activeTab === "settings" && (
-            <SettingsTab
-              categoriesWithSettings={categoriesWithSettings}
-              moduleMetaMap={moduleMetaMap}
-              definitionsLoading={definitionsLoading}
-              gpuCategoryStatus={gpuCategoryStatus}
-              hasGpuSettings={hasGpuSettings}
-              getIconByName={getIconByName}
-            />
-          )}
-          {activeTab === "games" && <GameTweaksTab />}
+          {activeTab === "optimize" && <OptimizeTab />}
           {activeTab === "cleanup" && <DiskCleanupTab />}
           {activeTab === "hardware" && <HardwareTab />}
           {activeTab === "benchmarks" && <BenchmarksTab />}

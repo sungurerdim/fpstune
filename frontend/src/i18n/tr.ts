@@ -47,9 +47,8 @@ export const tr: Record<keyof typeof en, string> = {
   "update.unreachable": "Güncellemeler denetlenemedi: {reason}",
   "header.admin": "Yönetici",
   "header.notAdmin": "Yönetici değil",
-  "tab.software": "Yazılım İnce Ayarları",
   "tab.hardware": "Donanım İnce Ayarları",
-  "tab.games": "Oyun İnce Ayarları",
+  "tab.optimize": "Optimize Et",
   "tab.cleanup": "Temizlik ve Onarım",
   "tab.benchmarks": "Ölçümler",
 
@@ -94,6 +93,9 @@ export const tr: Record<keyof typeof en, string> = {
   "row.ok": "Tamam",
   "row.advisory": "Bilgilendirme",
   "row.notRead": "Okunamadı",
+  "row.unreadReason": "Hiçbir değer okunamadı: {reason}",
+  "row.unreadNeedsAdmin": "Hiçbir değer okunamadı. fpstune yönetici olarak çalışmıyor; birkaç denetim bunu gerektiriyor.",
+  "row.unreadNoReason": "Hiçbir değer okunamadı, dolayısıyla burada eyleme geçilecek bir bulgu yok.",
   "row.verify": "Mevcut değeri doğrula",
   "reset.kind.software": "Windows varsayılanı",
   "reset.kind.hardware": "Sürücü varsayılanı",
@@ -464,12 +466,7 @@ export const tr: Record<keyof typeof en, string> = {
   // Software Tweaks tab
 
   // Game Tweaks tab
-  "games.searchPlaceholder": "Oyun ayarlarında ara...",
-  "games.searchLabel": "Oyun ayarlarında ara",
-  "games.filterGame": "Oyuna göre süz",
-  "games.allGames": "Tüm oyunlar",
   "games.reading": "Oyun yapılandırmalarınız okunuyor…",
-  "games.noMatch": "Bu aramayla eşleşen oyun ayarı yok.",
   "games.noneFound":
     "Bu makinede desteklenen bir oyun yapılandırması bulunamadı. fpstune bir oyunun yapılandırmasını yalnızca oyun kuruluysa okur.",
 
@@ -556,8 +553,6 @@ export const tr: Record<keyof typeof en, string> = {
   // Header metrics: a count set apart in bold, then what it counts
   "metric.toApply": "uygulanacak",
   "metric.needYou": "senden işlem bekliyor",
-  "metric.toFix": "düzeltilecek",
-  "metric.total": "toplam",
   "actions.confirm.apply": "{name} için {count} ayar uygulansın mı?",
   "actions.confirm.reset": "{count} ayar varsayılanına dönecek.",
   "actions.confirmBody.reset.software": "Windows'un sunduğundan farklı olan her ayar ona geri döner. Her satır kendi sonucunu gösterir.",
@@ -567,9 +562,12 @@ export const tr: Record<keyof typeof en, string> = {
   "actions.confirmBody.apply": "Her satır kendi sonucunu gösterir; her satır varsayılanına döndürülebilir.",
   "settings.search": "Ayarlarda ara",
   "settings.searchPlaceholder": "Ayarlarda ara...",
-  "settings.filterByCategory": "Kategoriye göre süz",
-  "settings.allCategories": "Tümü",
-  "settings.groupCount": "{toFix} düzeltilecek / {total} toplam",
+  "optimize.software": "Yazılım",
+  "optimize.hardware": "Donanım",
+  "optimize.games": "Oyun ayarları",
+  "optimize.otherHardware": "Diğer donanım",
+  "optimize.results": "Arama sonuçları",
+  "optimize.noMatch": "Bu aramayla eşleşen ayar yok.",
   // Gerekenler / ideal bantları
   "bands.needs": "İşlem gerekiyor",
   "bands.ideal": "İdeal",

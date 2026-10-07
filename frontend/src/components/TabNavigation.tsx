@@ -6,10 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
-  Settings,
+  Zap,
   HardDrive,
   Monitor,
-  Gamepad2,
   Gauge,
   Activity,
   ShieldCheck,
@@ -18,27 +17,18 @@ import {
 import { cn } from "../lib/utils";
 import { api } from "../lib/api";
 import { useStore, type TabId } from "../store";
-import { isGameTweak, isHardwareTweak } from "../lib/tweakDomain";
+import { isOptimizeRow, tweakCounts } from "../lib/tweakStatus";
 import { ActivityLog } from "./ActivityLog";
 import { UpdateControl } from "./UpdateControl";
 import { ThemeToggle } from "./ThemeToggle";
 import { tabButtonId, tabPanelId } from "./ui/tabIds";
 
-// Order follows what the user does, not what the app builds: tune the software,
-// then the hardware it runs on, then the games themselves, then clean up, then
-// measure the result. "Optimizations" said nothing about what was being
-// optimized, which left the Hardware tab looking like a different kind of thing
-// rather than its pair.
-//
-// Game Tweaks is its own tab because it is its own domain, not a category of
-// software: those settings are written into a game's file rather than into
-// Windows, and there are more of them than of everything on the Software tab.
+// Order follows what the user does: tune, then clean up, then measure the result.
 import type { MessageKey } from "../i18n/en";
 
-const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Settings }> = [
-  { id: "settings", labelKey: "tab.software", icon: Settings },
+const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Zap }> = [
+  { id: "optimize", labelKey: "tab.optimize", icon: Zap },
   { id: "hardware", labelKey: "tab.hardware", icon: Monitor },
-  { id: "games", labelKey: "tab.games", icon: Gamepad2 },
   { id: "cleanup", labelKey: "tab.cleanup", icon: HardDrive },
   { id: "benchmarks", labelKey: "tab.benchmarks", icon: Gauge },
 ];
@@ -136,28 +126,13 @@ export function TabNavigation() {
     selectTab(tabs[target].id);
   };
 
-  // One badge per tab that owns tweaks, counted with the same predicates the tabs
-  // themselves use. A single total on Software Tweaks counted hardware and game
-  // settings the user could not reach from that tab — the number said "18 here"
-  // about a list holding four.
+  // One badge, on the tab that owns the tweaks: the same count its own
+  // categories add up to (the backend's verdict over the rows it lists).
   const badges = useMemo(() => {
-    const counts: Partial<Record<TabId, number>> = {};
-    for (const s of settingsMap.values()) {
-      if (
-        !s.isApplicable ||
-        s.isAction ||
-        s.isReadonly ||
-        s.currentValue === null ||
-        s.status !== "suboptimal"
-      )
-        continue;
-      const tab: TabId = isGameTweak(s)
-        ? "games"
-        : isHardwareTweak(s)
-          ? "hardware"
-          : "settings";
-      counts[tab] = (counts[tab] ?? 0) + 1;
-    }
+    const { notOptimized } = tweakCounts(
+      [...settingsMap.values()].filter(isOptimizeRow),
+    );
+    const counts: Partial<Record<TabId, number>> = { optimize: notOptimized };
     return counts;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsVersion busts cache
   }, [settingsMap, settingsVersion]);

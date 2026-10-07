@@ -1,5 +1,10 @@
 import type { MessageKey } from "../i18n/en";
-import type { HardwareComponent, Setting, TweakDomain } from "../types/setting";
+import type {
+  CategoryMetadata,
+  HardwareComponent,
+  Setting,
+  TweakDomain,
+} from "../types/setting";
 
 /**
  * Which page owns a tweak.
@@ -52,4 +57,81 @@ export function scopeDomain(settings: readonly Setting[]): TweakDomain | "mixed"
   const first = settings[0]?.domain;
   if (first === undefined) return "mixed";
   return settings.every((s) => s.domain === first) ? first : "mixed";
+}
+
+/** The three pages' worth of tweaks, each row in exactly one. */
+export interface DomainPartition {
+  software: Setting[];
+  hardware: Setting[];
+  game: Setting[];
+}
+
+/** Split settings by the backend's domain; the three lists never overlap. */
+export function partitionByDomain(settings: Iterable<Setting>): DomainPartition {
+  const out: DomainPartition = { software: [], hardware: [], game: [] };
+  for (const s of settings) {
+    if (isGameTweak(s)) out.game.push(s);
+    else if (isHardwareTweak(s)) out.hardware.push(s);
+    else out.software.push(s);
+  }
+  return out;
+}
+
+/** One heading's worth of settings: a game, a software category. */
+export interface SettingGroup {
+  id: string;
+  /** The heading, in the words the backend sent. */
+  label: string;
+  order: number;
+  settings: Setting[];
+}
+
+function collect(
+  settings: Iterable<Setting>,
+  keyOf: (s: Setting) => { id: string; label: string; order: number },
+): SettingGroup[] {
+  const groups = new Map<string, SettingGroup>();
+  for (const s of settings) {
+    const key = keyOf(s);
+    let group = groups.get(key.id);
+    if (!group) {
+      group = { ...key, settings: [] };
+      groups.set(key.id, group);
+    }
+    group.settings.push(s);
+  }
+  return [...groups.values()].sort(
+    (a, b) => a.order - b.order || a.label.localeCompare(b.label),
+  );
+}
+
+/**
+ * A game's settings under that game, headed by the label the backend sent
+ * (C9: no game's name is spelled here). A setting whose backend named no group
+ * is listed under its own module rather than dropped: a setting the user cannot
+ * find is worse than an ugly heading.
+ */
+export function gameGroups(settings: Iterable<Setting>): SettingGroup[] {
+  return collect(settings, (s) => {
+    const id = s.groupId ?? s.module;
+    return { id, label: s.groupLabel ?? id, order: s.groupOrder ?? Number.MAX_SAFE_INTEGER };
+  });
+}
+
+/**
+ * Software settings under the category the backend files them in, in the
+ * backend's category order; an unknown category sorts last under its own id.
+ */
+export function categoryGroups(
+  settings: Iterable<Setting>,
+  categories: ReadonlyMap<string, CategoryMetadata>,
+): SettingGroup[] {
+  return collect(settings, (s) => {
+    const meta = categories.get(s.category);
+    return {
+      id: s.category,
+      label: meta?.displayName ?? s.category,
+      order: meta?.order ?? Number.MAX_SAFE_INTEGER,
+    };
+  });
 }

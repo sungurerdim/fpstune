@@ -16,6 +16,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, within } from "../../test/utils";
 import { TabNavigation } from "../TabNavigation";
 import { useStore } from "../../store";
+import type { Setting } from "../../types/setting";
 
 // The activity drawer polls and is not what these are about.
 vi.mock("../ActivityLog", () => ({ ActivityLog: () => null }));
@@ -32,16 +33,16 @@ const lastTab = (): HTMLElement => {
 describe("TabNavigation keeps the keyboard contract its roles promise", () => {
   beforeEach(() => {
     useStore.setState({
-      activeTab: "settings",
+      activeTab: "optimize",
       settings: new Map(),
     } as never);
   });
 
-  it("exposes exactly one tab strip over the five tabs", () => {
+  it("exposes exactly one tab strip over the four tabs", () => {
     render(<TabNavigation />);
 
     expect(screen.getByRole("tablist")).toBeInTheDocument();
-    expect(tabButtons()).toHaveLength(5);
+    expect(tabButtons()).toHaveLength(4);
   });
 
   it("keeps every tab findable by the words on it, at any width", () => {
@@ -50,7 +51,7 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     render(<TabNavigation />);
 
     expect(
-      screen.getByRole("tab", { name: /Software Tweaks/ }),
+      screen.getByRole("tab", { name: /Optimize/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Hardware Tweaks/ })).toBeInTheDocument();
   });
@@ -176,6 +177,40 @@ describe("TabNavigation keeps the keyboard contract its roles promise", () => {
     geometry(169);
     expect(screen.getByTestId("tab-strip-more-start")).toBeInTheDocument();
     expect(screen.queryByTestId("tab-strip-more-end")).toBeNull();
+  });
+
+  it("badges the Optimize tab with the tweaks not optimized across software, hardware and games", () => {
+    // One page owns all three now, so one number says how much is left on it;
+    // an advisory, a cleanup and a setting already right are not part of it.
+    const row = (id: string, over: Partial<Setting> = {}) =>
+      [
+        id,
+        {
+          id,
+          isApplicable: true,
+          isAction: false,
+          isReadonly: false,
+          currentValue: "on",
+          status: "suboptimal",
+          isOptimized: false,
+          ...over,
+        } as Setting,
+      ] as const;
+    useStore.setState({
+      activeTab: "optimize",
+      settings: new Map([
+        row("network:nagle", { domain: "software" }),
+        row("gpu-hardware:hags", { domain: "hardware" }),
+        row("game_config:mw4:shadow", { domain: "game" }),
+        row("network:rss", { status: "optimal", isOptimized: true }),
+        row("network:link", { isReadonly: true }),
+        row("cleanup:cache", { isAction: true }),
+      ]),
+    } as never);
+    render(<TabNavigation />);
+
+    expect(within(screen.getByRole("tab", { name: /Optimize/ })).getByText("3")).toBeInTheDocument();
+    expect(within(screen.getByRole("tab", { name: /Hardware/ })).queryByText(/^\d+$/)).toBeNull();
   });
 
   it("names a panel only from the tab that actually has one", () => {

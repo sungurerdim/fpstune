@@ -373,3 +373,27 @@ describe.each(["en", "tr"] as const)("the header stays one line (%s)", (locale) 
     expect(header()).toContainElement(counter);
   });
 });
+
+describe("a category made of groups", () => {
+  it("draws the groups in its body, and still counts every row inside", async () => {
+    renderSection([notOptimized("a"), optimized("b")], {
+      level: 2,
+      children: <p>the groups</p>,
+    });
+    expect(count()).toHaveTextContent("1 of 2 not optimized");
+    expect(screen.queryByText("the groups")).not.toBeInTheDocument();
+
+    await userEvent.click(header());
+
+    expect(screen.getByText("the groups")).toBeInTheDocument();
+    // Its rows are the groups' to draw, not the section's own.
+    expect(rows()).toHaveLength(0);
+  });
+
+  it("takes its place in the outline at the level it is given", () => {
+    renderSection([notOptimized("a")], { level: 2 });
+
+    expect(screen.getByRole("heading", { level: 2 })).toContainElement(header());
+    expect(screen.queryByRole("heading", { level: 3 })).toBeNull();
+  });
+});

@@ -74,18 +74,6 @@ export function categoryResponseToMetadata(
 // =============================================================================
 
 /**
- * Module metadata from backend API.
- * This is the SSOT for module UI - frontend should not hardcode any of this.
- * Replaces hardcoded MODULE_DISPLAY_NAMES and MODULE_DESCRIPTIONS.
- */
-export interface ModuleMetadata {
-  id: string;
-  displayName: string;
-  description: string;
-  order: number;
-}
-
-/**
  * Module metadata response from API (snake_case)
  */
 export interface ModuleMetadataResponse {
@@ -93,20 +81,6 @@ export interface ModuleMetadataResponse {
   display_name: string;
   description: string;
   order: number;
-}
-
-/**
- * Convert API response to ModuleMetadata
- */
-export function moduleResponseToMetadata(
-  response: ModuleMetadataResponse,
-): ModuleMetadata {
-  return {
-    id: response.id,
-    displayName: response.display_name,
-    description: response.description,
-    order: response.order,
-  };
 }
 
 /**

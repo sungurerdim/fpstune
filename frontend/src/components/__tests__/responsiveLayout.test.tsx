@@ -20,15 +20,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen } from "../../test/utils";
+import { fireEvent, render, screen } from "../../test/utils";
 import App from "../../App";
-import { SettingsTab } from "../SettingsTab";
-import { GameTweaksTab } from "../GameTweaksTab";
+import { OptimizeTab } from "../OptimizeTab";
 import { HardwarePanel } from "../HardwarePanel";
 import { BenchmarksTab } from "../BenchmarksTab";
 import { useStore } from "../../store";
-import { Settings as SettingsIcon } from "lucide-react";
-import type { CategoryMetadata, Setting } from "../../types/setting";
+import type { Setting } from "../../types/setting";
 
 // The panels App hosts each open a detection pipeline; what is under test up
 // there is the shell's own width.
@@ -36,6 +34,7 @@ vi.mock("../CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
 vi.mock("../ActivityLog", () => ({ ActivityLog: () => null }));
+vi.mock("../hardware/useRefreshOnFocus", () => ({ useRefreshOnFocus: () => undefined }));
 vi.mock("../FirstRunNotice", () => ({ FirstRunNotice: () => null }));
 vi.mock("../OsUpdateNotice", () => ({ OsUpdateNotice: () => null }));
 vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
@@ -166,7 +165,7 @@ beforeEach(() => {
 
 describe("every page lays its content out across the width it is given", () => {
   it("Shell: the content column widens past 1920px instead of banking margin", () => {
-    useStore.setState({ activeTab: "settings", settings: new Map() } as never);
+    useStore.setState({ activeTab: "optimize", settings: new Map() } as never);
 
     render(<App />);
 
@@ -178,47 +177,29 @@ describe("every page lays its content out across the width it is given", () => {
     expect(shell).toHaveClass("3xl:max-w-[150rem]");
   });
 
-  it("Software Tweaks: the row list gains columns as the window widens", () => {
-    const settings = pair("system:software");
-    setStore(settings);
-    const category: CategoryMetadata = {
-      id: "system",
-      displayName: "System",
-      description: "System tweaks",
-      icon: "Settings",
-      order: 1,
-    } as CategoryMetadata;
-
-    render(
-      <SettingsTab
-        categoriesWithSettings={[{ category, settings }]}
-        moduleMetaMap={new Map()}
-        definitionsLoading={false}
-        gpuCategoryStatus="done"
-        hasGpuSettings={false}
-        getIconByName={() => SettingsIcon}
-      />,
-    );
-
-    const [list] = screen.getAllByTestId("tweak-rows");
-    expectRespondsToWidth(list, "2xl:grid-cols-2");
-    expect(list).toHaveClass("3xl:grid-cols-3");
-  });
-
-  it("Game Tweaks: a game's config lines use the same widening row list", () => {
-    setStore(
-      pair("game_config:mw4:quality", {
+  it("Optimize: one-line rows stay in one column at every width", () => {
+    // A second column would halve the room a row's name and its current →
+    // recommended text have, and the row never wraps to make up for it.
+    setStore([
+      ...pair("system:software"),
+      ...pair("game_config:mw4:quality", {
         category: "game_config",
         groupId: "mw4",
         groupLabel: "Modern Warfare IV",
         groupOrder: 10,
       }),
-    );
+    ]);
 
-    render(<GameTweaksTab />);
+    const { container } = render(<OptimizeTab />);
+    for (let pass = 0; pass < 3; pass += 1) {
+      for (const closed of container.querySelectorAll('h2 [aria-expanded="false"], h3 [aria-expanded="false"]')) {
+        fireEvent.click(closed);
+      }
+    }
 
-    const [list] = screen.getAllByTestId("tweak-rows");
-    expectRespondsToWidth(list, "2xl:grid-cols-2");
+    const rows = screen.getAllByTestId("tweak-row");
+    expect(rows).toHaveLength(4);
+    for (const row of rows) expect(row.closest('[class*="grid-cols"]')).toBeNull();
   });
 
   it("Hardware: device cards sit two abreast on a wide window, one on a narrow one", () => {

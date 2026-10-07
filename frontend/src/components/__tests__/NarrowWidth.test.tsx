@@ -252,6 +252,8 @@ const NOT_GENERIC: Record<string, string> = {
     "Draws a reclaimable size, a TRIM age and measured figures; a setting's own text never reaches it. Its place on the row is held by the DiskCleanupTab surface above.",
   "components/SelectionToolbar.tsx#BulkConfirm":
     "The question a bulk button asks: fixed words and a count in a dialog the caller opens, with no setting text in it.",
+  "components/CategoryApply.tsx#CategoryApply":
+    "One button, \"Apply (N)\": the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
   "components/ScopeActions.tsx#ScopeActions":
     "Icon buttons: the scope's name reaches a screen reader through aria-label and a tooltip, and nothing on screen carries setting text.",
   "components/SelectionToolbar.tsx#SelectionToolbar":

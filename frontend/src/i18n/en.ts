@@ -52,9 +52,8 @@ export const en = {
   "update.unreachable": "Could not check for updates: {reason}",
   "header.admin": "Admin",
   "header.notAdmin": "Not Admin",
-  "tab.software": "Software Tweaks",
   "tab.hardware": "Hardware Tweaks",
-  "tab.games": "Game Tweaks",
+  "tab.optimize": "Optimize",
   "tab.cleanup": "Cleanup & Repair",
   "tab.benchmarks": "Benchmarks",
 
@@ -99,6 +98,9 @@ export const en = {
   "row.ok": "OK",
   "row.advisory": "Advisory",
   "row.notRead": "Not read",
+  "row.unreadReason": "Nothing was read: {reason}",
+  "row.unreadNeedsAdmin": "Nothing was read. fpstune is not running as Administrator, which several checks need.",
+  "row.unreadNoReason": "Nothing was read, so there is no finding here to act on.",
   "row.verify": "Verify current value",
   "reset.kind.software": "Windows default",
   "reset.kind.hardware": "Driver default",
@@ -485,12 +487,7 @@ export const en = {
   // Software Tweaks tab
 
   // Game Tweaks tab
-  "games.searchPlaceholder": "Search game settings...",
-  "games.searchLabel": "Search game settings",
-  "games.filterGame": "Filter by game",
-  "games.allGames": "All games",
   "games.reading": "Reading your game configs…",
-  "games.noMatch": "No game setting matches that search.",
   "games.noneFound":
     "No supported game config was found on this machine. fpstune reads a game's config only where the game is installed.",
 
@@ -577,8 +574,6 @@ export const en = {
   // Header metrics: a count set apart in bold, then what it counts
   "metric.toApply": "to apply",
   "metric.needYou": "need you",
-  "metric.toFix": "to fix",
-  "metric.total": "total",
   "actions.confirm.apply": "Apply {count} tweaks on {name}?",
   "actions.confirm.reset": "{count} settings will return to their defaults.",
   "actions.confirmBody.reset.software": "Every setting that differs from what Windows ships is put back to it. Each row shows its own result.",
@@ -588,9 +583,12 @@ export const en = {
   "actions.confirmBody.apply": "Each row shows its own result, and any row can be reset to its default.",
   "settings.search": "Search settings",
   "settings.searchPlaceholder": "Search settings...",
-  "settings.filterByCategory": "Filter by category",
-  "settings.allCategories": "All",
-  "settings.groupCount": "{toFix} to fix / {total} total",
+  "optimize.software": "Software",
+  "optimize.hardware": "Hardware",
+  "optimize.games": "Games",
+  "optimize.otherHardware": "Other hardware",
+  "optimize.results": "Search results",
+  "optimize.noMatch": "No setting matches that search.",
   // Needs / ideal bands
   "bands.needs": "Needs action",
   "bands.ideal": "Ideal",

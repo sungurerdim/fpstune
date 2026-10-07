@@ -19,7 +19,12 @@ import type {
   StorageDriveInfo,
 } from "../../lib/api";
 import { isComponentTweak } from "../../lib/tweakDomain";
-import { isTweakAdvisory, isTweakListable, isTweakSuboptimal } from "../../lib/tweakStatus";
+import {
+  isTweakAdvisory,
+  isTweakListable,
+  isTweakManual,
+  isTweakSuboptimal,
+} from "../../lib/tweakStatus";
 import type { Setting } from "../../types/setting";
 import type { useT } from "../../i18n";
 
@@ -215,11 +220,11 @@ export function describeDevices(hardware: HardwareInfo | null, t: T): DeviceDesc
 
 /** The tweaks one device owns and what they add up to. */
 export interface DeviceTweakSet {
-  /** Every listed row: writable ones with a reading, plus unresolved advisories. */
+  /** Every listed row: writable ones with a reading, plus every read-only row (finding, clear or unread). */
   settings: Setting[];
   /** Writable rows the backend reports as not optimized (never recomputed here). */
   notOptimized: number;
-  /** Findings only the user can act on; kept out of `notOptimized`. */
+  /** Findings only the user can act on (not the checks that passed); kept out of `notOptimized`. */
   advisories: number;
 }
 
@@ -234,7 +239,7 @@ export function tweaksOfDevice(
   const listed: Setting[] = [];
   if (device.match) {
     for (const s of settings) {
-      if (device.match(s) && (isTweakListable(s) || isTweakAdvisory(s))) listed.push(s);
+      if (device.match(s) && (isTweakListable(s) || isTweakManual(s))) listed.push(s);
     }
   }
   listed.sort((a, b) => a.categoryOrder - b.categoryOrder);

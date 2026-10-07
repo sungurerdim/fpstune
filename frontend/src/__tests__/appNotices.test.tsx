@@ -20,8 +20,7 @@ vi.mock("../components/CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
 vi.mock("../components/SelfCheckNotice", () => ({ SelfCheckNotice: () => <p>self-check notice</p> }));
-vi.mock("../components/SettingsTab", () => ({ SettingsTab: () => <p>software panel</p> }));
-vi.mock("../components/GameTweaksTab", () => ({ GameTweaksTab: () => <p>games panel</p> }));
+vi.mock("../components/OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../components/DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
 vi.mock("../components/HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
 vi.mock("../components/BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
@@ -72,7 +71,7 @@ describe("app-level notices", () => {
       expect(screen.getByText(/Nothing has been changed yet/)).toBeInTheDocument();
 
       fireEvent.click(screen.getByRole("button", { name: /Got it/ }));
-      fireEvent.click(screen.getByRole("tab", { name: /Software Tweaks/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /Optimize/ }));
 
       expect(screen.queryByText(/Nothing has been changed yet/)).not.toBeInTheDocument();
     });

@@ -23,10 +23,9 @@ vi.mock("../SelfCheckNotice", () => ({ SelfCheckNotice: () => null }));
 vi.mock("../CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
-vi.mock("../SettingsTab", () => ({ SettingsTab: () => <p>software panel</p> }));
+vi.mock("../OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
 vi.mock("../HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
-vi.mock("../GameTweaksTab", () => ({ GameTweaksTab: () => <p>games panel</p> }));
 vi.mock("../BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
 
 function assertTabOwnsThePanel() {
@@ -41,22 +40,22 @@ function assertTabOwnsThePanel() {
 
 describe("the selected tab and the panel on screen are one thing", () => {
   beforeEach(() => {
-    useStore.setState({ activeTab: "settings", settings: new Map() } as never);
+    useStore.setState({ activeTab: "optimize", settings: new Map() } as never);
   });
 
   it("ties the panel to the tab that selected it", () => {
     render(<App />);
 
-    expect(screen.getByText("software panel")).toBeInTheDocument();
+    expect(screen.getByText("optimize panel")).toBeInTheDocument();
     assertTabOwnsThePanel();
   });
 
   it("keeps the tie after the tab changes", () => {
     render(<App />);
 
-    fireEvent.click(screen.getByRole("tab", { name: /Game Tweaks/ }));
+    fireEvent.click(screen.getByRole("tab", { name: /Hardware Tweaks/ }));
 
-    expect(screen.getByText("games panel")).toBeInTheDocument();
+    expect(screen.getByText("hardware panel")).toBeInTheDocument();
     assertTabOwnsThePanel();
   });
 

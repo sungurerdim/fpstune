@@ -22,10 +22,9 @@ vi.mock("../components/SelfCheckNotice", () => ({ SelfCheckNotice: () => null })
 vi.mock("../components/CleanupRunnerProvider", () => ({
   CleanupRunnerProvider: () => null,
 }));
-vi.mock("../components/SettingsTab", () => ({ SettingsTab: () => <p>software panel</p> }));
+vi.mock("../components/OptimizeTab", () => ({ OptimizeTab: () => <p>optimize panel</p> }));
 vi.mock("../components/DiskCleanupTab", () => ({ DiskCleanupTab: () => <p>cleanup panel</p> }));
 vi.mock("../components/HardwareTab", () => ({ HardwareTab: () => <p>hardware panel</p> }));
-vi.mock("../components/GameTweaksTab", () => ({ GameTweaksTab: () => <p>games panel</p> }));
 vi.mock("../components/BenchmarksTab", () => ({ BenchmarksTab: () => <p>benchmarks panel</p> }));
 
 const SOURCES = import.meta.glob("../**/*.tsx", {
@@ -68,7 +67,7 @@ describe("DetectionNotice mount", () => {
 
     it("keeps one notice, not one per tab, when the tab changes", () => {
       render(<App />);
-      fireEvent.click(screen.getByRole("tab", { name: /Game Tweaks/ }));
+      fireEvent.click(screen.getByRole("tab", { name: /Optimize/ }));
       expect(screen.getAllByText(/1 setting could not be checked/)).toHaveLength(1);
     });
   });

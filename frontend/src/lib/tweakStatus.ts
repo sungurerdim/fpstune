@@ -58,3 +58,61 @@ export function isTweakAdvisory(setting: Setting): boolean {
     setting.status === "suboptimal"
   );
 }
+
+/**
+ * A read-only row: a finding fpstune cannot write (a cable, an XMP profile), a
+ * check that found nothing wrong, or one that could not read anything. All
+ * three are listed — a check that found nothing is the evidence it ran, and a
+ * detector that could not answer must not look like one that was never wired —
+ * under "Manual steps", never in a count and never behind an Apply.
+ */
+export function isTweakManual(setting: Setting): boolean {
+  return setting.isApplicable && !setting.isAction && setting.isReadonly;
+}
+
+/**
+ * A row the Optimize tab lists: it applies to this machine, is a setting rather
+ * than a cleanup run, and has been read — or is being read right now, so its
+ * line says "Reading…" instead of the row being absent. A writable setting
+ * whose read came back empty is the detection notice's business, not a row's;
+ * a read-only one stays, saying "Not read".
+ */
+export function isOptimizeRow(setting: Setting): boolean {
+  return (
+    setting.isApplicable &&
+    !setting.isAction &&
+    (setting.currentValue !== null || setting.status === "loading" || setting.isReadonly)
+  );
+}
+
+/** What a category header counts. */
+export interface TweakCounts {
+  /** Tweaks that were read and apply here. */
+  total: number;
+  /** Of those, the ones the backend marked not optimized. */
+  notOptimized: number;
+  /** Tweaks still being read: no answer yet, so neither number includes them. */
+  reading: number;
+}
+
+/**
+ * The numbers behind "N of M not optimized".
+ *
+ * A read-only row is a manual step, a cleanup is an action, one that does not
+ * apply here cannot be optimized, and one still being read has no answer yet —
+ * none of those is "not optimized". The verdict is the backend's `isOptimized`,
+ * never recomputed from the two values.
+ */
+export function tweakCounts(settings: Iterable<Setting>): TweakCounts {
+  const counts: TweakCounts = { total: 0, notOptimized: 0, reading: 0 };
+  for (const s of settings) {
+    if (s.isReadonly || s.isAction || !s.isApplicable) continue;
+    if (s.status === "loading" && s.currentValue === null) {
+      counts.reading += 1;
+      continue;
+    }
+    counts.total += 1;
+    if (!s.isOptimized) counts.notOptimized += 1;
+  }
+  return counts;
+}

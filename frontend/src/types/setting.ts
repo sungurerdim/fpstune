@@ -249,7 +249,6 @@ export interface Setting {
 
   // === Maintenance-specific (static) ===
   durationEstimate?: string; // "5-15 min" for maintenance actions
-  supportsStreaming?: boolean; // True for actions with live console output
   progressPattern?: string | null; // Regex to extract progress from output
 
   // === Risk (static) ===
@@ -348,7 +347,6 @@ export interface SettingDefinition {
   max_value?: number;
   // MaintenanceExecutor fields
   duration_estimate?: string;
-  supports_streaming?: boolean;
   progress_pattern?: string | null;
   // Advisory/detect-only
   is_readonly?: boolean;
@@ -510,7 +508,6 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     minValue: def.min_value,
     maxValue: def.max_value,
     durationEstimate: def.duration_estimate,
-    supportsStreaming: def.supports_streaming,
     progressPattern: def.progress_pattern,
     riskLevel: (def.risk_level || "low") as
       | "safe"

@@ -39,7 +39,12 @@ from __future__ import annotations
 import time
 from typing import Any
 
-from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
+from fpstune.benchmark.suite import (
+    SAMPLE_INTERVAL_MS,
+    BenchReading,
+    BenchResult,
+    deadline_for,
+)
 from fpstune.benchmark.win_query import query_rows
 from fpstune.utils.logger import get_logger
 from fpstune.utils.process_watch import quiet_for
@@ -52,8 +57,6 @@ DEFAULT_WINDOW_SAMPLES = 5
 Five seconds is long enough to catch a fan ramp and short enough that the whole
 bench is a fraction of a suite run.
 """
-
-SAMPLE_INTERVAL_MS = 1000
 
 _PER_SAMPLE_SECONDS = 2.0
 """What one sample costs on a slow machine: the sleep plus two short queries."""

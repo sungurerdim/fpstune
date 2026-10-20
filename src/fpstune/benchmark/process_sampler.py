@@ -47,7 +47,12 @@ import re
 import time
 from typing import Any
 
-from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
+from fpstune.benchmark.suite import (
+    SAMPLE_INTERVAL_MS,
+    BenchReading,
+    BenchResult,
+    deadline_for,
+)
 from fpstune.benchmark.win_query import query_rows
 from fpstune.settings.executors.game_processes import (
     GAME_LABELS,
@@ -66,8 +71,6 @@ Four is enough for a background spike to show up as one sample out of four
 rather than as the whole window, and short enough that three repeats of it are
 twelve seconds rather than a minute.
 """
-
-SAMPLE_INTERVAL_MS = 1000
 
 _PER_SAMPLE_SECONDS = 2.5
 """What one second of sampling costs on a slow machine, deadline-wise.

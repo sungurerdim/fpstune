@@ -48,6 +48,9 @@ from fpstune.utils.logger import get_logger
 
 logger = get_logger()
 
+SAMPLE_INTERVAL_MS = 1000
+"""The one sampling cadence for a bench's own sensor/process loop."""
+
 DEFAULT_REPEATS = 3
 """How many times a bench runs when the caller does not say.
 

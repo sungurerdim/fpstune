@@ -39,17 +39,21 @@ jobs:
       - name: Install dependencies
         run: uv sync --locked --extra dev --python 3.12
 
+      - name: Verify the project interpreter
+        run: |
+          uv run --extra dev python -c "import sys, pytest; print(f'ci: {sys.executable} | pytest {pytest.__version__}')"
+
       - name: Ruff lint
-        run: uv run ruff check src tests
+        run: uv run --extra dev ruff check src tests
 
       - name: Ruff format check
-        run: uv run ruff format --check src tests
+        run: uv run --extra dev ruff format --check src tests
 
       - name: Mypy
-        run: uv run mypy src
+        run: uv run --extra dev mypy src
 
       - name: Pytest (coverage gate)
-        run: uv run pytest --cov=src/fpstune --cov-report=term-missing
+        run: uv run --extra dev pytest --cov=src/fpstune --cov-report=term-missing
 
   frontend:
     # Nothing in the UI build or its tests depends on the host OS, and a Linux

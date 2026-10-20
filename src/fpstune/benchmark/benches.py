@@ -38,18 +38,19 @@ from typing import Any
 
 from fpstune.benchmark.cpu_bench import CpuBench
 from fpstune.benchmark.disk_io import DiskIoBench
+from fpstune.benchmark.dpc import TimingBench
 from fpstune.benchmark.event_scan import EventScanBench
 from fpstune.benchmark.gpu_memory import GpuMemoryBench
 from fpstune.benchmark.gpu_scene import GpuSceneBench, running_game_label
 from fpstune.benchmark.memory import MemoryBench
-from fpstune.benchmark.network_bench import NetworkIdleBench
+from fpstune.benchmark.network import NetworkIdleBench
 from fpstune.benchmark.network_load import NetworkLoadBench, unmetered_connection
 from fpstune.benchmark.pcie_link import PcieLinkBench
 from fpstune.benchmark.process_sampler import ProcessSamplerBench
 from fpstune.benchmark.sensors import SensorBench
 from fpstune.benchmark.storage_health import StorageHealthBench
 from fpstune.benchmark.suite import Bench
-from fpstune.benchmark.timing_bench import TimingBench
+
 
 
 @dataclass(frozen=True)

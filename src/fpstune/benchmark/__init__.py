@@ -6,6 +6,7 @@ from fpstune.benchmark.dpc import (
     DpcBenchmarkResult,
     DpcComparison,
     DpcStats,
+    TimingBench,
 )
 from fpstune.benchmark.memory import MemoryBench
 from fpstune.benchmark.network import (
@@ -13,8 +14,8 @@ from fpstune.benchmark.network import (
     NetworkBenchmark,
     NetworkBenchmarkResult,
     NetworkComparison,
+    NetworkIdleBench,
 )
-from fpstune.benchmark.network_bench import NetworkIdleBench
 from fpstune.benchmark.network_load import NetworkLoadBench
 from fpstune.benchmark.presentmon import (
     BenchmarkCapture,
@@ -33,8 +34,6 @@ from fpstune.benchmark.suite import (
     compare_runs,
     run_suite,
 )
-from fpstune.benchmark.timing_bench import TimingBench
-
 __all__ = [
     "Bench",
     "DiskIoBench",

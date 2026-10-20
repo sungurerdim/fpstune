@@ -4,7 +4,7 @@ Both are C11 failures of the quietest kind: a number that reaches the user
 looking exactly like a measurement, because it *is* one — of the wrong thing,
 or in the wrong unit.
 
-*The unit bug.* `timing_bench.py` published `stats.timing_jitter_max_us` under
+*The unit bug.* `dpc.TimingBench` published `stats.timing_jitter_max_us` under
 the claim metric `latency_spike_ms`. Percent comparisons survive a consistent
 scale error, so `compare_runs` never noticed; the before/after numbers a user
 reads were off by 1000x, and so was every verdict `judge` reached against a
@@ -24,7 +24,7 @@ from fastapi.testclient import TestClient
 from fpstune.api.main import create_app
 from fpstune.benchmark.dpc import DpcBenchmark, DpcBenchmarkResult, DpcStats
 from fpstune.benchmark.sources import NO_INSTRUMENT, NOT_JUDGEABLE, SOURCES, source_for
-from fpstune.benchmark.timing_bench import TimingBench
+from fpstune.benchmark.dpc import TimingBench
 from fpstune.benchmark.verify_round import direction_of
 
 

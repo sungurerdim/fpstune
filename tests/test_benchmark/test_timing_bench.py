@@ -16,7 +16,7 @@ import pytest
 
 from fpstune.benchmark.sources import source_for
 from fpstune.benchmark.suite import Bench, run_suite
-from fpstune.benchmark.timing_bench import TimingBench
+from fpstune.benchmark.dpc import TimingBench
 
 
 @dataclass
@@ -60,7 +60,7 @@ class TestItStaysAnAdapter:
         `latency_spike_ms` is the one value that is not passed through verbatim,
         and the exception is a unit rather than a second measurement: the stats
         report 0.3 microseconds, the claim metric is milliseconds, so the sample
-        is 0.0003. See `timing_bench.US_PER_MS`.
+        is 0.0003. See `dpc.US_PER_MS`.
         """
         fake = _FakeDpc()
         readings = TimingBench(benchmark=fake).run(2).readings  # type: ignore[arg-type]

@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from fpstune.benchmark.result_store import ResultStore
+from fpstune.benchmark.suite import BenchReading, BenchResult, deadline_for
 from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
 from fpstune.utils.system_tools import system_tool
@@ -482,3 +483,122 @@ class NetworkBenchmark:
         targets = {"google_dns": ("8.8.8.8", 53), "cloudflare": ("1.1.1.1", 53)}
         targets.update(self.GAME_SERVERS)
         return targets
+
+
+# The suite adapter, folded in from the retired network_bench.py.
+DEFAULT_PING_COUNT = 20
+"""Fewer than `network.py`'s own default of 50.
+
+The suite runs this several times over, so the samples that matter are the
+per-run medians rather than the pings inside one run — and fifty pings a repeat
+turns a three-repeat suite into a two-minute wait for one of five benches.
+"""
+
+DEFAULT_TCP_COUNT = 10
+
+_UNANSWERED_PROBE_SECONDS = 1.2
+"""What one probe costs in wall clock, which is a cadence rather than a latency.
+
+`ping.exe` waits about a second between echoes whatever the round trip is, so
+twenty pings take twenty seconds on a perfect line. Budgeting the round trip
+instead would produce a deadline the bench trips every single time it runs.
+"""
+
+
+_MEASUREMENT_FAILED = "the network benchmark returned nothing — the target did not answer"
+
+
+class NetworkIdleBench:
+    """Round trip, jitter and loss on a quiet line, made comparable."""
+
+    key = "network"
+    label = "Latency on an idle line"
+    requires = "a reachable host to measure against"
+
+    def __init__(
+        self,
+        *,
+        target: str = "8.8.8.8",
+        ping_count: int = DEFAULT_PING_COUNT,
+        tcp_count: int = DEFAULT_TCP_COUNT,
+        benchmark: NetworkBenchmark | None = None,
+    ) -> None:
+        self.target = target
+        self.ping_count = ping_count
+        self.tcp_count = tcp_count
+        self._benchmark = benchmark or NetworkBenchmark()
+
+    def timeout_seconds(self, repeats: int) -> float:
+        """Derived from the pings and TCP connects one pass makes.
+
+        A ping that gets no answer costs its own timeout rather than its round
+        trip, so the per-probe figure is that timeout — a target that has gone
+        away is the case this deadline exists for.
+        """
+        per_repeat = (self.ping_count + self.tcp_count) * _UNANSWERED_PROBE_SECONDS
+        return deadline_for(per_repeat, repeats)
+
+    def is_available(self) -> tuple[bool, str]:
+        """Answered by running rather than guessed at.
+
+        A reachability check here would be a round trip to the same host the
+        measurement is about to make twenty of, so it would cost what it saves.
+        A target that does not answer surfaces as `ran=False` with the reason.
+        """
+        return True, ""
+
+    def run(self, repeats: int) -> BenchResult:
+        started = time.perf_counter()
+
+        ping: list[float] = []
+        jitter: list[float] = []
+        loss: list[float] = []
+        tcp: list[float] = []
+
+        for _ in range(repeats):
+            result = self._benchmark.run_benchmark(
+                name="suite",
+                target=self.target,
+                ping_count=self.ping_count,
+                tcp_count=self.tcp_count,
+            )
+            if result is None:
+                # Not a partial result: a repeat that produced nothing has
+                # nothing to be averaged with the ones that did, and a noise
+                # floor computed from fewer samples than it claims is worse
+                # than no noise floor.
+                return BenchResult(
+                    bench=self.key,
+                    label=self.label,
+                    ran=False,
+                    reason=_MEASUREMENT_FAILED,
+                    duration_seconds=time.perf_counter() - started,
+                )
+
+            stats = result.stats
+            ping.append(stats.ping_avg)
+            jitter.append(stats.jitter_avg)
+            loss.append(stats.ping_loss_percent)
+            tcp.append(stats.tcp_avg)
+
+        return BenchResult(
+            bench=self.key,
+            label=self.label,
+            ran=True,
+            readings={
+                "latency_ms": BenchReading("latency_ms", ping, "ms"),
+                "jitter_ms": BenchReading("jitter_ms", jitter, "ms"),
+                "packet_loss": BenchReading("packet_loss", loss, "%"),
+                # TCP connect is a round trip through the same path that ICMP may
+                # be deprioritised on, so it moves when ICMP does not. Named for
+                # itself because no setting claims it.
+                "tcp_connect_ms": BenchReading("tcp_connect_ms", tcp, "ms", higher_is_better=False),
+            },
+            detail={
+                "target": self.target,
+                "ping_count": self.ping_count,
+                "tcp_count": self.tcp_count,
+                "source": "fpstune.benchmark.network.NetworkBenchmark",
+            },
+            duration_seconds=time.perf_counter() - started,
+        )

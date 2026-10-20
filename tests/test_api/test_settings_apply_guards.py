@@ -22,6 +22,7 @@ import json
 import threading
 from collections.abc import Iterator
 from contextlib import contextmanager
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import MagicMock, patch
 
@@ -330,6 +331,49 @@ class TestAbsenceSentinelsSkipVerification:
         assert success is False
         assert error is not None
         assert verified is False
+
+
+def _engine_with(value: str) -> MagicMock:
+    result = SimpleNamespace(
+        value=value,
+        is_applicable=True,
+        applicable_reason="",
+        is_optimized=True,
+        error=None,
+        finding=None,
+    )
+    engine = MagicMock()
+    engine.detect_one.return_value = result
+    return engine
+
+
+def test_a_successful_action_message_is_not_reported_as_a_partial_failure() -> None:
+    """`power_plan_switch` returns "FPS Balanced profile activated" on success.
+
+    That sentence used to stay in the error slot, so a clean apply read as
+    partial in the API and in the operation log. A message that is not the
+    "applied, but ..." warning shape is an informational note.
+    """
+    setting = _choice_setting()
+    with patch("fpstune.api.routes.settings.log_activity") as log:
+        response = _finalize_apply_response(
+            setting, "on", _engine_with("on"), True, "FPS Balanced profile activated"
+        )
+
+    assert response.success is True
+    assert response.error is None
+    assert any(call.args[1] == "info" for call in log.call_args_list)
+
+
+def test_a_real_partial_write_keeps_its_warning() -> None:
+    """The generic success-message rule must not swallow "applied, but ..."."""
+    setting = _choice_setting()
+    response = _finalize_apply_response(
+        setting, "on", _engine_with("on"), True, "applied, but 1 write(s) failed"
+    )
+
+    assert response.success is True
+    assert response.error == "applied, but 1 write(s) failed"
 
 
 def test_a_failed_write_is_logged_with_its_verb_not_its_past_tense() -> None:

@@ -29,6 +29,7 @@ from fpstune.settings.cleanup_measure import (
 )
 from fpstune.settings.detection import DetectionEngine
 from fpstune.settings.executors import action_will_not_run
+from fpstune.utils.operation_log import operation_log
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -94,8 +95,10 @@ def apply_and_finalize(
     would cost two scans to report that nothing was freed.
     """
     global _in_flight
+    started = time.perf_counter()
     success: bool
     error: str | None
+    will_run = True
     # Counted *before* waiting for the lock. Counting after left a window: the
     # scheduler read zero applies, this side saw the lock free, and then both
     # went ahead — a bench measuring a machine mid-apply. Counted first, a bench
@@ -119,7 +122,7 @@ def apply_and_finalize(
     # lookup is what keeps the finalizer patchable where the tests name it.
     from fpstune.api.routes import settings as settings_routes
 
-    return settings_routes._finalize_apply_response(
+    response = settings_routes._finalize_apply_response(
         setting,
         value,
         engine,
@@ -128,3 +131,13 @@ def apply_and_finalize(
         freed_bytes=freed.freed_bytes,
         size_after_bytes=freed.size_after_bytes,
     )
+    # The one apply path logs its own outcome here, after the finalizer has the
+    # verification verdict. A failed log write must never turn a working apply
+    # into a failed one; `record_apply` swallows its own I/O errors.
+    operation_log.record_apply(
+        setting,
+        response,
+        int((time.perf_counter() - started) * 1000),
+        ran=will_run,
+    )
+    return response

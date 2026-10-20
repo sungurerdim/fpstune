@@ -136,8 +136,11 @@ class TestPrefetchRegistration:
 
         from fpstune.settings import detection
 
-        source = inspect.getsource(detection.DetectionEngine.detect_all)
-        assert arg in source, f"{arg} has no prefetch branch in detect_all"
+        # The branches moved into `_run_prefetchers` when `detect_all` hit the
+        # function-length ceiling; the wiring must stay: the scan calls it.
+        source = inspect.getsource(detection._run_prefetchers)
+        assert arg in source, f"{arg} has no prefetch branch in _run_prefetchers"
+        assert "_run_prefetchers" in inspect.getsource(detection.DetectionEngine.detect_all)
 
     def test_settings_declaring_a_batch_arg_exist_for_each_prefetcher(
         self, adapter_backed_registry: SettingsRegistry

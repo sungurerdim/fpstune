@@ -27,6 +27,7 @@ from fpstune.settings.executors.ps_batch import (
     prefetch_services,
     reset_scan_cache,
 )
+from fpstune.utils.operation_log import classify_error, operation_log
 from fpstune.utils.powershell import substitute_placeholders
 
 if TYPE_CHECKING:
@@ -73,6 +74,113 @@ def _prefetch_powershell_group(settings: list[SettingExecutor]) -> None:
         prefetch_powershell_detects(specs)
 
 
+def _log_scan(results: dict[str, DetectionResult], total: int, started: float) -> None:
+    """One summary line for a scan, plus one line per error.
+
+    A scan of 475 rows must not write 475 lines. The summary answers "how many
+    need work, how many could not be read"; the per-error lines are the ones a
+    user can act on, and there are usually a handful.
+    """
+    errors = [result for result in results.values() if result.error]
+    operation_log.record_detect(
+        total=total,
+        errors=len(errors),
+        not_applicable=sum(1 for result in results.values() if not result.is_applicable),
+        optimized=sum(1 for result in results.values() if result.is_optimized),
+        not_optimized=sum(
+            1
+            for result in results.values()
+            if result.is_applicable and not result.is_optimized and not result.error
+        ),
+        duration_ms=int((time.perf_counter() - started) * 1000),
+    )
+    for result in errors:
+        operation_log.write(
+            "detect",
+            "failed",
+            result.setting_id,
+            error_kind=classify_error(result.error),
+            reason=result.error,
+        )
+
+
+def _partition_applicable(
+    settings: list[SettingExecutor],
+    checker: ApplicabilityChecker | None,
+) -> tuple[list[SettingExecutor], dict[str, DetectionResult]]:
+    """Split settings into the ones detection should read and the absent ones.
+
+    An absent setting is a result, not an error: it carries no value and the
+    reason the UI shows under "not applicable". Keeping the split here keeps
+    `detect_all` a scheduler rather than a second place that knows the rule.
+    """
+    applicable: list[SettingExecutor] = []
+    results: dict[str, DetectionResult] = {}
+    for setting in settings:
+        if checker:
+            is_applicable, reason = checker.is_applicable(setting)
+            if not is_applicable:
+                results[setting.id] = DetectionResult(
+                    setting_id=setting.id,
+                    value=None,
+                    error=None,
+                    time_ms=0,
+                    is_optimized=False,
+                    is_applicable=False,
+                    applicable_reason=reason,
+                )
+                continue
+        applicable.append(setting)
+    return applicable, results
+
+
+def _run_prefetchers(applicable_settings: list[SettingExecutor]) -> None:
+    """Run the batch prefetches this scan needs, in parallel, before the pool.
+
+    Return values are unused: every prefetcher writes into the scan cache. The
+    cleanups and the plain PowerShell detects are always included; the batch
+    queries are added only when a setting declares them.
+    """
+    prefetchers: list[Callable[[], object]] = []
+    if any("batch_service" in s.detect_args for s in applicable_settings):
+        prefetchers.append(prefetch_services)
+    if any("batch_adapter_keyword" in s.detect_args for s in applicable_settings):
+        prefetchers.append(prefetch_adapter_properties)
+    if any("batch_config" in s.detect_args for s in applicable_settings):
+        prefetchers.append(prefetch_game_configs)
+    if any("batch_tcp" in s.detect_args for s in applicable_settings):
+        from fpstune.settings.executors.netsh import prefetch_tcp_settings
+
+        prefetchers.append(prefetch_tcp_settings)
+    if any("batch_pnp_power" in s.detect_args for s in applicable_settings):
+        from fpstune.settings.executors.ps_batch import prefetch_adapter_power
+
+        prefetchers.append(prefetch_adapter_power)
+
+    # Cleanup sizes: one PowerShell for every pending target instead of one per
+    # setting. This returns immediately — the sizing itself runs in a background
+    # thread, because folder walks are genuinely slow and putting them on the
+    # scan's critical path would trade processes for wall-clock.
+    from fpstune.settings.executors.powershell import start_cleanup_size_batch
+
+    prefetchers.append(lambda: start_cleanup_size_batch(applicable_settings))
+    prefetchers.append(lambda: _prefetch_powershell_group(applicable_settings))
+
+    if len(prefetchers) == 1:
+        prefetchers[0]()
+        return
+    with ThreadPoolExecutor(max_workers=len(prefetchers)) as pre_pool:
+        # copy_context() must be evaluated HERE, in the submitting thread, so
+        # each task copies the context holding the scan cache. Calling it inside
+        # the worker callable copies the worker's own (empty) context instead,
+        # and every prefetch then computed its snapshot outside the scan and
+        # threw it away — the batches were silently dead in production while
+        # every test passed.
+        pre_futures = [pre_pool.submit(copy_context().run, fn) for fn in prefetchers]
+        for pre_future in pre_futures:
+            pre_future.result()
+
+
 class DetectionEngine:
     """Parallel setting detection engine.
 
@@ -112,83 +220,30 @@ class DetectionEngine:
         if not settings:
             return {}
 
+        started = time.perf_counter()
+
+        # A bulk run restarts adapters; a read that starts in the settle window
+        # sees an empty DNS/offload list and reports a transient as "not
+        # optimized". Wait for the restarts, then a short settle, before the
+        # scan reads any adapter.
+        from fpstune.settings.executors.adapter_restart import wait_for_restarts
+
+        wait_for_restarts()
+
         # Use provided context or fall back to instance context
         context = hardware_context or self.context
         checker = ApplicabilityChecker(context) if context else self.checker
 
-        results: dict[str, DetectionResult] = {}
-
-        # Separate applicable and non-applicable settings
-        applicable_settings: list[SettingExecutor] = []
-        for setting in settings:
-            if checker:
-                is_applicable, reason = checker.is_applicable(setting)
-                if not is_applicable:
-                    # Skip detection for non-applicable settings
-                    results[setting.id] = DetectionResult(
-                        setting_id=setting.id,
-                        value=None,
-                        error=None,
-                        time_ms=0,
-                        is_optimized=False,
-                        is_applicable=False,
-                        applicable_reason=reason,
-                    )
-                    continue
-            applicable_settings.append(setting)
-
+        applicable_settings, results = _partition_applicable(settings, checker)
         if not applicable_settings:
+            _log_scan(results, len(settings), started)
             return results
 
         # Initialize the per-scan cache. It is created fresh for every scan, so
         # a run can never read a previous run's snapshot, and it is carried into
         # worker threads by copy_context() at submit time (see below).
         _, token = init_scan_cache()
-
-        # Pre-fetch the batch queries before spawning the detection pool, so
-        # workers read from cache. These sit on the scan's critical path, and
-        # they are independent of each other, so they overlap. Each is only
-        # fetched when some setting actually needs it.
-        # Return values differ per prefetcher and are unused here — each one
-        # writes into the scan cache.
-        prefetchers: list[Callable[[], object]] = []
-        if any("batch_service" in s.detect_args for s in applicable_settings):
-            prefetchers.append(prefetch_services)
-        if any("batch_adapter_keyword" in s.detect_args for s in applicable_settings):
-            prefetchers.append(prefetch_adapter_properties)
-        if any("batch_config" in s.detect_args for s in applicable_settings):
-            prefetchers.append(prefetch_game_configs)
-        if any("batch_tcp" in s.detect_args for s in applicable_settings):
-            from fpstune.settings.executors.netsh import prefetch_tcp_settings
-
-            prefetchers.append(prefetch_tcp_settings)
-        if any("batch_pnp_power" in s.detect_args for s in applicable_settings):
-            from fpstune.settings.executors.ps_batch import prefetch_adapter_power
-
-            prefetchers.append(prefetch_adapter_power)
-
-        # Cleanup sizes: one PowerShell for every pending target instead of one
-        # per setting. This returns immediately — the sizing itself runs in a
-        # background thread, because folder walks are genuinely slow and putting
-        # them on the scan's critical path would trade processes for wall-clock.
-        from fpstune.settings.executors.powershell import start_cleanup_size_batch
-
-        prefetchers.append(lambda: start_cleanup_size_batch(applicable_settings))
-        prefetchers.append(lambda: _prefetch_powershell_group(applicable_settings))
-
-        if len(prefetchers) == 1:
-            prefetchers[0]()
-        else:
-            with ThreadPoolExecutor(max_workers=len(prefetchers)) as pre_pool:
-                # copy_context() must be evaluated HERE, in the submitting
-                # thread, so each task copies the context holding the scan cache.
-                # Calling it inside the worker callable copies the worker's own
-                # (empty) context instead, and every prefetch then computed its
-                # snapshot outside the scan and threw it away — the batches were
-                # silently dead in production while every test passed.
-                pre_futures = [pre_pool.submit(copy_context().run, fn) for fn in prefetchers]
-                for pre_future in pre_futures:
-                    pre_future.result()
+        _run_prefetchers(applicable_settings)
 
         try:
             # Use thread pool for parallel detection of applicable settings
@@ -228,6 +283,7 @@ class DetectionEngine:
         finally:
             reset_scan_cache(token)
 
+        _log_scan(results, len(settings), started)
         return results
 
     def detect_one(self, setting: SettingExecutor) -> DetectionResult:

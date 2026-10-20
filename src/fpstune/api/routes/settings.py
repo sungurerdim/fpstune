@@ -402,6 +402,14 @@ def _finalize_apply_response(
                 "error",
             )
         else:
+            # A handler that succeeded may still return a sentence in the error
+            # slot ("FPS Balanced profile activated"). It is a note, not a
+            # failure: putting it in `error` made a clean apply read as partial.
+            # "applied, but ..." is the one success-with-warning shape and keeps
+            # the error so the warning reaches the caller and the operation log.
+            if error and "applied, but" not in error.casefold():
+                log_activity(error, "info")
+                error = None
             log_activity(
                 f"Applied {setting.display_name}: {requested_value!r} → detected={result.value!r}",
                 "success",

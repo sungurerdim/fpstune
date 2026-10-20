@@ -52,6 +52,12 @@ _lock = threading.Lock()
 _pending: dict[int, threading.Timer] = {}
 # Adapters whose restart is running right now; the event is set when it ends.
 _restarting: dict[int, threading.Event] = {}
+# When the last restart finished. A read can start the instant the adapter is
+# "Up" and still see an empty DNS list a beat later, because the driver's
+# per-interface state is still being rebuilt; a short settle after the last
+# restart is cheaper than reporting a transient as "not optimized".
+_last_restart_finished: float | None = None
+_SETTLE_AFTER_RESTART_SECONDS = 2.0
 
 
 def adapter_status(ifindex: int) -> str | None:
@@ -59,7 +65,14 @@ def adapter_status(ifindex: int) -> str | None:
     from fpstune.utils.powershell import run_powershell
 
     ok, output = run_powershell(
-        f"try {{ [string](Get-NetAdapter -InterfaceIndex {ifindex} -ErrorAction Stop).Status }} "
+        # Numeric InterfaceOperationalStatus, not the Status text: the text is a
+        # Windows-localized display string on some builds, and this module runs
+        # on every language. The switch is the documented IF_OPER_STATUS enum.
+        f"try {{ switch ([int](Get-NetAdapter -InterfaceIndex {ifindex} "
+        "-ErrorAction Stop).InterfaceOperationalStatus) { "
+        "1 { 'Up' } 2 { 'Disconnected' } 3 { 'Testing' } 4 { 'Unknown' } "
+        "5 { 'Dormant' } 6 { 'NotPresent' } 7 { 'LowerLayerDown' } "
+        "default { 'Unknown' } } } "
         "catch { 'error:' + $_.Exception.Message }",
         component="adapter_restart",
     )
@@ -107,7 +120,20 @@ def wait_for_restarts(timeout: float = SETTLE_TIMEOUT_SECONDS) -> bool:
     with _lock:
         running = list(_restarting.values())
     deadline = time.monotonic() + timeout
-    return all(event.wait(max(0.0, deadline - time.monotonic())) for event in running)
+    if not all(event.wait(max(0.0, deadline - time.monotonic())) for event in running):
+        return False
+    # "Up" is not the same as "ready to be read": DNS, offload and power
+    # properties are rebuilt by the driver just after the interface returns.
+    # A read that starts in that window sees an empty list and reports a
+    # transient as a real state. Settle for a beat after the last restart, not
+    # on every read.
+    with _lock:
+        last = _last_restart_finished
+    if last is not None:
+        remaining = _SETTLE_AFTER_RESTART_SECONDS - (time.monotonic() - last)
+        if remaining > 0:
+            time.sleep(remaining)
+    return True
 
 
 def _restart_now(ifindex: int) -> None:
@@ -137,8 +163,10 @@ def _restart_now(ifindex: int) -> None:
         else:
             logger.warning("Restarted network adapter %d, but %s", ifindex, reason)
     finally:
+        global _last_restart_finished
         with _lock:
             _restarting.pop(ifindex, None)
+            _last_restart_finished = time.monotonic()
         done.set()
 
 

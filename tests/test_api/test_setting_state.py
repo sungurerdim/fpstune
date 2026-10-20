@@ -106,7 +106,13 @@ class TestDetectAnswersInTheOneShape:
             assert state["default_source"] == (
                 setting.default_source.value if setting.default_source else None
             ), setting.id
-            assert state["current"] == setting.recommended_value, setting.id
+            if setting.is_action:
+                assert state["current"] is None, setting.id
+                assert state["is_action"] is True, setting.id
+                assert state["reading"] is not None, setting.id
+            else:
+                assert state["current"] == setting.recommended_value, setting.id
+                assert state["is_action"] is False, setting.id
             assert state["applicable"] is True
 
     @pytest.mark.parametrize("source", list(DefaultSource), ids=lambda s: s.value)

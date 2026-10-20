@@ -142,7 +142,13 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
     not only at the end-of-run re-detect. No second builder: it is
     `response.state`, serialised. `null` when no re-detect happened.
     """
-    current_value = response.state.current if response.state is not None else None
+    current_value = (
+        response.state.reading
+        if response.state is not None and response.state.is_action
+        else response.state.current
+        if response.state is not None
+        else None
+    )
     if response.skipped:
         return [_sse({"event": "skipped", "id": setting_id})]
     if not response.success:

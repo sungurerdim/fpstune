@@ -84,7 +84,10 @@ export function useApply() {
             );
           }
           const state = response.state;
-          if (state !== null && state.current !== null && state.current !== undefined) {
+          if (
+            state !== null &&
+            (state.is_action || (state.current !== null && state.current !== undefined))
+          ) {
             useStore.getState().applySettingStates({ [setting.id]: state });
           } else {
             await detectionManager.redetectSettings([setting.id]);

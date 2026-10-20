@@ -74,7 +74,7 @@ export interface DetectionResultUpdate {
  */
 export function updateFromState(state: SettingState): DetectionResultUpdate {
   return {
-    value: state.current,
+    value: state.is_action ? state.reading : state.current,
     is_optimized: state.is_optimized,
     is_applicable: state.applicable,
     applicable_reason: state.applicable_reason,

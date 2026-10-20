@@ -329,9 +329,11 @@ class TestTheAfterReadingIsWhatTheRowThenShows:
         assert entry["status"] == "ready"
         assert entry["bytes"] == 96 * MB
         # And the post-apply detect served it, so the row updates on the response.
-        # Lower-cased on the way out by the detection engine's own
-        # normalisation; the size is the after reading either way.
-        assert str(body["state"]["current"]).lower() == "ready|96 mb"
+        # Lower-cased on the way out by the detection engine's own normalisation;
+        # an action carries the reading, never a `current` value.
+        assert body["state"]["current"] is None
+        assert body["state"]["is_action"] is True
+        assert str(body["state"]["reading"]).lower() == "ready|96 mb"
 
     def test_an_unreadable_after_measurement_drops_the_stale_size(
         self, client: TestClient, cache: CleanupSizeCache

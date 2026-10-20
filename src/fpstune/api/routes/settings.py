@@ -23,6 +23,7 @@ from fastapi import APIRouter, HTTPException
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
 from fpstune.api.routes.settings_apply import apply_and_finalize
+from fpstune.api.state_view import setting_state
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -81,27 +82,6 @@ def _get_hardware_context() -> HardwareContext:
 
 
 router = APIRouter()
-
-
-def setting_state(setting: SettingExecutor, result: DetectionResult) -> SettingState:
-    """One setting's detection, in the one shape `/detect` and `/apply` both answer in.
-
-    The only place a `SettingState` is built: `default` and `default_source` come
-    from the definition, never from a reading, so a reset's target is the same
-    value whether the client learned it from a detect or from an apply.
-    """
-    return SettingState(
-        setting_id=setting.id,
-        current=result.value,
-        applicable=result.is_applicable,
-        applicable_reason=result.applicable_reason,
-        recommended=setting.recommended_value,
-        default=setting.default_value,
-        default_source=setting.default_source,
-        is_optimized=result.is_optimized,
-        error=result.error,
-        finding=result.finding,
-    )
 
 
 def _get_registry() -> SettingsRegistry:

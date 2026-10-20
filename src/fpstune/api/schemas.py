@@ -366,6 +366,11 @@ class SettingState(BaseModel):
     setting_id: str
     # The value read from this machine; None when it could not be read (see `error`).
     current: Any | None = None
+    # True for a cleanup/repair/purge: it has a reading, not a state. `current`
+    # is None; `reading` carries the status string the Cleanup tab renders, and
+    # `is_optimized` is not a verdict for this row.
+    is_action: bool = False
+    reading: str | None = None
     # False = the setting does not exist on this machine (`applicable_reason` says why).
     applicable: bool = True
     applicable_reason: str = ""

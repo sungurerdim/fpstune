@@ -454,6 +454,9 @@ export const api = {
 export interface SettingState {
   setting_id: string;
   current: unknown | null;
+  /** True for an action: `current` is null and `reading` is the status string. */
+  is_action?: boolean;
+  reading?: string | null;
   applicable: boolean;
   applicable_reason: string;
   recommended: unknown | null;

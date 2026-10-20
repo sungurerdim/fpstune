@@ -1,7 +1,7 @@
 """The CLI benchmark tree: every refusal says why, and no failure is a green tick.
 
-These commands wrap the instruments (FurMark, PresentMon, the DPC and network
-benches) in click. The instruments themselves are tested in tests/test_benchmark;
+These commands wrap the instruments (PresentMon, the DPC and network benches)
+in click. The instruments themselves are tested in tests/test_benchmark;
 what is untested until now is the command layer — the part that decides whether
 a failure reaches the user as words or as a traceback, and whether a benchmark
 that did not run can still print like one that did (C11 rule 3: what could not
@@ -27,19 +27,6 @@ bench_cmds = import_module("fpstune.commands.benchmark")
 @pytest.fixture
 def runner():
     return CliRunner()
-
-
-def _furmark(**overrides) -> MagicMock:
-    fm = MagicMock()
-    fm.is_installed.return_value = True
-    fm.get_presets.return_value = {
-        "quick": {"duration": 30, "resolution": "1280x720", "msaa": 0},
-        "standard": {"duration": 60, "resolution": "1920x1080", "msaa": 4},
-        "extreme": {"duration": 60, "resolution": "2560x1440", "msaa": 8},
-    }
-    for key, value in overrides.items():
-        setattr(fm, key, value)
-    return fm
 
 
 class TestFpsCaptureLifecycle:
@@ -152,107 +139,6 @@ class TestFpsAnalyzeAndCompare:
         assert "fps start" in result.output
 
 
-class TestGpuBench:
-    def test_run_reports_failure_and_saves_nothing(self, runner) -> None:
-        """A FurMark pass that returned nothing must not leave a saved result a
-        later compare would treat as a measurement (C11)."""
-        fm = _furmark()
-        fm.run_benchmark.return_value = None
-
-        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
-            result = runner.invoke(bench_cmds.gpu_bench, ["run"])
-
-        assert result.exit_code == 0
-        assert "Benchmark failed" in result.output
-        fm.save_result.assert_not_called()
-
-    def test_run_without_furmark_installs_the_pinned_release_first(self, runner) -> None:
-        """A benchmark tool downloads on first use (owner decision, 2026-10-05) —
-        through `install`, which only accepts the pinned, hashed file."""
-        fm = _furmark()
-        fm.is_installed.return_value = False
-        fm.install.return_value = True
-        fm.run_benchmark.return_value = None
-
-        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
-            result = runner.invoke(bench_cmds.gpu_bench, ["run"])
-
-        assert result.exit_code == 0
-        fm.install.assert_called_once()
-        fm.run_benchmark.assert_called_once()
-
-    def test_a_failed_install_says_why_and_runs_nothing(self, runner) -> None:
-        fm = _furmark()
-        fm.is_installed.return_value = False
-        fm.install.return_value = False
-        fm.install_error = "FurMark 2.10.2 could not be installed: the hash did not match"
-
-        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
-            result = runner.invoke(bench_cmds.gpu_bench, ["run"])
-
-        assert "the hash did not match" in result.output
-        fm.run_benchmark.assert_not_called()
-
-    def test_run_passes_the_overrides_through(self, runner) -> None:
-        """--duration and --resolution silently ignored would benchmark a
-        different load than the one the user asked for and label it the same."""
-        fm = _furmark()
-        fm.run_benchmark.return_value = None  # stop before display
-
-        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
-            runner.invoke(
-                bench_cmds.gpu_bench,
-                ["run", "-p", "quick", "-a", "vulkan", "-d", "15", "-r", "1024x768"],
-            )
-
-        fm.run_benchmark.assert_called_once_with(
-            name="benchmark",
-            preset="quick",
-            api="vulkan",
-            custom_duration=15,
-            custom_resolution="1024x768",
-        )
-
-    def test_run_rejects_an_unknown_preset(self, runner) -> None:
-        """The preset list is the contract with FurMark's config; a free-text
-        preset would KeyError inside get_presets()."""
-        result = runner.invoke(bench_cmds.gpu_bench, ["run", "-p", "ultra"])
-
-        assert result.exit_code == 2
-        assert "ultra" in result.output
-
-    def test_compare_names_the_missing_side(self, runner) -> None:
-        fm = _furmark()
-        with (
-            patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm),
-            patch.object(bench_cmds, "load_furmark_result", side_effect=[MagicMock(), None]),
-        ):
-            result = runner.invoke(bench_cmds.gpu_bench, ["compare", "-b", "there", "-a", "gone"])
-
-        assert result.exit_code == 0
-        assert "'after'" in result.output
-        assert "gone" in result.output
-        fm.compare.assert_not_called()
-
-    def test_presets_are_read_from_the_instrument(self, runner) -> None:
-        """The table renders whatever get_presets() says — a hardcoded copy of
-        the durations would drift the moment the instrument's presets change."""
-        fm = _furmark()
-        fm.get_presets.return_value = {
-            "quick": {"duration": 7, "resolution": "640x480", "msaa": 0},
-            "standard": {"duration": 77, "resolution": "1920x1080", "msaa": 4},
-            "extreme": {"duration": 777, "resolution": "2560x1440", "msaa": 8},
-        }
-
-        with patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm):
-            result = runner.invoke(bench_cmds.gpu_bench, ["presets"])
-
-        assert result.exit_code == 0
-        assert "7s" in result.output
-        assert "77s" in result.output
-        assert "777s" in result.output
-
-
 class TestNetworkBench:
     def test_run_reports_failure_and_saves_nothing(self, runner) -> None:
         nb = MagicMock()
@@ -343,34 +229,3 @@ class TestDpcBench:
         db.compare.assert_not_called()
 
 
-class TestStandaloneBenchmark:
-    def test_compare_flag_never_installs_anything(self, runner) -> None:
-        """`benchmark --compare` is a read; downloading 100 MB of FurMark to
-        show two saved results is a write the user did not ask for."""
-        fm = _furmark()
-        fm.is_installed.return_value = False
-
-        with (
-            patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm),
-            patch.object(bench_cmds, "show_benchmark_comparison") as shown,
-            patch.object(bench_cmds, "print_banner"),
-        ):
-            result = runner.invoke(bench_cmds.benchmark, ["--compare"])
-
-        assert result.exit_code == 0
-        fm.install.assert_not_called()
-        shown.assert_called_once_with(fm)
-
-    def test_failed_run_is_reported_not_saved(self, runner) -> None:
-        fm = _furmark()
-        fm.run_benchmark.return_value = None
-
-        with (
-            patch.object(bench_cmds, "FurMarkBenchmark", return_value=fm),
-            patch.object(bench_cmds, "print_banner"),
-        ):
-            result = runner.invoke(bench_cmds.benchmark, [])
-
-        assert result.exit_code == 0
-        assert "Benchmark failed" in result.output
-        fm.save_result.assert_not_called()

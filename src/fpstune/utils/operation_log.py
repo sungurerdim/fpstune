@@ -305,20 +305,22 @@ class OperationLog:
         skipped = bool(getattr(response, "skipped", False)) or not ran
         success = bool(getattr(response, "success", False))
         error = getattr(response, "error", None)
+        warnings = list(getattr(response, "warnings", None) or [])
         if skipped:
             outcome = "skipped"
-        elif success and error:
+        elif success and warnings:
             outcome = "partial"
         elif success:
             outcome = "ok"
         else:
             outcome = "failed"
+        reason = None if outcome == "ok" else (error or ("; ".join(warnings) or None))
         self.write(
             "apply" if ran else "skip",
             outcome,
             setting.id,
             duration_ms=duration_ms,
-            reason=None if outcome == "ok" else error,
+            reason=reason,
             verified=getattr(response, "verified", None),
             requires_reboot=getattr(response, "requires_reboot", False),
             freed_bytes=getattr(response, "freed_bytes", None),

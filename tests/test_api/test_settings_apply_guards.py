@@ -373,7 +373,8 @@ def test_a_real_partial_write_keeps_its_warning() -> None:
     )
 
     assert response.success is True
-    assert response.error == "applied, but 1 write(s) failed"
+    assert response.error is None
+    assert response.warnings == ["applied, but 1 write(s) failed"]
 
 
 def test_a_failed_write_is_logged_with_its_verb_not_its_past_tense() -> None:

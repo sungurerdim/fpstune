@@ -44,9 +44,11 @@ def _make_apply_response(
     verified: bool | None = True,
     freed_bytes: int | None = None,
     size_after_bytes: int | None = None,
+    warnings: list[str] | None = None,
 ) -> MagicMock:
     r = MagicMock()
     r.success = success
+    r.warnings = warnings or []
     r.state = SettingState(setting_id="test:setting", current=current)
     r.requires_reboot = requires_reboot
     r.skipped = skipped
@@ -180,6 +182,35 @@ class TestBulkStreamApply:
         done = next(e for e in events if e.get("event") == "done")
         assert done["succeeded"] == 1
         assert done["failed"] == 0
+
+    def test_applied_event_carries_executor_warnings(self, client: TestClient) -> None:
+        """A partial sub-write must reach the row, not hide behind success."""
+        setting = _make_setting("core:game_mode", recommended_value="1", default_value="0")
+        apply_resp = _make_apply_response(
+            success=True, current="1", warnings=["applied, but 1 write(s) failed"]
+        )
+        mock_registry = MagicMock()
+        mock_registry.get.return_value = setting
+
+        with (
+            patch("fpstune.api.routes.settings_stream._get_registry", return_value=mock_registry),
+            patch(
+                "fpstune.api.routes.settings_stream._get_hardware_context",
+                return_value=neutral_hardware_context(),
+            ),
+            patch(
+                "fpstune.api.routes.settings_stream._apply_single_setting",
+                return_value=(setting, apply_resp),
+            ),
+        ):
+            response = client.post(
+                "/api/settings/bulk/stream-apply",
+                json={"settings": {"core:game_mode": "1"}},
+            )
+
+        events = _parse_sse(response.text)
+        applied = next(e for e in events if e.get("event") == "applied")
+        assert applied["warnings"] == ["applied, but 1 write(s) failed"]
 
     def test_failed_apply_emits_failed_event(self, client: TestClient) -> None:
         setting = _make_setting("core:bad_setting")

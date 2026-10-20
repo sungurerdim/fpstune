@@ -161,6 +161,7 @@ def _outcome_events(setting_id: str, response: ApplyResponse) -> list[str]:
                 "event": "applied",
                 "id": setting_id,
                 "success": True,
+                "warnings": response.warnings,
                 "current_value": current_value,
                 "requires_reboot": response.requires_reboot,
                 # What a cleanup reclaimed, measured around its own command by

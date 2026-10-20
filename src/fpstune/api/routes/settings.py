@@ -386,6 +386,7 @@ def _finalize_apply_response(
     state: SettingState | None = None
     success = cmd_success
     error = cmd_error
+    warnings: list[str] = []
     verify_outcome: bool | None = None
 
     if success:
@@ -407,7 +408,11 @@ def _finalize_apply_response(
             # failure: putting it in `error` made a clean apply read as partial.
             # "applied, but ..." is the one success-with-warning shape and keeps
             # the error so the warning reaches the caller and the operation log.
-            if error and "applied, but" not in error.casefold():
+            if error and "applied, but" in error.casefold():
+                warnings.append(error)
+                log_activity(error, "warning")
+                error = None
+            elif error:
                 log_activity(error, "info")
                 error = None
             log_activity(
@@ -421,6 +426,7 @@ def _finalize_apply_response(
         setting_id=setting.id,
         success=success,
         error=error,
+        warnings=warnings,
         state=state,
         requires_reboot=setting.requires_reboot,
         verified=verify_outcome,

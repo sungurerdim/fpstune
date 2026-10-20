@@ -107,13 +107,28 @@ def test_a_partial_apply_is_not_reported_as_clean_success(tmp_path: Path) -> Non
     path = log.start_session(tmp_path / "operations.log")
     log.record_apply(
         _setting("power:cpu_min_state"),
-        _response(error="applied, but 1 write(s) failed", verified=True),
+        _response(warnings=["applied, but 1 write(s) failed"], verified=True),
         90,
     )
 
     text = path.read_text(encoding="utf-8")
     assert "APPLY | partial |" in text
     assert "partial" in text
+
+
+def test_a_warning_on_a_successful_apply_is_still_partial(tmp_path: Path) -> None:
+    """The response now has a warnings channel; a clean `error` is not a clean run."""
+    log = OperationLog()
+    path = log.start_session(tmp_path / "operations.log")
+    log.record_apply(
+        _setting("power:cpu_min_state"),
+        _response(warnings=["applied, but 1 write(s) failed"], verified=True),
+        90,
+    )
+
+    text = path.read_text(encoding="utf-8")
+    assert "APPLY | partial |" in text
+    assert "applied, but 1 write(s) failed" in text
 
 
 def test_a_skipped_setting_is_not_a_failure(tmp_path: Path) -> None:

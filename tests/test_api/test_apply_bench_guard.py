@@ -189,6 +189,7 @@ class TestStreamLeavesTheSentinel:
         response.success = success
         response.skipped = False
         response.error = None if success else "Access denied"
+        response.warnings = []
         response.state = SettingState(setting_id="core:game_mode", current="1")
         response.requires_reboot = False
         response.verified = True

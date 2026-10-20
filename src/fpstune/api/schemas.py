@@ -405,6 +405,10 @@ class ApplyResponse(BaseModel):
     setting_id: str
     success: bool
     error: str | None
+    # Secondary copies that did not take, while the target state is in force.
+    # `error` is reserved for a failure of the target; mixing the two made a
+    # clean apply read as partial and a partial one read as failed.
+    warnings: list[str] = []
     # The setting as it reads after the write — the detect shape, produced by the
     # same re-detect that verified the apply. None when no re-detect happened:
     # the command failed, the value was refused, or the setting was skipped.

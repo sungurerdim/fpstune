@@ -26,6 +26,7 @@ export const en = {
   // Tabs
   // Single apply / reset outcomes
   "apply.applied": "Applied {name}",
+  "apply.appliedWarnings": "Applied {name} with warnings: {reason}",
   "apply.applyFailed": "Could not apply {name}: {reason}",
   "apply.reset": "Reset {name} to its default",
   "apply.resetFailed": "Could not reset {name}: {reason}",
@@ -114,6 +115,7 @@ export const en = {
   "row.statusFailedBecause": "Failed: {reason}",
   "toolbar.streamFailed": "The bulk run stopped: {reason}",
   "toolbar.doneSummary": "{done} done, {failed} failed.",
+  "toolbar.doneWarnings": "{count} applied with warnings.",
   "toolbar.stopped": "Stopped. Settings not yet started were left as they were.",
   "toolbar.restoreFailed": "Restore point failed — nothing was applied. {reason}",
   "row.queued": "queued",

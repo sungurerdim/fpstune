@@ -66,10 +66,20 @@ export function useApply() {
           .catch((error: unknown) => failedResponse(setting, errorMessage(error)));
         const name = localizedName(setting);
         if (response.success) {
-          addNotification(
-            t(kind === "apply" ? "apply.applied" : "apply.reset", { name }),
-            "success",
-          );
+          if (response.warnings && response.warnings.length > 0) {
+            addNotification(
+              t("apply.appliedWarnings", {
+                name,
+                reason: response.warnings[0],
+              }),
+              "warning",
+            );
+          } else {
+            addNotification(
+              t(kind === "apply" ? "apply.applied" : "apply.reset", { name }),
+              "success",
+            );
+          }
           const state = response.state;
           if (state !== null && state.current !== null && state.current !== undefined) {
             useStore.getState().applySettingStates({ [setting.id]: state });
@@ -122,6 +132,7 @@ export function useApply() {
       // The machine is being changed: the hardware re-read on window focus
       // stays off the same PowerShell for the length of the run.
       store.beginOperation();
+      const warned = new Set<string>();
 
       const finish = () => {
         const state = useStore.getState();
@@ -135,8 +146,11 @@ export function useApply() {
         ).length;
         state.addNotification(
           t("toolbar.doneSummary", { done, failed }),
-          failed > 0 ? "warning" : "success",
+          failed > 0 || warned.size > 0 ? "warning" : "success",
         );
+        if (warned.size > 0) {
+          state.addNotification(t("toolbar.doneWarnings", { count: warned.size }), "warning");
+        }
         // Every id is read again, failures included: a failed write can still
         // have changed part of what it touched, and a verified row's state
         // predates the writes that ran beside it, so this is the one reading
@@ -154,6 +168,13 @@ export function useApply() {
           const state = useStore.getState();
           if (event.event === "started" || event.event === "applied") {
             state.setOperationStatus(id, "running");
+            if (
+              event.event === "applied" &&
+              Array.isArray(event.warnings) &&
+              event.warnings.length > 0
+            ) {
+              warned.add(id);
+            }
           } else if (event.event === "verified") {
             state.setOperationStatus(id, "verified");
             const settingState = verifiedState(event);

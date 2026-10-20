@@ -173,6 +173,36 @@ describe("useApply", () => {
     ).toBe(true);
   });
 
+  it("a successful apply with warnings shows the warning, not a clean success", async () => {
+    useStore.setState({ notifications: [] } as never);
+    server.use(
+      http.post("/api/settings/:id/apply", () =>
+        HttpResponse.json({
+          setting_id: "timer:hpet",
+          success: true,
+          error: null,
+          warnings: ["applied, but 1 write(s) failed"],
+          state: stateOf("disabled"),
+          requires_reboot: false,
+          verified: true,
+        }),
+      ),
+    );
+    const { Wrapper } = makeWrapper();
+    const { result } = renderHook(() => useApply(), { wrapper: Wrapper });
+
+    await act(async () => {
+      await result.current.apply(makeSetting(), "disabled");
+    });
+
+    const notifications = useStore.getState().notifications;
+    expect(
+      notifications.some(
+        (n) => n.type === "warning" && n.message.includes("applied, but 1 write(s) failed"),
+      ),
+    ).toBe(true);
+  });
+
   it("a failed apply says so, with the backend's reason (E8)", async () => {
     useStore.setState({ notifications: [] } as never);
     server.use(

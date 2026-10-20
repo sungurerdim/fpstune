@@ -473,6 +473,8 @@ export interface ApplyResponse {
   setting_id: string;
   success: boolean;
   error: string | null;
+  /** Secondary copies that did not take while the target state is in force. */
+  warnings?: string[];
   /**
    * The setting as it reads after the write — the detect shape, from the same
    * re-detect that verified the apply. Null when nothing was re-detected: the

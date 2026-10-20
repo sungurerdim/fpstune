@@ -21,6 +21,7 @@ export const tr: Record<keyof typeof en, string> = {
   // Tabs
   // Single apply / reset outcomes
   "apply.applied": "{name} uygulandı",
+  "apply.appliedWarnings": "{name} uyarılarla uygulandı: {reason}",
   "apply.applyFailed": "{name} uygulanamadı: {reason}",
   "apply.reset": "{name} varsayılanına döndürüldü",
   "apply.resetFailed": "{name} sıfırlanamadı: {reason}",
@@ -109,6 +110,7 @@ export const tr: Record<keyof typeof en, string> = {
   "row.statusFailedBecause": "Başarısız: {reason}",
   "toolbar.streamFailed": "Toplu işlem durdu: {reason}",
   "toolbar.doneSummary": "{done} tamamlandı, {failed} başarısız.",
+  "toolbar.doneWarnings": "{count} ayar uyarılarla uygulandı.",
   "toolbar.stopped": "Durduruldu. Henüz başlamamış ayarlara dokunulmadı.",
   "toolbar.restoreFailed": "Geri yükleme noktası oluşturulamadı — hiçbir şey uygulanmadı. {reason}",
   "row.queued": "sırada",

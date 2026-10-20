@@ -23,7 +23,6 @@ from fastapi import APIRouter, HTTPException
 import fpstune.settings.registry_cache as registry_cache
 from fpstune.api.definitions_view import setting_to_response
 from fpstune.api.routes.settings_apply import apply_and_finalize
-from fpstune.api.state_view import setting_state
 from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
@@ -34,6 +33,7 @@ from fpstune.api.schemas import (
     SettingDefinitionResponse,
     SettingState,
 )
+from fpstune.api.state_view import setting_state
 from fpstune.safety import restore
 from fpstune.settings import (
     DetectionEngine,
@@ -48,7 +48,6 @@ from fpstune.settings.applicability import (
 from fpstune.settings.base import (
     CATEGORY_METADATA,
     MODULE_METADATA,
-    DetectionResult,
     SettingExecutor,
     SettingValueType,
     get_all_categories_metadata,

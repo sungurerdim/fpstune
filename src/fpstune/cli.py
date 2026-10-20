@@ -14,12 +14,10 @@ import click
 
 from fpstune import __version__
 from fpstune.commands import (
-    benchmark,
     cleanup,
     dpc_bench,
     fps,
     gpu,
-    gpu_bench,
     network_bench,
     nvidia_dump,
     status,
@@ -145,7 +143,7 @@ def main(ctx: click.Context, verbose: bool) -> None:
         fpstune status    What this machine is set to, and what is left to do
         fpstune gpu       How this GPU is configured
         fpstune nvidia-dump  Save NVIDIA driver settings to a file, for diagnosis
-        fpstune benchmark Measure this machine, before and after
+        fpstune fps       Measure frame rate with PresentMon
         fpstune cleanup   Free disk space
         fpstune serve     Start the web UI (same as no args)
 
@@ -187,12 +185,10 @@ def main(ctx: click.Context, verbose: bool) -> None:
 # ---------------------------------------------------------------------------
 # Register command modules
 # ---------------------------------------------------------------------------
-main.add_command(benchmark)
 main.add_command(cleanup)
 main.add_command(dpc_bench)
 main.add_command(fps)
 main.add_command(gpu)
-main.add_command(gpu_bench)
 main.add_command(network_bench)
 main.add_command(nvidia_dump)
 main.add_command(status)

@@ -36,11 +36,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any
 
-from fpstune.benchmark.boot_time import BootTimeBench
 from fpstune.benchmark.cpu_bench import CpuBench
 from fpstune.benchmark.disk_io import DiskIoBench
 from fpstune.benchmark.event_scan import EventScanBench
-from fpstune.benchmark.frame_pacing import FramePacingBench
 from fpstune.benchmark.gpu_memory import GpuMemoryBench
 from fpstune.benchmark.gpu_scene import GpuSceneBench, running_game_label
 from fpstune.benchmark.memory import MemoryBench
@@ -126,7 +124,6 @@ def _entries() -> tuple[Entry, ...]:
     module-level singleton would share it across two concurrent runs.
     """
     return (
-        Entry(FramePacingBench(), costs=""),
         Entry(TimingBench(), costs=""),
         Entry(MemoryBench(), costs=""),
         # Works every thread for a couple of seconds, which is what measuring
@@ -155,9 +152,6 @@ def _entries() -> tuple[Entry, ...]:
         # automatic run — but only on a machine that already has the engine and
         # nobody playing on it, both of which it answers for itself.
         _gpu_scene_entry(),
-        # Reads a log Windows wrote at the last boot, so it costs one query and
-        # needs no boot of its own.
-        Entry(BootTimeBench(), costs=""),
         # Asks the card what link it negotiated. Cheap, and the answer is a
         # ceiling the machine set before fpstune touched anything (C1).
         Entry(PcieLinkBench(), costs=""),
@@ -207,8 +201,8 @@ def benches_for(keys: list[str] | None) -> list[Bench]:
 def tool_executable_names() -> list[str]:
     """The external tools a bench can leave running, by their own file names.
 
-    Asked of the tools rather than listed here. `presentmon.py`, `furmark.py`
-    and `gpu_scene.py` each already know what their executable is called — they
+    Asked of the tools rather than listed here. `presentmon.py` and
+    `gpu_scene.py` each already know what their executable is called — they
     have to, in order to find it on disk after a download — so a second list in
     this module would be a copy that goes stale the next time one of them is
     repackaged. That is C9's rule about derived-not-declared applied to a
@@ -228,15 +222,11 @@ def tool_executable_names() -> list[str]:
     names: list[str] = []
 
     try:
-        from fpstune.benchmark.furmark import FurMarkBenchmark
         from fpstune.benchmark.presentmon import PresentMonBenchmark
 
         presentmon = PresentMonBenchmark()
-        furmark = FurMarkBenchmark()
         candidates = [
             presentmon.presentmon_path.name,
-            furmark.furmark_cli_path.name,
-            furmark.furmark_path.name,
             GpuSceneBench().engine_path.name,
         ]
     except Exception:  # pragma: no cover - import guarded for packaging

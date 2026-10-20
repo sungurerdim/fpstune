@@ -198,21 +198,6 @@ class TestEveryBenchUsesTheStore:
         assert path.parent == tmp_path.resolve()
         assert "evil" in path.name
 
-    def test_furmark_squashes_a_traversal_name(self, tmp_path: Path) -> None:
-        from fpstune.benchmark.furmark import FurMarkBenchmark, FurMarkResult
-
-        bench = FurMarkBenchmark(data_dir=tmp_path)
-        result = FurMarkResult(
-            name="..\\..\\evil",
-            timestamp="2026-08-25T12:00:00",
-            duration_seconds=60,
-        )
-
-        path = bench.save_result(result)
-
-        assert path.parent == (tmp_path / "results").resolve()
-        assert "evil" in path.name
-
     def test_presentmon_squashes_both_halves_of_a_capture_name(self, tmp_path: Path) -> None:
         from fpstune.benchmark.presentmon import (
             BenchmarkCapture,

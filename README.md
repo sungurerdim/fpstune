@@ -157,7 +157,6 @@ tuned when it had not.
 fpstune status       # what this machine is set to, and what is left to do
 fpstune gpu          # how this GPU is configured, and what would change
 fpstune nvidia-dump  # save every NVIDIA global driver setting to a file, for diagnosis
-fpstune benchmark    # measure this machine (--after to compare against a baseline)
 fpstune cleanup      # free disk space
 fpstune bios         # reboot straight into BIOS/UEFI setup (--cancel to abort)
 fpstune serve        # start the web UI by hand (--port, --no-browser; --dev from source)
@@ -165,11 +164,11 @@ fpstune update       # check whether a newer release exists
 fpstune -v status    # any command, with the full log
 ```
 
-Four commands are measurement trees of their own, each with `list` and
+Three commands are measurement trees of their own, each with `list` and
 `compare` subcommands: `fpstune fps` (PresentMon capture — see below),
-`fpstune gpu-bench` (FurMark stress), `fpstune network-bench` (latency and
-jitter against named targets) and `fpstune dpc-bench` (DPC latency and timer
-resolution). `--help` on any of them lists the rest of its tree.
+`fpstune network-bench` (latency and jitter against named targets) and
+`fpstune dpc-bench` (DPC latency and timer resolution). `--help` on any of them
+lists the rest of its tree.
 
 ---
 
@@ -258,9 +257,9 @@ vocabulary: frame time, CPU busy, GPU time, GPU wait, input-to-photon latency.
 That is what makes "max settings here, low settings there" one comparison on one
 axis instead of two unrelated scores.
 
-The corollary is that a stress test is not a performance test. FurMark answers
-"how hot, how stable"; it does not answer "what does this machine reach", so it
-sits on its own panel and stays off the performance path.
+The corollary is that a stress test is not a performance test. A power-virus
+stress test answers "how hot, how stable"; it does not answer "what does this
+machine reach", so it is not part of fpstune at all.
 
 | Endpoint | Method | Description |
 |----------|--------|-------------|
@@ -294,9 +293,9 @@ separately.
 pressed the broad one is a button that gets pressed once.
 
 Coverage over the shipped registry today: **324 of 664 claims are measurable**
-(151 via network latency, 151 via PresentMon, 11 via FurMark, 6 via timer
-jitter, 3 via disk I/O, 1 via memory bandwidth, 1 via throughput). The other
-340 are listed with a reason rather than dropped, and they are not one pile.
+(151 via network latency, 151 via PresentMon, 6 via timer jitter, 3 via disk
+I/O, 1 via memory bandwidth, 1 via throughput). The rest are listed with a
+reason rather than dropped, and they are not one pile.
 109 are not the kind of claim an instrument settles at all — privacy, whether
 a footstep is audible — and filing those as gaps would invent a to-do list
 nothing can ever close. The real shortfall is 231: 198 name the instrument
@@ -362,8 +361,8 @@ src/fpstune/
     base.py         SettingExecutor schema (risk_level, evidence_level, impact_scores)
   core/             DISM, NVIDIA driver settings (NVAPI), power profiles
   safety/           System Restore points; deletes the files earlier releases kept
-  benchmark/        PresentMon, FurMark, DPC latency, the suite, claim verification
-  commands/         the CLI surface (status, gpu, benchmark, fps, cleanup, ...)
+  benchmark/        PresentMon, DPC latency, the suite, claim verification
+  commands/         the CLI surface (status, gpu, fps, cleanup, ...)
   utils/            Hardware detection, admin check, logging, PowerShell runner
 
 frontend/src/       React + Vite + TypeScript + Tailwind

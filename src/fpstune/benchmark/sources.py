@@ -194,6 +194,18 @@ SOURCES: tuple[Source, ...] = (
         units={"storage_performance": "MB/s", "loading_speed": "MB/s"},
     ),
     Source(
+        name="cleanup_measure",
+        requires="a cleanup whose target can be sized either side of the command",
+        fields={
+            # Not a bench: `cleanup_measure.freed_after_cleanup` brackets the
+            # command with two readings and returns their difference. It is the
+            # instrument for a claim about space, and it belongs here so the
+            # claim is mapped rather than filed as unmeasurable.
+            "disk_freed": "freed_bytes",
+        },
+        units={"disk_freed": "bytes"},
+    ),
+    Source(
         name="network_load",
         requires="an internet connection this may download about 25 MB over",
         fields={
@@ -216,17 +228,6 @@ SOURCES: tuple[Source, ...] = (
         requires="nothing — it allocates its own working set",
         fields={"memory_bandwidth": "memory_bandwidth"},
         units={"memory_bandwidth": "MB/s"},
-    ),
-    Source(
-        name="boot_time",
-        requires="administrator rights, so Windows will open its boot diagnostics log",
-        fields={
-            # Only the shutdown half. The claims filed under `startup_speed` are
-            # mostly a game's own launch time, which this does not measure — see
-            # NO_INSTRUMENT below.
-            "shutdown_speed": "shutdown_time_s",
-        },
-        units={"shutdown_speed": "s"},
     ),
     Source(
         name="gpu_memory",
@@ -318,7 +319,6 @@ NO_INSTRUMENT: dict[str, str] = {
     "fps_sustained": "needs a long run under sustained load, which no benchmark here does",
     "fps_retained": "needs a long run under sustained load, which no benchmark here does",
     "matchmaking_s": "depends on a game's servers rather than on this machine",
-    "disk_freed": "measurable, but as a one-off reading rather than a before/after pair",
     "frame_time_consistency": "expressed as a quality rather than a quantity",
     "network_consistency": "expressed as a quality rather than a quantity",
     "stutter_reduction": "expressed as a quality rather than a quantity",
@@ -328,11 +328,10 @@ NO_INSTRUMENT: dict[str, str] = {
     # Listed here rather than left to be reported as "states no number", because
     # writing a number into them would change nothing: the missing half is the
     # instrument, not the figure.
-    # Windows boot *is* timed now (event 100, see `boot_time.py`), and it is not
-    # what these claims are about: they are a game's own launch — a shader cache
-    # that stops being rebuilt, a config that stops being reparsed. Judging one by
-    # the other would compare two different quantities.
-    "startup_speed": "this times Windows booting, not the game these claims are about",
+    # They are a game's own launch — a shader cache that stops being rebuilt, a
+    # config that stops being reparsed. No instrument here times that; timing
+    # Windows boot would compare two different quantities.
+    "startup_speed": "these claims time a game launching, which no instrument here times",
     # The drive's counters report wear and errors, not host writes: wear is a
     # consequence of writing rather than a count of it, and judging a claim about
     # write volume by a wear figure is the loose mapping this module refuses.

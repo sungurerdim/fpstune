@@ -25,10 +25,10 @@ type BenchTab = "suite" | "verify";
  *   problem it held zero captures. The one thing it could do that headroom
  *   cannot is measure a real match; that is recorded as a gap rather than kept
  *   as a panel.
- * - **Stress Test** was FurMark, which answers "how hot, how stable" and never
- *   "what does this machine reach" (C11 rule 6). It stays off the performance
- *   path — but off it entirely rather than beside it, since it had never been
- *   installed. The instrument and its CLI command are untouched.
+ * - **Stress Test** was a power-virus stress test that answers "how hot, how
+ *   stable" and never "what does this machine reach" (C11 rule 6). It stayed
+ *   off the performance path, and this phase removed the panel and its CLI
+ *   command too; the decision record is in `tasks.md`.
  *
  * The order is the order of the work: the suite is what you press, and what
  * this machine reaches is what you read afterwards. Headroom used to sit above

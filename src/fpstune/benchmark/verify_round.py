@@ -56,7 +56,6 @@ _LOWER_IS_BETTER: frozenset[str] = frozenset(
         "packet_loss",
         "network_overhead",
         "matchmaking_s",
-        "boot_time_s",
         "input_lag_ms",
         "input_latency_ms",
         "frame_time_ms",

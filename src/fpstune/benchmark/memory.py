@@ -132,7 +132,7 @@ difference between resolving a memory-timing change and not.
 
 What this deliberately does not do is hide contention from the caller. It is the
 *uncontended* capability being compared, which is what a memory setting changes;
-whether the machine is busy is `frame_pacing`'s question and it answers it.
+whether the machine is busy is the process sampler's question and it answers it.
 """
 
 

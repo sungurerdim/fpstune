@@ -43,6 +43,12 @@ def _setting(setting_id: str = "test:one", **impact: object) -> SimpleNamespace:
 # imported inside the test so that deleting one of these classes is a collection
 # error rather than a skipped assertion.
 def _emitted_keys(source_name: str) -> set[str]:
+    if source_name == "cleanup_measure":
+        # Not a Bench: the reading is `FreedSpace.freed_bytes`, produced by
+        # bracketing a cleanup command with two size measurements.
+        from fpstune.settings.cleanup_measure import FreedSpace
+
+        return set(FreedSpace._fields)
     if source_name == "presentmon":
         from fpstune.benchmark.presentmon import FrameTimeStats
 
@@ -77,20 +83,6 @@ def _emitted_keys(source_name: str) -> set[str]:
         from fpstune.benchmark.memory import MemoryBench
 
         return set(MemoryBench(working_set_mb=1, chase_steps=1000).run(1).readings)
-    if source_name == "boot_time":
-        from unittest.mock import patch
-
-        from fpstune.benchmark.boot_time import BootTimeBench
-
-        # The log is replaced because it needs administrator rights to read;
-        # what has to still exist is the reading `shutdown_speed` is mapped to.
-        rows = [
-            {"kind": "status", "access": "ok"},
-            {"kind": "100", "at": 1_789_000_000, "boot_ms": 42_000, "main_path_ms": 30_000},
-            {"kind": "200", "at": 1_788_900_000, "shutdown_ms": 9_500},
-        ]
-        with patch("fpstune.benchmark.boot_time.query_rows", return_value=(rows, "")):
-            return set(BootTimeBench().run(2).readings)
     if source_name == "gpu_memory":
         from unittest.mock import patch
 
@@ -493,24 +485,15 @@ class TestWhatIsMissingIsTheBindingThing:
     """When a claim lacks both a number and an instrument, say which matters.
 
     `{"startup_speed": "slower"}` is missing both. Writing `+2s` into it would
-    change nothing, because what those claims time is a game launching and what
-    this build times is Windows booting — so reporting "states no number" sends
-    somebody to do work that closes no gap.
-
-    The example used to be `shutdown_speed`, which stopped fitting the day the
-    boot log became an instrument: a machine's shutdown is timed now, so that
-    claim really is only missing its number.
+    change nothing, because what those claims time is a game launching, which no
+    instrument here times — so reporting "states no number" sends somebody to do
+    work that closes no gap.
     """
 
     def test_a_metric_with_no_instrument_says_so_rather_than_no_number(self) -> None:
         reason = why_unmeasurable(parse_claim("t:1", "startup_speed", "slower"))
 
         assert reason == NO_INSTRUMENT["startup_speed"]
-
-    def test_the_half_that_now_has_an_instrument_asks_for_its_number(self) -> None:
-        """`shutdown_speed` is timed by event 200, so "faster" is a real to-do."""
-        assert source_for("shutdown_speed") is not None
-        assert why_unmeasurable(parse_claim("t:1", "shutdown_speed", "faster")) == NOT_QUANTIFIED
 
     def test_a_metric_with_an_instrument_asks_for_the_number(self) -> None:
         """`throughput` is measurable since the network-load bench landed, so a

@@ -254,29 +254,12 @@ class TestEveryShippedBenchDeclaresItsOwnDeadline:
 
         assert many > few, f"{entry.key} gives 10 repeats no more time than 2"
 
-    def test_a_bench_that_ignores_repeats_still_derives_its_deadline(self) -> None:
-        """The opt-out above cannot become a way to ship a flat constant."""
-        from fpstune.benchmark.boot_time import BootTimeBench
-
-        assert BootTimeBench(occurrences=50).timeout_seconds(2) > BootTimeBench(
-            occurrences=2
-        ).timeout_seconds(2)
-
     @pytest.mark.parametrize("entry", bench_registry.all_entries(), ids=lambda e: e.key)
     def test_it_is_generous_enough_to_be_a_deadline_not_a_limit(
         self, entry: bench_registry.Entry
     ) -> None:
         """A deadline that a healthy bench trips is a broken feature."""
         assert entry.bench.timeout_seconds(2) >= 30.0
-
-    def test_a_bench_configured_to_do_more_work_gets_more_time(self) -> None:
-        """The derivation is from the bench's own parameters, provably."""
-        from fpstune.benchmark.frame_pacing import FramePacingBench
-
-        brief = FramePacingBench(seconds=1.0)
-        lengthy = FramePacingBench(seconds=60.0)
-
-        assert lengthy.timeout_seconds(3) > brief.timeout_seconds(3)
 
 
 class TestTheStartupSweep:

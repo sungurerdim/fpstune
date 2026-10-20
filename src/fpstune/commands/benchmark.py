@@ -1,4 +1,4 @@
-"""Benchmark commands for fpstune CLI (benchmark, fps, gpu-bench, dpc-bench, network-bench)."""
+"""Benchmark commands for fpstune CLI (fps, dpc-bench, network-bench)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,6 @@ import click
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
-from fpstune.benchmark.furmark import FurMarkBenchmark
 from fpstune.benchmark.presentmon import (
     PRESENTMON_DOWNLOAD_SIZE_MB,
     PRESENTMON_VERSION,
@@ -18,92 +17,11 @@ from fpstune.commands.utils import (
     console,
     display_dpc_result,
     display_fps_stats,
-    display_furmark_result,
     display_network_result,
     load_dpc_result,
     load_fps_capture,
-    load_furmark_result,
     load_network_result,
-    print_banner,
-    show_benchmark_comparison,
 )
-
-# ============================================================================
-# benchmark command (standalone)
-# ============================================================================
-
-
-@click.command()
-@click.option(
-    "--after", is_flag=True, help="Run post-optimization benchmark and compare with 'before'"
-)
-@click.option(
-    "--preset",
-    "-p",
-    type=click.Choice(["quick", "standard"]),
-    default="quick",
-    help="Benchmark preset",
-)
-@click.option("--compare", is_flag=True, help="Compare before/after results without running")
-def benchmark(
-    after: bool,
-    preset: str,
-    compare: bool,
-) -> None:
-    """Run GPU benchmark with FurMark 2.
-
-    By default, runs a quick benchmark to measure current GPU performance.
-    Use --after flag after rebooting to compare with pre-optimization results.
-
-    \b
-    Examples:
-      fpstune benchmark           # Run quick benchmark
-      fpstune benchmark --after   # Run after reboot, compare with 'before'
-      fpstune benchmark --compare # Just show comparison
-    """
-    print_banner()
-
-    fm = FurMarkBenchmark()
-
-    if not compare and not fm.is_installed():
-        console.print("Downloading FurMark ...")
-        if not fm.install():
-            console.print(f"[red]{fm.install_error}[/]")
-            return
-
-    # Just show comparison?
-    if compare:
-        show_benchmark_comparison(fm)
-        return
-
-    # Run benchmark
-    name = "after" if after else "benchmark"
-    settings = fm.get_presets()[preset]
-
-    console.print(f"\nRunning {preset} GPU benchmark ({settings['duration']}s)...")
-    console.print(f"Resolution: {settings['resolution']}, MSAA: {settings['msaa']}x\n")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        progress.add_task(f"Benchmarking ({settings['duration']}s)...", total=None)
-        result = fm.run_benchmark(name=name, preset=preset)
-
-    if not result:
-        console.print("[red]\u2717[/] Benchmark failed")
-        return
-
-    fm.save_result(result)
-
-    # Show result
-    display_furmark_result(result)
-
-    # If --after, compare with before
-    if after:
-        show_benchmark_comparison(fm)
-
 
 # ============================================================================
 # fps command group (PresentMon-based)
@@ -322,201 +240,6 @@ def fps_list(limit: int) -> None:
                 "-",
                 "",
             )
-
-    console.print(table)
-
-
-# ============================================================================
-# gpu-bench command group (FurMark-based)
-# ============================================================================
-
-
-@click.group("gpu-bench")
-def gpu_bench() -> None:
-    """GPU benchmarking with FurMark 2.
-
-    Run standardized GPU benchmarks for before/after comparison.
-    """
-    pass
-
-
-@gpu_bench.command("install")
-def gpu_bench_install() -> None:
-    """Download the pinned FurMark 2 release and verify it."""
-    fm = FurMarkBenchmark()
-
-    if fm.install():
-        console.print("[green]\u2713[/] FurMark 2 is installed")
-        console.print(f"  Location: {fm.furmark_cli_path}")
-        return
-
-    console.print(f"[red]{fm.install_error}[/]")
-
-
-@gpu_bench.command("run")
-@click.option("--name", "-n", default="benchmark", help="Name for this benchmark")
-@click.option(
-    "--preset",
-    "-p",
-    type=click.Choice(["quick", "standard", "extreme"]),
-    default="standard",
-    help="Benchmark preset",
-)
-@click.option(
-    "--api", "-a", type=click.Choice(["opengl", "vulkan"]), default="opengl", help="Graphics API"
-)
-@click.option("--duration", "-d", type=int, help="Override duration (seconds)")
-@click.option("--resolution", "-r", help="Override resolution (e.g., 1920x1080)")
-def gpu_bench_run(
-    name: str,
-    preset: str,
-    api: str,
-    duration: int | None,
-    resolution: str | None,
-) -> None:
-    """Run a GPU benchmark."""
-    fm = FurMarkBenchmark()
-
-    if not fm.is_installed():
-        console.print("Downloading FurMark ...")
-        if not fm.install():
-            console.print(f"[red]{fm.install_error}[/]")
-            return
-
-    # Show settings
-    settings = fm.get_presets()[preset]
-    actual_duration = duration or settings["duration"]
-    actual_resolution = resolution or settings["resolution"]
-
-    console.print(f"\n[bold]Running GPU Benchmark: {name}[/]")
-    console.print(f"  Preset: {preset}")
-    console.print(f"  API: {api.upper()}")
-    console.print(f"  Resolution: {actual_resolution}")
-    console.print(f"  Duration: {actual_duration} seconds")
-    console.print("")
-
-    with Progress(
-        SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
-        console=console,
-    ) as progress:
-        progress.add_task(f"Running benchmark ({actual_duration}s)...", total=None)
-
-        result = fm.run_benchmark(
-            name=name,
-            preset=preset,
-            api=api,
-            custom_duration=duration,
-            custom_resolution=resolution,
-        )
-
-    if not result:
-        console.print("[red]\u2717[/] Benchmark failed")
-        return
-
-    # Save result
-    saved_path = fm.save_result(result)
-    console.print(f"[green]\u2713[/] Benchmark saved: {saved_path}")
-
-    # Display results
-    display_furmark_result(result)
-
-
-@gpu_bench.command("compare")
-@click.option("--before", "-b", required=True, help="Before benchmark name or file")
-@click.option("--after", "-a", required=True, help="After benchmark name or file")
-def gpu_bench_compare(before: str, after: str) -> None:
-    """Compare before/after GPU benchmarks."""
-    fm = FurMarkBenchmark()
-
-    # Load results
-    before_result = load_furmark_result(fm, before)
-    after_result = load_furmark_result(fm, after)
-
-    if not before_result:
-        console.print(f"[red]\u2717[/] Could not load 'before' benchmark: {before}")
-        return
-
-    if not after_result:
-        console.print(f"[red]\u2717[/] Could not load 'after' benchmark: {after}")
-        return
-
-    # Compare
-    comparison = fm.compare(before_result, after_result)
-
-    # Display report
-    console.print(comparison.format_report())
-
-
-@gpu_bench.command("list")
-@click.option("--limit", "-l", default=10, help="Number of results to show")
-def gpu_bench_list(limit: int) -> None:
-    """List saved GPU benchmarks."""
-    fm = FurMarkBenchmark()
-    results = fm.list_results()
-
-    if not results:
-        console.print("No saved benchmarks found")
-        console.print("\nRun 'fpstune gpu-bench run' to start benchmarking")
-        return
-
-    table = Table(title="GPU Benchmarks (FurMark)")
-    table.add_column("Name", style="cyan")
-    table.add_column("Score", style="green")
-    table.add_column("Avg FPS", style="yellow")
-    table.add_column("Resolution")
-    table.add_column("API")
-    table.add_column("Date")
-
-    for path in results[:limit]:
-        result = fm.load_result(path)
-        if result:
-            table.add_row(
-                result.name,
-                f"{result.score:,}",
-                f"{result.fps_avg:.1f}",
-                result.resolution,
-                result.api,
-                result.timestamp[:10] if result.timestamp else "",
-            )
-
-    console.print(table)
-
-
-@gpu_bench.command("presets")
-def gpu_bench_presets() -> None:
-    """Show available benchmark presets."""
-    fm = FurMarkBenchmark()
-    presets = fm.get_presets()
-
-    table = Table(title="FurMark Benchmark Presets")
-    table.add_column("Preset", style="cyan")
-    table.add_column("Duration")
-    table.add_column("Resolution")
-    table.add_column("MSAA")
-    table.add_column("Use Case")
-
-    table.add_row(
-        "quick",
-        f"{presets['quick']['duration']}s",
-        presets["quick"]["resolution"],
-        str(presets["quick"]["msaa"]),
-        "Fast test, basic comparison",
-    )
-    table.add_row(
-        "standard",
-        f"{presets['standard']['duration']}s",
-        presets["standard"]["resolution"],
-        f"{presets['standard']['msaa']}x",
-        "Recommended for most tests",
-    )
-    table.add_row(
-        "extreme",
-        f"{presets['extreme']['duration']}s",
-        presets["extreme"]["resolution"],
-        f"{presets['extreme']['msaa']}x",
-        "High-end GPU stress test",
-    )
 
     console.print(table)
 

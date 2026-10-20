@@ -7,12 +7,6 @@ from fpstune.benchmark.dpc import (
     DpcComparison,
     DpcStats,
 )
-from fpstune.benchmark.frame_pacing import FramePacingBench
-from fpstune.benchmark.furmark import (
-    FurMarkBenchmark,
-    FurMarkComparison,
-    FurMarkResult,
-)
 from fpstune.benchmark.memory import MemoryBench
 from fpstune.benchmark.network import (
     LatencyStats,
@@ -43,7 +37,6 @@ from fpstune.benchmark.timing_bench import TimingBench
 
 __all__ = [
     "Bench",
-    "FramePacingBench",
     "DiskIoBench",
     "MemoryBench",
     "NetworkIdleBench",
@@ -59,9 +52,6 @@ __all__ = [
     "FrameTimeStats",
     "BenchmarkCapture",
     "FpsBenchmarkComparison",
-    "FurMarkBenchmark",
-    "FurMarkResult",
-    "FurMarkComparison",
     "NetworkBenchmark",
     "NetworkBenchmarkResult",
     "NetworkComparison",

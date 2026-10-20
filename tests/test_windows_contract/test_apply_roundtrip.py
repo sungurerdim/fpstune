@@ -36,11 +36,13 @@ import pytest
 from fpstune.settings.applicability import values_equal
 from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.executors import CommandExecutor
+from fpstune.settings.executors.adapter_restart import wait_for_restarts
 from fpstune.settings.executors.powershell_actions import ACTION_COMMANDS
 from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils.admin import is_admin
 
 SWEEP_ENV = "FPSTUNE_APPLY_SWEEP"
+DRY_RUN_ENV = "FPSTUNE_APPLY_SWEEP_DRY_RUN"
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="Applies settings to real Windows"),
@@ -159,9 +161,13 @@ def _skip_reason(setting: SettingExecutor, current: Any) -> str | None:
 def _roundtrip(setting: SettingExecutor) -> Row:
     original, _ = CommandExecutor.detect(setting)
     applied_ok, apply_error = CommandExecutor.apply(setting, setting.recommended_value)
+    # The apply may have scheduled a NIC restart. Reading before it settles is
+    # the transient that made a correct DNS write look undone (#123).
+    wait_for_restarts()
     observed, _ = CommandExecutor.detect(setting)
 
     restore_ok, _ = CommandExecutor.apply(setting, original)
+    wait_for_restarts()
     restored, _ = CommandExecutor.detect(setting)
 
     return Row(
@@ -189,11 +195,16 @@ def sweep() -> tuple[list[Row], list[tuple[str, str]]]:
 
     rows: list[Row] = []
     skipped: list[tuple[str, str]] = []
+    dry_run = os.environ.get(DRY_RUN_ENV) == "1"
     for setting in sorted(selected, key=lambda s: s.id):
         current, _ = CommandExecutor.detect(setting)
         reason = _skip_reason(setting, current)
         if reason:
             skipped.append((setting.id, reason))
+            continue
+        if dry_run:
+            print(f"  dry-run would exercise {setting.id}: {current!r} -> "
+                  f"{setting.recommended_value!r}")
             continue
         rows.append(_roundtrip(setting))
 
@@ -214,6 +225,8 @@ def test_the_sweep_exercised_something(
     sweep: tuple[list[Row], list[tuple[str, str]]],
 ) -> None:
     """A sweep that skipped everything must not read as a pass."""
+    if os.environ.get(DRY_RUN_ENV) == "1":
+        pytest.skip("dry run lists the selection; it deliberately writes nothing")
     rows, skipped = sweep
     assert rows, (
         "nothing was exercised — every selected setting was skipped: "
@@ -255,6 +268,26 @@ def test_the_reading_stays_inside_the_settings_own_choices(
         if not any(values_equal(row.observed, choice) for choice in setting.choices):
             strays.append(f"{row.setting_id}: read {row.observed!r} not in {setting.choices}")
     assert not strays, "detected value outside its own choices:\n" + "\n".join(strays)
+
+
+def test_a_success_without_a_visible_write_is_a_mismatch() -> None:
+    """The harness invariant itself, red-proven without touching the machine.
+
+    A fake executor that answers "ok" while the detect stays put is the exact
+    shape the sweep exists to catch; `Row.agrees` must be false for it.
+    """
+    row = Row(
+        setting_id="fake:noop",
+        original="off",
+        target="on",
+        observed="off",
+        applied_ok=True,
+        apply_error=None,
+        restored="off",
+        restore_ok=True,
+    )
+    assert row.agrees is False
+    assert row.back_where_it_started is True
 
 
 def test_the_machine_is_left_as_it_was_found(

@@ -254,11 +254,11 @@ class TestC2NumericImpact:
     """
 
     def test_every_setting_claims_more_than_stability(self) -> None:
-        from fpstune.settings.definitions import get_all_static_settings
+        from tests.test_settings.dynamic_rows import all_settings
 
         offenders = sorted(
             setting.id
-            for setting in get_all_static_settings()
+            for setting in all_settings()
             if not any(key != "stability" for key in setting.impact_scores)
         )
         assert not offenders, "C2: settings with no performance/resource metric: " + ", ".join(
@@ -280,11 +280,11 @@ class TestScopeImpactCoherence:
 
     def test_advanced_risk_never_sits_inside_the_safe_button(self) -> None:
         from fpstune.settings.base import SettingScope
-        from fpstune.settings.definitions import get_all_static_settings
+        from tests.test_settings.dynamic_rows import all_settings
 
         offenders = sorted(
             setting.id
-            for setting in get_all_static_settings()
+            for setting in all_settings()
             if setting.risk_level == "advanced" and setting.scope is not SettingScope.COMPLETE
         )
         assert not offenders, (
@@ -293,9 +293,9 @@ class TestScopeImpactCoherence:
 
     def test_a_perceptible_cost_is_offered_never_assumed(self) -> None:
         from fpstune.settings.base import SettingScope
-        from fpstune.settings.definitions import get_all_static_settings
+        from tests.test_settings.dynamic_rows import all_settings
 
-        for setting in get_all_static_settings():
+        for setting in all_settings():
             if setting.perceptible_cost is None:
                 continue
             assert setting.scope is SettingScope.COMPLETE, (

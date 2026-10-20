@@ -29,6 +29,7 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         description=s.description,
         value_type=s.value_type.value,
         choices=list(s.choices),
+        writable_choices=[choice for choice in s.choices if s.can_write(choice)],
         default_value=s.default_value,
         recommended_value=s.recommended_value,
         requires_reboot=s.requires_reboot,

@@ -1637,7 +1637,9 @@ def create_roaming_aggressiveness_setting(
         ],
         current_impact="Higher values: Frequent AP scanning → periodic ping spikes",
         recommended_impact="Lowest: Minimal scanning → stable connection, no ping spikes",
-        scope=SettingScope.RECOMMENDED,
+        # Experimental and advanced: offered under COMPLETE, never assumed by
+        # the recommended preset. Behaviour differs per driver.
+        scope=SettingScope.COMPLETE,
         category_order=14,  # Per-adapter WiFi setting
         effect="Lowest setting minimizes WiFi AP scanning ping spikes",
         impact_scores={"latency_ms": -100.0, "stability": "high"},
@@ -2352,9 +2354,21 @@ def create_speed_duplex_setting(interface_index: int, display_name: str) -> Sett
             "} catch { 'error:' + $_.Exception.Message }"
         ),
         apply_args={"ifindex": interface_index, "restart_adapter": True},
-        # Forced_Other is absent on purpose: it is a reading, not a target. There
-        # is no single number it could write, and fpstune has no reason to help a
-        # user force a speed — the recommendation is always to negotiate.
+        # These are readings, never targets. Forcing a speed is the defect this
+        # row exists to undo (a 2.5GbE link forced to 1 Gbps by an earlier
+        # version), and `Forced_Other` has no single number to write. Keeping
+        # them in `choices` lets the row show what the link is doing; keeping
+        # them out of `writable_choices` stops the picker from offering it.
+        unwritable_values=(
+            "10Mbps_Half",
+            "10Mbps_Full",
+            "100Mbps_Half",
+            "100Mbps_Full",
+            "1Gbps_Half",
+            "1Gbps_Full",
+            "2.5Gbps_Full",
+            "Forced_Other",
+        ),
         apply_value_map={
             "Auto_Negotiation": 0,
             "10Mbps_Half": 1,
@@ -2409,7 +2423,9 @@ def _make_vendor_power_setting(
         ],
         current_impact=current_impact,
         recommended_impact=recommended_impact,
-        scope=SettingScope.RECOMMENDED,
+        # Experimental and advanced: offered under COMPLETE, never assumed by
+        # the recommended preset.
+        scope=SettingScope.COMPLETE,
         category_order=category_order,
         effect=effect,
         impact_scores={"latency_ms": -1.0, "jitter_ms": "reduced"},
@@ -2935,7 +2951,9 @@ def create_throughput_booster_setting(interface_index: int, display_name: str) -
         ],
         current_impact="Enabled: Packet bursting → periodic jitter spikes during gameplay",
         recommended_impact="Disabled: Steady delivery → lower jitter, smoother gameplay",
-        scope=SettingScope.RECOMMENDED,
+        # Experimental and advanced: offered under COMPLETE, never assumed by
+        # the recommended preset.
+        scope=SettingScope.COMPLETE,
         category_order=24,
         effect="Disabling Throughput Booster removes WiFi bursting jitter",
         impact_scores={"latency_ms": -1.0, "stability": "high"},

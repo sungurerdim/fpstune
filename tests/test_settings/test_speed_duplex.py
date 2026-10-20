@@ -65,16 +65,20 @@ def test_the_snapshot_shortcut_is_not_used() -> None:
     assert "batch_adapter_keyword" not in setting.detect_args
 
 
-def test_every_settable_choice_can_be_applied() -> None:
-    """A choice with no apply mapping is a value the UI offers and cannot write."""
+def test_only_auto_negotiation_is_a_writable_target() -> None:
+    """The forced modes are readings, not targets.
+
+    They stay in `choices` so the row can show what the link is doing, but
+    `can_write` must refuse them: the picker offers only the writable subset,
+    and the backend refuses a hand-crafted request for a forced mode.
+    """
     setting = _speed_duplex()
-    for choice in setting.choices:
-        if choice == "Forced_Other":
-            # A reading, not a target: no single number could write it, and
-            # fpstune has no reason to help a user force a speed.
-            assert choice not in setting.apply_value_map
+    writable = [choice for choice in setting.choices if setting.can_write(choice)]
+    assert writable == ["Auto_Negotiation"]
+    for forced in setting.choices:
+        if forced == "Auto_Negotiation":
             continue
-        assert choice in setting.apply_value_map, f"{choice} cannot be applied"
+        assert not setting.can_write(forced), f"{forced} must not be writable"
 
 
 def test_apply_and_detect_agree_on_every_value() -> None:

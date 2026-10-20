@@ -268,6 +268,10 @@ class SettingDefinitionResponse(BaseModel):
     description: str
     value_type: str
     choices: list[str]
+    # The subset of `choices` apply can actually write. A detect-only state
+    # (Speed & Duplex's forced modes, a `changed` drift reading) stays in
+    # `choices` so the UI can show it, but must not be offered as a target.
+    writable_choices: list[str] = []
     default_value: Any
     recommended_value: Any
     requires_reboot: bool

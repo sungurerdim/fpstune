@@ -306,6 +306,23 @@ describe("a choice of three or more is picked in the row", () => {
     expect(picker()).toHaveValue("");
   });
 
+  it("does not offer a detect-only choice as a target", () => {
+    renderRow(
+      threeWay({
+        choices: ["low", "medium", "high"],
+        writableChoices: ["low", "high"],
+        currentValue: "low",
+      }),
+    );
+
+    const labels = within(picker()!)
+      .getAllByRole("option")
+      .map((option) => option.textContent);
+    expect(labels).not.toContain("medium");
+    expect(labels).toContain("low");
+    expect(labels).toContain("high");
+  });
+
   it("has no picker for two choices: Apply and Reset to default are the whole story", () => {
     renderRow(makeSetting());
 

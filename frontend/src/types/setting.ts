@@ -186,6 +186,8 @@ export interface Setting {
   // === Value Schema (static) ===
   valueType: SettingValueType; // "choice"
   choices: string[]; // ["enabled", "disabled", "default"]
+  /** The subset of `choices` apply can write; detect-only states stay visible. */
+  writableChoices?: string[];
   defaultValue: unknown; // "enabled"
   /** Whose stock the default is; the detect state refreshes it. Null/absent = none derivable. */
   defaultSource?: DefaultSource | null;
@@ -294,6 +296,7 @@ export interface SettingDefinition {
   description: string;
   value_type: string;
   choices: string[];
+  writable_choices?: string[];
   default_value: unknown;
   recommended_value: unknown;
   requires_reboot: boolean;
@@ -457,6 +460,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     category: def.category as SettingCategory,
     valueType: def.value_type as SettingValueType,
     choices: def.choices,
+    writableChoices: def.writable_choices ?? def.choices,
     defaultValue: def.default_value,
     recommendedValue: def.recommended_value,
     requiresReboot: def.requires_reboot,

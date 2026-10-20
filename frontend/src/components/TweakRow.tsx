@@ -71,7 +71,16 @@ function ValuePicker({
   onPick: (value: string) => void;
 }) {
   const { t } = useT();
-  const options = setting.choices;
+  const writable = new Set(
+    setting.writableChoices && setting.writableChoices.length > 0
+      ? setting.writableChoices
+      : setting.choices,
+  );
+  // A detect-only state (Speed & Duplex's forced modes, a `changed` reading)
+  // stays visible when it is what the machine is on, but cannot be chosen.
+  const options = setting.choices.filter(
+    (choice) => writable.has(choice) || valuesEqual(choice, setting.currentValue),
+  );
   // The choice the machine is on, found the way the backend compares values:
   // a number that arrived as text is still the same choice.
   const current =
@@ -91,7 +100,7 @@ function ValuePicker({
         </option>
       )}
       {options.map((choice) => (
-        <option key={choice} value={choice}>
+        <option key={choice} value={choice} disabled={!writable.has(choice)}>
           {valueLabel(setting, choice)}
         </option>
       ))}

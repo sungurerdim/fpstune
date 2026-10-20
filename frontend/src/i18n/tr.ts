@@ -106,6 +106,8 @@ export const tr: Record<keyof typeof en, string> = {
   "row.skipped": "atlandı",
   "row.statusRunning": "Uygulanıyor",
   "row.statusVerified": "Uygulandı ve doğrulandı",
+  "row.statusWarned": "Uyarılarla uygulandı",
+  "row.statusWarnedBecause": "Uyarılarla uygulandı: {reason}",
   "row.statusFailed": "Başarısız",
   "row.statusFailedBecause": "Başarısız: {reason}",
   "toolbar.streamFailed": "Toplu işlem durdu: {reason}",

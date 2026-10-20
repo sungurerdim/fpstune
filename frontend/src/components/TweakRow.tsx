@@ -16,7 +16,7 @@
  */
 
 import type { ReactNode } from "react";
-import { Check, CheckCircle2, Loader2, XCircle } from "lucide-react";
+import { AlertTriangle, Check, CheckCircle2, Loader2, XCircle } from "lucide-react";
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import {
@@ -30,7 +30,7 @@ import { Button } from "./ui/Button";
 import { TweakDetail } from "./TweakDetail";
 
 /** What a bulk or single run is doing with this row right now. */
-export type RowStatus = "queued" | "running" | "verified" | "failed" | "skipped";
+export type RowStatus = "queued" | "running" | "verified" | "warned" | "failed" | "skipped";
 
 export interface TweakRowProps {
   setting: Setting;
@@ -242,6 +242,19 @@ function RowStatusMark({
           aria-label={t("row.statusVerified")}
           className="h-3.5 w-3.5 shrink-0 text-success"
         />
+      );
+    case "warned":
+      return (
+        <span
+          role="img"
+          aria-label={
+            error ? t("row.statusWarnedBecause", { reason: error }) : t("row.statusWarned")
+          }
+          title={error}
+          className="shrink-0"
+        >
+          <AlertTriangle aria-hidden className="h-3.5 w-3.5 text-warning" />
+        </span>
       );
     case "failed":
       return (

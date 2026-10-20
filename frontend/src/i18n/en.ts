@@ -111,6 +111,8 @@ export const en = {
   "row.skipped": "skipped",
   "row.statusRunning": "Running",
   "row.statusVerified": "Applied and verified",
+  "row.statusWarned": "Applied with warnings",
+  "row.statusWarnedBecause": "Applied with warnings: {reason}",
   "row.statusFailed": "Failed",
   "row.statusFailedBecause": "Failed: {reason}",
   "toolbar.streamFailed": "The bulk run stopped: {reason}",

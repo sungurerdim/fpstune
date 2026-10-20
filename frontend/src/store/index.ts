@@ -13,6 +13,7 @@ export type OperationStatus =
   | "queued"
   | "running"
   | "verified"
+  | "warned"
   | "failed"
   | "skipped";
 

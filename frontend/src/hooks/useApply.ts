@@ -67,6 +67,9 @@ export function useApply() {
         const name = localizedName(setting);
         if (response.success) {
           if (response.warnings && response.warnings.length > 0) {
+            useStore
+              .getState()
+              .setOperationStatus(setting.id, "warned", response.warnings.join("; "));
             addNotification(
               t("apply.appliedWarnings", {
                 name,
@@ -166,17 +169,23 @@ export function useApply() {
           if (!id) return;
           applyActionEvent(event);
           const state = useStore.getState();
-          if (event.event === "started" || event.event === "applied") {
+          if (event.event === "started") {
             state.setOperationStatus(id, "running");
-            if (
-              event.event === "applied" &&
-              Array.isArray(event.warnings) &&
-              event.warnings.length > 0
-            ) {
+          } else if (event.event === "applied") {
+            const warnings = Array.isArray(event.warnings) ? event.warnings : [];
+            if (warnings.length > 0) {
               warned.add(id);
+              state.setOperationStatus(id, "warned", warnings.join("; "));
+            } else {
+              state.setOperationStatus(id, "running");
             }
           } else if (event.event === "verified") {
-            state.setOperationStatus(id, "verified");
+            const warningReason = state.operationError[id];
+            state.setOperationStatus(
+              id,
+              warningReason ? "warned" : "verified",
+              warningReason,
+            );
             const settingState = verifiedState(event);
             if (settingState !== null) {
               state.applySettingStates({ [id]: settingState });

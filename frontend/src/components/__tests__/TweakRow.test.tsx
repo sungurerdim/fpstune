@@ -351,6 +351,18 @@ describe("a run on this row", () => {
     expect(mark).toHaveAttribute("title", "Access is denied.");
   });
 
+  it("marks a partial apply as a warning, not a failure", () => {
+    renderRow(makeSetting(), {
+      status: "warned",
+      error: "applied, but 1 write(s) failed",
+    });
+
+    const mark = screen.getByRole("img", {
+      name: "Applied with warnings: applied, but 1 write(s) failed",
+    });
+    expect(mark).toHaveAttribute("title", "applied, but 1 write(s) failed");
+  });
+
   it("marks a verified row, a queued row and a skipped row", () => {
     const { rerender } = renderRow(makeSetting(), { status: "verified" });
     expect(screen.getByRole("img", { name: "Applied and verified" })).toBeInTheDocument();

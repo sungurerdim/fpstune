@@ -130,21 +130,25 @@ Exception: `InterfaceIndex` OK for netsh commands (command-only, not ID storage)
 - Detection never returns a value outside the `choices` tuple; `value_map` covers all raw outputs
 
 Single-setting endpoints:
-- `POST /settings/{id}/apply` — apply, detect, verify
-- `POST /settings/{id}/reset` — write `default_value`, detect, verify
-- `POST /settings/{id}/verify` — detect only → `VerifyResponse{matches, current_value, expected_value, target}`;
-  `target` ∈ `recommended` (default) | `default` names which question was asked
-- `POST /settings/bulk/stream-{apply,reset}` — SSE, four settings at a time, in turn when they share a resource or declare an order (`settings/bulk_plan.py`); events started/applied/verified/failed/done
+- `POST /settings/{id}/apply` — apply, detect, verify; the one write path
+- reset is the same endpoint carrying `default_value`; no `/reset` and no `/verify` route
+  exists, and no client method pretends otherwise
+- `POST /settings/bulk/stream-apply` — SSE, four settings at a time, in turn when they
+  share a resource or declare an order (`settings/bulk_plan.py`); reset streams through
+  the same route with each row's default. Events started/applied/verified/failed/done
 
 **One way back: reset to default** (owner decision 2026-10-06, #103). `default_value` is
 each domain's own stock, derived like every value: Windows stock for software settings,
 the driver's own default for hardware (its published `DefaultRegistryValue`, its INF),
 the game's own default for game settings. The UI names which ("Windows default",
 "Driver default", "Game default") and shows the value. There is no undo, and fpstune
-**stores no previous values and no history on disk**: the History tab is this session's
+**stores no previous values and no history on disk**: the Activity log is this session's
 journal in memory, and start-up deletes the retired `~/.fpstune/originals.json` and
 `~/.fpstune/history.json`. A default that cannot be derived is not invented — the reset is not
-offered for that row.
+offered for that row. One deliberate exception (owner request, 2026-10-20): the support log at
+`~/.fpstune/logs/operations.log` records setting id, phase, outcome, duration and a classified
+reason — never a previous value — and rotates five files. It exists to answer "why did this
+apply fail?"; it is not an undo history and must not become one.
 
 ### C7 — Optimal Caching
 | Data | Cache | TTL |
@@ -349,28 +353,31 @@ src/fpstune/
             ProgramData; tests redirect every root and an audit hook fails a test that
             writes under a real one — `tests/test_user_paths.py` keeps direct reads out)
 frontend/src/
-  components/  SettingsTab · GameTweaksTab · CleanupPanel · HomeTab · TweakRows · TweakSetting ·
-            SelectionToolbar · HardwarePanel · SettingInfoTooltip · SuitePanel · VerifyPanel ·
+  components/  TabNavigation · OptimizeTab · DiskCleanupTab · BenchmarksTab ·
+            CategorySection · CategoryApply · TweakRow · TweakRowList · TweakDetail ·
+            SelectionToolbar · ActivityLog · DetectionNotice · hardware/ (DeviceList,
+            DeviceHeader, MonitorCard, NetworkAdapterCard, StorageDriveCard, AudioSection)
+            · SuitePanel · VerifyPanel · HeadroomPanel · MeasuredLedger ·
             ui/ConfirmDialog · ui/NotificationToasts
   store/    index.ts (AppSlice: selectedSettingIds, operationStatus, maintenanceSelection,
-            cleanupResults, notifications) · settings.ts (SettingsSlice: flat
+            cleanupResults, notifications, bulkRun) · settings.ts (SettingsSlice: flat
             Map<SettingId, Setting>, detection, selectors)
-  lib/      api.ts · detection-manager.ts · hardware-manager.ts · tweakDomain.ts
+  lib/      api.ts · bulkStream.ts · actionRun.ts · detection-manager.ts · hardware-manager.ts ·
+            tweakDomain.ts · tweakStatus.ts · impact.ts
 ```
 
-UI surfaces: Home = what still needs optimizing plus reclaimable disk, one bulk action per
-domain group · SettingsTab = Software Tweaks, flat list + filter bar · GameTweaksTab = one
-section per game · CleanupPanel = rows grouped by `groupLabel` · TweakSetting = row with
-checkbox, Radix tooltips, Verify/Reset to default, operationStatus badge · SelectionToolbar = sticky
-bottom bar, bulk apply/reset via SSE, advanced-warning modal · HardwarePanel =
-CPU/GPU/monitor/network/audio/storage · SettingInfoTooltip variants (info/hint/warning) ·
-SuitePanel = Benchmarks > Measure, one button (baseline, then measure-and-compare) ·
-VerifyPanel = Benchmarks > Verify (coverage, the suite's own pair, verdicts) ·
+UI surfaces: three tabs — Optimize (Software by backend category, Hardware by device, Games one
+section per game; collapsed by default, "N of M not optimized"), Cleanup (rows grouped by
+`groupLabel`, run one or all), Measure (one button for baseline/then compare, coverage and
+verdicts) · TweakRow = one line with checkbox, name, current → recommended, Apply, (i); reset
+lives in TweakDetail · SelectionToolbar = sticky bottom bar, bulk apply/reset via SSE,
+advanced/perceptible-cost confirmation · hardware/DeviceList = one section per device ·
 `lib/detection-manager.ts` = `redetectSettings()` orchestrator · `lib/hardware-manager.ts` =
 monitor cache invalidation.
 
-Route surface: `settings.py` = CRUD/detect/apply/reset/verify/bulk · `settings_stream.py`
-= `/bulk/stream-{apply,reset}` SSE (own router, `/api/settings` prefix) · `benchmark.py` =
+Route surface: `settings.py` = `/definitions`, `/detect`, `/cleanup-sizes`, category/module
+metadata, `/{id}/apply` (apply, re-detect, verify; reset is apply of `default`) ·
+`settings_stream.py` = `/bulk/stream-apply` SSE (own router, `/api/settings` prefix) · `benchmark.py` =
 gpu-scene{,/install} + verify/{coverage,sources,sample,round} + headroom{,/measure} ·
 `benchmark_suite.py` = suite{,/run,/compare} · `benchmark_ledger.py` = ledger{,/runs,/run} ·
 `system.py` = system/hardware/activity/self-check/shutdown, with `system_{network,audio,power,storage}.py`
@@ -401,8 +408,9 @@ and PID file.
 
 Data flow: UI → api.ts `POST /settings/{id}/apply` → settings route → `executor.apply()` →
 subprocess → `_finalize_apply_response()` → detect → verify → response → Zustand → UI.
-SSE bulk: SelectionToolbar → bulkStreamApply/Reset → `/bulk/stream-{apply,reset}` →
-`_stream_each()` (`plan_lanes`, four at a time) → `asyncio.to_thread(apply)` per ID → events streamed → UI badges.
+SSE bulk: SelectionToolbar → `bulkStreamApply` (reset sends each row's `defaultValue`) →
+`/bulk/stream-apply` → `_stream_each()` (`plan_lanes`, four at a time) →
+`asyncio.to_thread(apply)` per ID → events streamed → UI badges.
 
 Module contracts — what the tree does not tell you:
 
@@ -410,7 +418,8 @@ Module contracts — what the tree does not tell you:
   command runs for apply and reset; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 412 `SettingExecutor` instances across 16 category files.
+- `settings/definitions/` — 420 static `SettingExecutor` instances across 16 category files
+  before discovery; 534 on the all-factory fixture, 475 on the audit machine.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
 - `definitions/game_configs_mw3_profile.py` — MW3 (cod23) gamerprofile (audio, input, aim), the
@@ -425,8 +434,8 @@ Module contracts — what the tree does not tell you:
 - `definitions/game_configs_titles.py` + `executors/game_ini.py` — Fortnite, Apex, Overwatch 2 and
   Siege: only keys on record in two sources; the rewriter changes lines that already exist (never
   adds one), keeps BOM and line endings, and runs the read-modify-write under one lock.
-- `utils/os_build.py` — the last Windows build fpstune saw; a change surfaces a notice on Home,
-  and the start-up scan is the re-check.
+- `utils/os_build.py` — the last Windows build fpstune saw; a change surfaces a notice on
+  Optimize, and the start-up scan is the re-check.
 - `executors/mw4_config.py` — MW4 target; the scope digit is required, because `DxrMode@0`
   (Off/On) and `@1` (Off..Ultra) are two controls.
 - `executors/mw3_profile.py` — MW3 gamerprofile target; the scope digit is *optional*, because
@@ -443,7 +452,7 @@ Module contracts — what the tree does not tell you:
   BOM, atomic replace; only keys the client is on record reading.
 - `settings/base.py` — `SettingExecutor` dataclass: risk_level, risk_warning, evidence_level,
   impact_scores. `module` is the first segment of the id.
-- `settings/bulk_plan.py` — the one scheduling SSOT for both bulk paths (`/bulk/apply` and the two SSE streams): `plan_lanes()` turns settings into lanes (serial inside, concurrent between) from `SettingExecutor.apply_after` and `resource_key`; `validate_declarations()` fails registry build on an unknown id or a cycle; `run_lanes()` is the thread-pool runner `/bulk/apply` uses. The planner is pure; the callers keep their own concurrency caps.
+- `settings/bulk_plan.py` — the one scheduling SSOT for the SSE bulk path: `plan_lanes()` turns settings into lanes (serial inside, concurrent between) from `SettingExecutor.apply_after` and `resource_key`; `validate_declarations()` fails registry build on an unknown id or a cycle. The planner is pure; the stream keeps its own four-worker cap.
 - `settings/retired.py` — every setting id ever removed and what became of it (guard row, replacement, no-op by limit 1, mitigation by limit 2, or owner-pending); `tests/test_settings/registered_ids.txt` pins the registered ids, so an id that leaves without an entry fails `test_retired.py`.
 - `settings/hardware_context.py` — `build_hardware_context()`, the one builder, API and CLI
   alike; `mobile` is derived from GetSystemPowerStatus, never from a model list.
@@ -482,9 +491,9 @@ Module contracts — what the tree does not tell you:
 - `ui/NotificationToasts.tsx` — the one reader of the store's `notifications`; two
   always-mounted live regions (assertive for errors and warnings, polite for the rest),
   keyboard-dismissed, never focus-stealing.
-- `lib/api.ts` — `settingsApi`: applySetting, bulkApply, bulkStreamApply,
-  bulkStreamReset. No `reset` client method — the row's reset posts `/apply` carrying
-  `defaultValue`; no `verify` one has ever existed.
+- `lib/api.ts` — `settingsApi`: applySetting, bulkStreamApply. No `reset`, `verify`
+  or separate bulk-reset client method — the row's reset posts `/apply` carrying
+  `defaultValue`, and bulk reset sends each row's `defaultValue` through the same stream.
 
 **Key invariants:**
 - Profile system removed; scope (essential/recommended/complete) replaces it throughout
@@ -541,7 +550,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(16 files, 412 settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(16 files, 420 static settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

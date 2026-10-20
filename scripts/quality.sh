@@ -19,17 +19,24 @@ workers=$((cores / blocks))
 ((workers < 1)) && workers=1
 echo "quality: $cores cores, $blocks blocks side by side, pytest -n $workers"
 
+# `--extra dev` on every call: without it `uv run pytest` falls through to a
+# global pytest from PATH (observed: Python 3.13/miniconda beside the project's
+# 3.12 env, then 46 collection errors). The first line prints which interpreter
+# and pytest actually ran, so a fall-through is visible in the gate's own log.
 backend() {
-  uv run ruff check src tests
-  uv run ruff format --check src tests
-  uv run mypy src
-  uv run pytest --no-cov -q -n "$workers" -m "not timing"
+  uv run --extra dev python -c \
+    "import sys, pytest; print(f'quality: {sys.executable} | pytest {pytest.__version__}')"
+  uv run --extra dev ruff check src tests
+  uv run --extra dev ruff format --check src tests
+  uv run --extra dev mypy src
+  uv run --extra dev pytest -q -n "$workers" -m "not timing" \
+    --cov=src/fpstune --cov-report=term-missing
 }
 
 # Wall-clock tests (pytest marker `timing`) run alone, after both blocks: beside
 # them the scheduler takes the core mid-measurement and a correct wait reads late.
 timing() {
-  uv run pytest --no-cov -q -m timing
+  uv run --extra dev pytest --no-cov -q -m timing
 }
 
 frontend() {

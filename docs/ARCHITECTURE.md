@@ -35,8 +35,11 @@ JSON response -> React Query refetch -> UI refresh
 ### `api/` — HTTP surface
 
 - `main.py` — FastAPI app factory, lifespan, CORS, static UI mount, /health
-- `routes/settings.py` — list / detect / apply / reset / verify
-- `routes/settings_stream.py` — the SSE bulk apply and bulk reset
+- `routes/settings.py` — definitions, detect, cleanup sizes, category/module
+  metadata, and `/{id}/apply` (apply, re-detect, verify). Reset is the same
+  endpoint carrying `default_value`; there is no `/reset` or `/verify` route.
+- `routes/settings_stream.py` — the SSE bulk apply (`/bulk/stream-apply`); reset
+  streams through it with each row's default.
 - `routes/settings_apply.py` — no router; the one place a setting's command runs
   for apply and reset
 - `routes/system.py` plus `system_network.py`, `system_audio.py`,
@@ -163,28 +166,27 @@ stays on the API path so every write is verified.
 
 - `App.tsx` — Top-level layout, tab routing
 - `components/` — UI building blocks
-  - `HomeTab`, `SettingsTab`, `HardwareTab`, `GameTweaksTab`,
-    `DiskCleanupTab`, `BenchmarksTab` — one per tab
-  - `TweakSetting`, `TweakRows`, `TweakListRow` — the settings list
-  - `ScopeActions` (Apply / Reset to default for any scope) and
-    `TweakBands` (the one needs/ideal drawing), shared by every page
-  - `HardwarePanel` plus the `hardware/` package it composes (`DeviceCard`,
-    `devices.ts` — one card per device instance, read by Hardware and Home —
-    `MonitorCard`, `NetworkAdapterCard`, `StorageDriveCard`, `AudioSection`)
-  - `home/` — Home's sections (advisories, optimized fold, domain group, stats)
-  - `CleanupPanel`, `MaintenancePanel`, `SuitePanel`, `VerifyPanel`,
-    `HeadroomPanel`
-  - `ActionConsole`, `ActivityLog` — operation feedback
+  - `TabNavigation` + `OptimizeTab`, `DiskCleanupTab`, `BenchmarksTab` — the
+    three tabs
+  - `CategorySection` / `CategoryApply` — one backend category or device group
+  - `TweakRow`, `TweakRowList`, `TweakDetail` — the settings list; reset and
+    verify live in the detail, not on the line
+  - `SelectionToolbar` — sticky bulk apply/reset via SSE
+  - `hardware/` — `DeviceList`, `DeviceHeader`, `MonitorCard`,
+    `NetworkAdapterCard`, `StorageDriveCard`, `AudioSection`
+  - `SuitePanel`, `VerifyPanel`, `HeadroomPanel`, `MeasuredLedger`, `ActivityLog`
 - `hooks/` — `useActionStream`, `useApplySingle`, `useBulkApply`,
   `useCleanupRunner`, `useImpactSummary`
 - `lib/`
   - `api.ts` — typed client over the FastAPI surface (single file)
+  - `bulkStream.ts`, `actionRun.ts` — SSE bulk and one-action state
   - `detection-manager.ts` — Coordinates detection requests, dedupes
     in-flight queries
   - `hardware-manager.ts` — Mirrors backend `HardwareManager`
   - `tweakDomain.ts` — predicates over the backend's `domain` / `component`
     fields (`SettingExecutor.component`: the physical component a tweak acts
     on, never how it is set); never over `module` or the id
+  - `tweakStatus.ts` — the one row-status derivation
   - `impact.ts` — per-row benefit text from `impact_scores`; claims only, and
     claims never add up to a headline
   - `logger.ts` — Structured logging

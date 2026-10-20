@@ -31,15 +31,15 @@ pre-commit:
         piped: true
         jobs:
           - name: py-lint
-            run: uv run ruff check src tests
+            run: uv run --extra dev ruff check src tests
           - name: py-format
-            run: uv run ruff format --check src tests
+            run: uv run --extra dev ruff format --check src tests
           # The tests that import or name a staged file, so a red the change
           # causes is seen by that change and not first by the full gate on push
           # (#104: eleven contract tests over definitions/network.py). Python
           # changes only (the glob above): a doc-only commit never reaches it.
           - name: py-affected-tests
-            run: uv run python scripts/affected_tests.py --staged --run
+            run: uv run --extra dev python scripts/affected_tests.py --staged --run
 
     - name: frontend
       glob: "frontend/*"

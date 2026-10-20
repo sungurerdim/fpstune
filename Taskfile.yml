@@ -30,25 +30,25 @@ tasks:
   lint:
     desc: ruff + mypy
     cmds:
-      - uv run ruff check src tests
-      - uv run ruff format --check src tests
-      - uv run mypy src
+      - uv run --extra dev ruff check src tests
+      - uv run --extra dev ruff format --check src tests
+      - uv run --extra dev mypy src
 
   fmt:
     desc: Auto-format Python with ruff
     cmds:
-      - uv run ruff format src tests
-      - uv run ruff check --fix src tests
+      - uv run --extra dev ruff format src tests
+      - uv run --extra dev ruff check --fix src tests
 
   test:
     desc: pytest with the coverage gate
     cmds:
-      - uv run pytest -v --tb=short --cov=src/fpstune --cov-report=term-missing
+      - uv run --extra dev pytest -v --tb=short --cov=src/fpstune --cov-report=term-missing
 
   test-fast:
     desc: pytest without coverage
     cmds:
-      - uv run pytest --no-cov -q
+      - uv run --extra dev pytest --no-cov -q
 
   test-frontend:
     desc: vitest

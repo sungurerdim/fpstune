@@ -367,16 +367,18 @@ src/fpstune/
   utils/            Hardware detection, admin check, logging, PowerShell runner
 
 frontend/src/       React + Vite + TypeScript + Tailwind
-  components/       SettingsTab, GameTweaksTab, TweakSetting/TweakRows,
-                    SelectionToolbar (SSE bulk), HardwarePanel + hardware/ cards,
-                    CleanupPanel, SuitePanel, VerifyPanel, HeadroomPanel
+  components/       TabNavigation (Optimize, Cleanup, Measure), OptimizeTab,
+                    DiskCleanupTab, BenchmarksTab, CategorySection/CategoryApply,
+                    TweakRow/TweakRowList/TweakDetail, SelectionToolbar (SSE bulk),
+                    hardware/ device cards, SuitePanel, VerifyPanel, HeadroomPanel,
+                    MeasuredLedger, ActivityLog
   store/            Zustand (settings state + selection)
   lib/              API client, detection manager, tweakDomain predicates
 ```
 
 **Data flow:** React UI → `POST /api/settings/{id}/apply` → `CommandExecutor.apply()` → PowerShell/registry → `_finalize_apply_response()` → detect+verify → Zustand update → UI refresh.
 
-**Bulk SSE flow:** SelectionToolbar → `bulkStreamApply/Reset` → `/bulk/stream-{apply,reset}` → per-setting `asyncio.to_thread` → streamed events → row status badges.
+**Bulk SSE flow:** SelectionToolbar → `bulkStreamApply` (a reset sends each row's `defaultValue`) → `/bulk/stream-apply` → per-setting `asyncio.to_thread` → streamed events → row status badges.
 
 ---
 

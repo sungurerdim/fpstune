@@ -262,7 +262,7 @@ def main(argv: list[str] | None = None) -> int:
 
     workers = worker_count(len(selection))
     # The wall-clock marker is the one the full gate runs alone; beside workers it reads late.
-    command = ["uv", "run", "pytest", "--no-cov", "-q", "-m", "not timing"]
+    command = ["uv", "run", "--extra", "dev", "pytest", "--no-cov", "-q", "-m", "not timing"]
     if workers > 1:
         command += ["-n", str(workers)]
     command += list(selection)

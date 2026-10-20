@@ -1,6 +1,7 @@
 import type { MessageKey } from "../i18n/en";
 import type {
   CategoryMetadata,
+  DefaultSource,
   HardwareComponent,
   Setting,
   TweakDomain,
@@ -47,9 +48,21 @@ export const DEFAULT_KIND_KEY = {
   game: "reset.kind.game",
 } as const satisfies Record<TweakDomain, MessageKey>;
 
-/** The default-kind word for one setting's domain. */
+/** The source the backend named -> the word the reset control shows. */
+const DEFAULT_KIND_BY_SOURCE = {
+  windows_stock: "reset.kind.software",
+  driver: "reset.kind.hardware",
+  scheme: "reset.kind.software",
+  game: "reset.kind.game",
+  application: "reset.kind.application",
+  firmware: "reset.kind.firmware",
+  none: "reset.kind.software",
+} as const satisfies Record<DefaultSource, MessageKey>;
+
+/** The default-kind word for one setting's real source, not its page. */
 export function defaultKindKey(setting: Setting): MessageKey {
-  return DEFAULT_KIND_KEY[setting.domain];
+  const source = setting.defaultSource;
+  return source ? DEFAULT_KIND_BY_SOURCE[source] : DEFAULT_KIND_KEY[setting.domain];
 }
 
 /** The one domain every setting in a scope shares, or "mixed" when they differ. */

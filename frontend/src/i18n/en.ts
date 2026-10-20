@@ -101,6 +101,8 @@ export const en = {
   "reset.kind.software": "Windows default",
   "reset.kind.hardware": "Driver default",
   "reset.kind.game": "Game default",
+  "reset.kind.application": "App default",
+  "reset.kind.firmware": "Firmware default",
   "row.resetKindValue": "Reset to default: {kind} ({value})",
   "row.resetNamedValue": "Reset {name} to default: {kind} ({value})",
   "row.applyNamed": "Apply {name}",

@@ -7,6 +7,7 @@ These settings optimize Windows for gaming with zero risk.
 from __future__ import annotations
 
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -168,6 +169,7 @@ GAME_DVR_BACKGROUND = SettingExecutor(
 # "disabled", and reset deletes the value to hand the choice back.
 HAGS = SettingExecutor(
     id="game:hags",
+    default_source=DefaultSource.WINDOWS_STOCK,
     component="gpu",
     category=SettingCategory.GAME,
     display_name="Hardware-Accelerated GPU Scheduling",

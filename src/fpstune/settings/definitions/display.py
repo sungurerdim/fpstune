@@ -13,6 +13,7 @@ driver's CDS_TEST first, and a revert unless the user keeps the new mode.
 from __future__ import annotations
 
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -63,6 +64,7 @@ _FLIP_DETECT, _FLIP_APPLY = directx_flag_scripts("SwapEffectUpgradeEnable")
 # Registry: HKCU\SOFTWARE\Microsoft\DirectX\UserGpuPreferences
 WINDOWED_FLIP_MODEL = SettingExecutor(
     id="display:windowed_flip_model",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.GPU,
     display_name="Windowed Games Optimization",
     short_name="Windowed game fast-path",
@@ -168,6 +170,7 @@ def create_mpo_setting(build: int) -> SettingExecutor:
 
     return SettingExecutor(
         id="display:mpo_disable",
+        default_source=DefaultSource.WINDOWS_STOCK,
         category=SettingCategory.GPU,
         display_name="Multi-Plane Overlay (MPO)",
         short_name="Multi-plane overlay",

@@ -411,6 +411,8 @@ class DefaultSource(StrEnum):
     DRIVER = "driver"  # the driver's own default: DefaultRegistryValue, INF, profile default
     SCHEME = "scheme"  # the Balanced plan's `DefaultPowerSchemeValues` entry
     GAME = "game"  # the game's own shipped value
+    APPLICATION = "application"  # Steam / Battle.net / another app's own config default
+    FIRMWARE = "firmware"  # BIOS/UEFI/ACPI fact; advisory, never a Windows value
     NONE = "none"  # no default can be derived: `default_value` is None, reset not offered
 
 
@@ -748,6 +750,8 @@ class SettingExecutor:
             return DefaultSource.SCHEME
         if self.module == "game_config":
             return DefaultSource.GAME
+        if self.module == "launcher":
+            return DefaultSource.APPLICATION
         if self.component is not None:
             return DefaultSource.DRIVER
         return DefaultSource.WINDOWS_STOCK

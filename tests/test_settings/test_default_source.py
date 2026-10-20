@@ -125,6 +125,12 @@ def violations(settings: list[SettingExecutor]) -> dict[str, str]:
             found[s.id] = f"game-config row with a {source} default"
         elif source is DefaultSource.DRIVER and s.component is None:
             found[s.id] = "driver default on a row with no hardware component"
+        elif source is DefaultSource.APPLICATION and s.module != "launcher":
+            found[s.id] = "application default on a row outside a launcher"
+        elif s.module == "launcher" and source is not DefaultSource.APPLICATION:
+            found[s.id] = f"launcher row with a {source} default"
+        elif source is DefaultSource.FIRMWARE and not s.is_readonly:
+            found[s.id] = "firmware default on a row that claims a write"
         elif s.default_value is None:
             continue
         elif isinstance(s.default_value, str) and is_absent_reading(s.default_value):
@@ -160,6 +166,34 @@ def test_every_factory_built_row_has_a_derivable_default(
     assert found == {}
 
 
+@pytest.mark.parametrize(
+    ("row_id", "source"),
+    [
+        ("launcher:steam:downloads_during_gameplay", DefaultSource.APPLICATION),
+        ("launcher:steam:overlay", DefaultSource.APPLICATION),
+        ("launcher:bnet:hardware_accel", DefaultSource.APPLICATION),
+        ("storage:trim_enabled", DefaultSource.WINDOWS_STOCK),
+        ("storage:disable_8dot3", DefaultSource.WINDOWS_STOCK),
+        ("storage:disable_last_access", DefaultSource.WINDOWS_STOCK),
+        ("display:windowed_flip_model", DefaultSource.WINDOWS_STOCK),
+        ("display:mpo_disable", DefaultSource.WINDOWS_STOCK),
+        ("audio:communications_ducking", DefaultSource.WINDOWS_STOCK),
+        ("game:hags", DefaultSource.WINDOWS_STOCK),
+        ("perf:gpu_tdr_delay", DefaultSource.WINDOWS_STOCK),
+        ("gpu-hardware:gpu_assignment", DefaultSource.WINDOWS_STOCK),
+        ("gpu-hardware:resizable_bar", DefaultSource.FIRMWARE),
+        ("system:xmp_expo", DefaultSource.FIRMWARE),
+        ("system:thermal_condition", DefaultSource.FIRMWARE),
+    ],
+)
+def test_the_default_source_names_the_real_owner(
+    static_rows: list[SettingExecutor], row_id: str, source: DefaultSource
+) -> None:
+    """A component is not the same as a default's owner (A10)."""
+    row = next(row for row in static_rows if row.id == row_id)
+    assert row.default_source is source
+
+
 def test_the_pending_set_only_shrinks(
     static_rows: list[SettingExecutor], factory_rows: list[SettingExecutor]
 ) -> None:
@@ -191,6 +225,7 @@ def test_a_row_that_names_no_source_gets_one_from_its_own_markers() -> None:
     assert _sample().default_source is DefaultSource.WINDOWS_STOCK
     assert _sample(detect_type=DetectType.POWERCFG).default_source is DefaultSource.SCHEME
     assert _sample(id="game_config:cs2:x").default_source is DefaultSource.GAME
+    assert _sample(id="launcher:steam:overlay").default_source is DefaultSource.APPLICATION
     assert _sample(component="gpu").default_source is DefaultSource.DRIVER
     explicit = _sample(default_source=DefaultSource.NONE, default_value=None)
     assert explicit.default_source is DefaultSource.NONE
@@ -221,6 +256,18 @@ def test_a_row_that_names_no_source_gets_one_from_its_own_markers() -> None:
         ),
         (_sample(id="game_config:cs2:x", default_source=DefaultSource.DRIVER), "game-config"),
         (_sample(default_source=DefaultSource.DRIVER), "no hardware component"),
+        (
+            _sample(id="launcher:steam:overlay", default_source=DefaultSource.WINDOWS_STOCK),
+            "launcher row",
+        ),
+        (
+            _sample(default_source=DefaultSource.APPLICATION),
+            "outside a launcher",
+        ),
+        (
+            _sample(default_source=DefaultSource.FIRMWARE),
+            "claims a write",
+        ),
     ],
 )
 def test_the_gate_names_each_way_a_default_can_be_wrong(row: SettingExecutor, needle: str) -> None:

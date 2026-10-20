@@ -10,6 +10,7 @@ a value nothing reads has no harmful state to restore.
 from __future__ import annotations
 
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -372,6 +373,7 @@ AUDIO_ENDPOINT_EXCLUSIVE_MODE = SettingExecutor(
 # next session rather than to one already running.
 COMMUNICATIONS_DUCKING = SettingExecutor(
     id="audio:communications_ducking",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.AUDIO,
     display_name="Communications Ducking",
     short_name="Voice Ducking",

@@ -96,6 +96,8 @@ export const tr: Record<keyof typeof en, string> = {
   "reset.kind.software": "Windows varsayılanı",
   "reset.kind.hardware": "Sürücü varsayılanı",
   "reset.kind.game": "Oyun varsayılanı",
+  "reset.kind.application": "Uygulama varsayılanı",
+  "reset.kind.firmware": "Donanım yazılımı varsayılanı",
   "row.resetKindValue": "Varsayılana dön: {kind} ({value})",
   "row.resetNamedValue": "{name} ayarını varsayılana döndür: {kind} ({value})",
   "row.applyNamed": "Uygula: {name}",

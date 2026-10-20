@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from fpstune.settings.applicability import HYBRID_GPU_CLASSIFY_PS
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -716,6 +717,7 @@ NVIDIA_FAN_CURVE = SettingExecutor(
 
 GPU_RESIZABLE_BAR = SettingExecutor(
     id="gpu-hardware:resizable_bar",
+    default_source=DefaultSource.FIRMWARE,
     category=SettingCategory.GPU,
     display_name="Resizable BAR / Smart Access Memory",
     short_name="Resizable BAR",
@@ -798,6 +800,7 @@ _HYBRID_GUARD = (
 
 GPU_LAPTOP_ASSIGNMENT = SettingExecutor(
     id="gpu-hardware:gpu_assignment",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.GPU,
     display_name="GPU Assignment (Hybrid Graphics)",
     short_name="Which GPU runs games",

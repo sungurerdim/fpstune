@@ -10,6 +10,7 @@ from fpstune.settings.base import (
     MASK,
     PERCENT_PROGRESS,
     UNMAPPED,
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -1815,6 +1816,7 @@ SYSTEM_VM_PLATFORM = SettingExecutor(
 
 SYSTEM_XMP_EXPO = SettingExecutor(
     id="system:xmp_expo",
+    default_source=DefaultSource.FIRMWARE,
     component="memory",
     category=SettingCategory.SYSTEM,
     display_name="XMP / EXPO Profile (RAM Speed)",
@@ -1875,6 +1877,7 @@ SYSTEM_XMP_EXPO = SettingExecutor(
 
 SYSTEM_THERMAL_CONDITION = SettingExecutor(
     id="system:thermal_condition",
+    default_source=DefaultSource.FIRMWARE,
     component="cpu",
     category=SettingCategory.SYSTEM,
     display_name="Thermal Condition",
@@ -3992,6 +3995,7 @@ SHUTDOWN_AUTO_END_TASKS = SettingExecutor(
 
 GPU_TDR_DELAY = SettingExecutor(
     id="perf:gpu_tdr_delay",
+    default_source=DefaultSource.WINDOWS_STOCK,
     component="gpu",
     category=SettingCategory.SYSTEM,
     display_name="GPU TDR Delay",

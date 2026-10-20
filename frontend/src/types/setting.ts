@@ -142,7 +142,14 @@ export type SettingCategory = string;
  * Settings are categorized by impact level, not risk.
  */
 /** Whose stock a setting's default is (mirrors schemas.SettingState.default_source). */
-export type DefaultSource = "windows_stock" | "driver" | "scheme" | "game" | "none";
+export type DefaultSource =
+  | "windows_stock"
+  | "driver"
+  | "scheme"
+  | "game"
+  | "application"
+  | "firmware"
+  | "none";
 
 type SettingScope = "essential" | "recommended" | "complete";
 

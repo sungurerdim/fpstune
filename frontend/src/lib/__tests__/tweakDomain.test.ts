@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   categoryGroups,
+  defaultKindKey,
   gameGroups,
   isComponentTweak,
   isGameTweak,
@@ -19,6 +20,15 @@ describe("tweak domain", () => {
     expect(isHardwareTweak(pcie)).toBe(true);
     expect(isSoftwareTweak(pcie)).toBe(false);
     expect(isComponentTweak(pcie, "pcie")).toBe(true);
+  });
+
+  it("names the real default owner, not the page the row sits on", () => {
+    const source = (defaultSource: Setting["defaultSource"]) =>
+      ({ id: "launcher:steam:overlay", domain: "software", defaultSource }) as unknown as Setting;
+    expect(defaultKindKey(source("application"))).toBe("reset.kind.application");
+    expect(defaultKindKey(source("firmware"))).toBe("reset.kind.firmware");
+    expect(defaultKindKey(source("windows_stock"))).toBe("reset.kind.software");
+    expect(defaultKindKey(source(undefined))).toBe("reset.kind.software");
   });
 
   it("partitions: each row answers true to exactly one predicate", () => {

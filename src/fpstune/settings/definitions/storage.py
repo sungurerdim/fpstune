@@ -7,6 +7,7 @@ Uses registry and PowerShell executors.
 from __future__ import annotations
 
 from fpstune.settings.base import (
+    DefaultSource,
     DetectType,
     SettingCategory,
     SettingExecutor,
@@ -20,6 +21,7 @@ FILESYSTEM_KEY = r"SYSTEM\CurrentControlSet\Control\FileSystem"
 # === TRIM Enabled ===
 TRIM_ENABLED = SettingExecutor(
     id="storage:trim_enabled",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.STORAGE,
     display_name="TRIM",
     short_name="SSD TRIM",
@@ -64,6 +66,7 @@ TRIM_ENABLED = SettingExecutor(
 # === 8.3 Filename Generation ===
 DISABLE_8DOT3 = SettingExecutor(
     id="storage:disable_8dot3",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.STORAGE,
     display_name="8.3 Filename Generation",
     short_name="Legacy short filenames",
@@ -118,6 +121,7 @@ DISABLE_8DOT3 = SettingExecutor(
 # === Last Access Time Updates ===
 DISABLE_LAST_ACCESS = SettingExecutor(
     id="storage:disable_last_access",
+    default_source=DefaultSource.WINDOWS_STOCK,
     category=SettingCategory.STORAGE,
     display_name="Last Access Time Updates",
     short_name="File access-time logging",

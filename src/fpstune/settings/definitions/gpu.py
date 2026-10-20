@@ -174,7 +174,11 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
             # latency_ms is 0.0 and that is the point: under the frame cap V-Sync
             # is never reached, so it neither adds nor removes latency here. The
             # -10 belongs to the fixed-refresh branch below.
-            impact_scores={"latency_ms": 0.0, "stability": "high"},
+            impact_scores={
+                "latency_ms": 0.0,
+                "frametime_consistency": "improved",
+                "stability": "high",
+            },
             applicable_conditions={"gpu_vendor": "nvidia", "requires_vrr": True},
             detect_type=DetectType.NVPROFILE,
             detect_command="",
@@ -339,6 +343,7 @@ def create_nvidia_fps_limiter_setting(vrr_available: bool, max_hz: int = 0) -> S
             impact_scores={
                 "fps": f"ceiling {target}",
                 "latency_spike_ms": 0.0,
+                "frametime_consistency": "improved",
                 "stability": "high",
             },
             applicable_conditions={"gpu_vendor": "nvidia", "requires_vrr": True},

@@ -230,7 +230,11 @@ CS2_MAXPING = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=7,
     effect="Limits matchmaking to servers within 50 ms for consistently low ping",
-    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    impact_scores={
+        "latency_ms": 0.0,
+        "network_consistency": "improved",
+        "stability": "high",
+    },
     detect_type=DetectType.POWERSHELL,
     detect_command=_CS2_CFG_DETECT_BASE
     + "if ($c -match '===fpstune-cs2_maxping-start===') { Write-Output '50ms' } "
@@ -2014,7 +2018,7 @@ MW3_DLSS_SHARPNESS = _make_mw3_cst_setting(
     current_impact="0.0: No sharpening → DLSS output is softened at distance",
     recommended_impact="0.25: Subtle sharpening → crisper distant targets without haloing artifacts",
     effect="Adds subtle DLSS sharpening for better distant enemy silhouette clarity",
-    impact_scores={"fps_gpu_bound": "0%", "stability": "high"},
+    impact_scores={"fps_gpu_bound": "0%", "target_clarity": "improved", "stability": "high"},
     category_order=44,
     evidence_level="likely",
     sources=_MW3_SOURCES,

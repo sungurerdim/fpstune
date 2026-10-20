@@ -36,7 +36,9 @@ _CATEGORY_KEYS: Final[dict[str, frozenset[str]]] = {
             "fps_sustained",
             "fps_retained",
             "fps_cap_removed",
+            "frame_consistency",
             "frame_time_consistency",
+            "frametime_consistency",
             "stutter_reduction",
             "gpu_performance",
             # A ceiling, like the two under "thermal" below — but not the same
@@ -62,6 +64,7 @@ _CATEGORY_KEYS: Final[dict[str, frozenset[str]]] = {
     "resources": frozenset(
         {
             "cpu_usage",
+            "gpu_load",
             "ram_saved",
             "ram_freed",
             "vram_mb",

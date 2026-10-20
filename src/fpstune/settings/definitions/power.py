@@ -611,7 +611,7 @@ POWER_DISK_TIMEOUT = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=12,
     effect="Disables disk spin-down timeout to prevent stutter on access after idle",
-    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     min_value=0,
     max_value=86400,
     detect_type=DetectType.POWERCFG,
@@ -1075,7 +1075,7 @@ POWER_CPU_PERF_CHECK = _cpu_power_setting(
     # than measured frame time. Scoring it as a 15 ms latency saving would claim
     # the bound as the effect, so the number stays in the text where it is true
     # and out of the score where it would not be.
-    impact_scores={"latency_spike_ms": 0.0, "stability": "high"},
+    impact_scores={"latency_spike_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     category_order=16,
     scope=SettingScope.RECOMMENDED,
 )
@@ -1095,7 +1095,7 @@ POWER_CPU_DECREASE_TIME = _cpu_power_setting(
     current_impact="1 check: One quiet interval drops the clock → the next frame waits for it to come back",
     recommended_impact="3 checks: Clocks hold through short lulls and still fall once the machine is really idle",
     effect="Requires sustained idle before clocking down, so brief lulls do not cost the next frame",
-    impact_scores={"latency_spike_ms": 0.0, "stability": "high"},
+    impact_scores={"latency_spike_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     category_order=17,
     scope=SettingScope.RECOMMENDED,
 )
@@ -1115,7 +1115,7 @@ POWER_CPU_LATENCY_HINT_UNPARK = _cpu_power_setting(
     current_impact="50%: A game wakes half the cores immediately and waits for the rest",
     recommended_impact="100%: Every core is back online the moment a latency-sensitive workload starts",
     effect="Wakes every core at once for latency-sensitive work instead of half of them",
-    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     category_order=18,
     scope=SettingScope.RECOMMENDED,
 )
@@ -1139,7 +1139,7 @@ POWER_CPU_LATENCY_HINT_PERF = _cpu_power_setting(
     # One percent, and it is here as a guard rather than as a gain — what it
     # catches is a machine where something set it to 50, not the 99 Windows
     # ships. Filed under Complete for that reason.
-    impact_scores={"fps_cpu_bound": 0.0, "stability": "high"},
+    impact_scores={"fps_cpu_bound": 0.0, "frame_consistency": "improved", "stability": "high"},
     category_order=19,
     scope=SettingScope.COMPLETE,
 )
@@ -1159,9 +1159,9 @@ POWER_CPU_PARKING_INC_POLICY = _cpu_power_setting(
     current_impact="Ideal: Cores come back a few at a time as load builds",
     recommended_impact="All: Every parked core returns in one step when load rises",
     effect="Brings every parked core back in one step instead of a few at a time",
+    impact_scores={"latency_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     value_map={0: "ideal", 1: "single", 2: "all", 3: "one_eighth"},
     apply_value_map={"ideal": 0, "single": 1, "all": 2, "one_eighth": 3},
-    impact_scores={"latency_ms": 0.0, "stability": "high"},
     category_order=20,
     scope=SettingScope.COMPLETE,
 )
@@ -1181,7 +1181,7 @@ POWER_CPU_PARKING_INC_TIME = _cpu_power_setting(
     current_impact="3 checks: A thread waits three load checks for a core that is already there",
     recommended_impact="1 check: Parked cores return at the first sign of load",
     effect="Returns parked cores at the first load check rather than the third",
-    impact_scores={"latency_ms": 0.0, "stability": "high"},
+    impact_scores={"latency_ms": 0.0, "frame_consistency": "improved", "stability": "high"},
     category_order=21,
     scope=SettingScope.COMPLETE,
 )

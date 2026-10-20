@@ -272,11 +272,39 @@ class TestAgainstTheRealRegistry:
         """C2 requires a numeric metric, so a low number here means C2 has slipped."""
         from fpstune.settings.registry import SettingsRegistry
 
+        # C11 rule 4 gives qualitative claims their own class. They are not a
+        # gap in the numeric parser, so they must not dilute the ratio this gate
+        # is about: of the claims that *can* carry a number, most must.
+        qualitative = {
+            "ability_readability",
+            "driver_stability",
+            "footstep_clarity",
+            "frame_consistency",
+            "frame_time_consistency",
+            "frametime_consistency",
+            "gpu_load",
+            "input_precision",
+            "network_consistency",
+            "packet_loss",
+            "privacy",
+            "security",
+            "stability",
+            "stutter_reduction",
+            "system_integrity",
+            "target_clarity",
+            "target_visibility",
+            "throughput",
+            "ux",
+            "visual_quality",
+        }
         claims = [
-            c for s in SettingsRegistry(discover_dynamic=False).get_all() for c in claims_of(s)
+            c
+            for s in SettingsRegistry(discover_dynamic=False).get_all()
+            for c in claims_of(s)
+            if c.metric not in qualitative
         ]
         quantified = [c for c in claims if c.is_quantified]
 
         assert len(quantified) > len(claims) * 0.75, (
-            f"only {len(quantified)} of {len(claims)} shipped claims state a number"
+            f"only {len(quantified)} of {len(claims)} numeric-capable shipped claims state a number"
         )

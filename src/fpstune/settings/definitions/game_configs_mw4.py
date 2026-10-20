@@ -1561,7 +1561,7 @@ MW4_TELESCOPE_VOLUME = _make_mw4_setting(
     current_impact="1.000000: Menu feed plays over whatever else is running",
     recommended_impact="0.000000: Menus stay quiet",
     effect="Silences the menu message feed",
-    impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
+    impact_scores={"footstep_clarity": "unaffected", "fps": "0%", "ux": "improved"},
     category_order=92,
     perceptible_cost=(
         "Telescope ambience goes silent — nothing tactical is lost, but the soundscape is barer."
@@ -1587,7 +1587,7 @@ MW4_CINEMATIC_VOLUME = _make_mw4_setting(
     current_impact="1.000000: Cinematic audio plays at full volume",
     recommended_impact="0.000000: Cinematics silent, matching them not being rendered",
     effect="Silences cinematic audio",
-    impact_scores={"footstep_clarity": "unaffected", "fps": "0%"},
+    impact_scores={"footstep_clarity": "unaffected", "fps": "0%", "ux": "improved"},
     category_order=93,
     perceptible_cost=(
         "Cinematic audio goes silent — nothing tactical is lost, but the soundscape is barer."
@@ -2386,7 +2386,7 @@ MW4_MENU_SCENE_RESOLUTION = _make_mw4_setting(
     current_impact="min: Menu backdrops reduced part of the way — heat still spent on a menu",
     recommended_impact="full: Menu backdrops at the largest reduction, with no in-match cost",
     effect="Renders menu backdrops at the largest resolution reduction",
-    impact_scores={"fps_menu_ceiling": 0, "stability": "high"},
+    impact_scores={"fps_menu_ceiling": 0, "gpu_load": "reduced", "stability": "high"},
     category_order=120,
     evidence_level="likely",
 )

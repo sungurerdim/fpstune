@@ -1610,7 +1610,12 @@ SYSTEM_COINSTALLERS = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=33,
     effect="Blocks peripheral co-installers to prevent unwanted background software installations",
-    impact_scores={"fps": "0%", "latency_ms": 0, "stability": "improved"},
+    impact_scores={
+        "fps": "0%",
+        "latency_ms": 0,
+        "security": "improved",
+        "stability": "improved",
+    },
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -2115,7 +2120,7 @@ NETWORK_AFD_RECEIVE_WINDOW = SettingExecutor(
     scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=55,
     effect="Sets AFD DefaultReceiveWindow=131072 to reduce UDP receive packet loss",
-    impact_scores={"latency_ms": 0, "stability": "marginal"},
+    impact_scores={"latency_ms": 0, "packet_loss": "reduced", "stability": "marginal"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": _AFD_PATH, "name": "DefaultReceiveWindow", "hive": "HKLM"},
@@ -2155,7 +2160,7 @@ NETWORK_AFD_SEND_WINDOW = SettingExecutor(
     scope=SettingScope.COMPLETE,  # experimental risk is offered, never assumed (C2/#30)
     category_order=56,
     effect="Sets AFD DefaultSendWindow=131072 to reduce UDP send packet loss",
-    impact_scores={"latency_ms": 0, "stability": "marginal"},
+    impact_scores={"latency_ms": 0, "packet_loss": "reduced", "stability": "marginal"},
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={"path": _AFD_PATH, "name": "DefaultSendWindow", "hive": "HKLM"},
@@ -3708,7 +3713,7 @@ PERF_STARTUP_DELAY = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=46,
     effect="Removes startup app delay so background apps finish loading before gaming sessions",
-    impact_scores={"fps": "0%", "latency_ms": 0, "stability": "high"},
+    impact_scores={"fps": "0%", "latency_ms": 0, "ux": "improved", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     detect_command=(
         "$val = (Get-ItemProperty -Path "

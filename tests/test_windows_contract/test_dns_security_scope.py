@@ -81,7 +81,7 @@ function Get-NetIPInterface {
 
 """
 
-_SHIPPED_CATCH = "catch { 'isp' }"
+_SHIPPED_CATCH = "catch { throw }"
 
 
 def _detect(
@@ -164,9 +164,13 @@ def test_no_dns_configured_reads_as_isp() -> None:
     assert _detect([ETHERNET], {}) == "isp"
 
 
-def test_no_matching_adapter_reads_as_isp() -> None:
-    """Adapters apply would skip must not be able to decide the answer."""
-    assert _detect([{**ETHERNET, "status": 2}], {"19": SECURITY_PAIR}) == "isp"
+def test_no_matching_adapter_reads_as_not_available() -> None:
+    """A down adapter is a missing read, not an ISP resolver verdict.
+
+    The command waits for an adapter to come back (the #123 restart case); when
+    none does, the answer is `not_available`, never the `isp` default.
+    """
+    assert _detect([{**ETHERNET, "status": 2}], {"19": SECURITY_PAIR}) == "not_available"
 
 
 def test_virtual_adapters_are_excluded_from_the_verdict() -> None:

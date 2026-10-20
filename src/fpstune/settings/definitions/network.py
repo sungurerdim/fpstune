@@ -21,7 +21,7 @@ from fpstune.settings.base import (
     SettingValueType,
 )
 from fpstune.settings.discovery.keyword_resolver import concept as keyword_concept
-from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER_UP
+from fpstune.utils.adapter_filter import PHYSICAL_ADAPTER_UP, PHYSICAL_ADAPTERS_UP
 
 
 def adapter_key(instance_id: str) -> str:
@@ -708,11 +708,12 @@ DNS_SECURITY = SettingExecutor(
     detect_command=(
         "try { "
         "$result = 'isp'; "
-        # Must match the apply filter exactly: physical adapters only.
-        "$adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { "
-        f"{PHYSICAL_ADAPTER_UP} "
-        "}); "
-        "if ($adapters.Count -gt 0) { "
+        # Must match the apply filter exactly: physical adapters only, and wait
+        # out a NIC restart. A read taken while the adapter is down used to fall
+        # through to 'isp' — a false "not optimized" after a correct apply.
+        f"$adapters = @({PHYSICAL_ADAPTERS_UP}); "
+        "if ($adapters.Count -eq 0) { $result = 'not_available' } "
+        "else { "
         # Values are pre-sorted so they can be compared against Sort-Object output.
         # Comparing the whole sorted list, not one element, is what makes an extra
         # resolver visible.
@@ -740,7 +741,7 @@ DNS_SECURITY = SettingExecutor(
         "} } }; "
         "if ($allMatch) { $result = $name; break } "
         "} }; $result "
-        "} catch { 'isp' }"
+        "} catch { throw }"
     ),
     detect_args={},
     value_map={},  # Direct pass-through
@@ -856,9 +857,7 @@ _DOH_TEMPLATES = {
 # Identical to dns_security's filter. Sharing the text is what stops the two
 # settings disagreeing about which adapters count, which is the defect fixed in
 # dns_security's own detect (it read one adapter while apply wrote all of them).
-_PHYSICAL_ADAPTER_FILTER = (
-    f"Get-NetAdapter -ErrorAction Stop | Where-Object {{ {PHYSICAL_ADAPTER_UP} }}"
-)
+_PHYSICAL_ADAPTER_FILTER = PHYSICAL_ADAPTERS_UP
 
 _DOH_TEMPLATE_TABLE_PS = "; ".join(
     f"'{address}' = '{template}'" for address, template in _DOH_TEMPLATES.items()

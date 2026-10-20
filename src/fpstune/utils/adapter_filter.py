@@ -35,3 +35,24 @@ PHYSICAL_ADAPTER: Final = (
 # The same expression, narrowed to an adapter that is up (InterfaceOperationalStatus
 # 1 is the numeric "Up", which no Windows language changes).
 PHYSICAL_ADAPTER_UP: Final = f"[int]$_.InterfaceOperationalStatus -eq 1 -and {PHYSICAL_ADAPTER}"
+
+# Physical adapters that are up, waiting out an adapter restart. A NIC restart
+# takes the interface down for a moment; a detector that reads at that instant
+# sees zero adapters and used to answer "ISP" (dns_security) or "not_supported"
+# (DoH), which is a false state, not a transient reading. The wait is bounded so
+# a genuinely disconnected machine still answers: after it, `$adapters` is empty
+# and the caller's own absent-state handling runs.
+#
+# Every adapter-backed detector that would otherwise read through a restart
+# should use this instead of a bare `Get-NetAdapter | Where-Object`.
+PHYSICAL_ADAPTERS_UP: Final = (
+    "$deadline = (Get-Date).AddSeconds(10); "
+    "do { "
+    "$adapters = @(Get-NetAdapter -ErrorAction SilentlyContinue | Where-Object { "
+    f"{PHYSICAL_ADAPTER_UP} "
+    "}); "
+    "if ($adapters.Count -gt 0) { break }; "
+    "Start-Sleep -Milliseconds 500 "
+    "} while ((Get-Date) -lt $deadline); "
+    "$adapters"
+)

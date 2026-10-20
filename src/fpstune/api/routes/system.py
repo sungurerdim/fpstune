@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
@@ -19,6 +20,7 @@ from fpstune.api.schemas import (
     ActivityLogResponse,
     AudioDeviceInfo,
     CpuInfo,
+    DiagnosticsResponse,
     GpuDeviceInfo,
     HardwareInfo,
     MonitorInfo,
@@ -35,6 +37,7 @@ from fpstune.utils.detect import (
 )
 from fpstune.utils.hardware_manager import hardware_manager
 from fpstune.utils.logger import activity_log
+from fpstune.utils.operation_log import operation_log
 
 router = APIRouter()
 
@@ -94,6 +97,29 @@ async def get_activity_log(limit: int = 50) -> ActivityLogResponse:
             )
             for e in entries
         ]
+    )
+
+
+@router.get("/system/diagnostics", response_model=DiagnosticsResponse)
+async def get_diagnostics(lines: int = 200) -> DiagnosticsResponse:
+    """The support log path, this session's counts, and the tail a user can copy."""
+    path = operation_log.path
+    if path is None:
+        from fpstune.utils import user_paths
+
+        path = user_paths.fpstune_home() / "logs" / "operations.log"
+    tail: list[str] = []
+    if path.exists():
+        try:
+            tail = path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+        except OSError:
+            tail = []
+    return DiagnosticsResponse(
+        log_path=str(path),
+        exists=path.exists(),
+        summary=operation_log.summary(),
+        generated_at=datetime.now().astimezone().isoformat(timespec="seconds"),
+        lines=tail,
     )
 
 

@@ -162,6 +162,14 @@ export interface ActivityLogEntry {
   level: string;
 }
 
+export interface DiagnosticsResponse {
+  log_path: string;
+  exists: boolean;
+  summary: string;
+  generated_at: string;
+  lines: string[];
+}
+
 /**
  * A failed request, carrying what the backend said rather than the transport's
  * "API error: 400 Bad Request - {json}". `detail` is FastAPI's own field and is
@@ -307,6 +315,9 @@ export const api = {
 
   getActivityLog: (limit = 50) =>
     fetchJson<{ entries: ActivityLogEntry[] }>(`/activity?limit=${limit}`),
+
+  getDiagnostics: (lines = 200) =>
+    fetchJson<DiagnosticsResponse>(`/system/diagnostics?lines=${lines}`),
 
   // Audio device loudness equalization toggle
   setLoudnessEq: (deviceId: string, enabled: boolean) =>

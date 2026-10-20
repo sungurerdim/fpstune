@@ -470,6 +470,8 @@ export const en = {
   "activity.title": "Activity Log",
   "activity.open": "Open activity log",
   "activity.close": "Close activity log",
+  "activity.copyDiagnostics": "Copy diagnostics",
+  "activity.copied": "Diagnostics copied",
 
   // Optimize tab
   "games.reading": "Reading your game configs…",

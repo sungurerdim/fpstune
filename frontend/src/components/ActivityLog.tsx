@@ -4,6 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import {
   ScrollText,
   X,
+  Check,
+  Copy,
   CheckCircle2,
   AlertCircle,
   XCircle,
@@ -27,6 +29,25 @@ const levelIcons = {
 export function ActivityLog() {
   const { t } = useT();
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const copyDiagnostics = async () => {
+    try {
+      const data = await api.getDiagnostics();
+      const text = [
+        `fpstune diagnostics | ${data.generated_at}`,
+        `log: ${data.log_path}`,
+        `summary: ${data.summary}`,
+        "",
+        ...data.lines,
+      ].join("\n");
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setCopied(false);
+    }
+  };
 
   const { data, isLoading } = useQuery({
     queryKey: ["activity"],
@@ -79,13 +100,23 @@ export function ActivityLog() {
                 <ScrollText className="w-4 h-4 text-primary" />
                 <h3 className="font-semibold text-sm">{t("activity.title")}</h3>
               </div>
-              <button
-                onClick={() => setOpen(false)}
-                aria-label={t("activity.close")}
-                className="p-1 rounded hover:bg-muted text-muted-foreground"
-              >
-                <X className="w-4 h-4" />
-              </button>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={copyDiagnostics}
+                  title={t(copied ? "activity.copied" : "activity.copyDiagnostics")}
+                  aria-label={t(copied ? "activity.copied" : "activity.copyDiagnostics")}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground"
+                >
+                  {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                </button>
+                <button
+                  onClick={() => setOpen(false)}
+                  aria-label={t("activity.close")}
+                  className="p-1 rounded hover:bg-muted text-muted-foreground"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 py-2">

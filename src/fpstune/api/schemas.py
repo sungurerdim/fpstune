@@ -241,6 +241,16 @@ class ActivityLogResponse(BaseModel):
     entries: list[ActivityLogEntry]
 
 
+class DiagnosticsResponse(BaseModel):
+    """The support bundle a user can copy: where the log is, its summary and tail."""
+
+    log_path: str
+    exists: bool
+    summary: str
+    generated_at: str
+    lines: list[str]
+
+
 # GPU Benchmark schemas (FurMark-based)
 # Power profile schemas
 # =============================================================================

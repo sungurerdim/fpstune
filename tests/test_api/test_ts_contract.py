@@ -45,6 +45,7 @@ _ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/system"): "SystemInfo",
     ("GET", "/api/hardware"): "HardwareInfo",
     ("GET", "/api/activity"): "ActivityLogResponse",
+    ("GET", "/api/system/diagnostics"): "DiagnosticsResponse",
     ("POST", "/api/display/{display_index}/auto"): "DisplayAutoResponse",
     ("POST", "/api/display/keep-all"): "DisplayConfirmResponse",
     ("POST", "/api/display/{display_index}/confirm"): "DisplayConfirmResponse",

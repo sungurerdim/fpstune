@@ -3,7 +3,7 @@
  * Tests button state, panel open/close, loading state, and entry rendering.
  */
 
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { http, HttpResponse } from "msw";
@@ -54,6 +54,33 @@ describe("ActivityLog", () => {
     const { Wrapper } = makeWrapper();
     render(<ActivityLog />, { wrapper: Wrapper });
     expect(getOpenButton()).toBeInTheDocument();
+  });
+
+  it("copies the diagnostics bundle from the open panel", async () => {
+    server.use(
+      http.get("/api/system/diagnostics", () =>
+        HttpResponse.json({
+          log_path: "C:\\Users\\test\\.fpstune\\logs\\operations.log",
+          exists: true,
+          summary: "ok=2",
+          generated_at: "2026-10-21T01:00:00+03:00",
+          lines: ["# header", "APPLY | ok | timer:hpet"],
+        }),
+      ),
+    );
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    });
+    const { Wrapper } = makeWrapper();
+    render(<ActivityLog />, { wrapper: Wrapper });
+    await userEvent.click(getOpenButton());
+    await userEvent.click(screen.getByRole("button", { name: "Copy diagnostics" }));
+
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0][0]).toContain("APPLY | ok | timer:hpet");
+    expect(writeText.mock.calls[0][0]).toContain("C:\\Users\\test\\.fpstune");
   });
 
   it("does not show the panel by default (panel is closed)", () => {

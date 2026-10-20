@@ -449,6 +449,8 @@ export const tr: Record<keyof typeof en, string> = {
   "activity.title": "Etkinlik Günlüğü",
   "activity.open": "Etkinlik günlüğünü aç",
   "activity.close": "Etkinlik günlüğünü kapat",
+  "activity.copyDiagnostics": "Tanılama bilgisini kopyala",
+  "activity.copied": "Tanılama bilgisi kopyalandı",
 
   // Optimize tab
   "games.reading": "Oyun yapılandırmalarınız okunuyor…",

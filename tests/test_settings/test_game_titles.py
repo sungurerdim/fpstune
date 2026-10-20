@@ -33,12 +33,19 @@ def test_a_vrr_panel_gets_the_drivers_own_cap(factory, hz: int) -> None:
     assert setting.recommended_value >= 30  # Siege reads anything lower as "no limit"
 
 
-@pytest.mark.parametrize("factory", _CAPS)
-def test_a_fixed_panel_is_left_uncapped(factory) -> None:
+@pytest.mark.parametrize(
+    ("factory", "expected_scope"),
+    [
+        (create_fortnite_fps_cap_setting, SettingScope.RECOMMENDED),
+        (create_siege_fps_cap_setting, SettingScope.ESSENTIAL),
+    ],
+)
+def test_a_fixed_panel_is_left_uncapped(factory, expected_scope) -> None:
     # Without a VRR window a cap only lowers the ceiling (consequence 3).
     setting = factory(144, vrr=False)
     assert setting.recommended_value == 0
-    assert setting.scope is SettingScope.ESSENTIAL
+    # Scope follows evidence: Fortnite is likely, Siege is proven.
+    assert setting.scope is expected_scope
 
 
 def test_every_vsync_row_recommends_off_and_is_a_drift_guard() -> None:

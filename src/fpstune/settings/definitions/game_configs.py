@@ -482,9 +482,9 @@ CS2_LOW_LATENCY_SLEEP = _make_cs2_cvar_setting(
     impact_scores={"latency_ms": -0.5},
     category_order=13,
     evidence_level="likely",
-    # ESSENTIAL for the same reason as MW3's Reflex: it changes state (CS2 ships
-    # false), and the effect is a frame of input lag rather than a cosmetic one.
-    scope=SettingScope.ESSENTIAL,
+    # RECOMMENDED until measured on this title: likely evidence may not sit in
+    # the conservative, proven-only preset.
+    scope=SettingScope.RECOMMENDED,
 )
 
 CS2_AUTOHELP = _make_cs2_cvar_setting(

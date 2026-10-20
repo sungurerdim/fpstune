@@ -2620,7 +2620,7 @@ MW4_AMD_ANTILAG = _make_mw4_setting(
     effect="Enables AMD Anti-Lag 2",
     impact_scores={"latency_ms": -3, "stability": "high"},
     category_order=131,
-    scope=SettingScope.ESSENTIAL,
+    scope=SettingScope.RECOMMENDED,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "amd"},
 )
@@ -2765,7 +2765,7 @@ MW4_INTEL_XELL = _make_mw4_setting(
     effect="Enables Intel Xe Low Latency",
     impact_scores={"latency_ms": -3, "stability": "high"},
     category_order=137,
-    scope=SettingScope.ESSENTIAL,
+    scope=SettingScope.RECOMMENDED,
     evidence_level="likely",
     applicable_conditions={"gpu_vendor": "intel"},
 )

@@ -1484,7 +1484,11 @@ SYSTEM_DO_BACKGROUND_BANDWIDTH = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=32,
     effect="Caps Windows Update background downloads at 20% of available bandwidth",
-    impact_scores={"latency_ms": -20, "jitter_ms": "reduced"},
+    impact_scores={
+        "latency_spike_ms": 0.0,
+        "network_consistency": "improved",
+        "jitter_ms": "reduced",
+    },
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={
@@ -1525,7 +1529,11 @@ SYSTEM_ONEDRIVE_UPLOAD_LIMIT = SettingExecutor(
     scope=SettingScope.RECOMMENDED,
     category_order=33,
     effect="Caps the OneDrive sync client at 30% of upload throughput",
-    impact_scores={"latency_ms": -30, "jitter_ms": "reduced"},
+    impact_scores={
+        "latency_spike_ms": 0.0,
+        "network_consistency": "improved",
+        "jitter_ms": "reduced",
+    },
     detect_type=DetectType.REGISTRY,
     detect_command="",
     detect_args={

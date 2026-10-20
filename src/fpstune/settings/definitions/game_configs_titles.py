@@ -194,7 +194,7 @@ def create_fortnite_fps_cap_setting(max_hz: int, *, vrr: bool) -> SettingExecuto
         impact_scores={"fps": f"ceiling {target or 'removed'}", "latency_ms": 0.0},
         category_order=37,
         sources=_FORTNITE_SOURCES,
-        scope=SettingScope.ESSENTIAL,
+        scope=SettingScope.RECOMMENDED,
         value_type=SettingValueType.INT,
         min_value=0,
         max_value=max(1000, max_hz),

@@ -168,7 +168,7 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
             requires_reboot=False,
             current_impact="Off: Tearing returns whenever the frame rate leaves the G-Sync window",
             recommended_impact="On: Tear-free inside and above the VRR range, with no added latency under the cap",
-            scope=SettingScope.ESSENTIAL,
+            scope=SettingScope.RECOMMENDED,
             category_order=2,
             effect="Completes the VRR configuration — tear-free without the latency cost",
             # latency_ms is 0.0 and that is the point: under the frame cap V-Sync
@@ -204,7 +204,7 @@ def create_nvidia_vsync_setting(vrr_available: bool) -> SettingExecutor:
         requires_reboot=False,
         current_impact="Application-controlled or On: A game with V-Sync on holds frames for the next refresh → extra input lag",
         recommended_impact="Off: Frames presented as soon as they are ready → minimum input lag",
-        scope=SettingScope.ESSENTIAL,
+        scope=SettingScope.RECOMMENDED,
         category_order=2,
         effect="Disables frame sync to monitor refresh for minimum latency",
         impact_scores={
@@ -669,7 +669,7 @@ NVIDIA_FAN_CURVE = SettingExecutor(
     category_order=17,
     effect="In MSI Afterburner or GPU Tweak, set a fan curve that keeps the core under 60°C and the "
     "hotspot under 70°C",
-    impact_scores={"fps_sustained": "+0-30%", "gpu_temp_c": -10, "stability": "high"},
+    impact_scores={"fps_sustained": "+0-30%", "gpu_temp_c": "reduced", "stability": "high"},
     applicable_conditions={"gpu_vendor": "nvidia"},
     is_readonly=True,
     detect_type=DetectType.POWERSHELL,
@@ -1003,7 +1003,7 @@ AMD_VSYNC = SettingExecutor(
     scope=SettingScope.COMPLETE,
     category_order=2,  # Critical for input lag
     effect="Disables frame sync to monitor refresh for minimum latency",
-    impact_scores={"fps": "0%", "latency_ms": -12.0, "visual_quality": "may tear"},
+    impact_scores={"fps": "0%", "latency_ms": "reduced", "visual_quality": "may tear"},
     applicable_conditions={"gpu_vendor": "amd"},  # AMD only
     detect_type=DetectType.REGISTRY,
     detect_command="",

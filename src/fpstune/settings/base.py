@@ -416,6 +416,20 @@ class DefaultSource(StrEnum):
     NONE = "none"  # no default can be derived: `default_value` is None, reset not offered
 
 
+# A named fact is a source too (A9): the game's own file, the driver's INF, the
+# Windows stock value. A definition with no URL gets the fact its default already
+# comes from, so "proven with no source" cannot mean "proven with no reason".
+_DEFAULT_SOURCE_FACT: dict[DefaultSource, str] = {
+    DefaultSource.WINDOWS_STOCK: "Windows 11 stock value",
+    DefaultSource.DRIVER: "Driver's published default (INF/DefaultRegistryValue)",
+    DefaultSource.SCHEME: "Balanced plan DefaultPowerSchemeValues",
+    DefaultSource.GAME: "Game's own shipped config file",
+    DefaultSource.APPLICATION: "Application's own shipped config",
+    DefaultSource.FIRMWARE: "BIOS/UEFI/ACPI published fact",
+}
+
+
+
 class DetectType(StrEnum):
     """Detection/Apply command types."""
 
@@ -718,6 +732,11 @@ class SettingExecutor:
                 self.component = _MODULE_COMPONENTS.get(self.module)
         if self.default_source is None:
             self.default_source = self._derive_default_source()
+        if not self.sources:
+            fact = _DEFAULT_SOURCE_FACT.get(self.default_source)
+            if fact:
+                self.sources.append(fact)
+
 
     @property
     def module(self) -> str:

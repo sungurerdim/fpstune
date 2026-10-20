@@ -174,7 +174,7 @@ WIN32_PRIORITY_SEPARATION = SettingExecutor(
     sources=["https://learn.microsoft.com/en-us/previous-versions/cc976120(v=technet.10)"],
     current_impact="Changed: the foreground program gets less of the CPU than Windows gives it",
     recommended_impact="Windows default: short variable slices with a 3:1 foreground boost",
-    scope=SettingScope.ESSENTIAL,
+    scope=SettingScope.RECOMMENDED,
     category_order=5,
     effect="Restores Windows' own foreground CPU priority",
     impact_scores={"latency_ms": 0.0, "stability": "high"},

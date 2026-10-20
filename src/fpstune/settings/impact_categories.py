@@ -57,6 +57,8 @@ _CATEGORY_KEYS: Final[dict[str, frozenset[str]]] = {
             "bandwidth",
             "packet_loss",
             "network_consistency",
+            "link_stability",
+            "roaming_stability",
             "network_overhead",
             "matchmaking_s",
         }

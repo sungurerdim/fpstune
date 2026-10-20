@@ -93,6 +93,8 @@ def _benefit(setting: SettingExecutor) -> bool:
             continue
         if key in _QUALITATIVE_BENEFIT_KEYS and any(word in text for word in _BENEFIT_WORDS):
             return True
+        if any(word in text for word in _BENEFIT_WORDS):
+            return True
         if text.startswith(("+", "-")) or text[:1].isdigit():
             return True
     return False

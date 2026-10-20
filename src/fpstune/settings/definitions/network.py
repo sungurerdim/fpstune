@@ -550,7 +550,12 @@ def create_power_management_setting(interface_index: int, display_name: str) -> 
         scope=SettingScope.RECOMMENDED,  # Noticeable benefit for connection stability
         category_order=13,  # Per-adapter setting
         effect="Disabling prevents adapter disconnects and resume delays",
-        impact_scores={"latency_ms": -150.0, "stability": "high", "power_watts": 0.5},
+        impact_scores={
+            "latency_ms": 0.0,
+            "link_stability": "improved",
+            "stability": "high",
+            "power_watts": 0.5,
+        },
         # "Allow the computer to turn off this device" lives in the adapter's
         # driver key (Control\Class\{4d36e972-...}\NNNN), PnPCapabilities bits
         # 0x18. The key is found from the adapter's own PnP device id through
@@ -1641,7 +1646,11 @@ def create_roaming_aggressiveness_setting(
         scope=SettingScope.COMPLETE,
         category_order=14,  # Per-adapter WiFi setting
         effect="Lowest setting minimizes WiFi AP scanning ping spikes",
-        impact_scores={"latency_ms": -100.0, "stability": "high"},
+        impact_scores={
+            "latency_ms": 0.0,
+            "roaming_stability": "improved",
+            "stability": "high",
+        },
         # Detection - Use InterfaceIndex (numeric) for reliable command execution
         detect_type=DetectType.POWERSHELL,
         detect_command=keyword_concept("roaming_aggressiveness").ps_detect(),

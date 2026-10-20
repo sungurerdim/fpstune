@@ -973,8 +973,12 @@ class TestVendorMatrixIsComplete:
         # Enabled, not boost: boost pins clocks for a gain that exists only
         # CPU-bound, which neither counterpart has an equivalent of.
         assert by_id["nvidia_reflex"].recommended_value == "Enabled"
-        for name in ("amd_antilag", "intel_xell", "nvidia_reflex"):
-            assert by_id[name].scope.name == "ESSENTIAL", name
+        # Scope follows evidence, not vendor symmetry: Reflex is proven and
+        # essential; Anti-Lag 2 and XeLL are likely, so they stay recommended
+        # until measured on AMD/Intel hardware.
+        assert by_id["nvidia_reflex"].scope.name == "ESSENTIAL"
+        for name in ("amd_antilag", "intel_xell"):
+            assert by_id[name].scope.name == "RECOMMENDED", name
 
     def test_frame_generation_is_off_on_every_vendor(self) -> None:
         """A generated frame cannot show anything the player did, so the counter

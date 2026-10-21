@@ -14,9 +14,9 @@ from dataclasses import dataclass
 
 import pytest
 
+from fpstune.benchmark.dpc import TimingBench
 from fpstune.benchmark.sources import source_for
 from fpstune.benchmark.suite import Bench, run_suite
-from fpstune.benchmark.dpc import TimingBench
 
 
 @dataclass

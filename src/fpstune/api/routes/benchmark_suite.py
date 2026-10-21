@@ -32,6 +32,10 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from fpstune.api.benchmark_schemas import (
+    SuiteCatalogueResponse,
+    SuiteComparisonResponse,
+)
 from fpstune.api.routes.settings_apply import applies_in_flight
 from fpstune.benchmark.benches import benches_for, catalogue, default_keys
 from fpstune.benchmark.operation_lock import operation_lock
@@ -104,7 +108,7 @@ def _sse(event: dict[str, Any]) -> str:
     return f"data: {json.dumps(event)}\n\n"
 
 
-@router.get("/suite")
+@router.get("/suite", response_model=SuiteCatalogueResponse)
 async def suite_catalogue() -> dict[str, Any]:
     """Every bench, whether it can run here, and what running it costs."""
     listing = await asyncio.to_thread(catalogue)
@@ -213,7 +217,7 @@ async def run_suite_stream(request: SuiteRunRequest) -> StreamingResponse:
     )
 
 
-@router.post("/suite/compare")
+@router.post("/suite/compare", response_model=SuiteComparisonResponse)
 async def compare_suite_runs(request: SuiteCompareRequest) -> dict[str, Any]:
     """Judge two runs against each other, metric by metric.
 

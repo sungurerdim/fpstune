@@ -22,9 +22,8 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 
 from fpstune.api.main import create_app
-from fpstune.benchmark.dpc import DpcBenchmark, DpcBenchmarkResult, DpcStats
+from fpstune.benchmark.dpc import DpcBenchmark, DpcBenchmarkResult, DpcStats, TimingBench
 from fpstune.benchmark.sources import NO_INSTRUMENT, NOT_JUDGEABLE, SOURCES, source_for
-from fpstune.benchmark.dpc import TimingBench
 from fpstune.benchmark.verify_round import direction_of
 
 

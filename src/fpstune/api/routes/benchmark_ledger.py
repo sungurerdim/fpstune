@@ -34,6 +34,11 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from fpstune.api.benchmark_schemas import (
+    BenchLedgerResponse,
+    LedgerRunQueuedResponse,
+    LedgerRunsResponse,
+)
 from fpstune.benchmark import ledger, scheduler
 from fpstune.benchmark.suite import SuiteRun, compare_runs
 from fpstune.benchmark.verify_round import direction_of
@@ -394,7 +399,7 @@ def _runs_payload() -> dict[str, Any]:
     }
 
 
-@router.get("/ledger/runs")
+@router.get("/ledger/runs", response_model=LedgerRunsResponse)
 async def get_ledger_runs() -> dict[str, Any]:
     """The persisted baseline and after runs, samples and all.
 
@@ -405,7 +410,7 @@ async def get_ledger_runs() -> dict[str, Any]:
     return await asyncio.to_thread(_runs_payload)
 
 
-@router.get("/ledger")
+@router.get("/ledger", response_model=BenchLedgerResponse)
 async def get_ledger() -> dict[str, Any]:
     """What has been measured on this machine, per area, and what has not.
 
@@ -434,7 +439,7 @@ def _enqueue() -> dict[str, Any]:
     return {"queued": True, "job": _job_summary(job)}
 
 
-@router.post("/ledger/run")
+@router.post("/ledger/run", response_model=LedgerRunQueuedResponse)
 async def run_ledger_job() -> dict[str, Any]:
     """Ask for a measurement now — the same pipeline the scheduler uses.
 

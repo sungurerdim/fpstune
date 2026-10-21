@@ -68,6 +68,19 @@ _ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/os-build"): "OsBuildChangeResponse",
     ("GET", "/api/display/pending"): "DisplayPendingResponse",
     ("GET", "/api/settings/cleanup-sizes"): "CleanupSizeEntry",
+    ("GET", "/api/benchmark/suite"): "SuiteCatalogueResponse",
+    ("POST", "/api/benchmark/suite/compare"): "SuiteComparisonResponse",
+    ("GET", "/api/benchmark/ledger"): "BenchLedgerResponse",
+    ("POST", "/api/benchmark/ledger/run"): "LedgerRunQueuedResponse",
+    ("GET", "/api/benchmark/ledger/runs"): "LedgerRunsResponse",
+    ("POST", "/api/benchmark/verify/coverage"): "VerifyCoverageResponse",
+    ("GET", "/api/benchmark/verify/sources"): "VerifySourcesResponse",
+    ("POST", "/api/benchmark/verify/sample"): "VerifySampleResponse",
+    ("POST", "/api/benchmark/verify/round"): "VerifyReportResponse",
+    ("GET", "/api/benchmark/headroom"): "HeadroomResponse",
+    ("POST", "/api/benchmark/headroom/measure"): "MeasureResultResponse",
+    ("GET", "/api/benchmark/gpu-scene"): "GpuSceneStatusResponse",
+    ("POST", "/api/benchmark/gpu-scene/install"): "GpuSceneInstallResponse",
 }
 
 # Routes api.ts calls whose OpenAPI response declares no fields, so there is
@@ -75,23 +88,9 @@ _ROUTES: dict[tuple[str, str], str] = {
 # returning a bare dict (or a stream); `test_unmodelled_routes_really_have_no_model`
 # fails the moment one gains a response model, so it moves to `_ROUTES`.
 _SSE = "server-sent events; the frontend types each event as Record<string, unknown>"
-_DICT = "the route returns a bare dict: no response model, no field names in the schema"
 _UNMODELLED: dict[tuple[str, str], str] = {
     ("POST", "/api/settings/bulk/stream-apply"): _SSE,
     ("POST", "/api/benchmark/suite/run"): _SSE,
-    ("GET", "/api/benchmark/suite"): _DICT,
-    ("POST", "/api/benchmark/suite/compare"): _DICT,
-    ("GET", "/api/benchmark/ledger"): _DICT,
-    ("POST", "/api/benchmark/ledger/run"): _DICT,
-    ("GET", "/api/benchmark/ledger/runs"): _DICT,
-    ("POST", "/api/benchmark/verify/coverage"): _DICT,
-    ("GET", "/api/benchmark/verify/sources"): _DICT,
-    ("POST", "/api/benchmark/verify/sample"): _DICT,
-    ("POST", "/api/benchmark/verify/round"): _DICT,
-    ("GET", "/api/benchmark/headroom"): _DICT,
-    ("POST", "/api/benchmark/headroom/measure"): _DICT,
-    ("GET", "/api/benchmark/gpu-scene"): _DICT,
-    ("POST", "/api/benchmark/gpu-scene/install"): _DICT,
 }
 
 

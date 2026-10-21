@@ -8,6 +8,16 @@ from typing import Any, Literal
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
+from fpstune.api.benchmark_schemas import (
+    GpuSceneInstallResponse,
+    GpuSceneStatusResponse,
+    HeadroomResponse,
+    MeasureResultResponse,
+    VerifyCoverageResponse,
+    VerifyReportResponse,
+    VerifySampleResponse,
+    VerifySourcesResponse,
+)
 from fpstune.api.routes.benchmark_ledger import router as ledger_router
 from fpstune.benchmark.sources import NO_INSTRUMENT, SOURCES, Source, coverage
 from fpstune.benchmark.verify_round import measure_pair, run_round
@@ -110,7 +120,7 @@ def _headroom_payload(headroom: PerformanceHeadroom) -> dict[str, Any]:
     }
 
 
-@router.get("/headroom")
+@router.get("/headroom", response_model=HeadroomResponse)
 async def get_headroom() -> dict[str, Any]:
     """What this machine last reached on the fixed scene, against what it can show.
 
@@ -126,7 +136,7 @@ async def get_headroom() -> dict[str, Any]:
     return {"headroom": _headroom_payload(headroom)}
 
 
-@router.post("/headroom/measure")
+@router.post("/headroom/measure", response_model=MeasureResultResponse)
 async def measure_headroom() -> dict[str, Any]:
     """Run the scene now, on the user's say-so, and return what it found.
 
@@ -165,7 +175,7 @@ def _gpu_scene_status() -> dict[str, Any]:
     }
 
 
-@router.get("/gpu-scene")
+@router.get("/gpu-scene", response_model=GpuSceneStatusResponse)
 async def get_gpu_scene() -> dict[str, Any]:
     """Whether the test scene is on this machine, and what installing it costs.
 
@@ -196,7 +206,7 @@ def _install_gpu_scene() -> dict[str, Any]:
     return {"busy": False, "installed": installed, "reason": reason}
 
 
-@router.post("/gpu-scene/install")
+@router.post("/gpu-scene/install", response_model=GpuSceneInstallResponse)
 async def install_gpu_scene() -> dict[str, Any]:
     """Download and silently install the test scene, on the user's say-so.
 
@@ -220,7 +230,7 @@ async def install_gpu_scene() -> dict[str, Any]:
     return {"installed": result["installed"], "reason": result["reason"]}
 
 
-@router.post("/verify/coverage")
+@router.post("/verify/coverage", response_model=VerifyCoverageResponse)
 async def verify_coverage(request: CoverageRequest) -> dict[str, Any]:
     """What a verification round over these settings could and could not show.
 
@@ -230,7 +240,7 @@ async def verify_coverage(request: CoverageRequest) -> dict[str, Any]:
     return coverage(_resolve(request.setting_ids)).to_dict()
 
 
-@router.post("/verify/round")
+@router.post("/verify/round", response_model=VerifyReportResponse)
 async def verify_round_endpoint(request: VerifyRequest) -> dict[str, Any]:
     """Judge these settings' own claims against a before/after pair.
 
@@ -264,7 +274,7 @@ async def verify_round_endpoint(request: VerifyRequest) -> dict[str, Any]:
     return round_.to_dict()
 
 
-@router.get("/verify/sources")
+@router.get("/verify/sources", response_model=VerifySourcesResponse)
 async def verify_sources() -> dict[str, Any]:
     """Which instrument can speak to which claim metric, and why not the rest.
 
@@ -333,7 +343,7 @@ def _sample_dpc() -> dict[str, Any]:
     return result.stats.to_dict()
 
 
-@router.post("/verify/sample")
+@router.post("/verify/sample", response_model=VerifySampleResponse)
 async def verify_sample(request: SampleRequest) -> dict[str, Any]:
     """Run one instrument once and return its reading, keyed by claim metric.
 

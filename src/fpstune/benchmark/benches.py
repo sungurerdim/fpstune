@@ -52,7 +52,6 @@ from fpstune.benchmark.storage_health import StorageHealthBench
 from fpstune.benchmark.suite import Bench
 
 
-
 @dataclass(frozen=True)
 class Entry:
     """One bench, plus what running it costs the person who pressed the button."""

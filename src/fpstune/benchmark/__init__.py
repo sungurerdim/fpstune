@@ -34,6 +34,7 @@ from fpstune.benchmark.suite import (
     compare_runs,
     run_suite,
 )
+
 __all__ = [
     "Bench",
     "DiskIoBench",

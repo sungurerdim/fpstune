@@ -25,6 +25,8 @@ from fpstune.api.schemas import (
     HardwareInfo,
     MonitorInfo,
     NetworkAdapterInfo,
+    OsBuildChangeResponse,
+    SelfCheckResponse,
     StorageDriveInfo,
     SystemInfo,
 )
@@ -233,7 +235,7 @@ async def request_shutdown(background: BackgroundTasks) -> dict[str, Any]:
     }
 
 
-@router.get("/self-check")
+@router.get("/self-check", response_model=SelfCheckResponse)
 async def get_self_check(refresh: bool = False) -> dict[str, Any]:
     """Every detector cross-checked against an independent source (A12).
 
@@ -251,7 +253,7 @@ async def get_self_check(refresh: bool = False) -> dict[str, Any]:
     return report.to_dict()
 
 
-@router.get("/os-build")
+@router.get("/os-build", response_model=OsBuildChangeResponse)
 async def get_os_build_change() -> dict[str, Any]:
     """Whether Windows was updated since fpstune last ran.
 

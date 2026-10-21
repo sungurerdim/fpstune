@@ -27,6 +27,7 @@ from fpstune.api.schemas import (
     ApplyRequest,
     ApplyResponse,
     CategoryMetadataResponse,
+    CleanupSizeEntry,
     DetectRequest,
     DetectResponse,
     ModuleMetadataResponse,
@@ -139,7 +140,7 @@ async def get_definitions() -> list[SettingDefinitionResponse]:
     return [setting_to_response(s) for s in registry.get_all()]
 
 
-@router.get("/cleanup-sizes")
+@router.get("/cleanup-sizes", response_model=dict[str, CleanupSizeEntry])
 async def get_cleanup_sizes() -> dict[str, Any]:
     """Return cached cleanup sizes for all background-detected cleanup settings.
 

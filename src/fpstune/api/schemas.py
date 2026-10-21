@@ -457,3 +457,83 @@ class BulkStreamRequest(BaseModel):
     """
 
     settings: dict[str, Any] = Field(..., description="Map of setting_id to the value to apply")
+
+
+# =============================================================================
+# Small action and system responses (previously bare dicts)
+# =============================================================================
+
+
+class AudioToggleResponse(BaseModel):
+    """The result of switching loudness EQ or enabling an endpoint."""
+
+    success: bool
+    device_id: str
+    enabled: bool
+    message: str
+
+
+class NetworkConnectionResponse(BaseModel):
+    """Connect/disconnect outcome for one adapter."""
+
+    success: bool
+    adapter_name: str
+    adapter_type: str
+    is_connected: bool
+    profile: str
+    message: str
+
+
+class StorageOptimizeResponse(BaseModel):
+    """Which pass ran on which drive, and what Windows reported."""
+
+    success: bool
+    drive_letter: str
+    media_type: str
+    action: str
+    message: str
+
+
+class RestorePointResponse(BaseModel):
+    """Whether a restore point was created."""
+
+    success: bool
+    message: str
+
+
+class SelfCheckFindingResponse(BaseModel):
+    """One detector compared with an independent source."""
+
+    area: str
+    name: str
+    agrees: bool
+    detail: str
+
+
+class SelfCheckResponse(BaseModel):
+    """The persisted self-check report."""
+
+    ok: bool
+    findings: list[SelfCheckFindingResponse]
+
+
+class OsBuildChangeResponse(BaseModel):
+    """Whether Windows changed build since fpstune last ran."""
+
+    previous: str | None
+    current: str | None
+    changed: bool
+
+
+class DisplayPendingResponse(BaseModel):
+    """Display modes that revert unless kept."""
+
+    devices: list[str]
+    seconds_left: int
+
+
+class CleanupSizeEntry(BaseModel):
+    """One cleanup target's cached size."""
+
+    bytes: int
+    status: str

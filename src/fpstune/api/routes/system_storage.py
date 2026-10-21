@@ -18,6 +18,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from fpstune.api.hardware import get_detailed_storage_drives
+from fpstune.api.schemas import StorageOptimizeResponse
 from fpstune.utils.admin import is_admin
 from fpstune.utils.logger import log_activity
 from fpstune.utils.powershell import run_powershell
@@ -33,7 +34,7 @@ logger = logging.getLogger(__name__)
 _DRIVE_LETTER = re.compile(r"^[A-Za-z]$")
 
 
-@router.post("/storage/{drive_letter}/optimize")
+@router.post("/storage/{drive_letter}/optimize", response_model=StorageOptimizeResponse)
 async def optimize_drive(drive_letter: str) -> dict[str, Any]:
     """Run the optimization this drive's own media type calls for.
 

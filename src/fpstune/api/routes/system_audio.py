@@ -11,7 +11,7 @@ from pydantic import BaseModel
 
 from fpstune.api.hardware import get_audio_devices
 from fpstune.api.routes.system_common import _run_powershell_async
-from fpstune.api.schemas import AudioDeviceInfo
+from fpstune.api.schemas import AudioDeviceInfo, AudioToggleResponse
 from fpstune.settings.definitions.audio import (
     _MIN_RIGHTS_WRITER,
     _MMDEV_SUBKEY,
@@ -79,7 +79,7 @@ def _last_line(output: str) -> str:
     return lines[-1] if lines else ""
 
 
-@router.post("/audio/device/{device_id}/loudness-eq")
+@router.post("/audio/device/{device_id}/loudness-eq", response_model=AudioToggleResponse)
 async def toggle_loudness_eq(device_id: str, enabled: bool) -> dict[str, bool | str]:
     """Switch Loudness Equalization on one output, and prove it held.
 
@@ -156,7 +156,7 @@ Invoke-FpsLoudness
     }
 
 
-@router.post("/audio/device/{device_id}/enabled")
+@router.post("/audio/device/{device_id}/enabled", response_model=AudioToggleResponse)
 async def toggle_audio_device(device_id: str, enabled: bool) -> dict[str, bool | str]:
     """Enable or disable one audio endpoint.
 

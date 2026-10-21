@@ -59,6 +59,15 @@ _ROUTES: dict[tuple[str, str], str] = {
     ("GET", "/api/settings/modules/metadata"): "ModuleMetadataResponse",
     ("GET", "/api/update/check"): "UpdateStatus",
     ("POST", "/api/update/install"): "UpdateInstallResult",
+    ("POST", "/api/audio/device/{device_id}/loudness-eq"): "AudioToggleResponse",
+    ("POST", "/api/audio/device/{device_id}/enabled"): "AudioToggleResponse",
+    ("POST", "/api/network/adapter/{adapter_name}/connection/{action}"): "NetworkConnectionResponse",
+    ("POST", "/api/storage/{drive_letter}/optimize"): "StorageOptimizeResponse",
+    ("POST", "/api/restore-point"): "RestorePointResponse",
+    ("GET", "/api/self-check"): "SelfCheckResponse",
+    ("GET", "/api/os-build"): "OsBuildChangeResponse",
+    ("GET", "/api/display/pending"): "DisplayPendingResponse",
+    ("GET", "/api/settings/cleanup-sizes"): "CleanupSizeEntry",
 }
 
 # Routes api.ts calls whose OpenAPI response declares no fields, so there is
@@ -70,15 +79,6 @@ _DICT = "the route returns a bare dict: no response model, no field names in the
 _UNMODELLED: dict[tuple[str, str], str] = {
     ("POST", "/api/settings/bulk/stream-apply"): _SSE,
     ("POST", "/api/benchmark/suite/run"): _SSE,
-    ("POST", "/api/audio/device/{device_id}/loudness-eq"): _DICT,
-    ("POST", "/api/audio/device/{device_id}/enabled"): _DICT,
-    ("POST", "/api/network/adapter/{adapter_name}/connection/{action}"): _DICT,
-    ("POST", "/api/storage/{drive_letter}/optimize"): _DICT,
-    ("POST", "/api/restore-point"): _DICT,
-    ("GET", "/api/self-check"): _DICT,
-    ("GET", "/api/os-build"): _DICT,
-    ("GET", "/api/display/pending"): _DICT,
-    ("GET", "/api/settings/cleanup-sizes"): _DICT,
     ("GET", "/api/benchmark/suite"): _DICT,
     ("POST", "/api/benchmark/suite/compare"): _DICT,
     ("GET", "/api/benchmark/ledger"): _DICT,

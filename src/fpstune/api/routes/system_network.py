@@ -14,7 +14,7 @@ from fpstune.api.routes.system_common import (
     _escape_ps_string,
     _run_powershell_async,
 )
-from fpstune.api.schemas import NetworkAdapterInfo
+from fpstune.api.schemas import NetworkAdapterInfo, NetworkConnectionResponse
 from fpstune.utils.admin import is_admin
 from fpstune.utils.debug import debug_log
 from fpstune.utils.hardware_manager import hardware_manager
@@ -288,7 +288,10 @@ async def toggle_network_adapter(
         raise HTTPException(status_code=500, detail=f"Unexpected response: {output}")
 
 
-@router.post("/network/adapter/{adapter_name}/connection/{action}")
+@router.post(
+    "/network/adapter/{adapter_name}/connection/{action}",
+    response_model=NetworkConnectionResponse,
+)
 async def toggle_network_connection(adapter_name: str, action: str) -> dict[str, bool | str]:
     """Connect or disconnect a network adapter without disabling the hardware.
 

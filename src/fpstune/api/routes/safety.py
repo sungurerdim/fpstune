@@ -15,12 +15,13 @@ from typing import Any
 
 from fastapi import APIRouter
 
+from fpstune.api.schemas import RestorePointResponse
 from fpstune.safety.restore import RestorePointManager
 
 router = APIRouter()
 
 
-@router.post("/restore-point")
+@router.post("/restore-point", response_model=RestorePointResponse)
 async def create_restore_point(description: str = "fpstune optimization") -> dict[str, Any]:
     """Create a Windows System Restore Point."""
     restore_mgr = RestorePointManager()

@@ -10,7 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Path, status
 from pydantic import BaseModel
 
-from fpstune.api.schemas import MonitorInfo
+from fpstune.api.schemas import DisplayPendingResponse, MonitorInfo
 from fpstune.settings import display_mode
 from fpstune.utils.hardware_manager import hardware_manager
 
@@ -154,7 +154,7 @@ async def confirm_display_change(display_index: int = Path(ge=0, le=10)) -> Disp
     return DisplayConfirmResponse(success=True, message="Display mode kept.")
 
 
-@router.get("/pending")
+@router.get("/pending", response_model=DisplayPendingResponse)
 async def pending_display_changes() -> dict[str, Any]:
     """Displays whose new mode reverts unless kept, and how long the window is."""
     return {

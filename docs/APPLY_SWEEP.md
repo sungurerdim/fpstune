@@ -44,22 +44,32 @@ Skip reasons (broad classes; the dry run prints one line per row):
 | One-way PowerShell apply | 1 |
 | Nothing detected | 4 |
 
-Representative real roundtrips (same `_roundtrip` path, non-elevated HKCU):
+Real roundtrips, all seven eligible rows, each first put at its default so the
+apply proves a write:
 
-| Setting | Original | Applied | Restored | Agrees | Final |
-|---|---|---|---|---|---|
-| `visual:animations` | enabled | disabled | enabled | yes | disabled |
-| `visual:transparency` | enabled | disabled | enabled | yes | disabled |
+| Setting | Original | Target | Observed | Restored | Agrees | Final |
+|---|---|---|---|---|---|---|
+| `gpu-nvidia:aniso_sample_opt` | off | on | on | off | yes | on |
+| `gpu-nvidia:fps_limit` | 0 | 275 | 275 | 0 | yes | 275 |
+| `gpu-nvidia:low_latency` | off | on | on | off | yes | on |
+| `gpu-nvidia:texture_lod_bias` | allow | clamp | clamp | allow | yes | clamp |
+| `gpu-nvidia:vrr_mode` | fullscreen | on | on | fullscreen | yes | on |
+| `gpu-nvidia:vsync` | app | on | on | app | yes | on |
+| `system:reserved_storage` | enabled | disabled | enabled | enabled | **no** | enabled |
+| `visual:animations` | enabled | disabled | disabled | enabled | yes | disabled |
+| `visual:transparency` | enabled | disabled | disabled | enabled | yes | disabled |
+
+The one `agrees=False` row, `system:reserved_storage`, failed because Windows
+returned "the requested operation requires elevation"; it was restored
+unchanged (`enabled`) and is the only row still needing an elevated retry.
+Every other eligible row applied, was read back, restored its original and was
+left at the recommended value.
 
 The dry run found two harness defects that the test-only rules had hidden: a
 `not_supported` reading was treated as a writable value, and a hardware
 condition (AMD GPU/CPU, VRR, battery, UCPD) was never consulted. Both are now
 skip reasons; the dry run went from 20 to **7** eligible rows — six NVIDIA DRS
-values and Reserved Storage. They need administrator rights.
-
-The elevated full sweep was launched, but UAC was cancelled, so no write ran.
-The two HKCU rows above remain the real-roundtrip evidence; the full elevated
-matrix is still required for #114.
+values and Reserved Storage.
 
 ## Release checklist
 

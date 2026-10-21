@@ -149,6 +149,8 @@ _DISM_RECLAIMABLE_FUNCTION = r"""
             if ($LASTEXITCODE -ne 0) { return $null }
             $total = 0.0
             $found = $false
+            $packages = 0
+            $recommended = $false
             foreach ($line in $out) {
                 if ("$line" -match '^\s*(Backups and Disabled Features|Cache and Temporary Data)\s*:\s*([\d.]+)\s*(bytes|KB|MB|GB|TB)\s*$') {
                     $found = $true
@@ -161,8 +163,20 @@ _DISM_RECLAIMABLE_FUNCTION = r"""
                         'TB' { $total += $n * 1048576 }
                     }
                 }
+                if ("$line" -match '^\s*Number of Reclaimable Packages\s*:\s*(\d+)\s*$') {
+                    $packages = [int]$Matches[1]
+                }
+                if ("$line" -match '^\s*Component Store Cleanup Recommended\s*:\s*(Yes|No)\s*$') {
+                    $recommended = $Matches[1] -eq 'Yes'
+                }
             }
             if (-not $found) { return $null }
+            # The overhead is only a cleanup opportunity when DISM itself says
+            # there are superseded packages or recommends a cleanup. Without
+            # that, the number describes files a cleanup is not entitled to
+            # remove; reporting it as reclaimable is how a 6.5 GB row produced
+            # a few hundred MB of actual free space.
+            if ($packages -eq 0 -and -not $recommended) { return 0 }
             return [int][math]::Round($total)
         }
 """
@@ -223,7 +237,10 @@ _CLEANUP_STATUS = (
             'dism' {
                 try {
                     $mb = Get-DismReclaimableMB
-                    if ($null -ne $mb) { Write-Output "ready|$mb MB" } else { Write-Output 'ready|unavailable' }
+                    if ($null -ne $mb) {
+                        if ($mb -gt 0) { Write-Output "ready|$mb MB (DISM estimate)" }
+                        else { Write-Output 'ready|0 MB (nothing reclaimable)' }
+                    } else { Write-Output 'ready|unavailable' }
                 } catch {
                     Write-Output 'ready|unavailable'
                 }

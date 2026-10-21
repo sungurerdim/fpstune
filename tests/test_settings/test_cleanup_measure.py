@@ -111,6 +111,9 @@ class TestMeasuringOneCleanupAroundItsOwnCommand:
             ("ready|56 MB", "ready", 56 * 1024 * 1024),
             # An emptied folder is a real reading of zero, not a failure to read.
             ("ready|0 MB", "ready", 0),
+            # DISM's estimate carries its own label; the number before it is
+            # still the measurement, and the label must not defeat the parse.
+            ("ready|6555 MB (DISM estimate)", "ready", 6555 * 1024 * 1024),
             ("ready|unavailable", "unavailable", None),
             ("ready|not_installed", "not_installed", None),
             # A warning line rides along with the value and must not become it.

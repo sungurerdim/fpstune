@@ -642,6 +642,44 @@ def _kept_at_top(entry: os.DirEntry[str], target: CleanupTarget, cutoff: float) 
     return False
 
 
+def _subtree_bytes(root: str, target: CleanupTarget) -> int:
+    """Bytes under one top-level directory, in one worker.
+
+    The top-level split is what gives the walk its parallelism: Temp routinely
+    holds hundreds of top-level entries and hundreds of thousands of files, and
+    one ``scandir`` loop over all of them is dominated by filesystem latency
+    rather than CPU. Directories are independent, so eight workers read eight
+    subtrees at once. Errors stay local to the subtree, the same rule the serial
+    walk used: a denied folder costs that folder, never the whole measurement.
+    """
+    total = 0
+    stack = [root]
+    while stack:
+        current = stack.pop()
+        try:
+            with os.scandir(current) as scan:
+                entries = list(scan)
+        except OSError:
+            continue
+        for entry in entries:
+            try:
+                if entry.is_symlink() or entry.is_junction():
+                    continue
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(entry.path)
+                    continue
+                if not _counts(entry.name, target):
+                    continue
+                if target.skip_locked_files and not _is_writable(entry.path):
+                    continue
+                total += entry.stat(follow_symlinks=False).st_size
+            except OSError:
+                # A file that vanished mid-walk contributed nothing, and one
+                # this process cannot stat is one it also cannot delete.
+                continue
+    return total
+
+
 def _dir_bytes(root: str, target: CleanupTarget) -> int | None:
     """Bytes under ``root`` the delete would take, or None if it cannot be read.
 
@@ -657,38 +695,40 @@ def _dir_bytes(root: str, target: CleanupTarget) -> int | None:
     import time
 
     cutoff = time.time() - target.keep_recent_hours * 3600
+    try:
+        with os.scandir(root) as scan:
+            entries = list(scan)
+    except OSError:
+        return None
+    if target.delete_mode == CONTENTS:
+        entries = [e for e in entries if not _kept_at_top(e, target, cutoff)]
+
     total = 0
-    stack = [root]
-    top_level = True
-    while stack:
-        current = stack.pop()
+    subtrees: list[str] = []
+    for entry in entries:
         try:
-            with os.scandir(current) as scan:
-                entries = list(scan)
-        except OSError:
-            if top_level:
-                return None
-            continue
-        if top_level and target.delete_mode == CONTENTS:
-            entries = [e for e in entries if not _kept_at_top(e, target, cutoff)]
-        top_level = False
-        for entry in entries:
-            try:
-                if entry.is_symlink() or entry.is_junction():
-                    continue
-                if entry.is_dir(follow_symlinks=False):
-                    if target.delete_mode != TOP_FILES:
-                        stack.append(entry.path)
-                    continue
-                if not _counts(entry.name, target):
-                    continue
-                if target.skip_locked_files and not _is_writable(entry.path):
-                    continue
-                total += entry.stat(follow_symlinks=False).st_size
-            except OSError:
-                # A file that vanished mid-walk contributed nothing, and one this
-                # process cannot stat is one it also cannot delete.
+            if entry.is_symlink() or entry.is_junction():
                 continue
+            if entry.is_dir(follow_symlinks=False):
+                if target.delete_mode != TOP_FILES:
+                    subtrees.append(entry.path)
+                continue
+            if not _counts(entry.name, target):
+                continue
+            if target.skip_locked_files and not _is_writable(entry.path):
+                continue
+            total += entry.stat(follow_symlinks=False).st_size
+        except OSError:
+            continue
+
+    if len(subtrees) == 1:
+        total += _subtree_bytes(subtrees[0], target)
+    elif subtrees:
+        # Cap at eight: the target batch already runs several cleanups in
+        # parallel, and a second unbounded pool would turn a scan into a
+        # filesystem stampede. One subtree needs no thread at all.
+        with ThreadPoolExecutor(max_workers=min(8, len(subtrees))) as pool:
+            total += sum(pool.map(lambda path: _subtree_bytes(path, target), subtrees))
     return total
 
 

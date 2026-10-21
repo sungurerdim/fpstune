@@ -2371,9 +2371,9 @@ CLEANUP_DISM = SettingExecutor(
     id="cleanup:dism_cleanup",
     category=SettingCategory.MAINTENANCE,
     display_name="DISM Cleanup",
-    short_name="Windows component cleanup",
-    description="Cleans the Windows component store, freeing disk space; it can take several minutes. A reboot may be needed "
-    "to reclaim all of it.",
+    short_name="Windows component cleanup (estimate)",
+    description="Cleans superseded components from the Windows component store. The size DISM reports is an estimate of "
+    "store overhead, not a promise of free space; a reboot can be needed before the rest is visible.",
     value_type=SettingValueType.BOOL,
     choices=(),
     default_value=False,
@@ -2386,11 +2386,11 @@ CLEANUP_DISM = SettingExecutor(
     sources=[
         "https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/clean-up-the-winsxs-folder"
     ],
-    current_impact="Current: WinSxS folder grows over time with old updates",
-    recommended_impact="Clean: Frees WinSxS reclaimable space (visible after reboot) → disk space recovered",
+    current_impact="Current: WinSxS keeps superseded components and their backups",
+    recommended_impact="Clean: Removes superseded components; the freed figure is measured after the run",
     scope=SettingScope.COMPLETE,  # Optional maintenance action
     category_order=21,  # DISM cleanup
-    effect="Cleans Windows component store to free several GB of disk space",
+    effect="Removes superseded Windows components and their backup copies",
     impact_scores={"disk_freed": "1-10GB", "stability": "high"},
     detect_type=DetectType.POWERSHELL,
     detect_command="cleanup_status",

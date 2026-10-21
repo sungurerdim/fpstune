@@ -50,6 +50,19 @@ class TestTheSharedScriptStaysBatchable:
     def test_the_dispatch_is_a_function_so_it_can_be_asked_more_than_once(self) -> None:
         assert "function Get-CleanupStatus" in ACTION_COMMANDS["cleanup_status"]
 
+    def test_dism_only_calls_the_store_reclaimable_when_dism_does(self) -> None:
+        """The overhead is not a promise.
+
+        AnalyzeComponentStore prints "Backups and Disabled Features" and
+        "Cache and Temporary Data" whether or not there is anything to remove.
+        Summing them unconditionally produced the 6.5 GB row that freed a few
+        hundred MB; the package count and the recommendation gate the number.
+        """
+        script = ACTION_COMMANDS["cleanup_status"]
+        assert "Number of Reclaimable Packages" in script
+        assert "Component Store Cleanup Recommended" in script
+        assert "packages -eq 0 -and -not $recommended" in script
+
     def test_it_carries_no_exit_or_write_host(self) -> None:
         """Either would make the shared session unusable.
 

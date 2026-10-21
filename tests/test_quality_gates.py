@@ -963,6 +963,14 @@ class TestNoLocalizedTextParsing:
         ("src/fpstune/settings/executors/powershell_actions.py", "Backups and Disabled Features"): (
             "DISM run with /English; these are its own invariant labels"
         ),
+        (
+            "src/fpstune/settings/executors/powershell_actions.py",
+            "Number of Reclaimable Packages",
+        ): "DISM run with /English; its own invariant label",
+        (
+            "src/fpstune/settings/executors/powershell_actions.py",
+            "Component Store Cleanup Recommended",
+        ): "DISM run with /English; its own invariant label",
         ("src/fpstune/settings/executors/powershell_actions.py", "mw3fix_backup"): (
             "fpstune's own backup folder name"
         ),

@@ -16,11 +16,17 @@ if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     exit 1
 }
 
-uv sync --locked --extra dev
+uv sync --locked --extra dev --python 3.12
 if ($LASTEXITCODE -ne 0) {
     Write-Host "uv sync failed (exit code $LASTEXITCODE)." -ForegroundColor Red
     Read-Host "Press Enter to close"
     exit $LASTEXITCODE
 }
 
-uv run --locked fpstune serve @args
+& uv run --locked fpstune serve @args
+$code = $LASTEXITCODE
+if ($code -ne 0) {
+    Write-Host "fpstune exited with code $code." -ForegroundColor Red
+    if ($Host.Name -eq "ConsoleHost") { Read-Host "Press Enter to close" }
+}
+exit $code

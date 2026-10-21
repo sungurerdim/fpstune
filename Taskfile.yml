@@ -14,7 +14,7 @@ tasks:
   install:
     desc: Python (from uv.lock), Node.js and the UI's node_modules
     cmds:
-      - uv sync --locked --extra dev
+      - uv sync --locked --extra dev --python 3.12
       - cd frontend && uv run --locked npm ci
 
   lock:

@@ -42,6 +42,7 @@ vi.mock("../../hooks/useApply", () => ({
 
 const WINDOWS = { id: "windows", label: "Windows", order: 1 };
 const DEVELOPER = { id: "developer", label: "Developer caches", order: 3 };
+const CONTAINERS = { id: "containers", label: "Containers & WSL", order: 4 };
 
 function action(
   module: string,
@@ -193,6 +194,19 @@ describe("the groups", () => {
       .map((h) => h.textContent?.trim());
     expect(headings).toEqual(["Windows", "Developer caches"]);
     expect(screen.queryByText("Temp Files")).not.toBeInTheDocument();
+  });
+
+  it("does not add overlapping Docker alternatives into one promise", () => {
+    // prune and prune-all share layers, and WSL compact touches the same
+    // Docker Desktop disks. 12.7 GB + 8.7 GB is one 12.7 GB choice, not 20.9.
+    setSettings([
+      action("cleanup", "docker_prune", "ready|8744 MB", "Docker prune", CONTAINERS),
+      action("cleanup", "docker_prune_all", "ready|12702 MB", "Docker prune all", CONTAINERS),
+    ]);
+    render(<DiskCleanupTab />);
+
+    expect(screen.getByText("12.4 GB")).toBeInTheDocument();
+    expect(screen.queryByText("20.9 GB")).not.toBeInTheDocument();
   });
 
   it("lists a repair under the maintenance heading, not under 'Other'", async () => {

@@ -257,7 +257,15 @@ function GroupActions({
   const ids = group.rows.map((s) => s.id);
   const selectedCount = ids.filter((id) => selectedSet.has(id)).length;
   const allSelected = selectedCount === ids.length && ids.length > 0;
-  const totalMB = group.rows.reduce((sum, s) => sum + (parseSizeToMB(s.currentValue) ?? 0), 0);
+  // Docker prune and prune-all reclaim the same layers, and the WSL compact
+  // touches the same Docker Desktop disks. Adding them turns a 12.7 GB choice
+  // into a 20.9 GB promise; the group's ceiling is the largest alternative,
+  // not their sum. Ordinary Windows cleanups stay additive.
+  const overlapping = group.rows.some((s) =>
+    ["cleanup:docker_prune", "cleanup:docker_prune_all", "cleanup:wsl_compact"].includes(s.id),
+  );
+  const sizes = group.rows.map((s) => parseSizeToMB(s.currentValue) ?? 0);
+  const totalMB = overlapping ? Math.max(0, ...sizes) : sizes.reduce((sum, mb) => sum + mb, 0);
 
   return (
     <span className="flex items-center gap-2">

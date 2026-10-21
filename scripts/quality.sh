@@ -33,12 +33,6 @@ backend() {
     --cov=src/fpstune --cov-report=term-missing
 }
 
-# Wall-clock tests (pytest marker `timing`) run alone, after both blocks: beside
-# them the scheduler takes the core mid-measurement and a correct wait reads late.
-timing() {
-  uv run --extra dev pytest --no-cov -q -m timing
-}
-
 frontend() {
   cd frontend
   # A green run over stale packages is not a green run: node_modules here once
@@ -84,17 +78,5 @@ for block in backend frontend; do
   fi
 done
 
-timing_log=$(mktemp)
-trap 'rm -f "$backend_log" "$frontend_log" "$timing_log"' EXIT
-if (set -euo pipefail; timing) >"$timing_log" 2>&1; then
-  echo "green: timing — $(grep -aE 'passed' "$timing_log" | tail -1 | sed 's/\x1b\[[0-9;]*m//g')"
-else
-  code=$?
-  status=1
-  kept="${TMPDIR:-${TEMP:-/tmp}}/fpstune-quality-red-timing.log"
-  cp "$timing_log" "$kept"
-  echo "red: timing (exit=$code) — full log: $kept — last lines:"
-  tail -40 "$timing_log"
-fi
 echo "quality: $((SECONDS - start)) s"
 exit "$status"

@@ -33,16 +33,22 @@ from typing import Any
 
 import pytest
 
-from fpstune.settings.applicability import values_equal
+from fpstune.settings.applicability import (
+    ApplicabilityChecker,
+    is_absent_reading,
+    values_equal,
+)
 from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.executors import CommandExecutor
 from fpstune.settings.executors.adapter_restart import wait_for_restarts
 from fpstune.settings.executors.powershell_actions import ACTION_COMMANDS
+from fpstune.settings.hardware_context import build_hardware_context
 from fpstune.settings.registry import SettingsRegistry
 from fpstune.utils.admin import is_admin
 
 SWEEP_ENV = "FPSTUNE_APPLY_SWEEP"
 DRY_RUN_ENV = "FPSTUNE_APPLY_SWEEP_DRY_RUN"
+DRY_RUN_VALUE = "dry-run"
 
 pytestmark = [
     pytest.mark.skipif(sys.platform != "win32", reason="Applies settings to real Windows"),
@@ -80,7 +86,7 @@ def _selection(registry: SettingsRegistry) -> list[SettingExecutor]:
     raw = os.environ[SWEEP_ENV].strip()
     everything = registry.get_all()
 
-    if raw == "all":
+    if raw in ("all", DRY_RUN_VALUE):
         return everything
 
     wanted = {part.strip() for part in raw.split(",") if part.strip()}
@@ -147,6 +153,11 @@ def _skip_reason(setting: SettingExecutor, current: Any) -> str | None:
         return "nothing to write with: no apply command and no apply args"
     if current is None:
         return "nothing detected, so there is no value to restore"
+    if is_absent_reading(current):
+        # `not_supported`, `not_installed`, `not_available`: a reading, not a
+        # value. Treating one as writable made the dry-run offer a write to a
+        # NIC keyword the driver does not publish.
+        return f"absent reading {current!r} means the setting does not apply here"
     if values_equal(current, setting.recommended_value):
         return "already at the recommended value: applying proves nothing"
     if setting.apply_value_map and current not in setting.apply_value_map:
@@ -185,26 +196,46 @@ def _roundtrip(setting: SettingExecutor) -> Row:
 @pytest.fixture(scope="module")
 def sweep() -> tuple[list[Row], list[tuple[str, str]]]:
     """Run the sweep once and hand every assertion the same evidence."""
-    assert is_admin(), (
-        "This sweep must run elevated. Unelevated, every write fails with access "
-        "denied and the run would report a clean machine it never touched."
+    dry_run = (
+        os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE
+        or os.environ.get(DRY_RUN_ENV) == "1"
     )
+    if not dry_run:
+        assert is_admin(), (
+            "This sweep must run elevated. Unelevated, every write fails with access "
+            "denied and the run would report a clean machine it never touched."
+        )
 
     registry = SettingsRegistry()
     selected = _selection(registry)
+    checker = ApplicabilityChecker(build_hardware_context())
 
     rows: list[Row] = []
     skipped: list[tuple[str, str]] = []
-    dry_run = os.environ.get(DRY_RUN_ENV) == "1"
     for setting in sorted(selected, key=lambda s: s.id):
+        applies, why = checker.is_applicable(setting)
+        if not applies:
+            skipped.append((setting.id, f"not applicable: {why}"))
+            if dry_run:
+                print(f"  skip {setting.id}: not applicable: {why}")
+            continue
         current, _ = CommandExecutor.detect(setting)
         reason = _skip_reason(setting, current)
         if reason:
             skipped.append((setting.id, reason))
+            if dry_run:
+                print(f"  skip {setting.id}: {reason}")
             continue
         if dry_run:
-            print(f"  dry-run would exercise {setting.id}: {current!r} -> "
-                  f"{setting.recommended_value!r}")
+            resolved = ACTION_COMMANDS.get(
+                setting.apply_command.strip(), setting.apply_command
+            )
+            print(
+                f"  exercise {setting.id}: {current!r} -> {setting.recommended_value!r}"
+                f" | detect={setting.detect_type.value} apply={setting.apply_type.value}"
+                f" | command={resolved[:100]!r}"
+                f" | conditions={setting.applicable_conditions or '{}'}"
+            )
             continue
         rows.append(_roundtrip(setting))
 
@@ -225,7 +256,10 @@ def test_the_sweep_exercised_something(
     sweep: tuple[list[Row], list[tuple[str, str]]],
 ) -> None:
     """A sweep that skipped everything must not read as a pass."""
-    if os.environ.get(DRY_RUN_ENV) == "1":
+    if (
+        os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE
+        or os.environ.get(DRY_RUN_ENV) == "1"
+    ):
         pytest.skip("dry run lists the selection; it deliberately writes nothing")
     rows, skipped = sweep
     assert rows, (

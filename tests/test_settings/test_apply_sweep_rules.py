@@ -188,6 +188,17 @@ def test_a_clean_roundtrip_agrees_and_restores() -> None:
     assert row.back_where_it_started
 
 
+def test_an_absent_reading_is_skipped_not_written() -> None:
+    """`not_supported` is a reading, not a writable value.
+
+    The dry run offered `not_supported -> Enabled` on every NIC keyword the
+    driver does not publish; applying one asks the adapter to restore a state
+    it never had.
+    """
+    reason = _skip_reason(_setting(), "not_supported")
+    assert reason is not None and "absent reading" in reason
+
+
 def test_success_without_the_write_landing_does_not_agree() -> None:
     """The #40 shape: `[OK] applied`, and the value never moved."""
     assert not _row(observed="enabled").agrees

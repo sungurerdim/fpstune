@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Turn off __TR_JSON__", "tr": "Kapat" },
+  "why": { "en": "C4 fixture: the test puts Turkish letters outside a tr field.", "tr": "C4 fiksturu: test Turkce harfleri tr alaninin disina koyar." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/test-path"],
+  "gain": ["experience"],
+  "detect": "[string](Test-Path -LiteralPath 'HKCU:\\Software\\__TR_CMD__')",
+  "target": { "value": "True" },
+  "apply": "New-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -Force | Out-Null",
+  "revert": "Remove-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -ErrorAction SilentlyContinue"
+}

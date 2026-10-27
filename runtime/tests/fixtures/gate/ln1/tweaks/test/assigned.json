@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Native output assigned in detect", "tr": "Detect icinde atanan yerel cikti" },
+  "why": { "en": "LN1 fixture: detect keeps what an exe printed.", "tr": "LN1 fiksturu: detect bir exe ciktisini saklar." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/windows-server/administration/windows-commands/netsh"],
+  "gain": ["network"],
+  "detect": "$state = netsh interface teredo show state; [string]$state.Count",
+  "target": { "value": "1" },
+  "apply": "netsh interface teredo set state type=disabled",
+  "revert": "netsh interface teredo set state type=default"
+}

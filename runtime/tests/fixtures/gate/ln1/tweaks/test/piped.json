@@ -1,0 +1,14 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Native output piped in applicable", "tr": "Applicable icinde borulanan yerel cikti" },
+  "why": { "en": "LN1 fixture: applicable pipes what an exe printed.", "tr": "LN1 fiksturu: applicable bir exe ciktisini borular." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/windows-hardware/design/device-experiences/powercfg-command-line-options"],
+  "gain": ["fps"],
+  "applicable": "[bool](powercfg /list | Measure-Object).Count",
+  "detect": "[string](Get-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction Stop).Value",
+  "target": { "value": "1" },
+  "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -Value $Target",
+  "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction SilentlyContinue"
+}

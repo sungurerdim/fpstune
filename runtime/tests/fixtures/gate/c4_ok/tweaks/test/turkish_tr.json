@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Turkish only inside tr fields", "tr": "__TR__" },
+  "why": { "en": "C4 fixture: every tr field carries Turkish letters, which is allowed.", "tr": "__TR__." },
+  "fixed": { "en": "Fixture fixed.", "tr": "__TR__" },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/test-path"],
+  "gain": ["experience"],
+  "detect": "[string](Test-Path -LiteralPath 'HKCU:\\Software\\FpsTuneFixture')",
+  "target": { "value": "True" },
+  "apply": "New-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -Force | Out-Null",
+  "revert": "Remove-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -ErrorAction SilentlyContinue"
+}

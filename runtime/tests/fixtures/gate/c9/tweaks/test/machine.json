@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "A machine literal in a command", "tr": "Komutta makineye ozgu bir sabit" },
+  "why": { "en": "C9 fixture: the test puts one machine literal into detect.", "tr": "C9 fiksturu: test detect icine makineye ozgu bir sabit koyar." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/test-path"],
+  "gain": ["experience"],
+  "detect": "[string](Test-Path -LiteralPath '__C9__')",
+  "target": { "value": "True" },
+  "apply": "New-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -Force | Out-Null",
+  "revert": "Remove-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -ErrorAction SilentlyContinue"
+}

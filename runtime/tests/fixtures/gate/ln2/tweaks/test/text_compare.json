@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Human text compared in detect", "tr": "Detect icinde karsilastirilan insan metni" },
+  "why": { "en": "LN2 fixture: detect matches a description Windows writes in its own language.", "tr": "LN2 fiksturu: detect Windows'un kendi dilinde yazdigi bir aciklamayi eslestirir." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/netadapter/get-netadapter"],
+  "gain": ["network"],
+  "detect": "[string]@(Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Intel*' }).Count",
+  "target": { "value": "1" },
+  "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -Value $Target",
+  "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction SilentlyContinue"
+}

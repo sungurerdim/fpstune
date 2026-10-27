@@ -1,0 +1,14 @@
+{
+  "kind": "tweak",
+  "title": { "en": "A command that does not parse", "tr": "Ayristirilamayan bir komut" },
+  "why": { "en": "LN3 fixture: detect has one closing parenthesis too many.", "tr": "LN3 fiksturu: detect bir fazla kapanan parantez icerir." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/get-itemproperty"],
+  "gain": ["experience"],
+  "applicable": "$true",
+  "detect": "[string](Get-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value).Value)",
+  "target": { "value": "1" },
+  "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -Value $Target",
+  "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction SilentlyContinue"
+}

@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Two registry writes in one tweak", "tr": "Tek tweakte iki kayit defteri yazimi" },
+  "why": { "en": "C8 fixture: apply writes two values and names no compound.", "tr": "C8 fiksturu: apply iki deger yazar ve bir bilesik adlandirmaz." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/set-itemproperty"],
+  "gain": ["experience"],
+  "detect": "[string](Get-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name A -ErrorAction Stop).A",
+  "target": { "value": "1" },
+  "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name A -Value $Target; New-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name B -Value $Target -PropertyType DWord -Force | Out-Null",
+  "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name A -ErrorAction SilentlyContinue"
+}

@@ -12,12 +12,93 @@
  *   hardwareManager.stopPolling()
  */
 
-import { api, HardwareInfo, MonitorInfo } from "./api";
+import {
+  api,
+  type GpuDeviceInfo,
+  type HardwareInfo,
+  type MonitorInfo,
+  type StorageDriveInfo,
+} from "./api";
 import { createLogger } from "./logger";
 
 const log = createLogger("HardwareManager");
 
 type HardwareListener = (hardware: HardwareInfo | null) => void;
+
+/** A monitor whose native mode or current reading is incomplete. */
+function collectMonitorIssues(
+  monitors: MonitorInfo[] | undefined,
+  issues: string[],
+  warnings: string[],
+): void {
+  for (const monitor of monitors ?? []) {
+    if (
+      monitor.is_resolution_known === false ||
+      (monitor.native_width === 0 && monitor.native_height === 0)
+    ) {
+      warnings.push(`Monitor "${monitor.name}": native resolution unknown`);
+    }
+    if (
+      monitor.is_refresh_known === false ||
+      monitor.max_refresh_rate_hz === 0 ||
+      monitor.max_refresh_rate_hz === undefined
+    ) {
+      warnings.push(`Monitor "${monitor.name}": max refresh rate unknown`);
+    }
+    if (monitor.width === 0 || monitor.height === 0) {
+      issues.push(`Monitor "${monitor.name}": current resolution is 0x0`);
+    }
+    if (!monitor.refresh_rate_hz || monitor.refresh_rate_hz === 0) {
+      issues.push(`Monitor "${monitor.name}": current refresh rate is 0 Hz`);
+    }
+  }
+}
+
+/** A GPU whose vendor answered but whose name, driver or VRAM did not. */
+function collectGpuIssues(
+  gpus: GpuDeviceInfo[] | undefined,
+  warnings: string[],
+): void {
+  for (const gpu of gpus ?? []) {
+    if (!gpu.name) {
+      warnings.push(`GPU (${gpu.vendor}): name unknown`);
+    }
+    if (!gpu.driver) {
+      warnings.push(`GPU "${gpu.name || gpu.vendor}": driver unknown`);
+    }
+    if (!gpu.vram_mb) {
+      warnings.push(`GPU "${gpu.name || gpu.vendor}": VRAM unknown`);
+    }
+  }
+}
+
+/** A CPU that is missing entirely, or was detected without its name. */
+function collectCpuIssues(
+  cpu: HardwareInfo["cpu"],
+  issues: string[],
+  warnings: string[],
+): void {
+  if (!cpu) {
+    issues.push("CPU: not detected");
+  } else if (!cpu.name) {
+    warnings.push("CPU: name unknown");
+  }
+}
+
+/** A drive whose model or media type was not read. */
+function collectDriveIssues(
+  drives: StorageDriveInfo[] | undefined,
+  warnings: string[],
+): void {
+  for (const drive of drives ?? []) {
+    if (!drive.model || drive.model === "Unknown") {
+      warnings.push(`Drive ${drive.drive_letter}: model unknown`);
+    }
+    if (!drive.media_type || drive.media_type === "Unknown") {
+      warnings.push(`Drive ${drive.drive_letter}: media type unknown (SSD/HDD)`);
+    }
+  }
+}
 
 class HardwareManager {
   private static instance: HardwareManager;
@@ -286,71 +367,10 @@ class HardwareManager {
     const issues: string[] = [];
     const warnings: string[] = [];
 
-    // Check monitors for unknown values
-    if (data.monitors) {
-      for (const monitor of data.monitors) {
-        // Check resolution detection
-        if (
-          monitor.is_resolution_known === false ||
-          (monitor.native_width === 0 && monitor.native_height === 0)
-        ) {
-          warnings.push(`Monitor "${monitor.name}": native resolution unknown`);
-        }
-        // Check refresh rate detection
-        if (
-          monitor.is_refresh_known === false ||
-          monitor.max_refresh_rate_hz === 0 ||
-          monitor.max_refresh_rate_hz === undefined
-        ) {
-          warnings.push(`Monitor "${monitor.name}": max refresh rate unknown`);
-        }
-        // Check current values
-        if (monitor.width === 0 || monitor.height === 0) {
-          issues.push(`Monitor "${monitor.name}": current resolution is 0x0`);
-        }
-        if (!monitor.refresh_rate_hz || monitor.refresh_rate_hz === 0) {
-          issues.push(
-            `Monitor "${monitor.name}": current refresh rate is 0 Hz`,
-          );
-        }
-      }
-    }
-
-    // Check GPUs
-    if (data.gpus) {
-      for (const gpu of data.gpus) {
-        if (!gpu.name) {
-          warnings.push(`GPU (${gpu.vendor}): name unknown`);
-        }
-        if (!gpu.driver) {
-          warnings.push(`GPU "${gpu.name || gpu.vendor}": driver unknown`);
-        }
-        if (!gpu.vram_mb) {
-          warnings.push(`GPU "${gpu.name || gpu.vendor}": VRAM unknown`);
-        }
-      }
-    }
-
-    // Check CPU
-    if (!data.cpu) {
-      issues.push("CPU: not detected");
-    } else if (!data.cpu.name) {
-      warnings.push("CPU: name unknown");
-    }
-
-    // Check storage drives
-    if (data.storage_drives) {
-      for (const drive of data.storage_drives) {
-        if (!drive.model || drive.model === "Unknown") {
-          warnings.push(`Drive ${drive.drive_letter}: model unknown`);
-        }
-        if (!drive.media_type || drive.media_type === "Unknown") {
-          warnings.push(
-            `Drive ${drive.drive_letter}: media type unknown (SSD/HDD)`,
-          );
-        }
-      }
-    }
+    collectMonitorIssues(data.monitors, issues, warnings);
+    collectGpuIssues(data.gpus, warnings);
+    collectCpuIssues(data.cpu, issues, warnings);
+    collectDriveIssues(data.storage_drives, warnings);
 
     // Log issues as errors, warnings as warnings
     if (issues.length > 0) {

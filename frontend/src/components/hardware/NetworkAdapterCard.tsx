@@ -12,13 +12,205 @@ import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { CopyableText } from "./shared";
 import { errorMessage } from "../../lib/api";
-import { notifyError } from "../../lib/notify";
+import { notifyError } from "../../store/notify";
 
 const log = createLogger("hardware");
 
 /**
  * Network adapter card with full details
  */
+/** Connect/disconnect, shown only while the adapter is enabled and controllable. */
+function ConnectionButton({
+  connected,
+  pending,
+  onPress,
+}: {
+  connected: boolean;
+  pending: boolean;
+  onPress: () => void;
+}) {
+  const { t } = useT();
+  return (
+    <button
+      onClick={onPress}
+      disabled={pending}
+      className={cn(
+        "p-1 rounded transition-colors shrink-0",
+        connected
+          ? "text-warning hover:bg-warning/10"
+          : "text-success hover:bg-success/10",
+        pending && "opacity-50 cursor-not-allowed",
+      )}
+      aria-label={connected ? t("adapter.disconnect") : t("adapter.connect")}
+      title={connected ? t("adapter.disconnectTitle") : t("adapter.connectTitle")}
+    >
+      {pending ? (
+        <RefreshCw className="w-3 h-3 animate-spin" />
+      ) : connected ? (
+        <>
+          <Unplug className="w-3 h-3" />
+          <span className="text-xs ml-0.5">{t("adapter.off")}</span>
+        </>
+      ) : (
+        <>
+          <Plug className="w-3 h-3" />
+          <span className="text-xs ml-0.5">{t("adapter.on")}</span>
+        </>
+      )}
+    </button>
+  );
+}
+
+/**
+ * The status badge, and the second one saying why the switch is inert when
+ * Windows returned no identifier to address the adapter with.
+ */
+function AdapterStateBadges({
+  adapter,
+  isPhantom,
+  lacksIdentifier,
+  phantomReasonId,
+  identifierReasonId,
+}: {
+  adapter: NetworkAdapterInfo;
+  isPhantom: boolean;
+  lacksIdentifier: boolean;
+  phantomReasonId: string;
+  identifierReasonId: string;
+}) {
+  const { t } = useT();
+  return (
+    <>
+      <span
+        id={isPhantom ? phantomReasonId : undefined}
+        className={cn(
+          "text-xs px-1 py-0.5 rounded shrink-0",
+          isPhantom
+            ? "bg-destructive/20 text-destructive"
+            : adapter.is_connected
+              ? "bg-primary/20 text-primary"
+              : "bg-muted text-muted-foreground",
+        )}
+      >
+        {isPhantom
+          ? t("adapter.notConnected")
+          : adapter.is_connected
+            ? t("adapter.connected")
+            : t("adapter.disconnected")}
+      </span>
+
+      {/* Why the switch is inert, in the same badge shape as "Not Connected".
+          A phantom adapter's badge already says it; this is the other case —
+          Windows returned neither an instance id nor an interface index, so
+          there is nothing to address an enable/disable call to. */}
+      {lacksIdentifier && (
+        <span
+          id={identifierReasonId}
+          className="text-xs px-1 py-0.5 rounded shrink-0 bg-warning/20 text-warning"
+        >
+          {t("hw.notControllable")}
+        </span>
+      )}
+    </>
+  );
+}
+
+/** The WiFi line: network, radio, channel, signal and authentication. */
+function WifiDetails({ adapter }: { adapter: NetworkAdapterInfo }) {
+  if (!adapter.ssid) return null;
+  return (
+    <div className="flex items-center gap-1.5 text-xs flex-wrap">
+      <Wifi className="w-3 h-3 text-primary" />
+      <span className="font-medium text-foreground">{adapter.ssid}</span>
+      {adapter.radio_type && (
+        <span className="bg-primary/20 text-primary px-1 rounded text-xs">
+          {adapter.radio_type}
+        </span>
+      )}
+      {adapter.channel && (
+        <span className="text-muted-foreground">CH {adapter.channel}</span>
+      )}
+      {adapter.frequency_ghz && adapter.frequency_ghz > 0 && (
+        <span className="text-muted-foreground">({adapter.frequency_ghz} GHz)</span>
+      )}
+      {adapter.signal_percent !== undefined && adapter.signal_percent > 0 && (
+        <span
+          className={cn(
+            "flex items-center gap-0.5",
+            adapter.signal_percent >= 70
+              ? "text-success"
+              : adapter.signal_percent >= 40
+                ? "text-warning"
+                : "text-destructive",
+          )}
+        >
+          <Signal className="w-3 h-3" />
+          {adapter.signal_percent}%
+        </span>
+      )}
+      {adapter.auth_type && (
+        <span className="bg-muted px-1 rounded text-xs">{adapter.auth_type}</span>
+      )}
+    </div>
+  );
+}
+
+/** Addresses and link speed, each line present only when it was read. */
+function AddressLines({ adapter }: { adapter: NetworkAdapterInfo }) {
+  const speedDisplay = adapter.speed_mbps
+    ? adapter.speed_mbps >= 1000
+      ? `${(adapter.speed_mbps / 1000).toFixed(1)} Gbps`
+      : `${adapter.speed_mbps} Mbps`
+    : null;
+
+  return (
+    <>
+      {adapter.ipv4_address && (
+        <div className="text-xs flex items-center gap-2">
+          <span className="text-muted-foreground">IP:</span>
+          <CopyableText
+            value={adapter.ipv4_address}
+            className="text-foreground"
+          />
+          {speedDisplay && (
+            <span className="text-muted-foreground">• {speedDisplay}</span>
+          )}
+        </div>
+      )}
+
+      {adapter.gateway && (
+        <div className="text-xs flex items-center gap-2">
+          <span className="text-muted-foreground">GW:</span>
+          <span className="font-mono text-muted-foreground">
+            {adapter.gateway}
+          </span>
+        </div>
+      )}
+
+      {adapter.dns_servers && adapter.dns_servers.length > 0 && (
+        <div className="text-xs flex items-center gap-2">
+          <span className="text-muted-foreground">DNS:</span>
+          <span className="font-mono text-muted-foreground">
+            {adapter.dns_servers.slice(0, 2).join(", ")}
+            {adapter.dns_servers.length > 2 &&
+              ` +${adapter.dns_servers.length - 2}`}
+          </span>
+        </div>
+      )}
+
+      {adapter.mac_address && (
+        <div className="text-xs flex items-center gap-2">
+          <span className="text-muted-foreground">MAC:</span>
+          <CopyableText
+            value={adapter.mac_address}
+            className="text-muted-foreground text-xs"
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
 export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo }) {
   const { t } = useT();
   const isWiFi = adapter.adapter_type === "WiFi";
@@ -113,13 +305,6 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
     },
   });
 
-  // Format speed display
-  const speedDisplay = adapter.speed_mbps
-    ? adapter.speed_mbps >= 1000
-      ? `${(adapter.speed_mbps / 1000).toFixed(1)} Gbps`
-      : `${adapter.speed_mbps} Mbps`
-    : null;
-
   return (
     <div
       className={cn(
@@ -152,165 +337,26 @@ export function NetworkAdapterCard({ adapter }: { adapter: NetworkAdapterInfo })
 
         {/* Connect/Disconnect button - only when adapter is enabled and controllable */}
         {adapter.is_enabled && canToggle && (
-          <button
-            onClick={() => connectionMutation.mutate()}
-            disabled={connectionMutation.isPending}
-            className={cn(
-              "p-1 rounded transition-colors shrink-0",
-              adapter.is_connected
-                ? "text-warning hover:bg-warning/10"
-                : "text-success hover:bg-success/10",
-              connectionMutation.isPending && "opacity-50 cursor-not-allowed",
-            )}
-            aria-label={adapter.is_connected ? t("adapter.disconnect") : t("adapter.connect")}
-            title={
-              adapter.is_connected
-                ? t("adapter.disconnectTitle")
-                : t("adapter.connectTitle")
-            }
-          >
-            {connectionMutation.isPending ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : adapter.is_connected ? (
-              <>
-                <Unplug className="w-3 h-3" />
-                <span className="text-xs ml-0.5">{t("adapter.off")}</span>
-              </>
-            ) : (
-              <>
-                <Plug className="w-3 h-3" />
-                <span className="text-xs ml-0.5">{t("adapter.on")}</span>
-              </>
-            )}
-          </button>
+          <ConnectionButton
+            connected={adapter.is_connected}
+            pending={connectionMutation.isPending}
+            onPress={() => connectionMutation.mutate()}
+          />
         )}
 
-        {/* Status badge. It doubles as the switch's description when the
-            adapter is phantom — "Not Connected" is the reason the switch is
-            inert, and the switch has to carry it rather than leave a reader to
-            find it after the control it explains. */}
-        <span
-          id={isPhantom ? phantomReasonId : undefined}
-          className={cn(
-            "text-xs px-1 py-0.5 rounded shrink-0",
-            isPhantom
-              ? "bg-destructive/20 text-destructive"
-              : adapter.is_connected
-                ? "bg-primary/20 text-primary"
-                : "bg-muted text-muted-foreground",
-          )}
-        >
-          {isPhantom
-            ? t("adapter.notConnected")
-            : adapter.is_connected
-              ? t("adapter.connected")
-              : t("adapter.disconnected")}
-        </span>
-
-        {/* Why the switch is inert, in the same badge shape as "Not Connected".
-            A phantom adapter's badge already says it; this is the other case —
-            Windows returned neither an instance id nor an interface index, so
-            there is nothing to address an enable/disable call to. It has to be
-            text rather than the switch's title, which now carries the adapter's
-            name and cannot say two things at once. */}
-        {lacksIdentifier && (
-          <span
-            id={identifierReasonId}
-            className="text-xs px-1 py-0.5 rounded shrink-0 bg-warning/20 text-warning"
-          >
-            {t("hw.notControllable")}
-          </span>
-        )}
+        <AdapterStateBadges
+          adapter={adapter}
+          isPhantom={isPhantom}
+          lacksIdentifier={lacksIdentifier}
+          phantomReasonId={phantomReasonId}
+          identifierReasonId={identifierReasonId}
+        />
       </div>
 
       {/* WiFi: Connected network info (first line for WiFi) */}
-      {isWiFi && adapter.ssid && (
-        <div className="flex items-center gap-1.5 text-xs flex-wrap">
-          <Wifi className="w-3 h-3 text-primary" />
-          <span className="font-medium text-foreground">{adapter.ssid}</span>
-          {adapter.radio_type && (
-            <span className="bg-primary/20 text-primary px-1 rounded text-xs">
-              {adapter.radio_type}
-            </span>
-          )}
-          {adapter.channel && (
-            <span className="text-muted-foreground">CH {adapter.channel}</span>
-          )}
-          {adapter.frequency_ghz && adapter.frequency_ghz > 0 && (
-            <span className="text-muted-foreground">
-              ({adapter.frequency_ghz} GHz)
-            </span>
-          )}
-          {adapter.signal_percent !== undefined &&
-            adapter.signal_percent > 0 && (
-              <span
-                className={cn(
-                  "flex items-center gap-0.5",
-                  adapter.signal_percent >= 70
-                    ? "text-success"
-                    : adapter.signal_percent >= 40
-                      ? "text-warning"
-                      : "text-destructive",
-                )}
-              >
-                <Signal className="w-3 h-3" />
-                {adapter.signal_percent}%
-              </span>
-            )}
-          {adapter.auth_type && (
-            <span className="bg-muted px-1 rounded text-xs">
-              {adapter.auth_type}
-            </span>
-          )}
-        </div>
-      )}
+      {isWiFi && <WifiDetails adapter={adapter} />}
 
-      {/* IP Address + Speed */}
-      {adapter.ipv4_address && (
-        <div className="text-xs flex items-center gap-2">
-          <span className="text-muted-foreground">IP:</span>
-          <CopyableText
-            value={adapter.ipv4_address}
-            className="text-foreground"
-          />
-          {speedDisplay && (
-            <span className="text-muted-foreground">• {speedDisplay}</span>
-          )}
-        </div>
-      )}
-
-      {/* Gateway */}
-      {adapter.gateway && (
-        <div className="text-xs flex items-center gap-2">
-          <span className="text-muted-foreground">GW:</span>
-          <span className="font-mono text-muted-foreground">
-            {adapter.gateway}
-          </span>
-        </div>
-      )}
-
-      {/* DNS Servers */}
-      {adapter.dns_servers && adapter.dns_servers.length > 0 && (
-        <div className="text-xs flex items-center gap-2">
-          <span className="text-muted-foreground">DNS:</span>
-          <span className="font-mono text-muted-foreground">
-            {adapter.dns_servers.slice(0, 2).join(", ")}
-            {adapter.dns_servers.length > 2 &&
-              ` +${adapter.dns_servers.length - 2}`}
-          </span>
-        </div>
-      )}
-
-      {/* MAC Address */}
-      {adapter.mac_address && (
-        <div className="text-xs flex items-center gap-2">
-          <span className="text-muted-foreground">MAC:</span>
-          <CopyableText
-            value={adapter.mac_address}
-            className="text-muted-foreground text-xs"
-          />
-        </div>
-      )}
+      <AddressLines adapter={adapter} />
 
       {/* The adapter's own tweaks are in its device card (`network:<setting_key>:`,
           derived from the PnP device id, C5); changing one restarts the link. */}

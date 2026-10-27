@@ -287,6 +287,38 @@ same escape hatch C10 uses. A clause that can never be bound is not written.
 
 ---
 
+## Principle catalogue (G24/G27)
+
+`docs/PRINCIPLES.md` applies the 56-principle catalogue
+(the external catalogue, draft 1, 2026-10-25) to this repository: for every principle,
+its operational meaning here, whether the catalogue's profile applies, and **what
+fails when it is broken**. The rule is the catalogue's own: a principle with no
+mechanical binding is a sentence nobody runs. A local-only Windows 11 desktop tool
+does not take the catalogue's hosted-service profiles (live users, data-holding
+service) or its payment profile — those rows are N/A **with evidence**, not
+silently missing.
+
+The bindings, in one place:
+
+| Catalogue section | Binding |
+|---|---|
+| A — structure (P-SSOT, P-DRY, P-SRP, P-SOC, P-DIP, P-COHESION, P-LSP, P-ISP, P-COMPOSE, P-FCIS) | `.importlinter` (layer order + framework confinement) and `tests/test_principles_architecture.py`; `frontend/.dependency-cruiser.cjs` |
+| A — state and shape (P-ILLEGAL, P-PARSE, P-CQS, P-DEMETER, P-SSOT) | `tests/test_principles_code.py`, `tests/test_principles_single_source.py`, `mypy --strict` |
+| B — simplicity (P-YAGNI, P-DELETE, P-SPECGEN, P-KISS, P-EXPLICIT) | `vulture` + `vulture_whitelist.py`, `knip`, `ruff` (`BLE`, `S110`, `S112`, `C901`), ESLint (`complexity`, `no-empty`) |
+| C — failure and security (P-FAILFAST, P-FAILCLOSED, P-LEASTPRIV, P-SECRETS, P-12FACTOR, P-PRIVACY, P-POSTEL, P-HYRUM) | `tests/test_principles_ops.py`, `tests/test_principles_security.py`, `.gitleaks.toml`, `zizmor` |
+| D — testing (P-PYRAMID, P-HERMETIC, P-BEHAVIOR, P-RISKTEST, P-GOODHART, P-MUTATION) | `tests/test_principles_testing.py`, `scripts/risk_coverage.py`, `scripts/mutation.sh` |
+| D — work shape (P-SMALLBATCH, P-SHIFTLEFT, P-REPRO) | `scripts/diff_budget.py`, `scripts/controls.py`, `tests/test_principles_ops.py` |
+| E — accessibility (P-WCAG) | Playwright axe in CI, `eslint-plugin-jsx-a11y`, `vitest-axe` |
+| E — hosted-service profiles (P-SIGNALS, P-ERRBUDGET, P-RPORTO, P-321; C's P-DEPTH) | N/A with evidence in `docs/PRINCIPLES.md` |
+| F — process (P-TIMEBOX, P-PARETO, P-BIKESHED, P-PARALYSIS, P-LRM) | `tasks.md` and the PR template; no test decides them |
+
+Every check is registered in `scripts/controls.py` with the stage it runs at and
+the failure it prevents; `scripts/controls.py --check` fails when `quality.sh`,
+`lefthook.yml` and CI disagree with that registry. A new binding is three things:
+the failure it catches, the command that catches it, and the stage it runs at.
+
+---
+
 ## Risk Taxonomy
 
 Every `SettingExecutor` carries `risk_level`. All tweaks (including `advanced`) are
@@ -330,8 +362,9 @@ src/fpstune/
   settings/ definitions/ (16 category files) · executors/ · base.py · applicability.py ·
             hardware_context.py · impact_categories.py · groups.py · registry.py ·
             performance_headroom.py · headroom_policy.py · cleanup_measure.py ·
-            cleanup_targets.py · detection.py · discovery/ · panel.py · virtualization.py
-  core/     DISM, NVIDIA driver settings (nvapi.py sessions, nv_drs.py key table), power profiles
+            cleanup_targets.py · detection.py · discovery/ · panel.py · virtualization.py ·
+            power_profile.py (the FPS Balanced plan) · apply_state.py (the in-flight apply counter)
+  core/     DISM, NVIDIA driver settings (nvapi.py sessions, nv_drs.py key table)
   safety/   restore.py (RestorePointManager) · history.py (this session's journal, in memory)
   benchmark/  suite.py (Bench/BenchReading/BenchResult/SuiteRun + the per-bench deadline) ·
             benches.py (the registry, and which benches a button may start) · verify_round.py ·
@@ -361,9 +394,12 @@ frontend/src/
             ui/ConfirmDialog · ui/NotificationToasts
   store/    index.ts (AppSlice: selectedSettingIds, operationStatus, maintenanceSelection,
             cleanupResults, notifications, bulkRun) · settings.ts (SettingsSlice: flat
-            Map<SettingId, Setting>, detection, selectors)
-  lib/      api.ts · bulkStream.ts · actionRun.ts · detection-manager.ts · hardware-manager.ts ·
-            tweakDomain.ts · tweakStatus.ts · impact.ts
+            Map<SettingId, Setting>, detection, selectors) · actionRun.ts ·
+            detection-manager.ts · notify.ts (store-aware services: they need the app state)
+  lib/      api.ts (the one fetch) · bulkStream.ts · actionReading.ts · cleanupSize.ts ·
+            displayStatus.ts · finding.ts · formatAge.ts · hardware-manager.ts · ledger.ts ·
+            logger.ts · theme.ts · tweakDomain.ts · tweakStatus.ts · utils.ts (pure domain)
+  types/    setting.ts (the wire shape, narrowed once at the boundary)
 ```
 
 UI surfaces: three tabs — Optimize (Software by backend category, Hardware by device, Games one
@@ -372,7 +408,7 @@ section per game; collapsed by default, "N of M not optimized"), Cleanup (rows g
 verdicts) · TweakRow = one line with checkbox, name, current → recommended, Apply, (i); reset
 lives in TweakDetail · SelectionToolbar = sticky bottom bar, bulk apply/reset via SSE,
 advanced/perceptible-cost confirmation · hardware/DeviceList = one section per device ·
-`lib/detection-manager.ts` = `redetectSettings()` orchestrator · `lib/hardware-manager.ts` =
+`store/detection-manager.ts` = `redetectSettings()` orchestrator · `lib/hardware-manager.ts` =
 monitor cache invalidation.
 
 Route surface: `settings.py` = `/definitions`, `/detect`, `/cleanup-sizes`, category/module
@@ -418,7 +454,7 @@ Module contracts — what the tree does not tell you:
   command runs for apply and reset; it measures a cleanup's target either side of the
   command and hands the pair to `_finalize_apply_response`, looked up on `settings.py` at call
   time so the edge back is never a module-level import.
-- `settings/definitions/` — 420 static `SettingExecutor` instances across 16 category files
+- `settings/definitions/` — 422 static `SettingExecutor` instances across 16 category files
   before discovery; 534 on the all-factory fixture, 475 on the audit machine.
 - `definitions/game_configs_mw4.py` — MW4 (cod26); keys carry their `@scope` index, and ranges
   are adopted from the installed build at startup, never declared.
@@ -550,7 +586,7 @@ Data: local system + hardware inventory, never leaves the machine | Regulations:
 Audience: public Windows 11 gamers (OSS) | Deploy: GitHub Releases single exe
 
 Entry: src/fpstune/cli.py (click) + src/fpstune/api/main.py (FastAPI)
-Modules: settings/definitions=registry(16 files, 420 static settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
+Modules: settings/definitions=registry(16 files, 422 static settings); settings/executors=writers(13); api/routes=http(12); benchmark=instruments(17); core=system-mutators(5); commands=cli(8); frontend/src/components=ui(41)
 Data Flow: UI → POST /api/settings/{id}/apply → executor.apply() → PowerShell/registry → _finalize_apply_response() → detect+verify → Zustand
 External: PresentMon(frame capture); FurMark(thermal/stability); NVAPI nvapi64.dll(NVIDIA driver settings, ships with the driver); PowerShell/WMI(system state)
 Toolchain: ruff+mypy+pytest / eslint+tsc+vitest | CI: github-actions (ci.yml, release.yml) | Container: none

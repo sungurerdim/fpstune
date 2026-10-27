@@ -112,7 +112,8 @@ reproduces that locally.
 - **Python**: ruff for linting + formatting, mypy for type checking (strict mode)
 - **Frontend**: ESLint with `no-console` rule (use `createLogger` from `lib/logger.ts`), TypeScript strict
 - **Commits**: Conventional commits required (`feat:`, `fix:`, `refactor:`, etc.); a lefthook `commit-msg` hook rejects anything else
-- **Pre-commit**: lefthook runs the *full* checks, not just the staged files — staging any `.py` file triggers `ruff check src tests`, `ruff format --check src tests`, `mypy src` and the whole pytest suite (`--no-cov -x`); staging anything under `frontend/` triggers ESLint, `tsc --noEmit` and the vitest suite. The commands run in parallel, but expect a Python commit to take as long as the test suite does — that is the point, not an accident
+- **Pre-commit**: lefthook runs what answers in seconds — `ruff check src tests scripts` + `ruff format --check`, the tests selected by the staged files (`scripts/affected_tests.py`), the dependency-free secret scan, the diff budget and the control-registry check; staging anything under `frontend/` adds ESLint. Types and the full test suite run on `pre-push` (`scripts/quality.sh`), which is also the contract CI runs
+- **Every rule and its binding**: `CLAUDE.md` holds the product's quality gates; `docs/PRINCIPLES.md` applies the 56-principle catalogue and names, for each principle, what fails when it is broken. A new check is one entry in `scripts/controls.py`
 
 ## Repo Scripts
 
@@ -123,6 +124,10 @@ What `scripts/` holds, so nobody has to reverse-engineer it:
 | `sync_version.py` | Copies the `pyproject.toml` version into `__init__.py` and `package.json`; `tests/test_release_contract.py` fails when a copy drifts |
 | `update_winget_manifest.py` | Points the `winget/` manifests at a built exe: rewrites version, download URL, `ReleaseDate` and checksum from that binary's own bytes. The release workflow runs it against the exe it just built, checks the manifest parses as YAML and carries that exe's checksum, and uploads the result as a `winget-manifest` artifact; `task winget` runs the same script locally |
 | `measure_scan.py` | Before/after cost measurement for detection-pipeline changes; internal tooling |
+| `controls.py` | The one registry of quality controls (command, stage, failure prevented); `--check` fails when `quality.sh`, `lefthook.yml` and CI disagree with it |
+| `diff_budget.py` | The staged/branch diff budget (files + lines) the pre-commit hook enforces; prints the budget and the offenders, never modifies anything |
+| `risk_coverage.py` | Per-critical-module coverage floors from the coverage JSON the gate already produces |
+| `mutation.sh` | Mutation testing for the two critical pure modules; a manual gate, Windows-native (mutmut 2.4.4, the last release that runs on Windows — 3.x refuses and is not a dependency of a Windows-only product) |
 
 `winget/` holds the manifest template that script fills in. Until a release is
 published and the script has run, the checked-in manifest is a template with a

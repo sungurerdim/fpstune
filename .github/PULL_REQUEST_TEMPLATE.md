@@ -26,6 +26,14 @@ CI cannot cover.
 - [ ] `ruff check src tests` and `mypy src` — clean
 - [ ] Behaviour or interface changed → README / CLAUDE.md / docs updated to match
 - [ ] Bug fix → a regression test that fails without the fix
+- [ ] Removing a guard or an existing behaviour → the commit body says why it was
+      there (P-CHESTERTON), and `settings/retired.py` has the entry if it was a setting
+- [ ] A performance claim → before/after measured on this machine with the same
+      instrument, not a sum of `impact_scores` (P-MEASURE, C11)
+- [ ] The diff is one purpose: unrelated cleanup is its own PR (P-SMALLBATCH, P-BOYSCOUT)
+- [ ] A new check → one entry in `scripts/controls.py` with the failure it prevents,
+      at the earliest stage that can catch it (P-SHIFTLEFT)
+- [ ] Every change maps to the acceptance criterion; nothing extra (P-GOLDPLATE)
 
 ## For a new or changed setting
 

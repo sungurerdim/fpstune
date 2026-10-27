@@ -1,0 +1,8 @@
+{
+  "totals": "Denetlenen {0} · zaten doğru {1} · düzeltilecek {2} · elle {3}",
+  "manualHeading": "Bunlar için bir ayarı kendiniz değiştirmelisiniz:",
+  "manualSteps": "Nasıl:",
+  "manualNoSteps": "Bunun için henüz adım yok.",
+  "unreadable": "{0} okunamadı, dokunulmayacak: {1}",
+  "notApplicable": "{0} bu bilgisayara uygun değil."
+}

@@ -1,0 +1,8 @@
+{
+  "totals": "Checked {0} · already right {1} · will fix {2} · manual {3}",
+  "manualHeading": "These need you to change a setting yourself:",
+  "manualSteps": "How:",
+  "manualNoSteps": "No steps are available for this one yet.",
+  "unreadable": "{0} could not be read and will be left alone: {1}",
+  "notApplicable": "{0} do not apply to this PC."
+}

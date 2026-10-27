@@ -15,6 +15,7 @@ import time
 import pytest
 
 from fpstune import cli
+from fpstune.utils.system_tools import explorer_exe
 
 
 @pytest.fixture
@@ -67,7 +68,7 @@ class TestTheBrowserOpens:
         monkeypatch.setattr("subprocess.Popen", fake_popen)
         landing = f"http://127.0.0.1:{listening_port}/ui"
         cli._open_web_ui_when_ready(landing, listening_port, timeout=3.0)
-        assert launched == [["explorer.exe", landing]]
+        assert launched == [[explorer_exe(), landing]]
 
     def test_a_browser_error_falls_back_to_explorer(
         self, listening_port: int, monkeypatch: pytest.MonkeyPatch
@@ -85,7 +86,7 @@ class TestTheBrowserOpens:
         )
         landing = f"http://127.0.0.1:{listening_port}/ui"
         cli._open_web_ui_when_ready(landing, listening_port, timeout=3.0)
-        assert launched == [["explorer.exe", landing]]
+        assert launched == [[explorer_exe(), landing]]
 
     def test_a_closed_port_does_not_wait_forever(
         self, closed_port: int, monkeypatch: pytest.MonkeyPatch
@@ -115,3 +116,22 @@ class TestTheBrowserOpens:
             cli._open_web_ui_when_ready(landing, listening_port, timeout=3.0)
         assert "Could not open a browser" in caplog.text
         assert landing in caplog.text
+
+    def test_an_unresolvable_windows_directory_starts_nothing(
+        self,
+        listening_port: int,
+        monkeypatch: pytest.MonkeyPatch,
+        caplog: pytest.LogCaptureFixture,
+    ) -> None:
+        monkeypatch.setattr("webbrowser.open", lambda _url: False)
+        monkeypatch.setattr(cli, "explorer_exe", lambda: None)
+        launched: list[list[str]] = []
+        monkeypatch.setattr(
+            "subprocess.Popen",
+            lambda argv, **_kwargs: launched.append(argv) or object(),
+        )
+        landing = f"http://127.0.0.1:{listening_port}/ui"
+        with caplog.at_level("WARNING", logger="fpstune.cli"):
+            cli._open_web_ui_when_ready(landing, listening_port, timeout=3.0)
+        assert launched == []
+        assert "Could not open a browser" in caplog.text

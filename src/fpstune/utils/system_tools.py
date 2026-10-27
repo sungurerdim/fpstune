@@ -33,6 +33,30 @@ def system_tool(name: str) -> str:
     return os.path.join(system32(), name)
 
 
+@lru_cache(maxsize=1)
+def windows_dir() -> str | None:
+    """The Windows directory as GetWindowsDirectoryW reports it, or None.
+
+    explorer.exe lives here, not in System32. Unlike ``system32`` there is no
+    default to fall back on: a path that cannot be resolved to an absolute one
+    is "unknown", and the caller refuses to start anything from it.
+    """
+    windll = getattr(ctypes, "windll", None)
+    if windll is not None:
+        buffer = ctypes.create_unicode_buffer(260)
+        length = windll.kernel32.GetWindowsDirectoryW(buffer, len(buffer))
+        if 0 < length < len(buffer) and os.path.isabs(buffer.value):
+            return buffer.value
+    root = os.environ.get("SYSTEMROOT", "")
+    return root if os.path.isabs(root) else None
+
+
+def explorer_exe() -> str | None:
+    """Absolute path of explorer.exe, or None when the Windows directory is unknown."""
+    root = windows_dir()
+    return os.path.join(root, "explorer.exe") if root else None
+
+
 def powershell_exe() -> str:
     """Windows PowerShell 5.1, which every Windows 11 edition ships."""
     return os.path.join(system32(), "WindowsPowerShell", "v1.0", "powershell.exe")

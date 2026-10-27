@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 from fpstune.utils.detect import get_gpu_info as get_gpu_info  # noqa: F401
 from fpstune.utils.detect import get_os_info as get_os_info  # noqa: F401
-from fpstune.utils.system_tools import pin_powershell_module_cache, system_tool
+from fpstune.utils.system_tools import explorer_exe, pin_powershell_module_cache, system_tool
 
 _LOCK_PORT = 59471  # Fixed internal port used as single-instance mutex
 
@@ -587,7 +587,10 @@ def _open_web_ui_when_ready(landing: str, port: int, *, timeout: float = 30.0) -
         # explorer.exe opens the URL with the logged-in user's shell; that still
         # works when this process is elevated and the direct hand-off is not.
         try:
-            subprocess.Popen(["explorer.exe", landing], close_fds=True)
+            explorer = explorer_exe()
+            if explorer is None:
+                raise OSError("the Windows directory could not be resolved")
+            subprocess.Popen([explorer, landing], close_fds=True)
         except OSError as exc:
             logger.warning("Could not open a browser (%s); open %s", exc, landing)
             return

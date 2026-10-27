@@ -49,9 +49,16 @@ pinning it would turn every wording improvement into a failure.
 from __future__ import annotations
 
 import ast
+import importlib.util
+import re
+import sys
 from collections import Counter
 from functools import cache
 from pathlib import Path
+from types import ModuleType
+from typing import Any
+
+import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 TESTS = ROOT / "tests"
@@ -554,3 +561,525 @@ class TestPBehaviorObservableBehaviour:
             "    logger.object()\n"
         ).body[0]
         assert _patch_calls(counted) == 3
+
+
+# --------------------------------------------------------------------------- #
+# P-RISKTEST — effort follows risk
+# --------------------------------------------------------------------------- #
+
+# (module, test files, minimum test functions across them, why a wrong branch here
+# is dangerous). The floors are measured minus headroom (2026-10-25), so a module
+# that loses its tests is red while ordinary growth is not.
+_RISK_MODULES: tuple[tuple[str, tuple[str, ...], int, str], ...] = (
+    (
+        "src/fpstune/safety/restore.py",
+        ("tests/test_safety/test_restore.py",),
+        10,
+        "a reset with no restore point is unrecoverable, and the description is "
+        "caller-supplied (C1/C6)",
+    ),
+    (
+        "src/fpstune/settings/applicability.py",
+        ("tests/test_settings/test_applicability.py",),
+        30,
+        "values_equal is the single comparison truth: a wrong answer marks an "
+        "unapplied value verified (C6)",
+    ),
+    (
+        "src/fpstune/settings/bulk_plan.py",
+        ("tests/test_settings/test_bulk_plan.py",),
+        12,
+        "a wrong lane lets two writers lose one setting while both report success (C6)",
+    ),
+    (
+        "src/fpstune/settings/registry.py",
+        ("tests/test_settings/test_registry.py",),
+        8,
+        "the registry is the SSOT: a lost or duplicated setting disappears from every "
+        "surface that shows it",
+    ),
+    (
+        "src/fpstune/benchmark/operation_lock.py",
+        ("tests/test_api/test_shutdown_route.py", "tests/test_benchmark/test_scheduler.py"),
+        10,
+        "the one mutex an apply, a cleanup and a bench share; without it a measurement "
+        "describes neither the before nor the after (C11)",
+    ),
+    (
+        "src/fpstune/benchmark/verify_round.py",
+        ("tests/test_benchmark/test_verify_round.py",),
+        20,
+        "the one comparison path a claim is judged by; a wrong judge publishes a "
+        "number no instrument produced (C11 rule 2)",
+    ),
+    (
+        "src/fpstune/utils/user_paths.py",
+        ("tests/test_user_paths.py",),
+        25,
+        "every write into the user's profile resolves a root here; a wrong root "
+        "writes the developer's real profile (C9)",
+    ),
+    (
+        "src/fpstune/settings/cleanup_targets.py",
+        (
+            "tests/test_settings/test_cleanup_targets.py",
+            "tests/test_executors/test_cleanup_delete_paths.py",
+        ),
+        15,
+        "these targets delete files; a wrong path deletes something the user wanted",
+    ),
+    (
+        "src/fpstune/settings/executors/game_config_writer.py",
+        (
+            "tests/test_executors/test_mw4_write_retry.py",
+            "tests/test_executors/test_mw4_config.py",
+        ),
+        20,
+        "the one Name@scope line rewrite shared by two games; a wrong byte is data loss",
+    ),
+    (
+        "src/fpstune/api/routes/settings_apply.py",
+        (
+            "tests/test_api/test_apply_bench_guard.py",
+            "tests/test_api/test_settings_apply_guards.py",
+        ),
+        12,
+        "the one place a setting's command runs for apply and reset; a bypass breaks "
+        "the C6 single write path",
+    ),
+)
+
+
+def _import_name(module: str) -> str:
+    """`src/fpstune/a/b.py` -> `fpstune.a.b`."""
+    parts = module.removesuffix(".py").split("/")
+    if parts and parts[0] == "src":
+        parts = parts[1:]
+    return ".".join(parts)
+
+
+def _names_module(source: str, module: str) -> bool:
+    """Does this test source name the module it is supposed to cover?"""
+    dotted = _import_name(module)
+    stem = dotted.rsplit(".", 1)[-1]
+    return dotted in source or re.search(rf"\b{re.escape(stem)}\b", source) is not None
+
+
+class TestPRiskBasedTestAllocation:
+    """The riskiest modules have tests, and the list says why each is risky."""
+
+    def test_every_critical_module_has_its_tests(self) -> None:
+        problems: list[str] = []
+        for module, test_files, floor, _why in _RISK_MODULES:
+            module_path = ROOT / module
+            if not module_path.exists():
+                problems.append(f"{module}: the module is gone — update the risk list")
+                continue
+            missing = [test for test in test_files if not (ROOT / test).exists()]
+            if missing:
+                problems.append(f"{module}: missing test file(s) {missing}")
+                continue
+            primary = (ROOT / test_files[0]).read_text(encoding="utf-8")
+            if not _names_module(primary, module):
+                problems.append(
+                    f"{module}: {test_files[0]} never names it, so nothing ties the "
+                    "tests to the module"
+                )
+            count = sum(len(_test_functions(ROOT / test)) for test in test_files)
+            if count < floor:
+                problems.append(f"{module}: {count} tests < risk floor {floor}")
+        assert not problems, (
+            "P-RISKTEST: the modules where a wrong branch is expensive lost their "
+            "cover, or the list no longer describes the tree:\n  " + "\n  ".join(problems)
+        )
+
+    def test_every_entry_explains_the_risk(self) -> None:
+        for module, _tests, _floor, why in _RISK_MODULES:
+            assert len(why.split()) >= 6, (
+                f"{module}: the risk list needs a sentence saying what a wrong branch does"
+            )
+
+    def test_the_naming_rule_itself(self) -> None:
+        assert _names_module(
+            "from fpstune.safety import restore\n", "src/fpstune/safety/restore.py"
+        )
+        assert _names_module("# the restore module\n", "src/fpstune/safety/restore.py")
+        assert not _names_module(
+            "from fpstune.safety import history\n", "src/fpstune/safety/restore.py"
+        )
+
+
+# --------------------------------------------------------------------------- #
+# P-HERMETIC — the guard in tests/conftest.py, proved rather than assumed
+# --------------------------------------------------------------------------- #
+
+
+def _conftest() -> ModuleType:
+    import tests.conftest as conftest
+
+    return conftest
+
+
+class TestPHermeticNoNetwork:
+    """A test reaches the network only through a documented allowlist entry."""
+
+    def test_the_guard_allows_loopback_and_refuses_a_remote_host(self) -> None:
+        watch = _conftest().NetworkWatch({"example.com": "the test is about DNS"})
+        watch.armed = True
+
+        watch("socket.getaddrinfo", ("localhost", 80, 0, 0, 0))
+        watch("socket.getaddrinfo", (None, 80, 0, 0, 0))
+        watch("socket.getaddrinfo", ("127.0.0.1", 80, 0, 0, 0))
+        watch("socket.connect", (object(), ("127.0.0.1", 8080)))
+        watch("socket.connect", (object(), ("::1", 8080, 0, 0)))
+        watch("socket.connect", (object(), "C:\\socket.sock"))
+        watch("socket.getaddrinfo", ("example.com", 443, 0, 0, 0))
+        watch.assert_clean()
+
+        watch("socket.getaddrinfo", ("pypi.org", 443, 0, 0, 0))
+        with pytest.raises(AssertionError, match="pypi.org"):
+            watch.assert_clean()
+
+    def test_the_hook_is_armed_while_a_test_runs(self) -> None:
+        """The autouse fixture arms it before every test; this test is a test."""
+        assert _conftest()._NETWORK_WATCH.armed is True
+
+    def test_the_guard_is_wired_as_an_autouse_fixture(self) -> None:
+        conftest = (TESTS / "conftest.py").read_text(encoding="utf-8")
+        fixture = next(
+            node
+            for node in ast.walk(ast.parse(conftest))
+            if isinstance(node, ast.FunctionDef) and node.name == "_no_network"
+        )
+        decorator = ast.unparse(fixture.decorator_list[0])
+        assert "autouse=True" in decorator, decorator
+        assert "_NETWORK_WATCH.assert_clean()" in conftest
+
+    def test_the_allowlist_cannot_rot(self) -> None:
+        """Every allowed host has a reason, and a test still names it."""
+        allowlist = _conftest().NETWORK_ALLOWLIST
+        test_sources = "\n".join(
+            path.read_text(encoding="utf-8") for path in sorted(TESTS.rglob("*.py"))
+        )
+        for host, reason in allowlist.items():
+            assert reason.strip(), f"NETWORK_ALLOWLIST[{host!r}] has no reason"
+            assert host in test_sources, (
+                f"NETWORK_ALLOWLIST[{host!r}] is stale: no test names that host any "
+                "more, so the exception outlived the reason"
+            )
+
+
+# --------------------------------------------------------------------------- #
+# P-MEASURE — the bindings that already exist
+# --------------------------------------------------------------------------- #
+
+
+def _defined_names(path: Path) -> set[str]:
+    return {
+        node.name
+        for node in ast.walk(_parsed(path))
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef)
+    }
+
+
+class TestPMeasureTheInstrumentIsBound:
+    """C11's measurement path, and the tests that keep it honest, are still there."""
+
+    def test_the_measurement_path_exists(self) -> None:
+        verify_round = ROOT / "src" / "fpstune" / "benchmark" / "verify_round.py"
+        sources = ROOT / "src" / "fpstune" / "benchmark" / "sources.py"
+        assert verify_round.exists() and sources.exists()
+
+        defined = _defined_names(verify_round)
+        for name in ("judge", "measure_pair", "noise_floor"):
+            assert name in defined, f"verify_round.{name} is gone; C11 rule 2 cites it"
+
+        tests = (ROOT / "tests" / "test_benchmark" / "test_verify_round.py").read_text(
+            encoding="utf-8"
+        )
+        for name in ("judge", "measure_pair", "noise_floor"):
+            assert name in tests, f"nothing in test_verify_round.py names {name}"
+
+    def test_the_unanswered_claims_have_a_place_to_say_so(self) -> None:
+        sources = (ROOT / "src" / "fpstune" / "benchmark" / "sources.py").read_text(
+            encoding="utf-8"
+        )
+        assert "NO_INSTRUMENT" in sources
+        assert "SOURCES" in sources
+        assert (ROOT / "tests" / "test_benchmark" / "test_sources.py").exists()
+
+
+# --------------------------------------------------------------------------- #
+# P-SHIFTLEFT — one registry, earliest stage (scripts/controls.py)
+# --------------------------------------------------------------------------- #
+
+
+def _load_script(name: str, filename: str) -> ModuleType:
+    spec = importlib.util.spec_from_file_location(name, SCRIPTS / filename)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+controls = _load_script("controls", "controls.py")
+
+
+@pytest.fixture
+def stage_tree(tmp_path: Path) -> Path:
+    """A minimal three-stage tree the checker can be driven over."""
+
+    def write(relative: str, text: str) -> None:
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(text, encoding="utf-8")
+
+    write(
+        "lefthook.yml",
+        "pre-commit:\n  jobs:\n    - run: npm run lint\n",
+    )
+    write("scripts/quality.sh", "#!/usr/bin/env bash\nnpm run lint\n")
+    write(
+        ".github/workflows/ci.yml",
+        "jobs:\n  frontend:\n    steps:\n      - run: npm run lint\n",
+    )
+    return tmp_path
+
+
+def _lint_control(**overrides: Any) -> Any:
+    values: dict[str, Any] = {
+        "id": "fe-lint",
+        "command": "npm run lint",
+        "stages": ("pre-commit", "pre-push", "ci"),
+        "prevents": "an ESLint violation reaching a reviewer",
+        "status": "wired",
+    }
+    values.update(overrides)
+    return controls.Control(**values)
+
+
+class TestPShiftLeftControlRegistry:
+    """The registry and the three stage files agree; the checker proves it."""
+
+    def test_the_registry_and_the_stage_files_agree(self) -> None:
+        problems = controls.check()
+        assert not problems, (
+            "P-SSOT/P-SHIFTLEFT: the control registry and the files that run the "
+            "controls disagree:\n  " + "\n  ".join(problems)
+        )
+
+    def test_every_control_names_what_it_prevents(self) -> None:
+        for control in controls.CONTROLS:
+            assert control.prevents.strip(), f"{control.id}: no `prevents` sentence"
+            assert len(control.prevents.split()) >= 4, (
+                f"{control.id}: `prevents` is too short to say anything"
+            )
+
+    def test_every_control_names_a_stage_the_checker_knows(self) -> None:
+        for control in controls.CONTROLS:
+            assert control.stages, f"{control.id}: runs nowhere"
+            for stage in control.stages:
+                assert stage in controls.STAGES, f"{control.id}: unknown stage {stage!r}"
+
+    def test_a_control_missing_from_its_earliest_stage_is_red(self, stage_tree: Path) -> None:
+        (stage_tree / "lefthook.yml").write_text("pre-commit:\n  jobs: []\n", encoding="utf-8")
+        problems = controls.check(stage_tree, (_lint_control(),))
+        assert any(
+            "missing from its earliest stage pre-commit" in problem for problem in problems
+        ), problems
+
+    def test_a_duplicate_command_in_one_stage_is_red(self, stage_tree: Path) -> None:
+        (stage_tree / "lefthook.yml").write_text(
+            "pre-commit:\n  jobs:\n    - run: npm run lint\n    - run: npm run lint\n",
+            encoding="utf-8",
+        )
+        problems = controls.check(stage_tree, (_lint_control(),))
+        assert any("runs 2 times at pre-commit" in problem for problem in problems), problems
+
+    def test_a_check_no_control_owns_is_red(self, stage_tree: Path) -> None:
+        with (stage_tree / "scripts/quality.sh").open("a", encoding="utf-8") as handle:
+            handle.write("python scripts/unregistered.py --check\n")
+        problems = controls.check(stage_tree, (_lint_control(),))
+        assert any("is not in the control registry" in problem for problem in problems), problems
+
+    def test_a_proposed_control_that_already_runs_is_stale(self, stage_tree: Path) -> None:
+        problems = controls.check(stage_tree, (_lint_control(status="proposed"),))
+        assert any("set status='wired'" in problem for problem in problems), problems
+
+    def test_a_declared_stage_that_does_not_run_it_is_red(self, stage_tree: Path) -> None:
+        (stage_tree / ".github/workflows/ci.yml").write_text(
+            "jobs:\n  frontend:\n    steps: []\n", encoding="utf-8"
+        )
+        problems = controls.check(stage_tree, (_lint_control(),))
+        assert any("declared at ci" in problem for problem in problems), problems
+
+    def test_the_clean_fixture_is_green(self, stage_tree: Path) -> None:
+        """The negative tests above are only meaningful if the fixture can pass."""
+        assert controls.check(stage_tree, (_lint_control(),)) == []
+
+
+# --------------------------------------------------------------------------- #
+# P-SMALLBATCH / P-BOYSCOUT — scripts/diff_budget.py
+# --------------------------------------------------------------------------- #
+
+diff_budget = _load_script("diff_budget", "diff_budget.py")
+
+
+class TestPSmallBatchDiffBudget:
+    """A change has a size, and the budget is what makes 'small' reviewable."""
+
+    def test_parsing_a_numstat_line(self) -> None:
+        diff = diff_budget.parse_numstat("3\t1\tsrc/fpstune/a.py\n")
+        assert diff.files == 1
+        assert diff.lines == 4
+        assert diff.changes[0] == diff_budget.FileChange(
+            path="src/fpstune/a.py", added=3, deleted=1
+        )
+
+    def test_a_rename_keeps_the_path_a_reviewer_opens(self) -> None:
+        diff = diff_budget.parse_numstat("2\t2\tsrc/old.py => src/new.py\n")
+        assert [change.path for change in diff.changes] == ["src/new.py"]
+
+    def test_a_binary_file_counts_as_a_file_with_no_lines(self) -> None:
+        diff = diff_budget.parse_numstat("-\t-\tfrontend/public/icon.png\n")
+        assert diff.files == 1
+        assert diff.lines == 0
+
+    def test_generated_files_are_not_charged_to_the_author(self) -> None:
+        """A lockfile's line count is a tool's output, not the change's scope."""
+        text = (
+            "1000\t0\tuv.lock\n"
+            "1000\t0\tfrontend/package-lock.json\n"
+            "5\t0\tfrontend/dist/app.js\n"
+            "1\t0\tsrc/fpstune/cli.py\n"
+        )
+        diff = diff_budget.parse_numstat(text)
+        assert [change.path for change in diff.changes] == ["src/fpstune/cli.py"]
+
+    def test_the_budget_boundary(self) -> None:
+        at_budget = diff_budget.parse_numstat("10\t10\tsrc/fpstune/a.py\n")
+        assert diff_budget.evaluate(at_budget, max_files=1, max_lines=20) == []
+
+        one_over = diff_budget.parse_numstat("10\t11\tsrc/fpstune/a.py\n")
+        problems = diff_budget.evaluate(one_over, max_files=1, max_lines=20)
+        assert problems == ["21 lines added+deleted (budget 20)"]
+
+        too_many = diff_budget.parse_numstat("1\t0\ta.py\n1\t0\tb.py\n")
+        assert diff_budget.evaluate(too_many, max_files=1, max_lines=20) == [
+            "2 files changed (budget 1)"
+        ]
+
+    def test_the_git_command_each_mode_means(self) -> None:
+        assert diff_budget.diff_command(staged=True, base=None) == [
+            "git",
+            "diff",
+            "--cached",
+            "--numstat",
+        ]
+        assert diff_budget.diff_command(staged=False, base="origin/main") == [
+            "git",
+            "diff",
+            "--numstat",
+            "origin/main...HEAD",
+        ]
+        assert diff_budget.diff_command(staged=False, base=None) == [
+            "git",
+            "diff",
+            "--numstat",
+            "HEAD",
+        ]
+
+    def test_the_report_names_the_budget_and_the_biggest_files(self) -> None:
+        diff = diff_budget.parse_numstat("8\t2\tsrc/fpstune/a.py\n1\t0\tsrc/fpstune/b.py\n")
+        report = diff_budget.report(diff, max_files=12, max_lines=800, problems=[])
+        assert "2 file(s), 11 line(s)" in report
+        assert "budget 12 file(s) / 800 line(s)" in report
+        assert "src/fpstune/a.py" in report
+
+    def test_the_defaults_are_measured_from_history(self) -> None:
+        """The docstring records the measurement; the defaults stay near its p75."""
+        assert 5 <= diff_budget.DEFAULT_MAX_FILES <= 25
+        assert 100 <= diff_budget.DEFAULT_MAX_LINES <= 1500
+
+
+# --------------------------------------------------------------------------- #
+# P-RISKTEST — scripts/risk_coverage.py
+# --------------------------------------------------------------------------- #
+
+risk_coverage = _load_script("risk_coverage", "risk_coverage.py")
+
+
+def _coverage_report(tmp_path: Path, files: dict[str, dict[str, object]]) -> Path:
+    import json
+
+    path = tmp_path / "coverage.json"
+    path.write_text(json.dumps({"files": files}), encoding="utf-8")
+    return path
+
+
+class TestPRiskCoverageFloors:
+    """A repository-wide percentage cannot see a critical module losing its tests."""
+
+    def test_parsing_a_report(self, tmp_path: Path) -> None:
+        path = _coverage_report(
+            tmp_path,
+            {
+                "src/fpstune/settings/bulk_plan.py": {
+                    "summary": {
+                        "percent_covered": 91.5,
+                        "covered_lines": 91,
+                        "num_statements": 100,
+                    }
+                }
+            },
+        )
+        measured = risk_coverage.load_report(path)
+        assert measured["src/fpstune/settings/bulk_plan.py"].percent == 91.5
+        assert measured["src/fpstune/settings/bulk_plan.py"].covered == 91
+
+    def test_absolute_paths_are_normalised(self, tmp_path: Path) -> None:
+        absolute = str(ROOT / "src" / "fpstune" / "settings" / "bulk_plan.py")
+        path = _coverage_report(
+            tmp_path,
+            {
+                absolute: {
+                    "summary": {"percent_covered": 90.0, "covered_lines": 9, "num_statements": 10}
+                }
+            },
+        )
+        measured = risk_coverage.load_report(path)
+        assert "src/fpstune/settings/bulk_plan.py" in measured
+
+    def test_the_floor_boundary(self) -> None:
+        floors = {"src/fpstune/a.py": 80.0}
+        at_floor = {
+            "src/fpstune/a.py": risk_coverage.ModuleCoverage(
+                path="src/fpstune/a.py", percent=80.0, covered=8, statements=10
+            )
+        }
+        assert risk_coverage.evaluate(at_floor, floors) == []
+
+        below = {
+            "src/fpstune/a.py": risk_coverage.ModuleCoverage(
+                path="src/fpstune/a.py", percent=79.9, covered=7, statements=10
+            )
+        }
+        problems = risk_coverage.evaluate(below, floors)
+        assert problems and "79.9% < floor 80%" in problems[0]
+
+    def test_a_module_the_report_never_measured_is_red(self) -> None:
+        problems = risk_coverage.evaluate({}, {"src/fpstune/a.py": 80.0})
+        assert problems and "not in the coverage report" in problems[0]
+
+    def test_a_malformed_report_is_rejected(self, tmp_path: Path) -> None:
+        path = tmp_path / "coverage.json"
+        path.write_text("{}", encoding="utf-8")
+        with pytest.raises(ValueError):
+            risk_coverage.load_report(path)
+
+    def test_the_floors_are_measured_not_aspirational(self) -> None:
+        """Every floor is a percentage a suite can reach; the script documents how."""
+        for module, floor in risk_coverage.FLOORS.items():
+            assert 0 < floor <= 100, module
+            assert module.startswith("src/fpstune/"), module

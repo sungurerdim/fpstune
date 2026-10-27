@@ -1,0 +1,32 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Spread network receive work across processor cores",
+    "tr": "Ağ alma işini işlemci çekirdeklerine yay"
+  },
+  "why": {
+    "en": "A network adapter can hand received packets to several cores instead of one, which keeps one core from becoming the bottleneck.",
+    "tr": "Bir ağ bağdaştırıcısı alınan paketleri tek çekirdek yerine birden çok çekirdeğe verebilir, böylece tek çekirdek darboğaz olmaz."
+  },
+  "fixed": {
+    "en": "Receive work is now spread across cores on this adapter.",
+    "tr": "Alma işi artık bu bağdaştırıcıda çekirdeklere yayılıyor."
+  },
+  "risk": "moderate",
+  "sources": [
+    "https://learn.microsoft.com/windows-hardware/drivers/network/introduction-to-receive-side-scaling"
+  ],
+  "gain": [
+    "network",
+    "latency"
+  ],
+  "restart": "none",
+  "applicable": "[bool](Get-NetAdapterRss -ErrorAction Stop)",
+  "instances": "Get-NetAdapterRss -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ id = $_.InterfaceGuid; label = $_.Name } }",
+  "detect": "(Get-NetAdapterRss -Name $Instance -ErrorAction Stop).Enabled",
+  "target": {
+    "command": "[math]::Min(4, [Environment]::ProcessorCount)"
+  },
+  "apply": "Set-NetAdapterRss -Name $Instance -NumberOfReceiveQueues $Target -ErrorAction Stop",
+  "revert": "Set-NetAdapterRss -Name $Instance -NumberOfReceiveQueues 1 -ErrorAction Stop"
+}

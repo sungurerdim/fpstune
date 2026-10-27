@@ -1,0 +1,28 @@
+{
+  "kind": "manual",
+  "title": {
+    "en": "Enable the memory profile in firmware",
+    "tr": "Bellek profilini aygıt yazılımında etkinleştir"
+  },
+  "why": {
+    "en": "Memory often runs below its rated speed until the profile is enabled in the firmware setup.",
+    "tr": "Bellek, profil aygıt yazılımı ayarlarında etkinleştirilene kadar genellikle beyan edilen hızın altında çalışır."
+  },
+  "risk": "low",
+  "sources": [
+    "https://www.intel.com/content/www/us/en/support/articles/000005657/memory-and-storage.html"
+  ],
+  "gain": ["fps", "experience"],
+  "steps": {
+    "en": [
+      "Restart the PC and open the firmware setup.",
+      "Find the memory profile option and select the first profile.",
+      "Save and exit."
+    ],
+    "tr": [
+      "Bilgisayarı yeniden başlatın ve aygıt yazılımı ayarlarını açın.",
+      "Bellek profili seçeneğini bulun ve ilk profili seçin.",
+      "Kaydedip çıkın."
+    ]
+  }
+}

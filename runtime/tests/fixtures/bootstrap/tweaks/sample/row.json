@@ -1,0 +1,26 @@
+{
+  "kind": "manual",
+  "title": {
+    "en": "Bundle sample row",
+    "tr": "Paket örnek satırı: ışık, şeker, İğne"
+  },
+  "why": {
+    "en": "Fixture for the bundle and bootstrap tests.",
+    "tr": "Paket ve önyükleme testleri için örnek."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "steps": {
+    "en": [
+      "Do the thing by hand."
+    ],
+    "tr": [
+      "Şeyi elle yapın."
+    ]
+  }
+}

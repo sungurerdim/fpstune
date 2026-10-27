@@ -19,17 +19,17 @@ from unittest.mock import patch
 
 import pytest
 
-from fpstune.core import power_profile
-from fpstune.core.power_profile import (
+from fpstune.settings import power_profile
+from fpstune.settings.applicability import NOT_AVAILABLE
+from fpstune.settings.base import DefaultSource, DetectType
+from fpstune.settings.definitions.power import FPS_BALANCED_PLAN, POWER_SETTINGS
+from fpstune.settings.executors.powershell import PowerShellExecutor
+from fpstune.settings.power_profile import (
     BALANCED_GUID,
     FPS_BALANCED_NAME,
     HIGH_PERFORMANCE_GUID,
     PowerProfileManager,
 )
-from fpstune.settings.applicability import NOT_AVAILABLE
-from fpstune.settings.base import DefaultSource, DetectType
-from fpstune.settings.definitions.power import FPS_BALANCED_PLAN, POWER_SETTINGS
-from fpstune.settings.executors.powershell import PowerShellExecutor
 
 NEW_GUID = "0f9d8a6b-1c2d-4e5f-8a9b-0c1d2e3f4a5b"
 

@@ -17,6 +17,7 @@ from typing import Any
 from fpstune.settings.base import (
     DefaultSource,
     DetectType,
+    EvidenceLevel,
     SettingCategory,
     SettingExecutor,
     SettingScope,
@@ -942,7 +943,7 @@ def _cpu_power_setting(
     apply_value_map: dict[Any, Any] | None = None,
     min_value: int | None = None,
     max_value: int | None = None,
-    evidence_level: str = "proven",
+    evidence_level: EvidenceLevel = "proven",
 ) -> SettingExecutor:
     """Build one processor-power setting.
 

@@ -11,8 +11,8 @@ import sys
 from types import SimpleNamespace
 from unittest.mock import patch
 
-from fpstune.core import power_profile
-from fpstune.core.power_profile import PowerProfileManager
+from fpstune.settings import power_profile
+from fpstune.settings.power_profile import PowerProfileManager
 
 NEW_GUID = "0f9d8a6b-1c2d-4e5f-8a9b-0c1d2e3f4a5b"
 

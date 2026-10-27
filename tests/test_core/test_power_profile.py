@@ -1,4 +1,4 @@
-"""Tests for fpstune.core.power_profile.
+"""Tests for fpstune.settings.power_profile.
 
 Covers: constant/GUID values, PowerPlan/PowerProfileResult dataclasses,
 list_plans output parsing (regex), find_fps_balanced cache, get_active_plan,
@@ -16,7 +16,11 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fpstune.core.power_profile import (
+from fpstune.settings.applicability import ApplicabilityChecker, HardwareContext
+from fpstune.settings.base import DetectType
+from fpstune.settings.definitions.power import POWER_SETTINGS
+from fpstune.settings.executors.powercfg import PowerCfgExecutor
+from fpstune.settings.power_profile import (
     BALANCED_GUID,
     FPS_BALANCED_DESCRIPTION,
     FPS_BALANCED_NAME,
@@ -27,10 +31,6 @@ from fpstune.core.power_profile import (
     PowerProfileResult,
     get_power_profile_manager,
 )
-from fpstune.settings.applicability import ApplicabilityChecker, HardwareContext
-from fpstune.settings.base import DetectType
-from fpstune.settings.definitions.power import POWER_SETTINGS
-from fpstune.settings.executors.powercfg import PowerCfgExecutor
 
 # ---------------------------------------------------------------------------
 # Constants and GUIDs
@@ -345,7 +345,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
-            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
+            patch("fpstune.settings.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
 
@@ -366,7 +366,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
-            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
+            patch("fpstune.settings.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             mgr.create()
 
@@ -415,7 +415,7 @@ class TestCreate:
         with (
             patch.object(mgr, "find_fps_balanced", return_value=None),
             patch("fpstune.utils.process_watch.run", side_effect=run_side_effect),
-            patch("fpstune.core.power_profile._registry_powercfg_settings", return_value=[]),
+            patch("fpstune.settings.power_profile._registry_powercfg_settings", return_value=[]),
         ):
             result = mgr.create()
 
@@ -491,7 +491,7 @@ class TestCreateRoutesThroughTheRegistry:
                 return_value=fixed_dc_index,
             ),
             patch(
-                "fpstune.core.power_profile.build_hardware_context",
+                "fpstune.settings.power_profile.build_hardware_context",
                 return_value=HardwareContext(),
             ),
         ):
@@ -535,7 +535,7 @@ class TestCreateRoutesThroughTheRegistry:
                 return_value=None,
             ),
             patch(
-                "fpstune.core.power_profile.build_hardware_context",
+                "fpstune.settings.power_profile.build_hardware_context",
                 return_value=HardwareContext(),
             ),
             patch.object(
@@ -688,7 +688,7 @@ class TestRevert:
 
 class TestGetPowerProfileManager:
     def test_returns_power_profile_manager_instance(self) -> None:
-        import fpstune.core.power_profile as pp_mod
+        import fpstune.settings.power_profile as pp_mod
 
         # Reset singleton for test isolation
         original = pp_mod._power_profile_manager
@@ -700,7 +700,7 @@ class TestGetPowerProfileManager:
             pp_mod._power_profile_manager = original
 
     def test_returns_same_instance_on_second_call(self) -> None:
-        import fpstune.core.power_profile as pp_mod
+        import fpstune.settings.power_profile as pp_mod
 
         original = pp_mod._power_profile_manager
         pp_mod._power_profile_manager = None

@@ -112,9 +112,7 @@ class TestGuardSeesTheShapes:
         assert none_context_stubs(source) == [1]
 
     def test_build_hardware_context_target(self) -> None:
-        source = (
-            'x = patch("fpstune.core.power_profile.build_hardware_context", return_value=None)\n'
-        )
+        source = 'x = patch("fpstune.settings.power_profile.build_hardware_context", return_value=None)\n'
         assert none_context_stubs(source) == [1]
 
     def test_side_effect_lambda_returning_none(self) -> None:

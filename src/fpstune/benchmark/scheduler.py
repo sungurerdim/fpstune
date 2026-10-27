@@ -36,8 +36,9 @@ two states and cannot say which one it meant.
 *An apply is running in this process.* The lock alone does not cover it: a
 Windows mutex is owned by the thread that took it, and a bulk apply runs on
 sixteen pool threads while this one asks. So the apply path keeps a counter
-(`settings_apply.applies_in_flight`) and this reads it live. Read rather than
-mirrored — a second copy of that count would go stale exactly when it mattered.
+(`settings.apply_state.applies_in_flight`, below both layers) and this reads it
+live. Read rather than mirrored — a second copy of that count would go stale
+exactly when it mattered.
 
 An unreadable answer to any of these counts as "do not run". The cost of
 deferring is one minute; the cost of measuring at the wrong moment is a number
@@ -66,6 +67,7 @@ from fpstune.benchmark import ledger
 from fpstune.benchmark.benches import benches_for, tool_executable_names, unattended_keys
 from fpstune.benchmark.operation_lock import operation_lock
 from fpstune.benchmark.suite import Bench, BenchResult, run_bench_with_deadline
+from fpstune.settings.apply_state import applies_in_flight
 from fpstune.settings.executors.game_processes import GAME_PROCESSES, game_is_running
 from fpstune.utils.logger import get_logger
 
@@ -255,26 +257,6 @@ def _job_for_trigger() -> ledger.Job | None:
         return ledger.open_job(ledger.AFTER, plan_keys())
 
     return None
-
-
-def applies_in_flight() -> int:
-    """How many applies are running in this process right now.
-
-    Imported inside the function on purpose. `api.routes.settings_apply` imports
-    `benchmark.operation_lock` at module level, so the edge back to it has to be
-    a late one — the dependency between the apply path and the benchmark package
-    stays one-way, and importing a FastAPI route module to answer a scheduler
-    question would drag the whole API layer into a daemon that does not need it.
-
-    Zero when it cannot be answered, which is the same direction the lock takes:
-    the lock is checked immediately afterwards and is the stronger of the two.
-    """
-    try:
-        from fpstune.api.routes.settings_apply import applies_in_flight as counted
-    except Exception as exc:  # noqa: BLE001 - a missing apply path is not an apply
-        logger.debug("Could not read the apply counter: %s", exc)
-        return 0
-    return counted()
 
 
 def _guard() -> TickOutcome | None:
@@ -486,7 +468,7 @@ def _watch_loop() -> None:  # pragma: no cover - timing loop, poll_once is teste
                 logger.info("benchmark: %s", outcome.detail)
             else:
                 logger.debug("benchmark: %s (%s)", outcome.detail, outcome.outcome)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 - a background measurement failing must never take the API with it
             # A background measurement failing must never take the API with it.
             logger.debug("benchmark poll failed: %s", exc)
         if _stop.wait(POLL_INTERVAL_SECONDS):

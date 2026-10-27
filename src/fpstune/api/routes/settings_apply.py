@@ -15,13 +15,18 @@ already name it there.
 
 from __future__ import annotations
 
-import threading
 import time
 from typing import TYPE_CHECKING, Any
 
 from fpstune.api.schemas import ApplyResponse
 from fpstune.benchmark.operation_lock import is_free
 from fpstune.settings import CommandExecutor
+from fpstune.settings.apply_state import (
+    applies_in_flight as applies_in_flight,
+)
+from fpstune.settings.apply_state import (
+    apply_in_flight,
+)
 from fpstune.settings.cleanup_measure import (
     NOTHING_MEASURED,
     freed_after_cleanup,
@@ -39,18 +44,6 @@ if TYPE_CHECKING:
 
 #: How often an apply looks again while a measurement holds the machine.
 _BENCH_POLL_SECONDS = 0.5
-
-# Applies in flight in this process. The scheduler reads it before starting a
-# bench: the Windows mutex is per-thread and a bulk apply runs on many threads,
-# so the apply side keeps a counter rather than taking the mutex itself.
-_in_flight = 0
-_in_flight_guard = threading.Lock()
-
-
-def applies_in_flight() -> int:
-    """How many applies are running right now — the scheduler's other guard."""
-    with _in_flight_guard:
-        return _in_flight
 
 
 def _wait_for_bench() -> None:
@@ -94,28 +87,18 @@ def apply_and_finalize(
     withheld, and sizing a folder twice around a command that never happened
     would cost two scans to report that nothing was freed.
     """
-    global _in_flight
     started = time.perf_counter()
     success: bool
     error: str | None
     will_run = True
-    # Counted *before* waiting for the lock. Counting after left a window: the
-    # scheduler read zero applies, this side saw the lock free, and then both
-    # went ahead — a bench measuring a machine mid-apply. Counted first, a bench
-    # that takes the lock afterwards sees this apply and stands down
-    # (`scheduler.poll_once`, `benchmark_suite`), and one that took it earlier
-    # is waited out here.
-    with _in_flight_guard:
-        _in_flight += 1
-    try:
+    # Counted before waiting for the lock (the context manager's own docstring
+    # carries the window that counting later left open).
+    with apply_in_flight():
         _wait_for_bench()
         will_run = not action_will_not_run(setting, value)
         before = measure_cleanup_size(setting) if will_run else None
         success, error = CommandExecutor.apply(setting, value, on_line)
         freed = freed_after_cleanup(setting, before) if success and will_run else NOTHING_MEASURED
-    finally:
-        with _in_flight_guard:
-            _in_flight -= 1
 
     # Looked up now rather than imported above: routes/settings imports this
     # module, so the edge back to it cannot be a module-level one — and a late

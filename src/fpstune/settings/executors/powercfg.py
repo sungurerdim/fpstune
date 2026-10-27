@@ -668,7 +668,7 @@ if (Test-Path -LiteralPath $path) {{
                     return self._battery_note_from_fallback(
                         display_value, fields, subgroup, setting, value_map
                     ), None
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an executor failure is the (success, error) answer this path returns
             from fpstune.utils.debug import debug_log
 
             debug_log("powercfg", f"PowerShell power setting query failed: {e}")
@@ -718,7 +718,7 @@ if (Test-Path -LiteralPath $path) {{
             return result.returncode == 0, output.strip()
         except subprocess.TimeoutExpired as e:
             return False, str(e)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an executor failure is the (success, error) answer this path returns
             return False, str(e)
 
     @classmethod

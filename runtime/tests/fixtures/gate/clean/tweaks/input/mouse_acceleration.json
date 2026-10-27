@@ -1,0 +1,18 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Turn off mouse acceleration", "tr": "Fare ivmesini kapat" },
+  "why": {
+    "en": "Acceleration changes how far the cursor moves with the speed of the hand, so aim stops being repeatable.",
+    "tr": "Ivme imlecin ne kadar gittigini elin hizina gore degistirir, bu yuzden nisan tekrarlanabilir olmaz."
+  },
+  "fixed": { "en": "Mouse acceleration is now off.", "tr": "Fare ivmesi artik kapali." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-systemparametersinfoa"],
+  "gain": ["experience"],
+  "restart": "none",
+  "compound": "mouse_acceleration",
+  "detect": "$m = Get-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -ErrorAction Stop; '{0},{1},{2}' -f $m.MouseSpeed, $m.MouseThreshold1, $m.MouseThreshold2",
+  "target": { "value": "0,0,0" },
+  "apply": "$v = $Target -split ','; Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseSpeed -Value $v[0]; Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseThreshold1 -Value $v[1]; Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseThreshold2 -Value $v[2]",
+  "revert": "Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseSpeed -Value '1'; Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseThreshold1 -Value '6'; Set-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -Name MouseThreshold2 -Value '10'"
+}

@@ -1,0 +1,17 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Turn off Teredo", "tr": "Teredo'yu kapat" },
+  "why": {
+    "en": "Teredo tunnels IPv6 over IPv4 and can add a slower path that some games pick.",
+    "tr": "Teredo IPv6 trafigini IPv4 uzerinden tuneller ve bazi oyunlarin sectigi daha yavas bir yol ekleyebilir."
+  },
+  "fixed": { "en": "Teredo is now turned off.", "tr": "Teredo artik kapali." },
+  "risk": "low",
+  "sources": ["https://learn.microsoft.com/windows-server/administration/windows-commands/netsh-interface"],
+  "gain": ["network"],
+  "restart": "none",
+  "detect": "[string](Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Windows\\TCPIP\\v6Transition' -Name Teredo_State -ErrorAction Stop).Teredo_State",
+  "target": { "value": "Disabled" },
+  "apply": "netsh interface teredo set state type=disabled",
+  "revert": "netsh interface teredo set state type=default"
+}

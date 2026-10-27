@@ -1,0 +1,19 @@
+{
+  "kind": "tweak",
+  "title": { "en": "Spread network work over more cores", "tr": "Ag isini daha fazla cekirdege dagit" },
+  "why": {
+    "en": "More receive queues let several cores handle incoming packets instead of one.",
+    "tr": "Daha fazla alma kuyrugu gelen paketleri tek bir cekirdek yerine birkac cekirdege dagitir."
+  },
+  "fixed": { "en": "The adapter now uses more receive queues.", "tr": "Bagdastirici artik daha fazla alma kuyrugu kullaniyor." },
+  "risk": "low",
+  "sources": ["https://learn.microsoft.com/windows-hardware/drivers/network/introduction-to-receive-side-scaling"],
+  "gain": ["latency", "network"],
+  "restart": "none",
+  "applicable": "[bool](Get-NetAdapterRss -ErrorAction SilentlyContinue)",
+  "instances": "Get-NetAdapter -Physical | ForEach-Object { [pscustomobject]@{ id = $_.PnPDeviceID; label = $_.InterfaceDescription } }",
+  "detect": "$name = (Get-NetAdapter -Physical | Where-Object { $_.PnPDeviceID -eq $Instance }).Name; [string](Get-NetAdapterRss -Name $name -ErrorAction Stop).NumberOfReceiveQueues",
+  "target": { "command": "[string][Math]::Min(4, (Get-CimInstance -ClassName Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum)" },
+  "apply": "$name = (Get-NetAdapter -Physical | Where-Object { $_.PnPDeviceID -eq $Instance }).Name; Set-NetAdapterRss -Name $name -NumberOfReceiveQueues ([int]$Target)",
+  "revert": "$name = (Get-NetAdapter -Physical | Where-Object { $_.PnPDeviceID -eq $Instance }).Name; Reset-NetAdapterAdvancedProperty -Name $name -RegistryKeyword '*NumRssQueues'"
+}

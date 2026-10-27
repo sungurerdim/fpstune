@@ -1,0 +1,15 @@
+{
+  "kind": "manual",
+  "title": { "en": "Turn on the memory profile (XMP or EXPO)", "tr": "Bellek profilini ac (XMP veya EXPO)" },
+  "why": {
+    "en": "Memory runs at a safe base speed until its rated profile is turned on in the firmware.",
+    "tr": "Bellek, derecelendirilmis profili firmware icinde acilana kadar guvenli taban hizinda calisir."
+  },
+  "steps": {
+    "en": ["Restart and open the firmware setup.", "Find the memory profile setting and choose XMP or EXPO.", "Save and restart."],
+    "tr": ["Yeniden baslatip firmware ayarlarini acin.", "Bellek profili ayarini bulun ve XMP veya EXPO secin.", "Kaydedip yeniden baslatin."]
+  },
+  "risk": "low",
+  "sources": ["https://www.intel.com/content/www/us/en/gaming/extreme-memory-profile-xmp.html"],
+  "gain": ["fps"]
+}

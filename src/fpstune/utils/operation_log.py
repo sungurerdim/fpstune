@@ -145,10 +145,60 @@ def hint_for(kind: str) -> str:
 
 
 def _clean(value: object, limit: int = _MAX_FIELD) -> str:
-    """One field: no line breaks, no pipes that break the format, bounded."""
+    """One field: no line breaks, no pipes that break the format, bounded.
+
+    A field is also where a failure message arrives, and Windows' own text names
+    the file it refused (``[Errno 13] ... 'C:\\Users\\<account>\\...'``). This
+    log is the file a user attaches to a bug report, so the profile path is
+    replaced with the variable that named it before the line is written
+    (P-PRIVACY): the setting id, the outcome and the classified cause are what
+    answer "why did this apply fail?", and none of them needs a person's name.
+    """
     text = str(value).replace("\r", " ").replace("\n", " / ").replace("|", "/")
     text = re.sub(r"\s+", " ", text).strip()
-    return text[:limit]
+    return _mask_profile_paths(text)[:limit]
+
+
+#: A path under *any* account's profile: ``C:\Users\<name>`` (or ``C:/Users/``).
+#: The resolved roots below cover this process's own account; this catches the
+#: console user's path when fpstune runs elevated as a different administrator.
+_ANY_PROFILE = re.compile(r"(?i)[a-z]:[\\/]+users[\\/]+[^\\/\s'\"|]+")
+
+#: A field with no slash in it cannot be a path, so most fields skip the work.
+_PATH_HINT = re.compile(r"[\\/]")
+
+
+def _mask_profile_paths(text: str) -> str:
+    """Replace every profile root in ``text`` with the variable that names it.
+
+    Roots come from ``utils.user_paths``, the one resolver (C9), at call time:
+    an elevated process and the console user can disagree about them, and the
+    test suite redirects all of them. ``%LOCALAPPDATA%`` sits under
+    ``%USERPROFILE%``, so the longest root is replaced first — otherwise the
+    shorter one would win and the line would say less than it knows.
+    """
+    if not _PATH_HINT.search(text):
+        return text
+
+    from fpstune.utils import user_paths
+
+    roots: list[tuple[str, str]] = []
+    for resolve, token in (
+        (user_paths.home, "%USERPROFILE%"),
+        (user_paths.local_appdata, "%LOCALAPPDATA%"),
+        (user_paths.roaming_appdata, "%APPDATA%"),
+        (user_paths.program_data, "%PROGRAMDATA%"),
+    ):
+        try:
+            resolved = resolve()
+        except OSError:  # pragma: no cover - a root that cannot be resolved
+            resolved = None
+        if resolved is not None:
+            roots.append((str(resolved), token))
+    for root_text, token in sorted(roots, key=lambda pair: len(pair[0]), reverse=True):
+        if root_text:
+            text = re.sub(re.escape(root_text), token, text, flags=re.IGNORECASE)
+    return _ANY_PROFILE.sub("%USERPROFILE%", text)
 
 
 @dataclass

@@ -60,6 +60,22 @@ _cleanup_batch_lock = threading.Lock()
 _cleanup_batch_running = False
 
 
+def _pending_cleanup_ids(settings: list[SettingExecutor]) -> dict[str, list[str]]:
+    """Cleanup types with a target and no cached reading, mapped to their setting ids."""
+    from fpstune.settings.cleanup_cache import cleanup_size_cache
+
+    pending: dict[str, list[str]] = {}
+    for setting in settings:
+        if setting.detect_command.strip() != "cleanup_status":
+            continue
+        if cleanup_size_cache.get(setting.id) is not None:
+            continue
+        cleanup_type = str(setting.detect_args.get("type", "")).strip()
+        if cleanup_type:
+            pending.setdefault(cleanup_type, []).append(setting.id)
+    return pending
+
+
 def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
     """Size every pending cleanup target in the background: one pass, one process.
 
@@ -85,16 +101,7 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
     from fpstune.settings.cleanup_cache import cleanup_size_cache
     from fpstune.settings.cleanup_targets import CLEANUP_TARGETS
 
-    pending: dict[str, list[str]] = {}
-    for setting in settings:
-        if setting.detect_command.strip() != "cleanup_status":
-            continue
-        if cleanup_size_cache.get(setting.id) is not None:
-            continue
-        cleanup_type = str(setting.detect_args.get("type", "")).strip()
-        if cleanup_type:
-            pending.setdefault(cleanup_type, []).append(setting.id)
-
+    pending = _pending_cleanup_ids(settings)
     if not pending:
         return
 
@@ -134,12 +141,12 @@ def start_cleanup_size_batch(settings: list[SettingExecutor]) -> None:
                 for setting_id in pending[cleanup_type]:
                     store_measurement(setting_id, as_reading(measured))
                     settled.add(setting_id)
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an executor failure is the (success, error) answer this path returns
             _logger.debug("cleanup size walk failed: %s", exc)
 
         try:
             sizes = _fetch_cleanup_sizes(scripted) if scripted else {}
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an executor failure is the (success, error) answer this path returns
             _logger.debug("cleanup size batch failed: %s", exc)
             sizes = {}
         finally:
@@ -307,8 +314,8 @@ def _start_bg_cleanup_detection(setting_id: str, cmd: str, done: threading.Event
             ok, out = run_powershell(cmd)
             if ok and out and store_cleanup_reading(setting_id, out):
                 return
-        except Exception:
-            pass
+        except Exception as exc:  # noqa: BLE001 - a failed scan is an unavailable size, below
+            _logger.debug("cleanup size scan for %s failed: %s", setting_id, exc)
         # No parseable "ready|<size>" line and no explicit "unavailable" marker.
         # Don't write a fake 0 (reads in the UI as "nothing to clean" and flashes
         # "0 MB"); surface unavailable so the short-TTL cache recomputes instead.

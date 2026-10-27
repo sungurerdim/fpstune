@@ -141,6 +141,84 @@ DISPLAY_COLUMN_REASONS: dict[str, str] = {
 }
 
 
+def _read_column(row: dict[str, str], names: tuple[str, ...]) -> float | None:
+    """The first readable non-negative value under any spelling of a column.
+
+    PresentMon writes negative sentinels for frames it could not attribute;
+    averaging those in would understate the real cost, so they are skipped.
+    """
+    for name in names:
+        raw = row.get(name)
+        if raw is None or raw in ("", "NA"):
+            continue
+        try:
+            value = float(raw)
+        except (ValueError, TypeError):
+            continue
+        if value >= 0:
+            return value
+    return None
+
+
+def _magnitude_column(row: dict[str, str], names: tuple[str, ...]) -> float | None:
+    """The size of a signed column, ignoring which way it drifted.
+
+    Animation error is signed — a frame shown early and one shown late are
+    equally wrong — so the sign is dropped rather than the sample. `_read_column`
+    drops negatives on purpose, because PresentMon writes them as "could not
+    attribute this frame" for the cost columns; doing that here would keep only
+    the half of the errors that happen to be positive and report a machine
+    drifting one way as smoother than it is.
+    """
+    for name in names:
+        raw = row.get(name)
+        if raw is None or raw in ("", "NA"):
+            continue
+        try:
+            return abs(float(raw))
+        except (ValueError, TypeError):
+            continue
+    return None
+
+
+def _collect_frame_row(
+    row: dict[str, str],
+    breakdown_columns: dict[str, tuple[str, ...]],
+    frametimes: list[float],
+    timestamps: list[float],
+    breakdown: dict[str, list[float]],
+    present_modes: Counter[str],
+) -> None:
+    """Add one CSV row's readings to the capture totals; a row with no frame is skipped."""
+    frametime = _read_column(row, ("MsBetweenPresents", "msBetweenPresents", "FrameTime"))
+    if not frametime or frametime <= 0:
+        return
+    frametimes.append(frametime)
+
+    for key, names in breakdown_columns.items():
+        value = (
+            _magnitude_column(row, names) if key == "animation_error" else _read_column(row, names)
+        )
+        if value is not None:
+            breakdown[key].append(value)
+
+    for column in PRESENT_MODE_COLUMNS:
+        mode = (row.get(column) or "").strip()
+        if mode:
+            present_modes[mode] += 1
+            break
+
+    # The first readable timestamp column wins; an unparseable one falls through
+    # to the next spelling rather than dropping the row's timestamp.
+    for tcol in ("TimeInSeconds", "Time", "TimeInMs"):
+        if tcol in row:
+            try:
+                timestamps.append(float(row[tcol]))
+            except (ValueError, TypeError):
+                continue
+            break
+
+
 @dataclass
 class FrameTimeStats:
     """Frame time statistics from a benchmark run."""
@@ -735,7 +813,7 @@ class PresentMonBenchmark:
             self._logger.info(f"Started capture: {output_file}")
             return True
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             self._logger.error(f"Failed to start capture: {e}")
             return False
 
@@ -824,8 +902,8 @@ class PresentMonBenchmark:
         if not capture_file.exists():
             return None
 
-        frametimes = []
-        timestamps = []
+        frametimes: list[float] = []
+        timestamps: list[float] = []
         # Per-frame cost breakdown. Column names differ across PresentMon
         # majors, so each is looked up by a list of spellings and simply stays
         # empty on a version that does not report it — an older capture loses
@@ -853,41 +931,6 @@ class PresentMonBenchmark:
         }
         header: list[str] = []
 
-        def _magnitude(row: dict[str, str], names: tuple[str, ...]) -> float | None:
-            """The size of a signed column, ignoring which way it drifted.
-
-            Animation error is signed — a frame shown early and one shown late
-            are equally wrong — so the sign is dropped rather than the sample.
-            `_read` below drops negatives on purpose, because PresentMon writes
-            them as "could not attribute this frame" for the cost columns; doing
-            that here would keep only the half of the errors that happen to be
-            positive and report a machine drifting one way as smoother than it is.
-            """
-            for name in names:
-                raw = row.get(name)
-                if raw is None or raw in ("", "NA"):
-                    continue
-                try:
-                    return abs(float(raw))
-                except (ValueError, TypeError):
-                    continue
-            return None
-
-        def _read(row: dict[str, str], names: tuple[str, ...]) -> float | None:
-            for name in names:
-                raw = row.get(name)
-                if raw is None or raw in ("", "NA"):
-                    continue
-                try:
-                    value = float(raw)
-                except (ValueError, TypeError):
-                    continue
-                # PresentMon writes negative sentinels for frames it could not
-                # attribute; averaging those in would understate the real cost.
-                if value >= 0:
-                    return value
-            return None
-
         try:
             with open(capture_file, newline="", encoding="utf-8-sig") as f:
                 reader = csv.DictReader(f)
@@ -899,38 +942,11 @@ class PresentMonBenchmark:
                 header = list(reader.fieldnames or [])
 
                 for row in reader:
-                    # PresentMon columns vary by version
-                    # Common: MsBetweenPresents, MsBetweenDisplayChange
-                    frametime = _read(row, ("MsBetweenPresents", "msBetweenPresents", "FrameTime"))
+                    _collect_frame_row(
+                        row, breakdown_columns, frametimes, timestamps, breakdown, present_modes
+                    )
 
-                    if frametime and frametime > 0:
-                        frametimes.append(frametime)
-
-                        for key, names in breakdown_columns.items():
-                            value = (
-                                _magnitude(row, names)
-                                if key == "animation_error"
-                                else _read(row, names)
-                            )
-                            if value is not None:
-                                breakdown[key].append(value)
-
-                        for column in PRESENT_MODE_COLUMNS:
-                            mode = (row.get(column) or "").strip()
-                            if mode:
-                                present_modes[mode] += 1
-                                break
-
-                        # Get timestamp if available
-                        for tcol in ["TimeInSeconds", "Time", "TimeInMs"]:
-                            if tcol in row:
-                                try:
-                                    timestamps.append(float(row[tcol]))
-                                    break
-                                except (ValueError, TypeError):
-                                    pass
-
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             self._logger.error(f"Failed to parse capture: {e}")
             return None
 

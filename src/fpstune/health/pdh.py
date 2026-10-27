@@ -195,8 +195,10 @@ class CounterSet:
 
     def __exit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        traceback: TracebackType | None,
+        _exc_type: type[BaseException] | None,
+        _exc: BaseException | None,
+        _traceback: TracebackType | None,
     ) -> None:
+        # Closing is unconditional: a failed collection still owns a query
+        # handle, and `__exit__` returning None re-raises whatever the body hit.
         self.close()

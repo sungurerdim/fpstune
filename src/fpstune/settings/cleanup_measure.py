@@ -16,13 +16,17 @@ from __future__ import annotations
 
 import logging
 import sys
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Literal, NamedTuple
 
 if TYPE_CHECKING:
     from fpstune.settings.base import SettingExecutor
     from fpstune.settings.cleanup_targets import SizeReading
 
 logger = logging.getLogger(__name__)
+
+# The four answers a cleanup reading can carry. A fifth spelling is a typo that
+# would read in the UI as a fifth state nothing renders.
+CleanupStatus = Literal["ready", "not_estimated", "unavailable", "not_installed"]
 
 
 class CleanupSize(NamedTuple):
@@ -41,7 +45,7 @@ class CleanupSize(NamedTuple):
     before/after pair of these readings still measures what the run reclaimed.
     """
 
-    status: str  # "ready" | "not_estimated" | "unavailable" | "not_installed"
+    status: CleanupStatus
     size_bytes: int | None
     reading: str  # the ``ready|...`` text a row shows, so the cache stores that
 
@@ -193,7 +197,7 @@ def measure_cleanup_type(cleanup_type: str) -> CleanupSize | None:
 
     try:
         reading = _fetch_cleanup_sizes((cleanup_type,)).get(cleanup_type, "")
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an unreadable size is no measurement; the pair then reports nothing freed
         logger.debug("cleanup size measurement for %s failed: %s", cleanup_type, exc)
         return None
     return _parse_cleanup_reading(reading) if reading else None

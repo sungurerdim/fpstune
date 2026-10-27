@@ -40,6 +40,7 @@ from typing import Literal
 
 from fpstune.settings.base import (
     DetectType,
+    EvidenceLevel,
     SettingCategory,
     SettingExecutor,
     SettingScope,
@@ -71,7 +72,7 @@ def _make_mw3_profile_setting(
     effect: str,
     impact_scores: dict[str, str | float],
     category_order: int,
-    evidence_level: str = "proven",
+    evidence_level: EvidenceLevel = "proven",
     sources: list[str] | None = None,
     risk_level: Literal["safe", "low", "moderate", "advanced"] = "low",
     risk_warning: str | None = None,

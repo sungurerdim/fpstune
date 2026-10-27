@@ -6,7 +6,13 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field
 
-from fpstune.settings.base import DefaultSource
+from fpstune.settings.base import (
+    DefaultSource,
+    EvidenceLevel,
+    SettingCategory,
+    SettingScope,
+    SettingValueType,
+)
 
 if TYPE_CHECKING:
     from fpstune.utils.detect import MonitorInfo as DetectedMonitorInfo
@@ -273,10 +279,10 @@ class SettingDefinitionResponse(BaseModel):
     """Setting definition for frontend initialization."""
 
     id: str
-    category: str
+    category: SettingCategory
     display_name: str
     description: str
-    value_type: str
+    value_type: SettingValueType
     choices: list[str]
     # The subset of `choices` apply can actually write. A detect-only state
     # (Speed & Duplex's forced modes, a `changed` drift reading) stays in
@@ -288,7 +294,7 @@ class SettingDefinitionResponse(BaseModel):
     is_action: bool
     current_impact: str
     recommended_impact: str
-    scope: str = "recommended"
+    scope: SettingScope = SettingScope.RECOMMENDED
     short_name: str = ""
     # Which device instance the setting belongs to ("Wi-Fi", "Ethernet"); empty
     # when machine-wide. Lets a translated name keep the adapter qualifier.
@@ -303,7 +309,7 @@ class SettingDefinitionResponse(BaseModel):
     max_value: int | float | None = None
     applicable_conditions: dict[str, Any] = {}
     # Evidence level: "proven", "likely", "experimental"
-    evidence_level: str = "likely"
+    evidence_level: EvidenceLevel = "likely"
     # Research sources (URLs)
     sources: list[str] = []
     # Effect field (combined summary + impact scores)
@@ -313,7 +319,7 @@ class SettingDefinitionResponse(BaseModel):
     # impact_scores rather than stored, so it cannot drift from the metrics.
     impact_categories: list[str] = []
     # Risk taxonomy (added Phase 1)
-    risk_level: str = "low"
+    risk_level: Literal["safe", "low", "moderate", "advanced"] = "low"
     risk_warning: str | None = None
     # Non-None = this setting changes what the player can see or hear, and the
     # string says what is lost — the copy the two-button UI shows before
@@ -396,7 +402,7 @@ class DetectRequest(BaseModel):
     setting_ids: list[str] | None = Field(
         None, description="Specific settings to detect (None = all)"
     )
-    category: str | None = Field(None, description="Detect all settings in category")
+    category: SettingCategory | None = Field(None, description="Detect all settings in category")
 
 
 class DetectResponse(BaseModel):

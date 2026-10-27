@@ -61,7 +61,10 @@ _ROUTES: dict[tuple[str, str], str] = {
     ("POST", "/api/update/install"): "UpdateInstallResult",
     ("POST", "/api/audio/device/{device_id}/loudness-eq"): "AudioToggleResponse",
     ("POST", "/api/audio/device/{device_id}/enabled"): "AudioToggleResponse",
-    ("POST", "/api/network/adapter/{adapter_name}/connection/{action}"): "NetworkConnectionResponse",
+    (
+        "POST",
+        "/api/network/adapter/{adapter_name}/connection/{action}",
+    ): "NetworkConnectionResponse",
     ("POST", "/api/storage/{drive_letter}/optimize"): "StorageOptimizeResponse",
     ("POST", "/api/restore-point"): "RestorePointResponse",
     ("GET", "/api/self-check"): "SelfCheckResponse",

@@ -8,12 +8,17 @@ import sys
 import threading
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 from fpstune.utils import process_watch
 from fpstune.utils.powershell import escape_single_quoted
 from fpstune.utils.system_tools import powershell_exe
 
 logger = logging.getLogger(__name__)
+
+# What a checkpoint attempt achieved. A sixth spelling is a type error rather
+# than an outcome no surface knows how to word.
+RestoreKind = Literal["created", "recent", "off", "stalled", "error", "unavailable"]
 
 # Descriptions reach this module from an HTTP query parameter, so they are
 # attacker-shaped: bound the length and drop control characters before any
@@ -96,7 +101,7 @@ class RestoreOutcome:
     ``error`` or ``unavailable``.
     """
 
-    kind: str
+    kind: RestoreKind
     message: str
 
     @property

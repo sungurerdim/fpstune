@@ -35,6 +35,11 @@ _MODULE_COMPONENTS: dict[str, Component] = {
 
 Domain = Literal["hardware", "software", "game"]
 
+# C1's evidence ladder, as a type rather than a comment: a fourth spelling is a
+# typo that would read as an unknown level, and nothing downstream could tell it
+# from a real one.
+EvidenceLevel = Literal["proven", "likely", "experimental"]
+
 
 class SettingCategory(StrEnum):
     """Setting categories for grouping."""
@@ -429,7 +434,6 @@ _DEFAULT_SOURCE_FACT: dict[DefaultSource, str] = {
 }
 
 
-
 class DetectType(StrEnum):
     """Detection/Apply command types."""
 
@@ -584,7 +588,7 @@ class SettingExecutor:
     is_action: bool = False  # True for one-time operations (TRIM, flush DNS)
     # Evidence level: "proven" (3+ sources, measured), "likely" (1-2 sources),
     # "experimental" (anecdotal, harmless but unproven)
-    evidence_level: str = "likely"
+    evidence_level: EvidenceLevel = "likely"
 
     # === Risk Taxonomy ===
     risk_level: Literal["safe", "low", "moderate", "advanced"] = "low"
@@ -736,7 +740,6 @@ class SettingExecutor:
             fact = _DEFAULT_SOURCE_FACT.get(self.default_source)
             if fact:
                 self.sources.append(fact)
-
 
     @property
     def module(self) -> str:

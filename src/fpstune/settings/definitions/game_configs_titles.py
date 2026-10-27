@@ -26,6 +26,7 @@ from typing import Any
 
 from fpstune.settings.base import (
     DetectType,
+    EvidenceLevel,
     SettingCategory,
     SettingExecutor,
     SettingScope,
@@ -74,7 +75,7 @@ def _make(
     category_order: int,
     sources: list[str],
     scope: SettingScope = SettingScope.RECOMMENDED,
-    evidence_level: str = "likely",
+    evidence_level: EvidenceLevel = "likely",
     value_type: SettingValueType = SettingValueType.CHOICE,
     min_value: int | None = None,
     max_value: int | None = None,

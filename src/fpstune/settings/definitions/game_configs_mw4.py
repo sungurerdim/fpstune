@@ -41,6 +41,7 @@ from typing import TYPE_CHECKING, Literal
 
 from fpstune.settings.base import (
     DetectType,
+    EvidenceLevel,
     SettingCategory,
     SettingExecutor,
     SettingScope,
@@ -80,7 +81,7 @@ def _make_mw4_setting(
     impact_scores: dict[str, str | float],
     category_order: int,
     source_file: Literal["global", "profile", "both"] = "global",
-    evidence_level: str = "likely",
+    evidence_level: EvidenceLevel = "likely",
     sources: list[str] | None = None,
     risk_level: Literal["safe", "low", "moderate", "advanced"] = "low",
     risk_warning: str | None = None,

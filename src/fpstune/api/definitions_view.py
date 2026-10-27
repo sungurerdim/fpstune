@@ -24,10 +24,10 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
 
     return SettingDefinitionResponse(
         id=s.id,
-        category=s.category.value,
+        category=s.category,
         display_name=s.display_name,
         description=s.description,
-        value_type=s.value_type.value,
+        value_type=s.value_type,
         choices=list(s.choices),
         writable_choices=[choice for choice in s.choices if s.can_write(choice)],
         default_value=s.default_value,
@@ -36,7 +36,7 @@ def setting_to_response(s: SettingExecutor) -> SettingDefinitionResponse:
         is_action=s.is_action,
         current_impact=s.current_impact,
         recommended_impact=s.recommended_impact,
-        scope=s.scope.value,
+        scope=s.scope,
         short_name=s.short_name,
         subject=s.subject,
         component=s.component,

@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "A file name that is not an id", "tr": "Kimlik olmayan bir dosya adi" },
+  "why": { "en": "ID1 fixture: upper case letters cannot form a row id.", "tr": "ID1 fiksturu: buyuk harfler satir kimligi olusturamaz." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/test-path"],
+  "gain": ["fps"],
+  "detect": "[string](Test-Path -LiteralPath 'HKCU:\\Software\\FpsTuneFixture')",
+  "target": { "value": "True" },
+  "apply": "New-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -Force | Out-Null",
+  "revert": "Remove-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -ErrorAction SilentlyContinue"
+}

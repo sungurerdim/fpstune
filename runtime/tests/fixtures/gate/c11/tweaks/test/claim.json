@@ -1,0 +1,13 @@
+{
+  "kind": "tweak",
+  "title": { "en": "A number claimed in the copy", "tr": "Metinde iddia edilen bir sayi" },
+  "why": { "en": "Games run up to 10% faster.", "tr": "C11 fiksturu: neden metni olculmemis bir sayi icerir." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.management/test-path"],
+  "gain": ["fps"],
+  "detect": "[string](Test-Path -LiteralPath 'HKCU:\\Software\\FpsTuneFixture')",
+  "target": { "value": "True" },
+  "apply": "New-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -Force | Out-Null",
+  "revert": "Remove-Item -Path 'HKCU:\\Software\\FpsTuneFixture' -ErrorAction SilentlyContinue"
+}

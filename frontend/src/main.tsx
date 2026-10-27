@@ -2,7 +2,7 @@ import React, { Component, ErrorInfo, ReactNode, useEffect } from "react";
 import ReactDOM from "react-dom/client";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
-import { detectionManager } from "./lib/detection-manager";
+import { detectionManager } from "./store/detection-manager";
 import { hardwareManager } from "./lib/hardware-manager";
 import { createLogger } from "./lib/logger";
 import { useStore } from "./store";

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { settingsApi } from "../lib/api";
-import { detectionManager } from "../lib/detection-manager";
+import { detectionManager } from "../store/detection-manager";
 import { useStore } from "../store";
 import type { SettingId } from "../types/setting";
 

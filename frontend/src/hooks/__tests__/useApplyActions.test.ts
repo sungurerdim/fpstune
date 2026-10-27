@@ -15,7 +15,7 @@ import React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useStore } from "../../store";
 import { useApply } from "../useApply";
-import { detectionManager } from "../../lib/detection-manager";
+import { detectionManager } from "../../store/detection-manager";
 import type { Setting } from "../../types/setting";
 
 const { bulkStreamApply } = vi.hoisted(() => ({ bulkStreamApply: vi.fn() }));
@@ -31,7 +31,7 @@ vi.mock("../../lib/api", async (importOriginal) => {
   };
 });
 
-vi.mock("../../lib/detection-manager", () => ({
+vi.mock("../../store/detection-manager", () => ({
   detectionManager: {
     redetectSettings: vi.fn().mockResolvedValue(undefined),
     detectCategory: vi.fn().mockResolvedValue(undefined),

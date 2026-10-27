@@ -11,7 +11,7 @@ import { cn } from "../../lib/utils";
 import { ToggleSwitch } from "../ui/ToggleSwitch";
 import { HardwareSection, NotDetected } from "./shared";
 import { errorMessage } from "../../lib/api";
-import { notifyError, notifyInfo } from "../../lib/notify";
+import { notifyError, notifyInfo } from "../../store/notify";
 
 const log = createLogger("hardware");
 

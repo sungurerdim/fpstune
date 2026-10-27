@@ -1,4 +1,4 @@
-import { useStore } from "../store";
+import { useStore } from "./index";
 
 /** Report a failed hardware action through the one accessible toast channel. */
 export function notifyError(message: string): void {

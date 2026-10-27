@@ -14,8 +14,8 @@
  * rather than as zero.
  */
 
-import { useStore } from "../store";
-import { parseActionReading } from "./actionReading";
+import { useStore } from "./index";
+import { parseActionReading } from "../lib/actionReading";
 import { detectionManager } from "./detection-manager";
 import type { Setting, SettingId } from "../types/setting";
 

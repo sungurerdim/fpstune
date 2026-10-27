@@ -11,10 +11,10 @@
  * Backend handles parallel execution with per-setting timeouts.
  */
 
-import { settingsApi } from "./api";
-import type { DetectResponse } from "./api";
-import { createLogger } from "./logger";
-import { useStore } from "../store";
+import { settingsApi } from "../lib/api";
+import type { DetectResponse } from "../lib/api";
+import { createLogger } from "../lib/logger";
+import { useStore } from "./index";
 import type { SettingCategory } from "../types/setting";
 
 const log = createLogger("DetectionManager");

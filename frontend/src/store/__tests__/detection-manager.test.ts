@@ -15,12 +15,12 @@
 
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { detectionManager } from "../detection-manager";
-import { settingsApi } from "../api";
-import { useStore } from "../../store";
+import { settingsApi } from "../../lib/api";
+import { useStore } from "../index";
 import type { SettingDefinition } from "../../types/setting";
-import type { DetectResponse, SettingState } from "../api";
+import type { DetectResponse, SettingState } from "../../lib/api";
 
-vi.mock("../api", () => ({
+vi.mock("../../lib/api", () => ({
   settingsApi: {
     detect: vi.fn(),
     getDefinitions: vi.fn(),

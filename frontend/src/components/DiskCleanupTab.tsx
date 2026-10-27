@@ -4,7 +4,7 @@ import { useT } from "../i18n";
 import type { MessageKey } from "../i18n/en";
 import { localizedName } from "../i18n/settings";
 import { useApply } from "../hooks/useApply";
-import { isDockerCleanup } from "../lib/actionRun";
+import { isDockerCleanup } from "../store/actionRun";
 import { fmtMB, parseCleanupSize, parseSizeToMB } from "../lib/cleanupSize";
 import { useStore } from "../store";
 import type { Setting, SettingId } from "../types/setting";

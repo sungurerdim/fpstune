@@ -3,9 +3,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useT } from "../i18n";
 import { localizedName } from "../i18n/settings";
 import { errorMessage, settingsApi, type ApplyResponse } from "../lib/api";
-import { applyActionEvent, beginActionRun } from "../lib/actionRun";
+import { applyActionEvent, beginActionRun } from "../store/actionRun";
 import { bulkTargets, verifiedState } from "../lib/bulkStream";
-import { detectionManager } from "../lib/detection-manager";
+import { detectionManager } from "../store/detection-manager";
 import { hardwareManager } from "../lib/hardware-manager";
 import { useStore, type BulkAction } from "../store";
 import { isDisplaySetting, type Setting } from "../types/setting";
@@ -36,7 +36,7 @@ function failedResponse(setting: Setting, error: string): ApplyResponse {
  *   event carries the row's whole `SettingState` (the backend's verdict,
  *   `is_optimized` included), which goes into the store as it arrives, so a row
  *   is live before `done`. An action in the run (a cleanup, a repair) also gets
- *   its live step, its freed bytes and its post-run reading (`lib/actionRun.ts`).
+ *   its live step, its freed bytes and its post-run reading (`store/actionRun.ts`).
  *   At the end, one batched re-detect of every id still runs:
  *   the rows with no state (failed, skipped, never reached) need it, and a
  *   verified row's state predates the writes that ran beside it. The run lives in the store, so
@@ -166,7 +166,7 @@ export function useApply() {
       };
 
       const cancel = settingsApi.bulkStreamApply(
-        bulkTargets(ids, action),
+        bulkTargets(useStore.getState().settings, ids, action),
         (event) => {
           const id = event.id as string | undefined;
           if (!id) return;

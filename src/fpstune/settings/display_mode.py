@@ -183,7 +183,7 @@ def schedule_revert(
                     "error",
                 )
             hardware_manager.invalidate_cache("monitors")
-        except Exception as exc:  # pragma: no cover - defensive logging
+        except Exception as exc:  # pragma: no cover - defensive logging  # noqa: BLE001 - a mode change that fails is reported as a write outcome, not raised into the route
             logger.warning("Display revert failed for %s: %s", device, exc)
 
     with _pending_lock:

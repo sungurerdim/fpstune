@@ -69,7 +69,7 @@ def primary_refresh_hz() -> int | None:
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an unreadable panel is 0, the unknown rate the policy already understands
         logger.debug("Panel refresh unknown, monitor detection failed: %s", exc)
         return None
 

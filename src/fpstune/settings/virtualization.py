@@ -236,7 +236,7 @@ def detect_virtualization_consumers() -> list[VirtualizationConsumer]:
     for probe in _PROBES:
         try:
             found = probe()
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an unreadable feature is treated as absent, the conservative answer
             logger.debug("virtualization probe %s failed: %s", probe.__name__, exc)
             continue
         if found is not None:

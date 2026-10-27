@@ -271,7 +271,7 @@ class DetectionEngine:
                     setting = futures[future]
                     try:
                         results[setting.id] = future.result()
-                    except Exception as e:
+                    except Exception as e:  # noqa: BLE001 - one setting's failure is its own DetectionResult; the rest must still be detected
                         results[setting.id] = DetectionResult(
                             setting_id=setting.id,
                             value=None,
@@ -384,7 +384,7 @@ class DetectionEngine:
                 applicable_reason=applicable_reason,
                 finding=finding,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - one setting's failure is its own DetectionResult; the rest must still be detected
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             return DetectionResult(
                 setting_id=setting.id,

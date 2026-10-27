@@ -58,12 +58,12 @@ def discover_mw3_display_settings(registry: Registrar, probes: HardwareProbes) -
             registry.register(create_mw3_aa_technique_setting(vendor))
         else:
             logger.debug("MW3 AA technique not registered: GPU vendor unknown")
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.debug("MW3 VRAM scale not registered: %s", e)
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.warning("MW3 display settings skipped, monitor detection failed: %s", e)
         return 0
 

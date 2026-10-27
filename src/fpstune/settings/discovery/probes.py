@@ -172,7 +172,7 @@ class HardwareProbes:
             for future in [pool.submit(probe) for probe in probes]:
                 try:
                     future.result()
-                except Exception as e:  # pragma: no cover - environment dependent
+                except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - a probe that cannot read the machine reports absence, not an exception (C10)
                     logger.debug("A hardware probe failed during warm-up: %s", e)
 
     def adapter_guids(self) -> dict[int, str]:
@@ -304,7 +304,7 @@ class HardwareProbes:
         except subprocess.TimeoutExpired as e:
             logger.warning("Adapter discovery %s", e)
             return []
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a probe that cannot read the machine reports absence, not an exception (C10)
             logger.warning(
                 "Failed to get active adapters. Error: %s",
                 e,

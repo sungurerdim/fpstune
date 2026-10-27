@@ -58,7 +58,7 @@ def warm_registry() -> None:
     """
     try:
         get_registry()
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - a registry build failure is reported through the cache, not raised into a request
         # The next real request rebuilds; a failed warm-up must not be the thing
         # that takes the API down at startup.
         logger.warning("registry warm-up failed, the first request will pay for it: %s", exc)

@@ -30,7 +30,7 @@ def discover_hots_display_settings(registry: Registrar, probes: HardwareProbes) 
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.warning("HotS display settings skipped, monitor detection failed: %s", e)
         return 0
 
@@ -66,7 +66,7 @@ def discover_hots_audio_settings(registry: Registrar, probes: HardwareProbes) ->
 
     try:
         device_hz = get_output_sample_rate_hz()
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.debug("HotS audio setting skipped, endpoint read failed: %s", e)
         return 0
 

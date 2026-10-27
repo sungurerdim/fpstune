@@ -35,7 +35,7 @@ def discover_title_frame_caps(registry: Registrar, probes: HardwareProbes) -> in
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.warning("Game frame caps skipped, monitor detection failed: %s", e)
         return 0
 

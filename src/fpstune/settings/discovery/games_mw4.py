@@ -62,12 +62,12 @@ def discover_mw4_display_settings(registry: Registrar, probes: HardwareProbes) -
             registered += 1
         else:
             logger.debug("MW4 AA technique not registered: GPU vendor unknown")
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.debug("MW4 VRAM budget not registered: %s", e)
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
         logger.debug("MW4 frame caps not registered, monitor detection failed: %s", e)
         return registered
 
@@ -145,7 +145,7 @@ def adopt_mw4_ranges(registry: Registrar, probes: HardwareProbes) -> int:  # noq
 
         try:
             meta = get_mw4_metadata(str(key), str(setting.detect_args.get("batch_source")))
-        except Exception as exc:  # pragma: no cover - environment dependent
+        except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - a game that is not installed is not detected, never an error (C10)
             logger.debug("MW4 range lookup failed for %s: %s", setting_id, exc)
             continue
         if not meta:

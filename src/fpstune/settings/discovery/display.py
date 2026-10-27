@@ -36,7 +36,7 @@ def discover_monitor_modes(registry: Registrar, probes: HardwareProbes) -> int: 
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - hardware probing answers 'not detected' on an unknown machine, never raises (C10)
         logger.debug("No per-monitor display settings: %s", e)
         return 0
 
@@ -72,7 +72,7 @@ def discover_mpo_setting(registry: Registrar, probes: HardwareProbes) -> int:  #
     try:
         os_info = hardware_manager.detect_os()
         build = int(getattr(os_info, "build", 0) or 0)
-    except Exception as e:  # pragma: no cover - environment dependent
+    except Exception as e:  # pragma: no cover - environment dependent  # noqa: BLE001 - hardware probing answers 'not detected' on an unknown machine, never raises (C10)
         logger.debug("MPO setting left at its static default: %s", e)
         return 0
 
@@ -110,7 +110,7 @@ def discover_vrr_dependent_settings(registry: Registrar, probes: HardwareProbes)
 
     try:
         monitors = hardware_manager.detect_monitors()
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - hardware probing answers 'not detected' on an unknown machine, never raises (C10)
         logger.warning("VRR-dependent settings skipped, monitor detection failed: %s", e)
         return 0
 

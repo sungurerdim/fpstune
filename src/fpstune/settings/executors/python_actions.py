@@ -23,6 +23,11 @@ from fpstune.settings.executors import describe_refusal
 from fpstune.settings.executors.bnet_config import bnet_config_read, bnet_config_write
 from fpstune.settings.executors.game_ini import game_ini_read, game_ini_write
 from fpstune.settings.executors.msi_mode import msi_mode_status, msi_mode_write
+from fpstune.settings.executors.nvapp_config import nvapp_auto_apply_read, nvapp_auto_apply_write
+from fpstune.settings.executors.nvapp_mcp import (
+    nvapp_laptop_feature_read,
+    nvapp_laptop_feature_write,
+)
 from fpstune.settings.executors.steam_config import steam_vdf_read, steam_vdf_write
 from fpstune.utils.winapi.memory import purge_standby_list
 
@@ -158,13 +163,13 @@ def _display_mode_status(args: dict[str, Any]) -> str | Reading:
 
 
 def _power_plan_switch(args: dict[str, Any]) -> tuple[bool, str | None]:
-    from fpstune.core.power_profile import power_plan_switch
+    from fpstune.settings.power_profile import power_plan_switch
 
     return power_plan_switch(args)
 
 
 def _power_plan_status(args: dict[str, Any]) -> str:
-    from fpstune.core.power_profile import power_plan_status
+    from fpstune.settings.power_profile import power_plan_status
 
     return power_plan_status(args)
 
@@ -180,6 +185,8 @@ PYTHON_ACTIONS: dict[str, PythonAction] = {
     "steam_vdf_write": steam_vdf_write,
     "game_ini_write": game_ini_write,
     "msi_mode_write": msi_mode_write,
+    "nvapp_laptop_feature_write": nvapp_laptop_feature_write,
+    "nvapp_auto_apply_write": nvapp_auto_apply_write,
 }
 
 
@@ -322,4 +329,6 @@ PYTHON_DETECTORS: dict[str, PythonDetector] = {
     "msi_mode_status": msi_mode_status,
     "wifi_link_quality": wifi_link_quality,
     "wifi_security": wifi_security,
+    "nvapp_laptop_feature_read": nvapp_laptop_feature_read,
+    "nvapp_auto_apply_read": nvapp_auto_apply_read,
 }

@@ -1,0 +1,128 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/sungurerdim/fpstune/schema/tweak.schema.json",
+  "title": "FpsTune tweak or manual row",
+  "description": "One file under tweaks/<category>/<name>.json. The id (category:name) derives from the path and is deliberately not a field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "title", "why", "risk", "sources", "gain"],
+  "properties": {
+    "kind": { "enum": ["tweak", "manual"] },
+    "title": { "$ref": "#/$defs/text" },
+    "why": { "$ref": "#/$defs/sentence" },
+    "fixed": { "$ref": "#/$defs/text" },
+    "steps": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "tr"],
+      "properties": {
+        "en": { "$ref": "#/$defs/stepList" },
+        "tr": { "$ref": "#/$defs/stepList" }
+      }
+    },
+    "risk": { "enum": ["safe", "low", "moderate", "advanced"] },
+    "riskNote": { "$ref": "#/$defs/text" },
+    "sources": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^https://[^\\s]+$" }
+    },
+    "gain": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "enum": ["fps", "latency", "thermal", "ram", "disk", "network", "security", "privacy", "experience"]
+      }
+    },
+    "applicable": { "$ref": "#/$defs/command" },
+    "instances": { "$ref": "#/$defs/command" },
+    "detect": { "$ref": "#/$defs/command" },
+    "target": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "value": { "type": ["string", "number", "boolean"] },
+        "command": { "$ref": "#/$defs/command" }
+      },
+      "oneOf": [
+        { "required": ["value"] },
+        { "required": ["command"] }
+      ]
+    },
+    "apply": { "$ref": "#/$defs/command" },
+    "revert": { "$ref": "#/$defs/command" },
+    "restart": { "enum": ["none", "reboot"] },
+    "after": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rowId" }
+    },
+    "compound": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/rowId" }
+    }
+  },
+  "allOf": [
+    {
+      "if": { "properties": { "kind": { "const": "tweak" } }, "required": ["kind"] },
+      "then": {
+        "required": ["fixed", "detect", "target", "apply", "revert"],
+        "not": { "required": ["steps"] }
+      }
+    },
+    {
+      "if": { "properties": { "kind": { "const": "manual" } }, "required": ["kind"] },
+      "then": {
+        "required": ["steps"],
+        "not": {
+          "anyOf": [
+            { "required": ["apply"] },
+            { "required": ["revert"] },
+            { "required": ["target"] },
+            { "required": ["fixed"] },
+            { "required": ["restart"] }
+          ]
+        }
+      }
+    },
+    {
+      "if": { "properties": { "risk": { "const": "advanced" } }, "required": ["risk"] },
+      "then": { "required": ["riskNote"] }
+    },
+    {
+      "if": { "properties": { "risk": { "enum": ["moderate", "advanced"] } }, "required": ["risk"] },
+      "then": { "properties": { "sources": { "minItems": 2 } } }
+    }
+  ],
+  "$defs": {
+    "text": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "tr"],
+      "properties": {
+        "en": { "type": "string", "minLength": 1 },
+        "tr": { "type": "string", "minLength": 1 }
+      }
+    },
+    "sentence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["en", "tr"],
+      "properties": {
+        "en": { "type": "string", "pattern": "[.]$" },
+        "tr": { "type": "string", "pattern": "[.]$" }
+      }
+    },
+    "stepList": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "command": { "type": "string", "minLength": 1 },
+    "rowId": { "type": "string", "pattern": "^[a-z0-9_]+:[a-z0-9_]+$" }
+  }
+}

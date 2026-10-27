@@ -73,7 +73,7 @@ BeforeAll {
 Describe 'Tweak schema' {
     It 'exists and loads as a JSON Schema' -Skip:$script:skipReason {
         Test-Path -LiteralPath $script:schemaPath | Should -BeTrue
-        $r = Invoke-SchemaCheck $script:validCases[0].Path
+        $r = Invoke-SchemaCheck (Join-Path $PSScriptRoot 'fixtures/schema/valid/registry.json')
         $r.Result | Should -Not -Be 'THROW' -Because $r.Detail
     }
 

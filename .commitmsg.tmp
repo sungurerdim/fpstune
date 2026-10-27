@@ -1,0 +1,9 @@
+test: keep suite off the network
+
+conftest.py refuses any outbound socket destination that is not
+loopback or listed in NETWORK_ALLOWLIST with a reason (P-HERMETIC);
+test_principles_testing holds the allowlist to that shape.
+
+Refs sungurerdim/fpstune#108
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

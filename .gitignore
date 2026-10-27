@@ -94,3 +94,13 @@ apply_sweep_result.txt
 
 # Build output
 dist/
+
+# Mutation testing (scripts/mutation.sh): mutmut writes its working tree and
+# statistics here, and the WSL run keeps its own environment beside the Windows one.
+mutants/
+.venv-wsl/
+
+# Coverage JSON for the critical-module floors (scripts/risk_coverage.py).
+coverage.json
+# mutmut 2.x result cache (scripts/mutation.sh); the mutants/ working tree above.
+.mutmut-cache

@@ -1,9 +1,11 @@
 # Apply, verify, restore point and journal (decision D3, unit U6 of #127).
 #
 # Contract pinned here:
-# - Invoke-FpsApply -Rows <detect results> -Catalogue <loaded rows>: only rows
-#   classed will-fix are applied; already-right, manual, not-applicable and
-#   unreadable rows are never applied.
+# - Invoke-FpsApply -Rows <detect results>: each detect state carries Entry,
+#   the catalogue entry object Get-FpsCatalogue returns, and row data is read
+#   from it (no -Catalogue). A state without Entry fails closed: Status failed,
+#   Reason no-entry, nothing applied. Only rows classed will-fix are applied;
+#   already-right, manual, not-applicable and unreadable rows never are.
 # - Before the first write: a restore point. If the newest restore point is
 #   less than 24 h old it is reused and its time is reported; otherwise
 #   Checkpoint-Computer runs and success is confirmed by a new sequence number.
@@ -78,7 +80,7 @@ BeforeAll {
         , @($states)
     }
     function script:Invoke-TestApply([string[]]$Names) {
-        Invoke-FpsApply -Rows (Get-TestRows $Names) -Catalogue $script:catalogue
+        Invoke-FpsApply -Rows (Get-TestRows $Names)
     }
     function script:Get-ResultRow($Result, [string]$RowId) {
         @($Result.Rows) | Where-Object { $_.RowId -eq $RowId }
@@ -147,6 +149,24 @@ Describe 'Invoke-FpsApply' {
             Get-TestValue Touched | Should -BeNullOrEmpty
             @(Get-ResultRow $r 'test:untouched' | Where-Object { $_.Status -in 'fixed', 'failed' }).Count | Should -Be 0
             (Get-ResultRow $r 'test:ok').Status | Should -Be 'fixed'
+        }
+
+        It 'reads row data from the detect state Entry' {
+            $s = (Get-TestRows ok)[0]
+            $s.Entry | Should -Not -BeNullOrEmpty
+            $s.Entry.Id | Should -Be 'test:ok'
+            $s.Entry.Data.apply | Should -Not -BeNullOrEmpty
+        }
+
+        It 'fails closed for a will-fix state without Entry' {
+            $bare = (Get-TestRows ok)[0] | Select-Object -Property * -ExcludeProperty Entry
+            $bare.PSObject.Properties['Entry'] | Should -BeNullOrEmpty
+            $bare.Class | Should -Be 'will-fix'
+            $r = Invoke-FpsApply -Rows @($bare)
+            $row = Get-ResultRow $r 'test:ok'
+            $row.Status | Should -Be 'failed'
+            $row.Reason | Should -Be 'no-entry'
+            Get-TestValue Level | Should -Be 7340
         }
 
         It 'never applies a manual row' {

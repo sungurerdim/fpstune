@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { AlertTriangle } from "lucide-react";
 import { useT } from "../../i18n";
@@ -91,37 +91,44 @@ export function ConfirmDialog({
     };
   }, [open]);
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
-    if (event.key === "Escape") {
-      // Stopped here so a dialog opened from inside another Escape-aware
-      // surface closes one layer per press.
-      event.stopPropagation();
-      onCancel();
-      return;
-    }
-    if (event.key !== "Tab") return;
+  // Escape and the Tab trap, on the document in the capture phase rather than
+  // on the overlay div: a div with an interactive key handler is not a control a
+  // keyboard can own, and jsx-a11y rejects one. Capture also gives the dialog
+  // first claim on the key, so a dialog opened inside another Escape-aware
+  // surface closes one layer per press.
+  useEffect(() => {
+    if (!open) return;
 
-    const focusable = Array.from(
-      panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
-    );
-    if (focusable.length === 0) return;
-    const first = focusable[0];
-    const last = focusable[focusable.length - 1];
-    const leavingAtEdge = event.shiftKey
-      ? document.activeElement === first
-      : document.activeElement === last;
-    if (!leavingAtEdge) return;
-    event.preventDefault();
-    (event.shiftKey ? last : first).focus();
-  };
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onCancel();
+        return;
+      }
+      if (event.key !== "Tab") return;
+
+      const focusable = Array.from(
+        panelRef.current?.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR) ?? [],
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const leavingAtEdge = event.shiftKey
+        ? document.activeElement === first
+        : document.activeElement === last;
+      if (!leavingAtEdge) return;
+      event.preventDefault();
+      (event.shiftKey ? last : first).focus();
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open, onCancel]);
 
   if (!open) return null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-modal flex items-center justify-center bg-black/50"
-      onKeyDown={handleKeyDown}
-    >
+    <div className="fixed inset-0 z-modal flex items-center justify-center bg-black/50">
       <div
         ref={panelRef}
         role="dialog"

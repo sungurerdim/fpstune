@@ -5,8 +5,29 @@
 
 import "@testing-library/jest-dom";
 import { cleanup, configure } from "@testing-library/react";
-import { afterEach, beforeAll, afterAll, vi } from "vitest";
+import { afterEach, beforeAll, afterAll, expect, vi } from "vitest";
+import * as axeMatchers from "vitest-axe/matchers";
+import type { AxeMatchers } from "vitest-axe";
 import { server } from "./mocks/server";
+
+// P-WCAG's rendered-tree half: the matcher the a11y tests assert with. `axe()`
+// runs in each test against what actually rendered, which catches what the
+// static jsx-a11y rules cannot (a wrong accessible name, a heading level skip,
+// a live region nothing announces). No rule is turned off: jsdom has no layout,
+// so axe itself skips the rules that need one (colour contrast above all), and
+// that gap is written down in the a11y test file rather than hidden here.
+expect.extend(axeMatchers);
+
+// vitest-axe 0.1 declares its matcher against the pre-vitest-1 `Vi` namespace,
+// which vitest 4 no longer has. Merging the matcher into vitest's own interfaces
+// requires empty extension bodies and the original `<T = any>` signature — the
+// exact shapes these rules forbid — so they are off for this augmentation only.
+/* eslint-disable @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
+declare module "vitest" {
+  interface Assertion<T = any> extends AxeMatchers {}
+  interface AsymmetricMatchersContaining extends AxeMatchers {}
+}
+/* eslint-enable @typescript-eslint/no-empty-object-type, @typescript-eslint/no-unused-vars, @typescript-eslint/no-explicit-any */
 
 // findBy*/waitFor give up after 1 s by default. The pre-push gate runs vitest
 // beside an eight-worker pytest, and on that loaded machine a render that

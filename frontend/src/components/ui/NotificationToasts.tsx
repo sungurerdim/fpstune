@@ -82,10 +82,11 @@ function Toast({
   const Icon = config.icon;
   const delay = AUTO_DISMISS_MS[notification.type];
 
-  // Escape dismisses whichever toast the keyboard is currently inside. Reaching
-  // the button and pressing it works too; this is the shortcut for a user who
-  // arrived here by tabbing and does not want to read the rest of the stack.
-  const handleKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+  // Escape dismisses the toast the keyboard is currently inside. The dismiss
+  // button is the only focusable part of a toast, so its key handler is the
+  // toast's — and a native button is where an interactive key handler belongs
+  // (a div with one is not keyboard-operable and jsx-a11y rejects it).
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
     if (event.key !== "Escape") return;
     event.stopPropagation();
     onDismiss(notification.id);
@@ -113,7 +114,6 @@ function Toast({
 
   return (
     <div
-      onKeyDown={handleKeyDown}
       onMouseEnter={pause}
       onMouseLeave={resume}
       onFocus={pause}
@@ -133,6 +133,7 @@ function Toast({
       <button
         type="button"
         onClick={() => onDismiss(notification.id)}
+        onKeyDown={handleKeyDown}
         aria-label={`Dismiss: ${notification.message}`}
         className="shrink-0 rounded p-0.5 text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
       >

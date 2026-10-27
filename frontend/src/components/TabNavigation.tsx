@@ -42,7 +42,7 @@ const tabs: Array<{ id: TabId; labelKey: MessageKey; icon: typeof Zap }> = [
  * tab (a locale switch changes tab widths without changing the strip's own box).
  */
 function useScrollEdges() {
-  const ref = useRef<HTMLElement | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
   const [edges, setEdges] = useState({ start: false, end: false });
 
   const update = useCallback(() => {
@@ -154,7 +154,9 @@ export function TabNavigation() {
           data-testid="tab-strip"
           className="order-3 basis-full min-w-0 relative 3xl:order-2 3xl:basis-0 3xl:flex-1"
         >
-          <nav
+          {/* A div, not a nav: `role="tablist"` is the element's job here, and
+              `nav` may not take an interactive role (jsx-a11y). */}
+          <div
             ref={stripRef}
             className="flex gap-1 min-w-0 overflow-x-auto [scrollbar-width:none]"
             role="tablist"
@@ -214,7 +216,7 @@ export function TabNavigation() {
                 </button>
               );
             })}
-          </nav>
+          </div>
           {edges.start && (
             <span
               aria-hidden="true"

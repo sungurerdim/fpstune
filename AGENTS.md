@@ -1,5 +1,95 @@
 # FPSTune Project Rules
 
+## Start here
+
+This file is the one entry point. An agent that has never seen this project starts here.
+Claude Code reaches it through `CLAUDE.md`, which holds one line (`@AGENTS.md`).
+Other harnesses read this file directly. Facts below name their owner; read the owner
+for the current number, never copy it.
+
+### What is happening
+
+- A rewrite replaces the Python, React and exe tree with JSON tweaks and a Windows
+  PowerShell 5.1 runtime. The plan is issue #125. The first phase, F1, is issue #127.
+- Old tree: `src/`, `frontend/`, `tests/`. New tree: `tweaks/`, `schema/`, `runtime/`
+  (its tests are in `runtime/tests/`).
+- Both trees live side by side until phase F6 deletes the old one. Change one tree
+  only for that tree's own reasons.
+- Which rules apply where. The Product Goal, C1, C3, C4, C5, C8, C9, C10, C11 and the
+  Risk Taxonomy hold for both trees; the new tree binds them in `schema/` and
+  `runtime/gate.ps1` (owner: #127, decision D7). C2 and C6 are retired or replaced
+  for the new tree (the note at the top of each says how). C7, the Principle catalogue
+  bindings, the Project Map and the Blueprint Profile describe the old tree only;
+  unit U12 of #127 rewrites them for the new one.
+
+### Read first, in this order
+
+1. This file.
+2. TODO.md (what to do next).
+3. STATUS.md (where the work stands).
+4. Open issues: `gh issue list --state open`, then `gh issue view <n>` for the ones you touch.
+5. DECISIONS.md (why things are as they are).
+
+TODO.md, STATUS.md, DECISIONS.md and ARCHIVE.md are not generated yet: the machine
+generator is being updated. Until they exist, the plan and every owner decision live in
+the body of #125, and the F1 units (each with its verify line) live in the body of #127.
+Read those two first.
+
+### Tools and exact commands
+
+New tree. Run each script as `powershell -NoProfile -ExecutionPolicy Bypass -File <script> [args]`
+(Windows PowerShell 5.1, the same engine a user has):
+
+- `runtime/tools/restore.ps1` restores the pinned Pester into `runtime/.modules` (once per checkout).
+- `runtime/test.ps1 [-Path <file or folder>] [-Culture fr-FR|tr-TR]` runs Pester; the exit code is the failed count.
+- `runtime/gate.ps1 [-Root <dir>]` checks the catalogue and the runtime rules; one line per violation, exit 1 on any.
+- `runtime/build.ps1 -Out <bundle.ps1> [-RunOut <run.ps1> -Tag <tag> -BundleUrl <url>]` builds the deterministic bundle and prints its SHA-256.
+
+Old tree:
+
+- `uv run --extra dev <command>` for every Python tool (`pytest --no-cov -q <paths>`, `ruff`, `mypy`).
+- `python scripts/affected_tests.py --base <ref> [--run]` selects the tests a change can break; run it after every unit.
+- `bash scripts/quality.sh` is the full gate; lefthook runs it on pre-push.
+- lefthook pre-commit checks lint and format on the whole tree and fails on a finding.
+  Auto-fixing the staged files and re-staging them is being changed (uncommitted edit
+  of `lefthook.yml`; no issue yet, plan owner #125). Until it lands, run `ruff` yourself.
+
+Issues. Create and edit them only through the owner's tool:
+`python3 $HOME/.agents/araclar/issue.py ac|guncelle` (`denetle` audits open issues).
+The template has these sections: Problem (first line `Severity: ... · Affected: ...`),
+Scope (`In:` and `Out:` lines), To do (each line `task — verify: check → signal`),
+Verification, Done criteria, Links. If the tool is absent, follow the same template with `gh`.
+
+### Working rules learned (each with its reason)
+
+- `.ps1` files are ASCII only. Windows PowerShell 5.1 reads a BOM-less file as ANSI and
+  corrupts any other byte. Turkish text is built from code points, or kept in JSON read with explicit UTF-8.
+- Use `-cmatch`, `-clike`, `-creplace` for exact matching. `-match`, `-like` and `-replace`
+  are case-insensitive and culture-sensitive: under tr-TR `'I' -match '[A-Z]'` is False.
+- Read `[CultureInfo]::CurrentCulture`, not `Get-Culture`. In 5.1 `Get-Culture` ignores a
+  thread culture set later.
+- Never parse the human-language output of a Windows tool. Use numeric enums, GUIDs and cmdlet objects only.
+  The same row must work on every Windows language.
+- The runtime writes no file. Nothing is left behind after `irm ... | iex`.
+- The owner's PC is tr-TR. A test that is green only under en-US is red.
+
+### Commit rules
+
+- Conventional Commits: subject at most 50 characters, body lines at most 72.
+  The trailer is `Refs sungurerdim/fpstune#<n>`.
+- Write the message to a file and run `git commit -F <literal Windows path>`.
+- Agents work in parallel in one tree: stage nothing broadly; run `git add -N <new files>`
+  and then `git commit --only -- <your paths>`.
+- The diff-budget hook caps a commit at 12 files and 800 lines (`scripts/diff_budget.py`).
+  Split the commit; never bypass the hook.
+- Never `--no-verify`. Push runs the full gate (`scripts/quality.sh`).
+
+### Language
+
+- Reply to the owner in Turkish.
+- Everything in the repo is English, except `frontend/src/i18n/` and the `tr` fields and
+  strings of the new tree (`tweaks/`, `runtime/strings/`).
+
 ## Product Goal
 
 Tune every point of a Windows 11 machine to the ceiling of *that* hardware and
@@ -84,6 +174,8 @@ Every tweak safe on any compatible system. No crashes, BSODs, data loss, or app 
 - Advisory settings (BIOS, physical) → `is_readonly=True`
 
 ### C2 — Numeric Impact Scores
+Retired for the new tree by the owner decision of 2026-10-27 (#125): a tweak carries gain kinds, never numbers.
+
 Every `SettingExecutor` has ≥1 numeric/range `impact_scores` entry.
 Allowed: `{"fps": "+3-5%"}`, `{"latency_ms": -15.0}`, `{"ram_saved": "50-150MB"}`, `{"disk_freed": "4-16GB"}`
 Forbidden: `impact_scores={}` or only `"stability": "high"` with no performance/resource metric.
@@ -124,6 +216,8 @@ Use immutable, order-independent identifiers:
 Exception: `InterfaceIndex` OK for netsh commands (command-only, not ID storage).
 
 ### C6 — Apply/Reset/Verify Correctness
+Replaced for the new tree (#125): no reset button; each tweak JSON carries a revert command; restore point before bulk apply.
+
 - `_verify_setting_applied()` uses `values_equal()` from `applicability.py` (strip/CRLF/cross-type coercion)
 - Post-apply detect+verify+log consolidated in `_finalize_apply_response()` — never duplicate
 - Bulk ops use `asyncio.to_thread()` (never bare `asyncio.gather()` over sync subprocess)
@@ -233,7 +327,7 @@ Windows 11 edition — where "correct" includes *knowing it does not apply*.
   caps from the same rule.
 
 Gate: for every vendor-specific setting, either a sibling exists for the other two
-vendors or `tasks.md` records the gap with a reason.
+vendors or an open issue (vendor gaps: #64) records the gap with a reason.
 
 ### C11 — Measured, or Not Claimed
 
@@ -282,7 +376,7 @@ Bindings, because a rule nothing enforces is decoration:
 | 4, 5 | `NO_INSTRUMENT` in `src/fpstune/benchmark/sources.py` + its tests |
 | 6, 7 | the composition of `SOURCES` in `src/fpstune/benchmark/sources.py` |
 
-A clause with no binding yet names, in `tasks.md`, the step that gives it one — the
+A clause with no binding yet names, in an open issue, the step that gives it one — the
 same escape hatch C10 uses. A clause that can never be bound is not written.
 
 ---
@@ -310,7 +404,7 @@ The bindings, in one place:
 | D — work shape (P-SMALLBATCH, P-SHIFTLEFT, P-REPRO) | `scripts/diff_budget.py`, `scripts/controls.py`, `tests/test_principles_ops.py` |
 | E — accessibility (P-WCAG) | Playwright axe in CI, `eslint-plugin-jsx-a11y`, `vitest-axe` |
 | E — hosted-service profiles (P-SIGNALS, P-ERRBUDGET, P-RPORTO, P-321; C's P-DEPTH) | N/A with evidence in `docs/PRINCIPLES.md` |
-| F — process (P-TIMEBOX, P-PARETO, P-BIKESHED, P-PARALYSIS, P-LRM) | `tasks.md` and the PR template; no test decides them |
+| F — process (P-TIMEBOX, P-PARETO, P-BIKESHED, P-PARALYSIS, P-LRM) | the issue tracker and the PR template; no test decides them |
 
 Every check is registered in `scripts/controls.py` with the stage it runs at and
 the failure it prevents; `scripts/controls.py --check` fails when `quality.sh`,

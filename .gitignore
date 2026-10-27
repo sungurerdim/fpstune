@@ -104,3 +104,6 @@ mutants/
 coverage.json
 # mutmut 2.x result cache (scripts/mutation.sh); the mutants/ working tree above.
 .mutmut-cache
+
+# Pinned Pester restored by runtime/tools/restore.ps1 (dev/CI only).
+runtime/.modules/

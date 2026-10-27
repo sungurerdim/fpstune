@@ -1,0 +1,31 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row order_a",
+    "tr": "Test satırı order_a"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row order_a is now right.",
+    "tr": "Test satırı order_a artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name OrdA -ErrorAction Stop).OrdA",
+  "target": {
+    "value": 1
+  },
+  "apply": "$p = (Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Order -ErrorAction Stop).Order; Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Order -Value ($p + 'a'); Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name OrdA -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name OrdA",
+  "after": [
+    "test:order_b"
+  ]
+}

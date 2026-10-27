@@ -1,0 +1,28 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row noverify",
+    "tr": "Test satırı noverify"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row noverify is now right.",
+    "tr": "Test satırı noverify artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Mismatch -ErrorAction Stop).Mismatch",
+  "target": {
+    "value": 1
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Mismatch -Value 4321",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Mismatch"
+}

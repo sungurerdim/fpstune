@@ -1,0 +1,26 @@
+{
+  "kind": "manual",
+  "title": {
+    "en": "Test row manual",
+    "tr": "Test satırı manual"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "steps": {
+    "en": [
+      "Open the test page."
+    ],
+    "tr": [
+      "Test sayfasını aç."
+    ]
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ]
+}

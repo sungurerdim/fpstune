@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row reboot",
+    "tr": "Test satırı reboot"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row reboot is now right.",
+    "tr": "Test satırı reboot artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Boot -ErrorAction Stop).Boot",
+  "target": {
+    "value": 1
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Boot -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Boot",
+  "restart": "reboot"
+}

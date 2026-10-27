@@ -1,0 +1,28 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row exitcode",
+    "tr": "Test satırı exitcode"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row exitcode is now right.",
+    "tr": "Test satırı exitcode artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Exiter -ErrorAction Stop).Exiter",
+  "target": {
+    "value": 1
+  },
+  "apply": "cmd.exe /c exit 5",
+  "revert": "cmd.exe /c exit 0"
+}

@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row untouched",
+    "tr": "Test satırı untouched"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row untouched is now right.",
+    "tr": "Test satırı untouched artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "applicable": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Gate -ErrorAction Stop).Gate -eq 1",
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Guard -ErrorAction Stop).Guard",
+  "target": {
+    "value": 1
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Touched -Value 1; Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Guard -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Guard"
+}

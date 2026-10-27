@@ -1,0 +1,28 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row throws",
+    "tr": "Test satırı throws"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row throws is now right.",
+    "tr": "Test satırı throws artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Thrower -ErrorAction Stop).Thrower",
+  "target": {
+    "value": 1
+  },
+  "apply": "Get-Item -LiteralPath (Join-Path $env:FPSTUNE_TEST_KEY 'missing-item') | Out-Null; Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Thrower -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Thrower"
+}

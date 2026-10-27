@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row instances",
+    "tr": "Test satırı instances"
+  },
+  "why": {
+    "en": "Fixture for the apply and verify tests.",
+    "tr": "Uygulama ve doğrulama testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test row instances is now right.",
+    "tr": "Test satırı instances artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "instances": "Get-ChildItem -LiteralPath $env:FPSTUNE_TEST_KEY\\Items -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ id = $_.PSChildName; label = 'Item ' + $_.PSChildName } }",
+  "detect": "(Get-ItemProperty -LiteralPath (Join-Path \"$env:FPSTUNE_TEST_KEY\\Items\" $Instance) -Name On -ErrorAction Stop).On",
+  "target": {
+    "command": "if ($Instance -eq 'a') { 3 } else { 4 }"
+  },
+  "apply": "Set-ItemProperty -LiteralPath (Join-Path \"$env:FPSTUNE_TEST_KEY\\Items\" $Instance) -Name On -Value $Target",
+  "revert": "Set-ItemProperty -LiteralPath (Join-Path \"$env:FPSTUNE_TEST_KEY\\Items\" $Instance) -Name On -Value 0"
+}

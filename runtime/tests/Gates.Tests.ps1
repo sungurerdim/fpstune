@@ -96,7 +96,7 @@ BeforeAll {
         $output = @(& powershell.exe @arguments 2>&1 | ForEach-Object { "$_" })
         $code = $LASTEXITCODE
         $findings = @(foreach ($line in $output) {
-                if ($line -match '^(?<rule>[A-Z]+[0-9]+) (?<file>.+?): (?<reason>\S.*)$') {
+                if ($line -cmatch '^(?<rule>[A-Z]+[0-9]+) (?<file>.+?): (?<reason>\S.*)$') {
                     [pscustomobject]@{ Rule = $Matches.rule; File = $Matches.file; Leaf = (Split-Path -Leaf $Matches.file); Line = $line }
                 }
             })
@@ -158,7 +158,7 @@ Describe 'LN1 native exe output never feeds detect/applicable/target/instances' 
 }
 
 Describe 'LN2 human-text properties are never compared or parsed' {
-    It 'reports the committed fixture (-like on InterfaceDescription)' {
+    It 'reports the committed fixture (-clike on InterfaceDescription)' {
         Assert-Finding (Invoke-Gate -Root (New-GateRoot -Overlay 'ln2')) 'LN2' 'text_compare.json'
     }
 
@@ -213,6 +213,99 @@ Describe 'LN3 every command parses' {
             }
         }
         Assert-Finding (Invoke-Gate -Root $root) 'LN3' 'broken.json'
+    }
+}
+
+Describe 'LN4 no case-insensitive pattern with an ASCII letter range or an i' {
+    # The third locale defect class (after LN1 and LN2): -match, -notmatch,
+    # -like, -notlike, -replace, -split (and their i- forms) and Select-String
+    # without -CaseSensitive fold case by the thread culture, so under tr-TR
+    # 'I' -match '[A-Z]' is False and 'I' -like 'i*' is False. In runtime/*.ps1
+    # and in every command field, such a pattern holding an ASCII letter range
+    # or the letter i/I is a finding; the c- forms and -CaseSensitive are allowed.
+    BeforeAll {
+        $script:ln4Valid = '[string](Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value'
+        function script:New-Ln4Runtime([string]$Line) {
+            "# Gate fixture: one runtime pattern line for LN4.`r`nfunction Test-FixtureName([string]`$Name) {`r`n    $Line`r`n}`r`n"
+        }
+    }
+
+    It 'reports the committed tweak fixture (-match ''^[A-Z]+$'' in detect)' {
+        $root = New-GateRoot -Overlay 'ln4' -Remove @('runtime/Matcher.ps1')
+        Assert-Finding (Invoke-Gate -Root $root) 'LN4' 'case_fold.json'
+    }
+
+    It 'reports the committed runtime fixture (-like ''id_*'')' {
+        $root = New-GateRoot -Overlay 'ln4' -Remove @('tweaks/test/case_fold.json')
+        Assert-Finding (Invoke-Gate -Root $root) 'LN4' 'Matcher.ps1'
+    }
+
+    It 'reports <Field> = <Command>' -ForEach @(
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -notmatch ''[a-f0-9]'')' }
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -match "^[A-Z]")' }
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -like ''*I*'')' }
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -notlike ''min*'')' }
+        @{ Field = 'detect'; Command = '(Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -replace ''i'', ''''' }
+        @{ Field = 'detect'; Command = '((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -split ''[A-Z]'')[0]' }
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -imatch ''min'')' }
+        @{ Field = 'detect'; Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value | Select-String -Pattern ''id'' -Quiet)' }
+        @{ Field = 'detect'; Command = '[string](Select-String -InputObject (Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value ''[a-z]'' -Quiet)' }
+        @{ Field = 'applicable'; Command = '[bool]($env:PROCESSOR_ARCHITECTURE -match ''^[A-Z]'')' }
+        @{ Field = 'instances'; Command = 'Get-ChildItem -Path ''HKCU:\Software\FpsTuneFixture'' | Where-Object { $_.PSChildName -like ''Item*'' } | ForEach-Object { [pscustomobject]@{ id = $_.PSChildName; label = $_.PSChildName } }' }
+        @{ Field = 'target.command'; Command = '[string](''A1'' -replace ''[A-Z]'', '''')' }
+        @{ Field = 'apply'; Command = 'if ($Target -match ''i'') { Set-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -Value $Target }' }
+        @{ Field = 'revert'; Command = 'if ($Target -notlike ''*I*'') { Remove-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction SilentlyContinue }' }
+    ) {
+        $root = New-GateRoot -Overlay 'ln4' -Remove @('runtime/Matcher.ps1')
+        Edit-GateJson $root 'tweaks/test/case_fold.json' {
+            param($d)
+            Set-Field $d 'detect' $script:ln4Valid
+            if ($Field -eq 'target.command') { Set-Field $d 'target' ([pscustomobject]@{ command = $Command }) }
+            else { Set-Field $d $Field $Command }
+        }
+        Assert-Finding (Invoke-Gate -Root $root) 'LN4' 'case_fold.json'
+    }
+
+    It 'reports the runtime line <Line>' -ForEach @(
+        @{ Line = '$Name -match ''^[A-Z]''' }
+        @{ Line = '$Name -notmatch ''(?i)\.exe$''' }
+        @{ Line = '$Name -notlike ''*I''' }
+        @{ Line = '$Name -replace ''[a-z]'', ''''' }
+        @{ Line = '$Name -split ''i''' }
+        @{ Line = '$Name -imatch ''min''' }
+        @{ Line = '$Name | Select-String -Pattern ''id'' -Quiet' }
+        @{ Line = 'sls -InputObject $Name -Pattern ''[A-F]'' -Quiet' }
+    ) {
+        $root = New-GateRoot -Files @{ 'runtime/Matcher.ps1' = (New-Ln4Runtime $Line) }
+        Assert-Finding (Invoke-Gate -Root $root) 'LN4' 'Matcher.ps1'
+    }
+
+    It 'allows detect = <Command>' -ForEach @(
+        @{ Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -cmatch ''^[A-Z]+$'')' }
+        @{ Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -cnotmatch ''[a-f0-9]'')' }
+        @{ Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -clike ''*I*'')' }
+        @{ Command = '(Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -creplace ''i'', ''''' }
+        @{ Command = '((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -csplit ''[A-Z]'')[0]' }
+        @{ Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value | Select-String -Pattern ''id'' -CaseSensitive -Quiet)' }
+        @{ Command = '[string]((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -match ''^\d+$'')' }
+        @{ Command = '((Get-ItemProperty -Path ''HKCU:\Software\FpsTuneFixture'' -Name Value -ErrorAction Stop).Value -split '','')[0]' }
+    ) {
+        $root = New-GateRoot -Overlay 'ln4' -Remove @('runtime/Matcher.ps1')
+        Edit-GateJson $root 'tweaks/test/case_fold.json' { param($d) Set-Field $d 'detect' $Command }
+        Assert-Clean (Invoke-Gate -Root $root)
+    }
+
+    It 'allows the runtime line <Line>' -ForEach @(
+        @{ Line = '$Name -cmatch ''^[A-Z]''' }
+        @{ Line = '$Name -clike ''id_*''' }
+        @{ Line = '$Name -creplace ''[a-z]'', ''''' }
+        @{ Line = '$Name -csplit ''i''' }
+        @{ Line = '$Name | Select-String -Pattern ''id'' -CaseSensitive -Quiet' }
+        @{ Line = '$Name -split ''[\\/]''' }
+        @{ Line = '$Name -replace ''\s+'', '' ''' }
+    ) {
+        $root = New-GateRoot -Files @{ 'runtime/Matcher.ps1' = (New-Ln4Runtime $Line) }
+        Assert-Clean (Invoke-Gate -Root $root)
     }
 }
 
@@ -327,10 +420,59 @@ Describe 'FS1 the runtime writes no file' {
         @{ Write = '[IO.File]::WriteAllText((Join-Path $env:TEMP ''fpstune-note.txt''), ''x'')' }
         @{ Write = '[System.IO.File]::WriteAllBytes((Join-Path $env:TEMP ''fpstune-note.txt''), [byte[]](1))' }
         @{ Write = '[IO.File]::WriteAllLines((Join-Path $env:TEMP ''fpstune-note.txt''), [string[]]@(''x''))' }
+        @{ Write = '[System.IO.File]::AppendAllText((Join-Path $env:TEMP ''fpstune-note.txt''), ''x'')' }
+        @{ Write = '$fileApi = [IO.File]; $fileApi::WriteAllBytes((Join-Path $env:TEMP ''fpstune-note.bin''), [byte[]](1))' }
+        @{ Write = '$fileApi = [type]''System.IO.File''; $fileApi::AppendAllLines((Join-Path $env:TEMP ''fpstune-note.txt''), [string[]]@(''x''))' }
+        @{ Write = '([IO.File])::WriteAllText((Join-Path $env:TEMP ''fpstune-note.txt''), ''x'')' }
+        @{ Write = '[IO.File]::Create((Join-Path $env:TEMP ''fpstune-note.txt'')).Dispose()' }
+        @{ Write = '[IO.File]::OpenWrite((Join-Path $env:TEMP ''fpstune-note.txt'')).Dispose()' }
+        @{ Write = '$w = [IO.StreamWriter]::new((Join-Path $env:TEMP ''fpstune-note.txt'')); $w.Dispose()' }
+        @{ Write = '$writerType = [IO.StreamWriter]; $w = $writerType::new((Join-Path $env:TEMP ''fpstune-note.txt'')); $w.Dispose()' }
+        @{ Write = '$w = New-Object IO.StreamWriter (Join-Path $env:TEMP ''fpstune-note.txt''); $w.Dispose()' }
+        @{ Write = '$w = New-Object -TypeName System.IO.StreamWriter -ArgumentList (Join-Path $env:TEMP ''fpstune-note.txt''); $w.Dispose()' }
+        @{ Write = '$s = [IO.FileStream]::new((Join-Path $env:TEMP ''fpstune-note.txt''), [IO.FileMode]::Create); $s.Dispose()' }
+        @{ Write = '$s = New-Object IO.FileStream (Join-Path $env:TEMP ''fpstune-note.txt''), ''OpenOrCreate'', ''Write''; $s.Dispose()' }
+        @{ Write = '$doc = New-Object Xml.XmlDocument; $doc.LoadXml(''<a/>''); $doc.Save((Join-Path $env:TEMP ''fpstune-note.xml''))' }
+        @{ Write = 'Copy-Item -LiteralPath $PSCommandPath -Destination (Join-Path $env:TEMP ''fpstune-copy.ps1'')' }
+        @{ Write = 'Move-Item -LiteralPath (Join-Path $env:TEMP ''a.txt'') -Destination (Join-Path $env:TEMP ''b.txt'')' }
     ) {
         $text = "# Gate fixture: a runtime file that writes a file.`r`nfunction Save-FixtureNote {`r`n    $Write`r`n}`r`n"
         $root = New-GateRoot -Files @{ 'runtime/Writer.ps1' = $text }
         Assert-Finding (Invoke-Gate -Root $root) 'FS1' 'Writer.ps1'
+    }
+
+    It 'reports the committed receiver fixture ($fileApi = [IO.File]; $fileApi::WriteAllBytes)' {
+        Assert-Finding (Invoke-Gate -Root (New-GateRoot -Overlay 'fs1_receiver')) 'FS1' 'Writer.ps1'
+    }
+
+    It 'allows the read-only <Read>' -ForEach @(
+        @{ Read = '$s = [IO.File]::OpenRead($PSCommandPath); $s.Dispose()' }
+        @{ Read = '$s = [IO.FileStream]::new($PSCommandPath, [IO.FileMode]::Open, [IO.FileAccess]::Read); $s.Dispose()' }
+        @{ Read = '$s = New-Object IO.FileStream $PSCommandPath, ''Open'', ''Read''; $s.Dispose()' }
+        @{ Read = '$doc = New-Object Xml.XmlDocument; $doc.LoadXml(''<a/>''); $doc.OuterXml' }
+    ) {
+        $text = "# Gate fixture: a runtime file that only reads.`r`nfunction Read-FixtureNote {`r`n    $Read`r`n}`r`n"
+        $root = New-GateRoot -Files @{ 'runtime/Reader.ps1' = $text }
+        Assert-Clean (Invoke-Gate -Root $root)
+    }
+
+    # Scope: FS1 binds the shipped runtime modules runtime/*.ps1. The dev files
+    # runtime/gate.ps1 and runtime/test.ps1 stay at runtime/ by their contract
+    # and are exempt by name; runtime/tools/** and runtime/tests/** are not scanned.
+    It 'does not report the dev file runtime/<Leaf> writing a file' -ForEach @(
+        @{ Leaf = 'gate.ps1' }
+        @{ Leaf = 'test.ps1' }
+        @{ Leaf = 'tools/build.ps1' }
+    ) {
+        $root = New-GateRoot -Overlay 'fs1_scope' -Remove @(
+            @('gate.ps1', 'test.ps1', 'tools/build.ps1') | Where-Object { $_ -ne $Leaf } | ForEach-Object { "runtime/$_" })
+        Assert-Clean (Invoke-Gate -Root $root)
+    }
+
+    It 'reports runtime/Apply.ps1 making the write runtime/tools/build.ps1 makes' {
+        $text = [IO.File]::ReadAllText((Join-Path $script:fixtures 'fs1_scope/runtime/tools/build.ps1'), $script:utf8)
+        $root = New-GateRoot -Files @{ 'runtime/Apply.ps1' = $text }
+        Assert-Finding (Invoke-Gate -Root $root) 'FS1' 'Apply.ps1'
     }
 }
 

@@ -42,7 +42,6 @@ BeforeAll {
         function script:Checkpoint-Computer { param($Description, $RestorePointType) }
     }
 
-    $script:repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '../..')).ProviderPath
     $script:fixtureRoot = Join-Path $PSScriptRoot 'fixtures/apply'
     $script:catalogue = @(Get-FpsCatalogue -Root $script:fixtureRoot)
     $script:testKeyParent = 'HKCU:\Software\FpsTuneTest'
@@ -97,18 +96,8 @@ BeforeAll {
             EventType        = 100
         }
     }
-    function script:Get-FileSnapshot {
-        $set = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
-        $gitDir = Join-Path $script:repoRoot '.git'
-        $lists = @(
-            @(Get-ChildItem -LiteralPath $script:repoRoot -Recurse -File -Force -ErrorAction SilentlyContinue |
-                    Where-Object { -not $_.FullName.StartsWith($gitDir, [StringComparison]::OrdinalIgnoreCase) })
-            @(Get-ChildItem -LiteralPath $env:TEMP -Depth 2 -File -Force -ErrorAction SilentlyContinue)
-            @(Get-ChildItem -LiteralPath $HOME -Depth 1 -File -Force -ErrorAction SilentlyContinue)
-        )
-        foreach ($f in $lists) { [void]$set.Add($f.FullName) }
-        , $set
-    }
+    # The folders a run could spill files into, by environment variable.
+    $script:spillVars = 'TEMP', 'TMP', 'USERPROFILE', 'HOME', 'LOCALAPPDATA', 'APPDATA'
 }
 
 AfterAll {
@@ -402,20 +391,40 @@ Describe 'Invoke-FpsApply' {
             $entries.Count | Should -BeGreaterThan 0
             foreach ($e in $entries) {
                 foreach ($p in $e.PSObject.Properties) {
-                    $p.Name | Should -Not -Match '(?i)value|previous|prev|old|before|current|target'
+                    # Folded with the invariant culture: a case-insensitive regex would
+                    # miss an upper-case I under tr-TR.
+                    $p.Name.ToLowerInvariant() | Should -Not -MatchExactly 'value|previous|prev|old|before|current|target'
                     $text = "$($p.Value)"
                     foreach ($sentinel in '7340', '9876', '4321') { $text | Should -Not -Match $sentinel }
                 }
             }
         }
 
-        It 'writes no file to TEMP, the repo or HOME during a run' {
-            $before = Get-FileSnapshot
-            $r = Invoke-TestApply ok, noverify, throws, reboot, instances
-            $after = Get-FileSnapshot
+        # Hermetic: TEMP, TMP, USERPROFILE, HOME, LOCALAPPDATA and APPDATA point at
+        # fresh empty folders of this test only, so parallel runs and other tools
+        # cannot touch what is asserted. The repository is not listed here: the
+        # static gate rule FS1 (runtime/gate.ps1) binds "the runtime writes no file".
+        It 'writes no file to TEMP, TMP, USERPROFILE, HOME, LOCALAPPDATA or APPDATA during a run' {
+            $saved = @{}
+            $folders = @{}
+            foreach ($name in $script:spillVars) {
+                $saved[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
+                $folder = Join-Path $TestDrive ("spill-$name-" + [guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $folder | Out-Null
+                $folders[$name] = $folder
+            }
+            try {
+                foreach ($name in $script:spillVars) { [Environment]::SetEnvironmentVariable($name, $folders[$name], 'Process') }
+                $r = Invoke-TestApply ok, noverify, throws, reboot, instances
+            }
+            finally {
+                foreach ($name in $script:spillVars) { [Environment]::SetEnvironmentVariable($name, $saved[$name], 'Process') }
+            }
             @($r.Journal).Count | Should -BeGreaterThan 0
-            $new = @($after | Where-Object { -not $before.Contains($_) })
-            $new | Should -BeNullOrEmpty
+            foreach ($name in $script:spillVars) {
+                $left = @(Get-ChildItem -LiteralPath $folders[$name] -Recurse -Force -ErrorAction Stop | ForEach-Object { $_.FullName })
+                $left | Should -BeNullOrEmpty -Because "`$env:$name pointed at $($folders[$name]) during the run"
+            }
         }
     }
 }

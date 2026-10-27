@@ -1,0 +1,14 @@
+{
+  "kind": "tweak",
+  "title": { "en": "A command that folds case by the machine culture", "tr": "Makine kulturune gore harf buyuklugunu katlayan bir komut" },
+  "why": { "en": "LN4 fixture: detect matches an ASCII letter range with the case-insensitive -match.", "tr": "LN4 fiksturu: detect bir ASCII harf araligini buyuk-kucuk harf duyarsiz -match ile eslestirir." },
+  "fixed": { "en": "Fixture fixed.", "tr": "Fikstur duzeldi." },
+  "risk": "safe",
+  "sources": ["https://learn.microsoft.com/powershell/module/microsoft.powershell.core/about/about_comparison_operators"],
+  "gain": ["experience"],
+  "applicable": "$true",
+  "detect": "[string]((Get-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction Stop).Value -match '^[A-Z]+$')",
+  "target": { "value": "True" },
+  "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -Value $Target",
+  "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction SilentlyContinue"
+}

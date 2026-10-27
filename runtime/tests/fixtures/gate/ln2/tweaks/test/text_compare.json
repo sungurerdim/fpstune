@@ -6,7 +6,7 @@
   "risk": "safe",
   "sources": ["https://learn.microsoft.com/powershell/module/netadapter/get-netadapter"],
   "gain": ["network"],
-  "detect": "[string]@(Get-NetAdapter | Where-Object { $_.InterfaceDescription -like '*Intel*' }).Count",
+  "detect": "[string]@(Get-NetAdapter | Where-Object { $_.InterfaceDescription -clike '*Intel*' }).Count",
   "target": { "value": "1" },
   "apply": "Set-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -Value $Target",
   "revert": "Remove-ItemProperty -Path 'HKCU:\\Software\\FpsTuneFixture' -Name Value -ErrorAction SilentlyContinue"

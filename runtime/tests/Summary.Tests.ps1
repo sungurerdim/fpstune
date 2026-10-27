@@ -88,10 +88,10 @@ Describe 'Strings files' {
 Describe 'Format-FpsSummary totals' {
     It 'counts every class from the rows (en)' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
-        $text | Should -Match 'Checked 9 '
-        $text | Should -Match 'already right 2'
-        $text | Should -Match 'will fix 3'
-        $text | Should -Match 'manual 1'
+        $text | Should -MatchExactly 'Checked 9 '
+        $text | Should -MatchExactly 'already right 2'
+        $text | Should -MatchExactly 'will fix 3'
+        $text | Should -MatchExactly 'manual 1'
     }
     It 'counts every class from the rows (tr)' {
         $tr = Read-Strings 'tr'
@@ -102,17 +102,17 @@ Describe 'Format-FpsSummary totals' {
     It 'derives the counts, not a fixed number' {
         $one = @(New-Row 'power:a' 'will-fix' $null)
         $text = Get-Text (Format-FpsSummary -Rows $one -Language en)
-        $text | Should -Match 'Checked 1 '
-        $text | Should -Match 'will fix 1'
-        $text | Should -Match 'already right 0'
-        $text | Should -Match 'manual 0'
+        $text | Should -MatchExactly 'Checked 1 '
+        $text | Should -MatchExactly 'will fix 1'
+        $text | Should -MatchExactly 'already right 0'
+        $text | Should -MatchExactly 'manual 0'
     }
     It 'formats numbers the same under a comma-decimal culture' {
         $old = [Threading.Thread]::CurrentThread.CurrentCulture
         try {
             [Threading.Thread]::CurrentThread.CurrentCulture = New-Object Globalization.CultureInfo('fr-FR')
             $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
-            $text | Should -Match 'Checked 9 '
+            $text | Should -MatchExactly 'Checked 9 '
         }
         finally { [Threading.Thread]::CurrentThread.CurrentCulture = $old }
     }
@@ -123,55 +123,55 @@ Describe 'Format-FpsSummary totals' {
     }
     It 'handles an empty row set' {
         $text = Get-Text (Format-FpsSummary -Rows @() -Language en)
-        $text | Should -Match 'Checked 0 '
+        $text | Should -MatchExactly 'Checked 0 '
     }
 }
 
 Describe 'Format-FpsSummary manual rows' {
     It 'shows the steps in English' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
-        $text | Should -Match 'Open the BIOS\. Enable the memory profile\. Save\.'
-        $text | Should -Match 'Turn on the memory profile'
+        $text | Should -MatchExactly 'Open the BIOS\. Enable the memory profile\. Save\.'
+        $text | Should -MatchExactly 'Turn on the memory profile'
     }
     It 'shows the steps in Turkish and not the English text' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr)
-        $text | Should -Match ('Bellek profilini etkinle' + [char]0x015F + 'tir')
-        $text | Should -Not -Match 'Open the BIOS'
+        $text | Should -MatchExactly ('Bellek profilini etkinle' + [char]0x015F + 'tir')
+        $text | Should -Not -MatchExactly 'Open the BIOS'
     }
     It 'takes steps from the row when it carries them' {
         $row = New-Row 'hardware:xmp' 'manual' $null
         $row | Add-Member -NotePropertyName Steps -NotePropertyValue ([pscustomobject]@{ en = 'Do the thing.'; tr = 'Yap.' })
-        (Get-Text (Format-FpsSummary -Rows @($row) -Language en)) | Should -Match 'Do the thing\.'
+        (Get-Text (Format-FpsSummary -Rows @($row) -Language en)) | Should -MatchExactly 'Do the thing\.'
     }
     It 'names the row id when no steps are known' {
         $text = Get-Text (Format-FpsSummary -Rows @(New-Row 'hardware:xmp' 'manual' $null) -Language en)
-        $text | Should -Match 'hardware:xmp'
+        $text | Should -MatchExactly 'hardware:xmp'
     }
     It 'omits the manual section at 0' {
         $en = Read-Strings 'en'
         $text = Get-Text (Format-FpsSummary -Rows @(New-Row 'power:a' 'will-fix' $null) -Language en)
-        $text | Should -Not -Match ([regex]::Escape($en.manualHeading))
+        $text | Should -Not -MatchExactly ([regex]::Escape($en.manualHeading))
     }
 }
 
 Describe 'Format-FpsSummary unreadable and not applicable' {
     It 'is absent at 0' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rowsClean -Language en)
-        $text | Should -Not -Match 'could not be read'
-        $text | Should -Not -Match 'do not apply'
+        $text | Should -Not -MatchExactly 'could not be read'
+        $text | Should -Not -MatchExactly 'do not apply'
     }
     It 'is present with the row ids at more than 0' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
-        $text | Should -Match 'could not be read'
-        $text | Should -Match 'power:e'
-        $text | Should -Match 'network:rss@eth2'
-        $text | Should -Match '1 does not apply'
+        $text | Should -MatchExactly 'could not be read'
+        $text | Should -MatchExactly 'power:e'
+        $text | Should -MatchExactly 'network:rss@eth2'
+        $text | Should -MatchExactly '1 does not apply'
     }
     It 'is present in Turkish with the row ids' {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr)
-        $text | Should -Match 'power:e'
-        $text | Should -Match 'network:rss@eth2'
-        $text | Should -Not -Match 'could not be read'
+        $text | Should -MatchExactly 'power:e'
+        $text | Should -MatchExactly 'network:rss@eth2'
+        $text | Should -Not -MatchExactly 'could not be read'
     }
 }
 
@@ -192,7 +192,7 @@ Describe 'Format-FpsSummary copy' {
     It 'labels the manual total "elle yapilacak" in Turkish' {
         $expected = 'elle yap' + $script:u.i + 'lacak 1'
         $lines = @(Format-FpsSummary -Rows @(New-Row 'hardware:xmp' 'manual' $null) -Language tr)
-        (Get-Text $lines) | Should -Match ([regex]::Escape($expected))
+        (Get-Text $lines) | Should -MatchExactly ([regex]::Escape($expected))
     }
 
     It 'says "does not apply" for one row and "do not apply" for <Count> (en)' -ForEach @(
@@ -232,8 +232,8 @@ Describe 'Format-FpsSummary copy' {
         @{ Lang = 'tr'; Title = 'G' + [char]0x00FC + [char]0x00E7 + ' k' + [char]0x0131 + 's' + [char]0x0131 + 'tlamas' + [char]0x0131 + 'n' + [char]0x0131 + ' kapat' }
     ) {
         $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language $Lang)
-        $text | Should -Match ([regex]::Escape("$Title (power:e)"))
-        $text | Should -Match ([regex]::Escape('network:rss@eth2'))
+        $text | Should -MatchExactly ([regex]::Escape("$Title (power:e)"))
+        $text | Should -MatchExactly ([regex]::Escape('network:rss@eth2'))
     }
 }
 
@@ -242,7 +242,7 @@ Describe 'Format-FpsSummary claims' {
         foreach ($lang in 'en', 'tr') {
             foreach ($set in @($script:rows, $script:rowsClean)) {
                 foreach ($line in @(Format-FpsSummary -Rows $set -Language $lang)) {
-                    [string]$line | Should -Not -Match '\d\s*(%|ms\b|fps\b)'
+                    ([string]$line).ToLowerInvariant() | Should -Not -MatchExactly '\d\s*(%|ms\b|fps\b)'
                 }
             }
         }

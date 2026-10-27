@@ -17,9 +17,13 @@ import pytest
 from fpstune.utils.powershell import run_powershell
 from fpstune.utils.process_watch import StallPolicy
 
-pytestmark = pytest.mark.skipif(
-    sys.platform != "win32", reason="the PowerShell runner is Windows-only"
-)
+pytestmark = [
+    pytest.mark.skipif(sys.platform != "win32", reason="the PowerShell runner is Windows-only"),
+    # A wall-clock verdict: the 4 s stall has to be observed by a sampler that is
+    # not competing with seven other workers for the machine (measured: the same
+    # test passes alone in 23 s and read late enough to fail beside eight).
+    pytest.mark.timing,
+]
 
 # Long enough that a run which waits for the grandchild is unmistakable.
 _GRANDCHILD_SECONDS = 30

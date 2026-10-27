@@ -164,7 +164,7 @@ class TestStaticNetworkSettings:
     def test_no_dns_setting_claims_an_in_game_latency_gain(self) -> None:
         """DNS cannot move in-game latency, and the headline sums whatever is claimed.
 
-        `lib/impact.ts` pushes every numeric `latency_ms` into the Gained/Potential
+        The retired Home headline pushed every numeric `latency_ms` into a Gained/Potential
         figure shown on Home, and `dns_security` used to carry -12.0 -- the
         deterministic cap the impact_scores sweep applied, not a measurement. So the
         UI credited DNS with an invented 12 ms saving. Resolution happens once at

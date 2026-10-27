@@ -78,7 +78,7 @@ class TestTheReleaseWorkflow:
 
     def test_a_release_runs_every_ci_check_first(self, release: str, ci: str) -> None:
         """A release must not be the first place a check runs."""
-        assert "uses: ./.github/workflows/ci.yml" in release
+        assert "uses: $/.github/workflows/ci.yml" in release
         assert "workflow_call:" in ci
         assert "uv run --extra dev pytest" in ci
         assert "uv run --extra dev mypy src" in ci

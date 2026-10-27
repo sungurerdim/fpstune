@@ -109,9 +109,7 @@ def test_a_non_guard_row_claims_a_benefit() -> None:
         and setting.recommended_value != setting.default_value
         and not _benefit(setting)
     )
-    assert not offenders, "a change with no claimed benefit is not a tweak: " + ", ".join(
-        offenders
-    )
+    assert not offenders, "a change with no claimed benefit is not a tweak: " + ", ".join(offenders)
 
 
 def _positive_number(value: object) -> bool:

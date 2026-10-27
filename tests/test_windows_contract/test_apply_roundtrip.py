@@ -197,8 +197,7 @@ def _roundtrip(setting: SettingExecutor) -> Row:
 def sweep() -> tuple[list[Row], list[tuple[str, str]]]:
     """Run the sweep once and hand every assertion the same evidence."""
     dry_run = (
-        os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE
-        or os.environ.get(DRY_RUN_ENV) == "1"
+        os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE or os.environ.get(DRY_RUN_ENV) == "1"
     )
     if not dry_run:
         assert is_admin(), (
@@ -227,9 +226,7 @@ def sweep() -> tuple[list[Row], list[tuple[str, str]]]:
                 print(f"  skip {setting.id}: {reason}")
             continue
         if dry_run:
-            resolved = ACTION_COMMANDS.get(
-                setting.apply_command.strip(), setting.apply_command
-            )
+            resolved = ACTION_COMMANDS.get(setting.apply_command.strip(), setting.apply_command)
             print(
                 f"  exercise {setting.id}: {current!r} -> {setting.recommended_value!r}"
                 f" | detect={setting.detect_type.value} apply={setting.apply_type.value}"
@@ -256,10 +253,7 @@ def test_the_sweep_exercised_something(
     sweep: tuple[list[Row], list[tuple[str, str]]],
 ) -> None:
     """A sweep that skipped everything must not read as a pass."""
-    if (
-        os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE
-        or os.environ.get(DRY_RUN_ENV) == "1"
-    ):
+    if os.environ.get(SWEEP_ENV, "").strip() == DRY_RUN_VALUE or os.environ.get(DRY_RUN_ENV) == "1":
         pytest.skip("dry run lists the selection; it deliberately writes nothing")
     rows, skipped = sweep
     assert rows, (

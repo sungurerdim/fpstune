@@ -673,8 +673,8 @@ DNS_SECURITY = SettingExecutor(
     effect="Blocks malware and phishing domains at the resolver",
     # latency_ms is deliberately 0.0, not the -12.0 this used to claim. That figure
     # was the deterministic cap applied by the impact_scores sweep, not a
-    # measurement, and `lib/impact.ts` sums latency_ms into the user-visible
-    # Gained/Potential headline -- so it was showing an invented 12 ms saving.
+    # measurement, and the retired Home headline summed latency_ms into a
+    # Gained/Potential figure -- so it was showing an invented 12 ms saving.
     # DNS cannot move in-game latency: resolution happens once at connect time and
     # match traffic goes straight to an IP. Measured here over 25 domains x 2
     # rounds, servers interleaved per domain (single vantage point, Turkey,

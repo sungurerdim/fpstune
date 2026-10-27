@@ -52,7 +52,7 @@ async def refresh_network_adapters() -> NetworkRefreshResponse:
         adapters = await asyncio.to_thread(get_detailed_network_adapters)
         hardware_manager.set_network_adapters(adapters)
         return NetworkRefreshResponse(success=True, network_adapters=adapters)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the route answers success=False with the error in its body; raising would abort the refresh
         logging.getLogger(__name__).warning("Network refresh failed: %s", e)
         return NetworkRefreshResponse(success=False, network_adapters=[])
 

@@ -60,7 +60,7 @@ class Dism:
             return result.returncode == 0, result.stdout + result.stderr
         except subprocess.TimeoutExpired as e:
             return False, str(e)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a subprocess failure is returned to the caller as (False, error)
             return False, str(e)
 
     def component_cleanup(self) -> CleanupResult:

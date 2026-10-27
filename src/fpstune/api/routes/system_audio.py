@@ -53,7 +53,7 @@ async def refresh_audio_devices() -> AudioRefreshResponse:
         devices = await asyncio.to_thread(get_audio_devices)
         hardware_manager.set_audio_devices(devices)
         return AudioRefreshResponse(success=True, audio_devices=devices)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - the route answers success=False with the error in its body; raising would abort the refresh
         logging.getLogger(__name__).warning("Audio refresh failed: %s", e)
         return AudioRefreshResponse(success=False, audio_devices=[])
 

@@ -226,7 +226,7 @@ async def _stream_each(
                 result_counts[setting.id] = response.skipped or response.success
                 for event in _outcome_events(setting.id, response):
                     event_queue.put_nowait(event)
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - a failed setting is one event in the stream; raising would drop the rest
                 result_counts[setting.id] = False
                 event_queue.put_nowait(
                     _sse({"event": "failed", "id": setting.id, "error": str(exc)})

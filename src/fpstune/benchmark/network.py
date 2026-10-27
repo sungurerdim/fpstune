@@ -424,7 +424,7 @@ class NetworkBenchmark:
                 target=target,
                 stats=stats,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             self._logger.error(f"Network benchmark failed: {e}")
             return None
 

@@ -238,7 +238,7 @@ class TestARealServerStopsItself:
         def serve() -> None:
             try:
                 run_api(port=port, app=_tiny_fpstune_app(events))
-            except BaseException as exc:
+            except BaseException as exc:  # noqa: BLE001 - the server thread records the stop's own SystemExit instead of dying silently
                 errors.append(exc)
 
         server = threading.Thread(target=serve, daemon=True)

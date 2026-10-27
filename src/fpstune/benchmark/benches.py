@@ -229,7 +229,7 @@ def tool_executable_names() -> list[str]:
             presentmon.presentmon_path.name,
             GpuSceneBench().engine_path.name,
         ]
-    except Exception:  # pragma: no cover - import guarded for packaging
+    except Exception:  # pragma: no cover - import guarded for packaging  # noqa: BLE001 - an optional instrument that cannot be imported means no bench, not a crash
         return []
 
     for name in candidates:

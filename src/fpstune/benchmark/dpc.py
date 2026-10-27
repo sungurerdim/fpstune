@@ -254,7 +254,7 @@ class DpcBenchmark:
 
             if status == 0:  # STATUS_SUCCESS
                 return minimum.value, maximum.value, current.value
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             self._logger.debug(f"Failed to get timer resolution: {e}")
 
         return 0, 0, 0
@@ -272,7 +272,7 @@ class DpcBenchmark:
             frequency = ctypes.c_longlong()
             ctypes.windll.kernel32.QueryPerformanceFrequency(ctypes.byref(frequency))
             return frequency.value
-        except Exception:
+        except Exception:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             return 0
 
     def _measure_sleep_accuracy(
@@ -412,7 +412,7 @@ class DpcBenchmark:
                 timestamp=datetime.now().isoformat(),
                 stats=stats,
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an instrument failure is a bench result (ran=False + reason), not an exception
             self._logger.error(f"DPC benchmark failed: {e}")
             return None
 

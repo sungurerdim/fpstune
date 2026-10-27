@@ -9,7 +9,7 @@ game reading them back, and its frame limits live in the account's cloud
 settings — a write there would pass verify and change nothing.
 
 What every game here gets is the same pair the rest of the product already
-holds coherent (CLAUDE.md coherence table): in-game V-Sync off, because the
+holds coherent (AGENTS.md coherence table): in-game V-Sync off, because the
 driver owns synchronisation, and — where the file has a frame cap the game
 honours — the one cap rule (``frame_cap_for_refresh``) on a VRR panel and no cap
 on a fixed one. Beyond that, only decoration whose removal also clears the view.

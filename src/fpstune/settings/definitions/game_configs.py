@@ -1418,7 +1418,7 @@ MW3_SCREEN_SPACE_SHADOWS = _make_mw3_cst_setting(
     # that gives a position away comes from the shadow maps and calls contact
     # shadowing decoration. Same key family, same engine family, opposite
     # readings, and nobody has measured which is right — both sit at `Low`,
-    # which is correct either way. See tasks.md D4.
+    # which is correct either way. Unmeasured; a measurement decides it.
     impact_scores={"fps_gpu_bound": "0 to -2%", "stability": "high"},
     category_order=21,
     evidence_level="likely",

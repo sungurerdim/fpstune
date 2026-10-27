@@ -1,6 +1,6 @@
 """Is anything on this machine near the temperature its own maker says it should not pass?
 
-Heat is a performance category here (CLAUDE.md consequence 4), and a part close to
+Heat is a performance category here (AGENTS.md consequence 4), and a part close to
 its limit is a finding whatever else is true of the machine. The rule is the same
 for every component, and it never uses a constant limit:
 

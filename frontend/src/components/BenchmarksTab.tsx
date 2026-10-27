@@ -28,7 +28,7 @@ type BenchTab = "suite" | "verify";
  * - **Stress Test** was a power-virus stress test that answers "how hot, how
  *   stable" and never "what does this machine reach" (C11 rule 6). It stayed
  *   off the performance path, and this phase removed the panel and its CLI
- *   command too; the decision record is in `tasks.md`.
+ *   command too; the decision record is in #107.
  *
  * The order is the order of the work: the suite is what you press, and what
  * this machine reaches is what you read afterwards. Headroom used to sit above

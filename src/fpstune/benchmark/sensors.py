@@ -22,7 +22,7 @@ LibreHardwareMonitor — the obvious candidate — documents administrator right
 its sensors and ships a kernel driver for the ones fpstune would want, which is a
 standing red line. On those machines the GPU readings are absent with a reason
 and the ACPI zone reading still works, so the panel is never blank and never
-guesses. The gap is recorded in `tasks.md`.
+guesses. The gap is recorded in #108.
 
 **The ACPI zone is in tenths of a kelvin.** `HighPrecisionTemperature` of 3532
 is 353.2 K, which is 80.05 °C. Measured moving here across three seconds — 3452,

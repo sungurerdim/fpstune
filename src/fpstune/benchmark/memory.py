@@ -27,7 +27,7 @@ here at 3.2 GB/s against `memset`'s 29 GB/s on the same machine and the same
 64 MB working set (2026-09-11), which is the counting loop's speed and not the
 memory's. Publishing it as a read bandwidth would be a number no instrument
 produced. Closing this needs a primitive that touches every byte and computes
-nothing — see `tasks.md`.
+nothing — see #107.
 
 *Latency* is the dependent load: the address of the next read is not known until
 the previous one returns, so nothing can be prefetched and nothing overlaps. This

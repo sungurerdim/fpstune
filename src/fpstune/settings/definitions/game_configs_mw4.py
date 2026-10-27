@@ -175,7 +175,7 @@ MW4_RENDER_RESOLUTION = _make_mw4_setting(
     category_order=10,
     # COMPLETE: it changes what the screen shows, and it costs frames on a card
     # already asked for 297 of them. Offered with the price written, never
-    # assumed — CLAUDE.md consequence 5.
+    # assumed — AGENTS.md consequence 5.
     scope=SettingScope.COMPLETE,
     evidence_level="likely",
     sources=_MW3_MEASURED,
@@ -1132,7 +1132,7 @@ MW4_PERSISTENT_DAMAGE = _make_mw4_setting(
 # a legitimate answer, and a guard that never fires is still doing its job.
 #
 # The ruling behind this phase (2026-08-23): where MW3's shipped value and
-# CLAUDE.md's consequence 5 disagreed, the product contract wins, and MW3 is
+# AGENTS.md's consequence 5 disagreed, the product contract wins, and MW3 is
 # corrected rather than copied. The distinction doing the work is that **the
 # presence of a shadow is information and its softness is decoration** — which
 # is why `ShadowFilteringQuality` is lowered in B2 and `ShadowQuality` is guarded
@@ -1276,7 +1276,7 @@ MW4_SCREEN_SPACE_SHADOWS = _make_mw4_setting(
     # `Low` is the answer that does not depend on winning that argument: it is
     # the lowest tier at which the channel still exists, so it is correct under
     # the sharpened rule either way. `Off` would have bet on this file's reading.
-    # See tasks.md D4 — this needs a measurement, not a stronger opinion.
+    # Unmeasured — this needs a measurement, not a stronger opinion.
     evidence_level="likely",
 )
 
@@ -1488,7 +1488,7 @@ MW4_WEAPON_CYCLE_DELAY = _make_mw4_setting(
 # which is how we know the game keeps them in step and a one-file write would be
 # half-applied.
 #
-# All four reductions are COMPLETE, not RECOMMENDED. CLAUDE.md consequence 5 is
+# All four reductions are COMPLETE, not RECOMMENDED. AGENTS.md consequence 5 is
 # explicit that a setting changing what the player can *hear* is offered with its
 # cost written, never assumed — someone may well want the soundtrack.
 # --------------------------------------------------------------------------
@@ -1989,7 +1989,7 @@ MW4_MOUSE_MONITOR_DISTANCE_COEFF = _make_mw4_setting(
     current_impact="1.333333: The game's own scaling factor — the correct state",
     recommended_impact="1.333333: Guards the one number every other sensitivity setting scales against",
     effect="Leaves the monitor-distance coefficient untouched",
-    # Drift guard only (tasks.md decision 2, owner-confirmed 2026-09-09):
+    # Drift guard only (owner decision 2, confirmed 2026-09-09):
     # every other sensitivity setting in this file is a multiplier layered on
     # top of this coefficient, so moving it would silently rescale all of
     # them at once. fpstune never changes this value, in either direction.
@@ -2095,7 +2095,7 @@ MW4_FOV = _make_mw4_setting(
     current_impact="90.000000: The narrower default — movement beside the player can go unseen",
     recommended_impact="120.000000: The file's own maximum — nothing beside the player goes unseen",
     effect="Widens field of view to the file's own maximum",
-    # Owner decision (tasks.md decision 3, 2026-09-09), replacing the earlier
+    # Owner decision (owner decision 3, 2026-09-09), replacing the earlier
     # "left as a preference" guard at 90. Not seeing an enemy beside you costs
     # more than a missed shot: peripheral information is what a wider view
     # buys, and a smaller apparent target plus a small render cost is what

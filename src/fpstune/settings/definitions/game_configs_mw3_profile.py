@@ -31,7 +31,7 @@ a guide, or an earlier fpstune release moved (product consequence 2).
 machines read held the maximum, so nothing available says what the game's
 factory default is — and ``default_value`` is what ``reset`` writes back to a
 user. Shipping a guessed one is the invented-constant bug C9 exists for, so the
-setting is not registered and the gap is recorded in ``tasks.md`` instead.
+setting is not registered and the gap is recorded in the issue tracker instead.
 """
 
 from __future__ import annotations
@@ -212,7 +212,7 @@ MW3_ADS_TIMING_SENSITIVITY = _make_mw3_profile_setting(
     # is how far into the ADS animation the movement arrives, which the player
     # cannot see and cannot practise against.
     #
-    # The enum is measured, not assumed (tasks.md, "Measured facts"). MW3 stores
+    # The enum is measured, not assumed (measured on the dev machine). MW3 stores
     # 0..2 while MW4 spells the same setting `immediately, interpolated,
     # delayed`, and the Touch sibling agrees across both games — MW3
     # `ADSTimingSensitivityTouch@0 = 1` against MW4's `= interpolated`.
@@ -254,7 +254,7 @@ MW3_ADS_SENSITIVITY = _make_mw3_profile_setting(
     effect="Keeps the scoped turn rate matched to the hipfire one",
     # A guard, and one that will fire: the profiles read held 0.850000, which
     # detection surfaces as drift rather than as a second correct answer
-    # (tasks.md decision 1, owner-confirmed). At 1.0 the multiplier layer adds
+    # (owner decision 1, confirmed). At 1.0 the multiplier layer adds
     # nothing and the player feels exactly what the game's own monitor-distance
     # scaling produces; any other value is a per-player offset stacked on that
     # scaling, and it has to be re-learned at every zoom level.
@@ -345,7 +345,7 @@ MW3_MOUSE_MONITOR_DISTANCE_COEFF = _make_mw3_profile_setting(
     current_impact="1.333333: The game's own scaling factor — the correct state",
     recommended_impact="1.333333: Puts back the one number every other sensitivity scales against",
     effect="Leaves the monitor-distance coefficient untouched",
-    # Drift guard only (tasks.md decision 2, owner-confirmed 2026-09-09): every
+    # Drift guard only (owner decision 2, confirmed 2026-09-09): every
     # other sensitivity setting in this file is a multiplier layered on top of
     # this coefficient, so moving it would silently rescale all of them at once.
     # fpstune never changes this value, in either direction.
@@ -488,7 +488,7 @@ MW3_FOV = _make_mw3_profile_setting(
     current_impact="90.000000: The narrower default — movement beside the player can go unseen",
     recommended_impact="120.000000: The file's own maximum — nothing beside the player goes unseen",
     effect="Widens field of view to the file's own maximum",
-    # Same owner decision as MW4's sibling (tasks.md decision 3): peripheral
+    # Same owner decision as MW4's sibling (owner decision 3): peripheral
     # information is worth more than apparent target size, offered in COMPLETE
     # rather than assumed, because it changes what the screen shows and costs
     # frames (consequence 5).

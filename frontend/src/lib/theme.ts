@@ -31,7 +31,7 @@ function initialTheme(): Theme {
 }
 
 /** Put the theme on the document: Tailwind's `dark` class, and the UA's own colour scheme. */
-export function applyTheme(theme: Theme): void {
+function applyTheme(theme: Theme): void {
   const root = document.documentElement;
   root.classList.toggle("dark", theme === "dark");
   root.style.colorScheme = theme;

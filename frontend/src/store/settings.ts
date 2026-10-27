@@ -48,7 +48,7 @@ function computeStatusFromResult(
  * cleanup sizer all build it: three inline copies is how one of them came to omit
  * `recommended_value` and silently blank it.
  */
-export interface DetectionResultUpdate {
+interface DetectionResultUpdate {
   value: unknown;
   is_optimized: boolean;
   is_applicable: boolean;
@@ -72,7 +72,7 @@ export interface DetectionResultUpdate {
  * and is carried as it came, never re-derived from `current` and `recommended`
  * on this side (#107 U0).
  */
-export function updateFromState(state: SettingState): DetectionResultUpdate {
+function updateFromState(state: SettingState): DetectionResultUpdate {
   return {
     value: state.is_action ? state.reading : state.current,
     is_optimized: state.is_optimized,

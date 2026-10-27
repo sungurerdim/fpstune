@@ -42,7 +42,7 @@ export function isComponentTweak(setting: Setting, component: HardwareComponent)
  * own value for a software tweak, the driver's for a component, the game's for
  * a line in its config file. One way back everywhere; only the word differs.
  */
-export const DEFAULT_KIND_KEY = {
+const DEFAULT_KIND_KEY = {
   software: "reset.kind.software",
   hardware: "reset.kind.hardware",
   game: "reset.kind.game",

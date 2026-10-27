@@ -9,7 +9,7 @@ import { createSettingsSlice, type SettingsSlice } from "./settings";
 export type TabId = "optimize" | "cleanup" | "measure";
 /** What a streamed bulk run does to each row: apply, or reset to its default. */
 export type BulkAction = "apply" | "reset";
-export type OperationStatus =
+type OperationStatus =
   | "queued"
   | "running"
   | "verified"
@@ -59,7 +59,7 @@ export interface RunStep {
 const MAX_RUN_LINES = 400;
 
 /** Outcome of a single cleanup/maintenance action for the results summary. */
-export interface CleanupResult {
+interface CleanupResult {
   id: string;
   name: string;
   success: boolean;

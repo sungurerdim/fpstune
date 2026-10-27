@@ -37,23 +37,34 @@ function Get-FpsLocalText {
     $null
 }
 
+function Get-FpsEntryField {
+    # {en,tr} pair for a state: its own Title / Steps property, else the field on state.Entry.Data.
+    param($State, [ValidateSet('title', 'steps')][string]$Name)
+    $own = $State.PSObject.Properties[$(if ($Name -eq 'title') { 'Title' } else { 'Steps' })]
+    if ($own) { return $own.Value }
+    $entry = $State.PSObject.Properties['Entry']
+    if ($entry -and $entry.Value -and $entry.Value.Data) {
+        $field = $entry.Value.Data.PSObject.Properties[$Name]
+        if ($field) { return $field.Value }
+    }
+    $null
+}
+
 function Format-FpsSummary {
     <#
     .SYNOPSIS
       Returns the summary lines for a set of detect results.
     .PARAMETER Rows
-      States from Get-FpsRowState / Get-FpsState (Class, RowId, Id).
+      States from Get-FpsRowState / Get-FpsState (Class, RowId, Id, Entry).
+      Titles and steps come from state.Entry (the catalogue entry), or from
+      Title / Steps properties on the state itself.
     .PARAMETER Language
       en or tr.
-    .PARAMETER Catalogue
-      Optional catalogue rows (Get-FpsCatalogue). Manual rows take title and
-      steps from here, or from Title / Steps properties on the state itself.
     #>
     [CmdletBinding()]
     param(
         [AllowEmptyCollection()][object[]]$Rows = @(),
-        [ValidateSet('en', 'tr')][string]$Language = 'en',
-        [object[]]$Catalogue = @()
+        [ValidateSet('en', 'tr')][string]$Language = 'en'
     )
 
     $s = Get-FpsStrings -Language $Language
@@ -73,13 +84,8 @@ function Format-FpsSummary {
         $lines.Add('')
         $lines.Add($s.manualHeading)
         foreach ($row in $manual) {
-            $entry = $Catalogue | Where-Object { $_.Id -eq $row.Id } | Select-Object -First 1
-            $data = if ($entry) { $entry.Data } else { $null }
-
-            $titlePair = if ($row.PSObject.Properties['Title']) { $row.Title } elseif ($data -and $data.PSObject.Properties['title']) { $data.title } else { $null }
-            $stepsPair = if ($row.PSObject.Properties['Steps']) { $row.Steps } elseif ($data -and $data.PSObject.Properties['steps']) { $data.steps } else { $null }
-            $title = Get-FpsLocalText -Pair $titlePair -Language $Language
-            $steps = Get-FpsLocalText -Pair $stepsPair -Language $Language
+            $title = Get-FpsLocalText -Pair (Get-FpsEntryField -State $row -Name 'title') -Language $Language
+            $steps = Get-FpsLocalText -Pair (Get-FpsEntryField -State $row -Name 'steps') -Language $Language
 
             $name = if ($title) { $title } else { $row.RowId }
             $lines.Add("- $name")
@@ -93,13 +99,18 @@ function Format-FpsSummary {
     }
 
     if ($unreadable.Count -gt 0) {
-        $ids = @($unreadable | ForEach-Object { $_.RowId }) -join ', '
+        $names = @($unreadable | ForEach-Object {
+                $title = Get-FpsLocalText -Pair (Get-FpsEntryField -State $_ -Name 'title') -Language $Language
+                if ($title) { "$title ($($_.RowId))" } else { [string]$_.RowId }
+            }) -join ', '
+        $format = if ($unreadable.Count -eq 1) { $s.unreadableOne } else { $s.unreadableMany }
         $lines.Add('')
-        $lines.Add([string]::Format($inv, $s.unreadable, $unreadable.Count, $ids))
+        $lines.Add([string]::Format($inv, $format, $unreadable.Count, $names))
     }
 
     if ($notApplicable.Count -gt 0) {
-        $lines.Add([string]::Format($inv, $s.notApplicable, $notApplicable.Count))
+        $format = if ($notApplicable.Count -eq 1) { $s.notApplicableOne } else { $s.notApplicableMany }
+        $lines.Add([string]::Format($inv, $format, $notApplicable.Count))
     }
 
     $lines.ToArray()
@@ -112,11 +123,10 @@ function Show-FpsSummary {
     #>
     param(
         [AllowEmptyCollection()][object[]]$Rows = @(),
-        [string]$Language,
-        [object[]]$Catalogue = @()
+        [string]$Language
     )
     if (-not $Language) { $Language = Get-FpsLanguage }
-    foreach ($line in @(Format-FpsSummary -Rows $Rows -Language $Language -Catalogue $Catalogue)) {
+    foreach ($line in @(Format-FpsSummary -Rows $Rows -Language $Language)) {
         Write-Host $line
     }
 }

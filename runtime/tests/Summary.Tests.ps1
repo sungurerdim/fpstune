@@ -6,30 +6,19 @@ BeforeAll {
     $script:stringsRoot = Join-Path $PSScriptRoot '../strings'
     $script:utf8 = New-Object System.Text.UTF8Encoding($false)
 
-    function script:New-Row([string]$Id, [string]$Class, $Instance) {
+    function script:New-Row([string]$Id, [string]$Class, $Instance, $Entry) {
         $rowId = if ($null -ne $Instance) { "$Id@$Instance" } else { $Id }
-        [pscustomobject]@{ RowId = $rowId; Id = $Id; Instance = $Instance; Label = $null; Class = $Class; Current = $null; Target = $null; Error = $null }
+        [pscustomobject]@{ RowId = $rowId; Id = $Id; Instance = $Instance; Label = $null; Class = $Class; Current = $null; Target = $null; Error = $null; Entry = $Entry }
     }
 
     function script:Read-Strings([string]$Name) {
         [IO.File]::ReadAllText((Join-Path $script:stringsRoot "$Name.json"), $script:utf8) | ConvertFrom-Json
     }
 
-    # 2 already right, 3 will fix (one row has two instances), 1 manual, 1 not applicable,
-    # 2 unreadable: 9 states in all.
-    $script:rows = @(
-        (New-Row 'power:a' 'already-right' $null)
-        (New-Row 'power:b' 'already-right' $null)
-        (New-Row 'power:c' 'will-fix' $null)
-        (New-Row 'network:rss' 'will-fix' 'eth0')
-        (New-Row 'network:rss' 'will-fix' 'eth1')
-        (New-Row 'hardware:xmp' 'manual' $null)
-        (New-Row 'power:d' 'not-applicable' $null)
-        (New-Row 'power:e' 'unreadable' $null)
-        (New-Row 'network:rss' 'unreadable' 'eth2')
-    )
-    $script:rowsClean = @($script:rows | Where-Object { $_.Class -ne 'unreadable' -and $_.Class -ne 'not-applicable' })
-
+    $script:unreadableEntry = [pscustomobject]@{
+        Id   = 'power:e'
+        Data = [pscustomobject]@{ kind = 'tweak'; title = [pscustomobject]@{ en = 'Turn off the power throttle'; tr = 'G' + [char]0x00FC + [char]0x00E7 + ' k' + [char]0x0131 + 's' + [char]0x0131 + 'tlamas' + [char]0x0131 + 'n' + [char]0x0131 + ' kapat' } }
+    }
     $trSteps = 'BIOS ay' + [char]0x0131 + 'n' + [char]0x0131 + ' a' + [char]0x00E7 + '. Bellek profilini etkinle' + [char]0x015F + 'tir. Kaydet.'
     $script:catalogue = @(
         [pscustomobject]@{
@@ -41,6 +30,21 @@ BeforeAll {
             }
         }
     )
+
+    # 2 already right, 3 will fix (one row has two instances), 1 manual, 1 not applicable,
+    # 2 unreadable: 9 states in all.
+    $script:rows = @(
+        (New-Row 'power:a' 'already-right' $null)
+        (New-Row 'power:b' 'already-right' $null)
+        (New-Row 'power:c' 'will-fix' $null)
+        (New-Row 'network:rss' 'will-fix' 'eth0')
+        (New-Row 'network:rss' 'will-fix' 'eth1')
+        (New-Row 'hardware:xmp' 'manual' $null $script:catalogue[0])
+        (New-Row 'power:d' 'not-applicable' $null)
+        (New-Row 'power:e' 'unreadable' $null $script:unreadableEntry)
+        (New-Row 'network:rss' 'unreadable' 'eth2')
+    )
+    $script:rowsClean = @($script:rows | Where-Object { $_.Class -ne 'unreadable' -and $_.Class -ne 'not-applicable' })
 
     function script:Get-Text($Lines) { (@($Lines) | ForEach-Object { [string]$_ }) -join "`n" }
 }
@@ -83,7 +87,7 @@ Describe 'Strings files' {
 
 Describe 'Format-FpsSummary totals' {
     It 'counts every class from the rows (en)' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
         $text | Should -Match 'Checked 9 '
         $text | Should -Match 'already right 2'
         $text | Should -Match 'will fix 3'
@@ -92,7 +96,7 @@ Describe 'Format-FpsSummary totals' {
     It 'counts every class from the rows (tr)' {
         $tr = Read-Strings 'tr'
         $expected = [string]::Format([Globalization.CultureInfo]::InvariantCulture, $tr.totals, 9, 2, 3, 1)
-        $lines = @(Format-FpsSummary -Rows $script:rows -Language tr -Catalogue $script:catalogue)
+        $lines = @(Format-FpsSummary -Rows $script:rows -Language tr)
         $lines | Should -Contain $expected
     }
     It 'derives the counts, not a fixed number' {
@@ -107,13 +111,13 @@ Describe 'Format-FpsSummary totals' {
         $old = [Threading.Thread]::CurrentThread.CurrentCulture
         try {
             [Threading.Thread]::CurrentThread.CurrentCulture = New-Object Globalization.CultureInfo('fr-FR')
-            $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en -Catalogue $script:catalogue)
+            $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
             $text | Should -Match 'Checked 9 '
         }
         finally { [Threading.Thread]::CurrentThread.CurrentCulture = $old }
     }
     It 'returns lines and prints nothing' {
-        $out = @(Format-FpsSummary -Rows $script:rows -Language en -Catalogue $script:catalogue 6>&1)
+        $out = @(Format-FpsSummary -Rows $script:rows -Language en 6>&1)
         @($out | Where-Object { $_ -is [System.Management.Automation.InformationRecord] }).Count | Should -Be 0
         $out.Count | Should -BeGreaterThan 2
     }
@@ -125,12 +129,12 @@ Describe 'Format-FpsSummary totals' {
 
 Describe 'Format-FpsSummary manual rows' {
     It 'shows the steps in English' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
         $text | Should -Match 'Open the BIOS\. Enable the memory profile\. Save\.'
         $text | Should -Match 'Turn on the memory profile'
     }
     It 'shows the steps in Turkish and not the English text' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr)
         $text | Should -Match ('Bellek profilini etkinle' + [char]0x015F + 'tir')
         $text | Should -Not -Match 'Open the BIOS'
     }
@@ -152,22 +156,84 @@ Describe 'Format-FpsSummary manual rows' {
 
 Describe 'Format-FpsSummary unreadable and not applicable' {
     It 'is absent at 0' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rowsClean -Language en -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rowsClean -Language en)
         $text | Should -Not -Match 'could not be read'
         $text | Should -Not -Match 'do not apply'
     }
     It 'is present with the row ids at more than 0' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language en)
         $text | Should -Match 'could not be read'
         $text | Should -Match 'power:e'
         $text | Should -Match 'network:rss@eth2'
-        $text | Should -Match '1 do not apply'
+        $text | Should -Match '1 does not apply'
     }
     It 'is present in Turkish with the row ids' {
-        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr -Catalogue $script:catalogue)
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language tr)
         $text | Should -Match 'power:e'
         $text | Should -Match 'network:rss@eth2'
         $text | Should -Not -Match 'could not be read'
+    }
+}
+
+Describe 'Format-FpsSummary copy' {
+    BeforeAll {
+        $script:u = @{
+            i = [string][char]0x0131; I2 = [string][char]0x0130; g = [string][char]0x011F; s = [string][char]0x015F
+            c = [string][char]0x00E7; o = [string][char]0x00F6; u = [string][char]0x00FC
+        }
+        function script:Get-CountRows([int]$Unreadable, [int]$NotApplicable) {
+            $list = @()
+            for ($n = 1; $n -le $Unreadable; $n++) { $list += New-Row "power:u$n" 'unreadable' $null }
+            for ($n = 1; $n -le $NotApplicable; $n++) { $list += New-Row "power:n$n" 'not-applicable' $null }
+            , $list
+        }
+    }
+
+    It 'labels the manual total "elle yapilacak" in Turkish' {
+        $expected = 'elle yap' + $script:u.i + 'lacak 1'
+        $lines = @(Format-FpsSummary -Rows @(New-Row 'hardware:xmp' 'manual' $null) -Language tr)
+        (Get-Text $lines) | Should -Match ([regex]::Escape($expected))
+    }
+
+    It 'says "does not apply" for one row and "do not apply" for <Count> (en)' -ForEach @(
+        @{ Count = 1; Expected = '1 does not apply to this PC.' }
+        @{ Count = 2; Expected = '2 do not apply to this PC.' }
+    ) {
+        $lines = @(Format-FpsSummary -Rows (Get-CountRows 0 $Count) -Language en)
+        $lines | Should -Contain $Expected
+    }
+
+    It 'states the not-applicable count <Count> in Turkish' -ForEach @(
+        @{ Count = 1 }
+        @{ Count = 2 }
+    ) {
+        $expected = "$Count bu bilgisayara uygun de" + $script:u.g + 'il.'
+        @(Format-FpsSummary -Rows (Get-CountRows 0 $Count) -Language tr) | Should -Contain $expected
+    }
+
+    It 'says "row could" for one unreadable row and "rows could" for <Count> (en)' -ForEach @(
+        @{ Count = 1; Expected = '1 row could not be read and will be left alone: power:u1' }
+        @{ Count = 2; Expected = '2 rows could not be read and will be left alone: power:u1, power:u2' }
+    ) {
+        $lines = @(Format-FpsSummary -Rows (Get-CountRows $Count 0) -Language en)
+        $lines | Should -Contain $Expected
+    }
+
+    It 'states the unreadable count <Count> in Turkish' -ForEach @(
+        @{ Count = 1; Ids = 'power:u1' }
+        @{ Count = 2; Ids = 'power:u1, power:u2' }
+    ) {
+        $expected = "$Count sat" + $script:u.i + 'r okunamad' + $script:u.i + ', dokunulmayacak: ' + $Ids
+        @(Format-FpsSummary -Rows (Get-CountRows $Count 0) -Language tr) | Should -Contain $expected
+    }
+
+    It 'shows each unreadable row title in the UI language and keeps the id in parentheses (<Lang>)' -ForEach @(
+        @{ Lang = 'en'; Title = 'Turn off the power throttle' }
+        @{ Lang = 'tr'; Title = 'G' + [char]0x00FC + [char]0x00E7 + ' k' + [char]0x0131 + 's' + [char]0x0131 + 'tlamas' + [char]0x0131 + 'n' + [char]0x0131 + ' kapat' }
+    ) {
+        $text = Get-Text (Format-FpsSummary -Rows $script:rows -Language $Lang)
+        $text | Should -Match ([regex]::Escape("$Title (power:e)"))
+        $text | Should -Match ([regex]::Escape('network:rss@eth2'))
     }
 }
 
@@ -175,7 +241,7 @@ Describe 'Format-FpsSummary claims' {
     It 'has no line with a number followed by %, ms or fps' {
         foreach ($lang in 'en', 'tr') {
             foreach ($set in @($script:rows, $script:rowsClean)) {
-                foreach ($line in @(Format-FpsSummary -Rows $set -Language $lang -Catalogue $script:catalogue)) {
+                foreach ($line in @(Format-FpsSummary -Rows $set -Language $lang)) {
                     [string]$line | Should -Not -Match '\d\s*(%|ms\b|fps\b)'
                 }
             }

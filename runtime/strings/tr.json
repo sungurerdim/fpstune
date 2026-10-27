@@ -1,8 +1,10 @@
 {
-  "totals": "Denetlenen {0} · zaten doğru {1} · düzeltilecek {2} · elle {3}",
+  "totals": "Denetlenen {0} · zaten doğru {1} · düzeltilecek {2} · elle yapılacak {3}",
   "manualHeading": "Bunlar için bir ayarı kendiniz değiştirmelisiniz:",
   "manualSteps": "Nasıl:",
   "manualNoSteps": "Bunun için henüz adım yok.",
-  "unreadable": "{0} okunamadı, dokunulmayacak: {1}",
-  "notApplicable": "{0} bu bilgisayara uygun değil."
+  "unreadableOne": "{0} satır okunamadı, dokunulmayacak: {1}",
+  "unreadableMany": "{0} satır okunamadı, dokunulmayacak: {1}",
+  "notApplicableOne": "{0} bu bilgisayara uygun değil.",
+  "notApplicableMany": "{0} bu bilgisayara uygun değil."
 }

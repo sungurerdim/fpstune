@@ -26,6 +26,11 @@ from pathlib import PureWindowsPath
 from fpstune.utils import process_watch
 from fpstune.utils.logger import get_logger
 from fpstune.utils.system_tools import system_tool
+from fpstune.utils.winapi.processes import (
+    INVALID_HANDLE_VALUE,
+    PROCESSENTRY32W,
+    TH32CS_SNAPPROCESS,
+)
 
 logger = get_logger()
 
@@ -76,18 +81,13 @@ def running_images(names: Iterable[str]) -> list[ProcessImage]:
     """Running processes named one of ``names``, with their full image paths."""
     if sys.platform != "win32":
         return []
-    from fpstune.settings.executors.game_processes import (
-        _PROCESSENTRY32W,
-        INVALID_HANDLE_VALUE,
-        TH32CS_SNAPPROCESS,
-    )
 
     wanted = {name.casefold() for name in names}
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
-    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
-    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
     kernel32.OpenProcess.restype = wintypes.HANDLE
     kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
     kernel32.QueryFullProcessImageNameW.argtypes = (
@@ -103,8 +103,8 @@ def running_images(names: Iterable[str]) -> list[ProcessImage]:
         return []
     found: list[ProcessImage] = []
     try:
-        entry = _PROCESSENTRY32W()
-        entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
         more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while more:
             if entry.szExeFile.casefold() in wanted:

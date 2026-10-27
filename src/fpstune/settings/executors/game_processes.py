@@ -27,6 +27,11 @@ import time
 from ctypes import wintypes
 
 from fpstune.utils.logger import get_logger
+from fpstune.utils.winapi.processes import (
+    INVALID_HANDLE_VALUE,
+    PROCESSENTRY32W,
+    TH32CS_SNAPPROCESS,
+)
 
 logger = get_logger()
 
@@ -97,25 +102,6 @@ LAUNCHER_LABELS: dict[str, str] = {"steam": "Steam", "bnet": "Battle.net"}
 _CACHE_TTL_SECONDS = 2.0
 _cache: tuple[float, frozenset[str]] | None = None
 
-TH32CS_SNAPPROCESS = 0x00000002
-INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
-MAX_PATH = 260
-
-
-class _PROCESSENTRY32W(ctypes.Structure):
-    _fields_ = (
-        ("dwSize", wintypes.DWORD),
-        ("cntUsage", wintypes.DWORD),
-        ("th32ProcessID", wintypes.DWORD),
-        ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
-        ("th32ModuleID", wintypes.DWORD),
-        ("cntThreads", wintypes.DWORD),
-        ("th32ParentProcessID", wintypes.DWORD),
-        ("pcPriClassBase", ctypes.c_long),
-        ("dwFlags", wintypes.DWORD),
-        ("szExeFile", wintypes.WCHAR * MAX_PATH),
-    )
-
 
 def _snapshot_process_names() -> frozenset[str]:
     """Every running process name, lowercased, without its ``.exe`` suffix.
@@ -130,8 +116,8 @@ def _snapshot_process_names() -> frozenset[str]:
     kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
-    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
-    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
     kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
 
     handle = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
@@ -141,8 +127,8 @@ def _snapshot_process_names() -> frozenset[str]:
 
     names: set[str] = set()
     try:
-        entry = _PROCESSENTRY32W()
-        entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
         if not kernel32.Process32FirstW(handle, ctypes.byref(entry)):
             return frozenset()
         while True:
@@ -151,7 +137,7 @@ def _snapshot_process_names() -> frozenset[str]:
                 names.add(exe.removesuffix(".exe").removesuffix(".EXE").casefold())
             if not kernel32.Process32NextW(handle, ctypes.byref(entry)):
                 break
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - a failed enumeration falls back to 'no game running', never blocks an apply
         logger.debug("process enumeration failed: %s", exc)
         return frozenset()
     finally:

@@ -58,6 +58,33 @@ _TCP_ROW = struct.Struct("<6I")
 _TERMINATE_EXIT_CODE = 1
 _TERMINATE_WAIT_MS = 5000
 
+TH32CS_SNAPPROCESS = 0x00000002
+INVALID_HANDLE_VALUE = ctypes.c_void_p(-1).value
+MAX_PATH = 260
+
+
+class PROCESSENTRY32W(ctypes.Structure):
+    """``PROCESSENTRY32W``: one row of a ``CreateToolhelp32Snapshot`` process table.
+
+    Public because the two other readers of that table (the game-config write
+    guard and the tool-process sweep) import it from here rather than declaring
+    a second copy — one wrong field offset would read every PID and image name
+    shifted, and the copies would drift silently.
+    """
+
+    _fields_ = (
+        ("dwSize", wintypes.DWORD),
+        ("cntUsage", wintypes.DWORD),
+        ("th32ProcessID", wintypes.DWORD),
+        ("th32DefaultHeapID", ctypes.POINTER(ctypes.c_ulong)),
+        ("th32ModuleID", wintypes.DWORD),
+        ("cntThreads", wintypes.DWORD),
+        ("th32ParentProcessID", wintypes.DWORD),
+        ("pcPriClassBase", ctypes.c_long),
+        ("dwFlags", wintypes.DWORD),
+        ("szExeFile", wintypes.WCHAR * MAX_PATH),
+    )
+
 
 @dataclass(frozen=True)
 class TcpRow:
@@ -322,24 +349,18 @@ def split_command_line(text: str) -> list[str]:
 
 def list_processes() -> list[ProcessEntry]:
     """Every running process with its parent's PID (``CreateToolhelp32Snapshot``)."""
-    from fpstune.settings.executors.game_processes import (
-        _PROCESSENTRY32W,
-        INVALID_HANDLE_VALUE,
-        TH32CS_SNAPPROCESS,
-    )
-
     kernel32 = _kernel32()
     kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
     kernel32.CreateToolhelp32Snapshot.argtypes = (wintypes.DWORD, wintypes.DWORD)
-    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
-    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(_PROCESSENTRY32W))
+    kernel32.Process32FirstW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
+    kernel32.Process32NextW.argtypes = (wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W))
     snapshot = kernel32.CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0)
     if not snapshot or snapshot == INVALID_HANDLE_VALUE:
         raise ctypes.WinError(ctypes.get_last_error())
     found: list[ProcessEntry] = []
     try:
-        entry = _PROCESSENTRY32W()
-        entry.dwSize = ctypes.sizeof(_PROCESSENTRY32W)
+        entry = PROCESSENTRY32W()
+        entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
         more = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
         while more:
             found.append(

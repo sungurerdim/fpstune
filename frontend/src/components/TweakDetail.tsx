@@ -12,7 +12,7 @@
  * it the (i) to place.
  */
 
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { Info, RotateCcw } from "lucide-react";
 import { useT } from "../i18n";
 import {
@@ -48,17 +48,128 @@ interface DetailPanelProps {
   error?: string;
 }
 
-function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
+/**
+ * The measured fact behind an advisory, or the current → recommended pair.
+ *
+ * Split out of the panel so each rule keeps its own branch count (P-KISS): the
+ * panel was one 43-branch function, and none of the branches were about the
+ * panel's own job of laying the sections out.
+ */
+function StateLine({ setting }: { setting: Setting }) {
   const { t } = useT();
-  const name = localizedName(setting);
-  const description = localizedDescription(setting);
-  const effect = localizedEffect(setting);
-  const finding = describeFinding(setting);
-
   const optimized = setting.isOptimized;
-  const hasState = setting.isApplicable && !setting.isAction;
+  const finding = describeFinding(setting);
   const hasCurrent =
     setting.currentValue !== null && setting.currentValue !== undefined;
+
+  if (!setting.isApplicable || setting.isAction) return null;
+
+  if (finding) {
+    return (
+      <p className="wrap-break-word">
+        <span>{finding.summary}</span>
+        {finding.advice && (
+          <span className="text-muted-foreground"> {finding.advice}</span>
+        )}
+      </p>
+    );
+  }
+  return (
+    <p className="wrap-break-word">
+      <span className="text-muted-foreground">{t("tooltip.current")} </span>
+      <span className={cn("font-medium", !optimized && "text-warning")}>
+        {hasCurrent
+          ? valueLabel(setting, setting.currentValue, { withRawValue: true })
+          : t("row.notRead")}
+      </span>
+      {!optimized && !setting.isReadonly && (
+        <>
+          <span className="text-muted-foreground">
+            {" · "}
+            {t("tooltip.recommended")}{" "}
+          </span>
+          <span className="font-medium text-success">
+            {valueLabel(setting, setting.recommendedValue, {
+              withRawValue: true,
+            })}
+          </span>
+        </>
+      )}
+    </p>
+  );
+}
+
+/** What the setting claims, in its own words: never added up (C11 rule 1). */
+function ClaimsRow({ setting }: { setting: Setting }) {
+  const { t } = useT();
+  const claims = Object.entries(setting.impactScores ?? {});
+  const categories = setting.impactCategories ?? [];
+  if (claims.length === 0 && categories.length === 0) return null;
+
+  return (
+    <div className="flex min-w-0 flex-wrap gap-1">
+      {categories.map((c) => (
+        <span
+          key={c}
+          data-category={c}
+          className={cn(
+            "rounded border px-1.5 py-0.5 leading-none font-medium",
+            IMPACT_CATEGORY_META[c].className,
+          )}
+        >
+          {t(IMPACT_CATEGORY_META[c].labelKey)}
+        </span>
+      ))}
+      {claims.map(([key, value]) => (
+        <span
+          key={key}
+          className="inline-flex min-w-0 items-center rounded bg-muted px-1.5 py-0.5"
+        >
+          <span className="capitalize">{key.replace(/_/g, " ")}:</span>
+          <span className="ml-1 font-medium text-primary">{value}</span>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+/** The risk sentence, with the chip naming whether it is a warning or a note. */
+function RiskRow({ setting }: { setting: Setting }) {
+  const { t } = useT();
+  if (!setting.riskWarning) return null;
+  const isAdvanced = setting.riskLevel === "advanced";
+
+  return (
+    <div className="flex min-w-0 items-start gap-1.5">
+      <span
+        data-testid="detail-risk-chip"
+        data-risk={setting.riskLevel}
+        className={cn(
+          "shrink-0 rounded border px-1",
+          isAdvanced
+            ? "border-warning/30 bg-warning/20 text-warning"
+            : "border-border bg-muted/60 text-muted-foreground",
+        )}
+      >
+        {isAdvanced ? t("badge.risk") : t("badge.note")}
+      </span>
+      <p className="min-w-0 flex-1 wrap-break-word">{setting.riskWarning}</p>
+    </div>
+  );
+}
+
+/** What "Reset to default" writes back, and whose stock that is (C6). */
+function DefaultRow({
+  setting,
+  onReset,
+  busy,
+}: {
+  setting: Setting;
+  onReset: () => void;
+  busy: boolean;
+}) {
+  const { t } = useT();
+  const name = localizedName(setting);
   // The same predicate every surface asks, so the button appears exactly when
   // there is something to write back.
   const canReset = canResetSetting(setting);
@@ -68,14 +179,72 @@ function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
     !setting.isReadonly &&
     setting.defaultValue !== null &&
     setting.defaultValue !== undefined;
-  const kind = t(defaultKindKey(setting));
-  const defaultLabel = hasDefault
-    ? valueLabel(setting, setting.defaultValue)
-    : "";
+  if (!hasDefault) return null;
 
-  const claims = Object.entries(setting.impactScores ?? {});
+  const kind = t(defaultKindKey(setting));
+  const defaultLabel = valueLabel(setting, setting.defaultValue);
+
+  return (
+    <div className="flex min-w-0 items-center gap-2">
+      <p className="min-w-0 flex-1 text-muted-foreground wrap-break-word">
+        {t("detail.defaultIs", { kind, value: defaultLabel })}
+      </p>
+      {canReset && (
+        <Button
+          variant="outline"
+          size="xs"
+          className="shrink-0"
+          busy={busy}
+          icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
+          aria-label={t("row.resetNamedValue", {
+            name,
+            kind,
+            value: defaultLabel,
+          })}
+          title={t("row.resetKindValue", { kind, value: defaultLabel })}
+          onClick={onReset}
+        >
+          {t("action.reset")}
+        </Button>
+      )}
+    </div>
+  );
+}
+
+/** Where the claim comes from, as hostnames a person can read. */
+function SourcesRow({ setting }: { setting: Setting }) {
+  const { t } = useT();
+  if (setting.sources.length === 0) return null;
+
+  return (
+    <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
+      <span className="font-medium text-muted-foreground">
+        {t("tooltip.sources")}
+      </span>
+      {setting.sources.map((url) => (
+        <a
+          key={url}
+          href={url}
+          target="_blank"
+          rel="noopener noreferrer"
+          title={url}
+          className="min-w-0 truncate text-primary/80 hover:text-primary"
+        >
+          {hostOf(url)}
+        </a>
+      ))}
+    </div>
+  );
+}
+
+function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
+  const { t } = useT();
+  const name = localizedName(setting);
+  const description = localizedDescription(setting);
+  const effect = localizedEffect(setting);
+
+  const optimized = setting.isOptimized;
   const failure = error ?? setting.lastError;
-  const isAdvanced = setting.riskLevel === "advanced";
   // A readonly row has no Apply: its `effect` is written as the instruction,
   // so it is labelled as one.
   const showImpact = !optimized || setting.isReadonly;
@@ -94,38 +263,7 @@ function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
         <p className="text-muted-foreground wrap-break-word">{description}</p>
       )}
 
-      {hasState && finding ? (
-        <p className="wrap-break-word">
-          <span>{finding.summary}</span>
-          {finding.advice && (
-            <span className="text-muted-foreground"> {finding.advice}</span>
-          )}
-        </p>
-      ) : (
-        hasState && (
-          <p className="wrap-break-word">
-            <span className="text-muted-foreground">{t("tooltip.current")} </span>
-            <span className={cn("font-medium", !optimized && "text-warning")}>
-              {hasCurrent
-                ? valueLabel(setting, setting.currentValue, { withRawValue: true })
-                : t("row.notRead")}
-            </span>
-            {!optimized && !setting.isReadonly && (
-              <>
-                <span className="text-muted-foreground">
-                  {" · "}
-                  {t("tooltip.recommended")}{" "}
-                </span>
-                <span className="font-medium text-success">
-                  {valueLabel(setting, setting.recommendedValue, {
-                    withRawValue: true,
-                  })}
-                </span>
-              </>
-            )}
-          </p>
-        )
-      )}
+      <StateLine setting={setting} />
 
       {!optimized && setting.currentImpact && (
         <p className="text-muted-foreground wrap-break-word">
@@ -147,50 +285,8 @@ function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
         </p>
       )}
 
-      {(claims.length > 0 || (setting.impactCategories ?? []).length > 0) && (
-        <div className="flex min-w-0 flex-wrap gap-1">
-          {(setting.impactCategories ?? []).map((c) => (
-            <span
-              key={c}
-              data-category={c}
-              className={cn(
-                "rounded border px-1.5 py-0.5 leading-none font-medium",
-                IMPACT_CATEGORY_META[c].className,
-              )}
-            >
-              {t(IMPACT_CATEGORY_META[c].labelKey)}
-            </span>
-          ))}
-          {/* What the setting claims, in its own words: never added up. */}
-          {claims.map(([key, value]) => (
-            <span
-              key={key}
-              className="inline-flex min-w-0 items-center rounded bg-muted px-1.5 py-0.5"
-            >
-              <span className="capitalize">{key.replace(/_/g, " ")}:</span>
-              <span className="ml-1 font-medium text-primary">{value}</span>
-            </span>
-          ))}
-        </div>
-      )}
-
-      {setting.riskWarning && (
-        <div className="flex min-w-0 items-start gap-1.5">
-          <span
-            data-testid="detail-risk-chip"
-            data-risk={setting.riskLevel}
-            className={cn(
-              "shrink-0 rounded border px-1",
-              isAdvanced
-                ? "border-warning/30 bg-warning/20 text-warning"
-                : "border-border bg-muted/60 text-muted-foreground",
-            )}
-          >
-            {isAdvanced ? t("badge.risk") : t("badge.note")}
-          </span>
-          <p className="min-w-0 flex-1 wrap-break-word">{setting.riskWarning}</p>
-        </div>
-      )}
+      <ClaimsRow setting={setting} />
+      <RiskRow setting={setting} />
 
       {setting.perceptibleCost && (
         <p className="wrap-break-word">
@@ -211,51 +307,8 @@ function DetailPanel({ setting, id, onReset, busy, error }: DetailPanelProps) {
         </p>
       )}
 
-      {hasDefault && (
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="min-w-0 flex-1 text-muted-foreground wrap-break-word">
-            {t("detail.defaultIs", { kind, value: defaultLabel })}
-          </p>
-          {canReset && (
-            <Button
-              variant="outline"
-              size="xs"
-              className="shrink-0"
-              busy={busy}
-              icon={<RotateCcw className="h-3.5 w-3.5" aria-hidden />}
-              aria-label={t("row.resetNamedValue", {
-                name,
-                kind,
-                value: defaultLabel,
-              })}
-              title={t("row.resetKindValue", { kind, value: defaultLabel })}
-              onClick={onReset}
-            >
-              {t("action.reset")}
-            </Button>
-          )}
-        </div>
-      )}
-
-      {setting.sources.length > 0 && (
-        <div className="flex min-w-0 flex-wrap gap-x-3 gap-y-0.5">
-          <span className="font-medium text-muted-foreground">
-            {t("tooltip.sources")}
-          </span>
-          {setting.sources.map((url) => (
-            <a
-              key={url}
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              title={url}
-              className="min-w-0 truncate text-primary/80 hover:text-primary"
-            >
-              {hostOf(url)}
-            </a>
-          ))}
-        </div>
-      )}
+      <DefaultRow setting={setting} onReset={onReset} busy={busy} />
+      <SourcesRow setting={setting} />
 
       {!setting.isApplicable && (
         <p className="text-destructive wrap-break-word">
@@ -311,16 +364,30 @@ export function TweakDetail({
   const [open, setOpen] = useState(false);
   const panelId = useId();
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const rootRef = useRef<HTMLDivElement>(null);
   const name = localizedName(setting);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key !== "Escape" || !open) return;
-    // Closing the detail is the whole of what this Escape means: a dialog or
-    // a menu around the list must not also close.
-    event.stopPropagation();
-    setOpen(false);
-    triggerRef.current?.focus();
-  };
+  // Escape closes the detail from anywhere inside it. On the document in the
+  // capture phase, not on a div: a div with an interactive key handler is not
+  // keyboard-operable, and jsx-a11y rejects one. Capture also keeps the key to
+  // this disclosure, so a dialog around the list does not close with it.
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      const root = rootRef.current;
+      if (!root || !(event.target instanceof Node) || !root.contains(event.target)) {
+        return;
+      }
+      event.stopPropagation();
+      setOpen(false);
+      triggerRef.current?.focus();
+    };
+
+    document.addEventListener("keydown", onKeyDown, true);
+    return () => document.removeEventListener("keydown", onKeyDown, true);
+  }, [open]);
 
   const trigger = (
     <button
@@ -343,7 +410,7 @@ export function TweakDetail({
   );
 
   return (
-    <div onKeyDown={onKeyDown} className="min-w-0">
+    <div ref={rootRef} className="min-w-0">
       {children ? children(trigger) : trigger}
       {open && (
         <DetailPanel

@@ -8,6 +8,7 @@
  */
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { useEffect, type ReactNode } from "react";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setLocale } from "../../i18n";
@@ -21,6 +22,29 @@ import {
 } from "../../test/narrow";
 import type { Setting } from "../../types/setting";
 import { TweakDetail } from "../TweakDetail";
+
+/**
+ * An Escape-aware surface *around* the detail, the way a dialog wrapping the
+ * list would be. A document listener rather than a div's `onKeyDown`: that is
+ * how a real outer surface hears a key, and a div carrying an interactive key
+ * handler is exactly what jsx-a11y forbids.
+ */
+function OuterEscape({
+  onEscape,
+  children,
+}: {
+  onEscape: () => void;
+  children: ReactNode;
+}) {
+  useEffect(() => {
+    const handler = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onEscape();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onEscape]);
+  return <>{children}</>;
+}
 
 function makeSetting(overrides: Partial<Setting> = {}): Setting {
   return {
@@ -167,9 +191,9 @@ describe("Escape closes it and the keyboard user keeps their place", () => {
   it("keeps the Escape to itself while open, so a dialog around the list stays open", async () => {
     const outer = vi.fn();
     render(
-      <div onKeyDown={outer}>
+      <OuterEscape onEscape={outer}>
         <TweakDetail setting={makeSetting()} onReset={vi.fn()} />
-      </div>,
+      </OuterEscape>,
     );
     await userEvent.click(trigger());
 
@@ -181,9 +205,9 @@ describe("Escape closes it and the keyboard user keeps their place", () => {
   it("lets Escape through when nothing is open, so the dialog around the list can close", async () => {
     const outer = vi.fn();
     render(
-      <div onKeyDown={outer}>
+      <OuterEscape onEscape={outer}>
         <TweakDetail setting={makeSetting()} onReset={vi.fn()} />
-      </div>,
+      </OuterEscape>,
     );
     trigger().focus();
 

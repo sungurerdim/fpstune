@@ -2,6 +2,7 @@
 # Requires Catalogue.ps1 to be dot-sourced first. Windows PowerShell 5.1
 # compatible; defines functions only.
 #
+# Every state carries Entry, the catalogue entry it came from (Apply reads it).
 # Classes: already-right, will-fix, manual, not-applicable, unreadable.
 # A command that throws, or returns something that is not one scalar, makes the
 # row unreadable. It never counts as already-right.
@@ -59,6 +60,7 @@ function New-FpsState {
         Current  = $Current
         Target   = $Target
         Error    = $ErrorText
+        Entry    = $Row
     }
 }
 

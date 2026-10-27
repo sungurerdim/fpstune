@@ -36,9 +36,9 @@ import { localizedEffect, localizedName } from "../i18n/settings";
 import { settingsTr } from "../i18n/settingsTr";
 
 /** A run of non-space characters this long cannot wrap at a space. */
-export const UNBROKEN_MIN = 24;
+const UNBROKEN_MIN = 24;
 /** Text this long, with spaces in it, is a phrase: it needs room, or somewhere to wrap. */
-export const PHRASE_MIN = 24;
+const PHRASE_MIN = 24;
 
 /** Classes that let a word break inside itself (and therefore shrink min-content). */
 const BREAKS_ANYWHERE = new Set(["wrap-anywhere", "break-all"]);
@@ -126,6 +126,75 @@ export interface NarrowReport {
   carriers: Record<string, number>;
 }
 
+interface ElementContext {
+  root: Element;
+  text: string;
+  chain: Element[];
+  flag: (rule: string, at: Element) => void;
+}
+
+/** R1 and R4: a clipped carrier names itself, and nowrap text can be clipped. */
+function checkClipping(
+  { root, text, chain, flag }: ElementContext,
+  el: Element,
+): void {
+  const clipped = anyUp(
+    el,
+    root,
+    (t) => t === "truncate" || /^line-clamp-\d+$/.test(t),
+  );
+  // R1: a clipped carrier names itself in full on hover (its own or an ancestor's title).
+  if (clipped) {
+    const titled = chain.some((e) =>
+      (e.getAttribute("title") ?? "").includes(text),
+    );
+    if (!titled) flag("R1 clipped-without-title", el);
+  }
+
+  // R4: nowrap text must be clipped or scrollable by something above it.
+  if (anyUp(el, root, (t) => t === "whitespace-nowrap" || t === "text-nowrap")) {
+    if (!anyUp(el, root, CLIPS)) flag("R4 nowrap-without-clip", el);
+  }
+}
+
+/** R5: a phrase under a box that refuses to narrow. */
+function checkPhrase({ root, text, chain, flag }: ElementContext): void {
+  if (text.length < PHRASE_MIN || !/\s/.test(text)) return;
+  // Clipping or wrapping *inside* that box does nothing, because the box sizes
+  // itself to the unwrapped text; only `max-w-full` (bounded by the container)
+  // rescues it.
+  for (const item of chain) {
+    if (item === root) break;
+    const itemTokens = tokens(item);
+    if (itemTokens.has("max-w-full")) break;
+    if (itemTokens.has("shrink-0") || itemTokens.has("flex-none")) {
+      flag("R5 phrase-in-shrink-0", item);
+      break;
+    }
+  }
+}
+
+/** R2 and R3: an unbroken token needs a wrap or clip policy, and every flex
+ * item above it must be allowed to shrink below it. */
+function checkUnbroken(
+  { root, text, chain, flag }: ElementContext,
+  el: Element,
+): void {
+  if (longestRun(text) < UNBROKEN_MIN) return;
+  // R2: a token that cannot wrap at a space needs a wrap or clip policy.
+  if (!anyUp(el, root, (t) => WRAPS.has(t) || CLIPS(t))) {
+    flag("R2 unbroken-without-wrap", el);
+  }
+  // R3: every flex item above the token must be allowed to shrink below it.
+  if (anyUp(el, root, (t) => BREAKS_ANYWHERE.has(t))) return;
+  for (const item of chain) {
+    if (item === root) break;
+    if (isFlexRowItem(item) && !shrinkable(item)) {
+      flag("R3 flex-item-without-min-w-0", item);
+    }
+  }
+}
+
 /**
  * Check every element under `root` whose own text contains one of `probes`.
  *
@@ -161,51 +230,15 @@ export function narrowReport(root: Element, probes: Record<string, string>): Nar
       }
     };
 
-    const chain = lineage(el, root);
-    const unbroken = longestRun(text) >= UNBROKEN_MIN;
-    const clipped = anyUp(el, root, (t) => t === "truncate" || /^line-clamp-\d+$/.test(t));
-
-    // R1: a clipped carrier names itself in full on hover (its own or an ancestor's title).
-    if (clipped) {
-      const titled = chain.some((e) => (e.getAttribute("title") ?? "").includes(text));
-      if (!titled) flag("R1 clipped-without-title", el);
-    }
-
-    // R4: nowrap text must be clipped or scrollable by something above it.
-    if (anyUp(el, root, (t) => t === "whitespace-nowrap" || t === "text-nowrap")) {
-      if (!anyUp(el, root, CLIPS)) flag("R4 nowrap-without-clip", el);
-    }
-
-    // R5: a phrase under a box that refuses to narrow. Clipping or wrapping
-    // *inside* that box does nothing, because the box sizes itself to the
-    // unwrapped text; only `max-w-full` (bounded by the container) rescues it.
-    if (text.length >= PHRASE_MIN && /\s/.test(text)) {
-      for (const item of chain) {
-        if (item === root) break;
-        const itemTokens = tokens(item);
-        if (itemTokens.has("max-w-full")) break;
-        if (itemTokens.has("shrink-0") || itemTokens.has("flex-none")) {
-          flag("R5 phrase-in-shrink-0", item);
-          break;
-        }
-      }
-    }
-
-    if (unbroken) {
-      // R2: a token that cannot wrap at a space needs a wrap or clip policy.
-      if (!anyUp(el, root, (t) => WRAPS.has(t) || CLIPS(t))) {
-        flag("R2 unbroken-without-wrap", el);
-      }
-      // R3: every flex item above the token must be allowed to shrink below it.
-      if (!anyUp(el, root, (t) => BREAKS_ANYWHERE.has(t))) {
-        for (const item of chain) {
-          if (item === root) break;
-          if (isFlexRowItem(item) && !shrinkable(item)) {
-            flag("R3 flex-item-without-min-w-0", item);
-          }
-        }
-      }
-    }
+    const context: ElementContext = {
+      root,
+      text,
+      chain: lineage(el, root),
+      flag,
+    };
+    checkClipping(context, el);
+    checkPhrase(context);
+    checkUnbroken(context, el);
   }
   return { violations, carriers };
 }

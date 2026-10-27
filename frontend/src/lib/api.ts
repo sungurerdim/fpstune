@@ -156,10 +156,15 @@ export interface SystemInfo {
   gpu_detecting?: boolean;
 }
 
+/** One activity-log line, as `log_activity` writes it (utils/logger.py). */
 export interface ActivityLogEntry {
   timestamp: string;
   message: string;
-  level: string;
+  /**
+   * The four levels `log_activity` takes. A free string here let the panel's
+   * icon lookup be a cast; the union makes the set the contract (P-ILLEGAL).
+   */
+  level: "info" | "success" | "warning" | "error";
 }
 
 export interface DiagnosticsResponse {
@@ -841,12 +846,18 @@ export const suiteApi = {
  */
 export interface LedgerJob {
   id: string;
-  /** Why this job opened: "baseline", "after" or "manual". */
-  trigger: string;
+  /**
+   * Why this job opened. The backend's three trigger constants
+   * (`benchmark/ledger.py`); a fourth value is a contract change, not a string.
+   */
+  trigger: "baseline" | "after" | "manual";
   /** Which half of a comparison it is measuring: "baseline" or "after". */
   label: string;
-  /** "queued" until the guards pass, then "running", then "done" or "failed". */
-  status: string;
+  /**
+   * `queued` until the guards pass, then `running`, then `done`/`failed`;
+   * `archived` is a finished job the ledger has rotated out of the panel.
+   */
+  status: "queued" | "running" | "done" | "failed" | "archived";
   /** Bench keys, in the order they will run. */
   plan: string[];
   /** How many of `plan` have their result on disk. Never more than that. */
@@ -903,7 +914,13 @@ export interface LedgerArea {
   noise: number | null;
   exceeds_noise: boolean;
   improves_upward?: boolean | null;
-  verdict?: string | null;
+  /**
+   * The backend's four verdicts (`benchmark_ledger._verdict`). `unmeasured`
+   * and `unchanged` stay distinct on purpose: "we never looked" is not a
+   * finding, and a panel that renders them alike states something it did not
+   * measure (C11 rule 3).
+   */
+  verdict?: "improved" | "unchanged" | "worse" | "unmeasured" | null;
   samples_before?: number | null;
   samples_after?: number | null;
 }
@@ -1011,7 +1028,11 @@ export interface MachineHeadroom {
   target_fps: number | null;
   achievement_percent: number | null;
   tier: "met" | "near" | "short" | "critical" | "unknown";
-  bottleneck: string;
+  /**
+   * Which side the frame waited on, as `headroom_policy.should_promote` reads
+   * it. `unknown` is a real answer: the run did not establish a side.
+   */
+  bottleneck: "gpu" | "cpu" | "both" | "unknown";
   /** PresentMon's PresentMode for most frames; a fact, shown verbatim. */
   present_mode: string | null;
   /** The resolution the scene rendered at, which is the panel's own. */

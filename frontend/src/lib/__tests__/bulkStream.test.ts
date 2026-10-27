@@ -54,6 +54,11 @@ const REPAIR = makeSetting({
 });
 const NO_DEFAULT = makeSetting({ id: "network:no_default", defaultValue: null });
 
+/** The store's map is what the hook hands the pure function. */
+function targets(ids: string[], action: "apply" | "reset") {
+  return bulkTargets(useStore.getState().settings, ids, action);
+}
+
 beforeEach(() => {
   useStore.setState({
     settings: new Map(
@@ -64,32 +69,32 @@ beforeEach(() => {
 
 describe("bulkTargets", () => {
   it("applies an ordinary setting's recommendation", () => {
-    expect(bulkTargets(["network:nagle"], "apply")).toEqual({
+    expect(targets(["network:nagle"], "apply")).toEqual({
       "network:nagle": "disabled",
     });
   });
 
   it("runs an action with true even when it is not recommended unasked", () => {
     expect(REPAIR.recommendedValue).toBe(false);
-    expect(bulkTargets(["maintenance:sfc_scan"], "apply")).toEqual({
+    expect(targets(["maintenance:sfc_scan"], "apply")).toEqual({
       "maintenance:sfc_scan": true,
     });
   });
 
   it("resets every row to its own default, an action's being do-not-run", () => {
     expect(
-      bulkTargets(["network:nagle", "maintenance:sfc_scan"], "reset"),
+      targets(["network:nagle", "maintenance:sfc_scan"], "reset"),
     ).toEqual({ "network:nagle": "enabled", "maintenance:sfc_scan": false });
   });
 
   it("sends null for a row with no derivable default, so the backend refuses it", () => {
-    expect(bulkTargets(["network:no_default"], "reset")).toEqual({
+    expect(targets(["network:no_default"], "reset")).toEqual({
       "network:no_default": null,
     });
   });
 
   it("sends null for an id the store does not know, so the stream reports it", () => {
-    expect(bulkTargets(["ghost:setting"], "apply")).toEqual({
+    expect(targets(["ghost:setting"], "apply")).toEqual({
       "ghost:setting": null,
     });
   });

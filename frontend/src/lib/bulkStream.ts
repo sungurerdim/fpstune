@@ -10,19 +10,10 @@
  * `false`, which the backend reads as "do not run" and reports as success.
  */
 
-import type { ApplyResponse, SettingState } from "./api";
+import type { SettingState } from "./api";
 import { isTweakSuboptimal } from "./tweakStatus";
-import { useStore, type BulkAction } from "../store";
+import type { BulkAction } from "../store";
 import { canResetSetting, type Setting, type SettingId } from "../types/setting";
-
-/** The outcome of a bulk run, assembled from the events it streamed. */
-export interface BulkApplyResponse {
-  results: Record<string, ApplyResponse>;
-  /** Rows that were written and verified. A skipped row is neither a success nor an error. */
-  success_count: number;
-  error_count: number;
-  requires_reboot: boolean;
-}
 
 /**
  * The `SettingState` a streamed `verified` event carries, or null when it has none.
@@ -42,7 +33,12 @@ export function verifiedState(event: Record<string, unknown>): SettingState | nu
 }
 
 /**
- * The value each id is sent with.
+ * The value each id is sent with, from the store's own settings map.
+ *
+ * The map is passed in rather than read here: `lib` is the domain layer and the
+ * store sits above it (dependency-cruiser's `lib-must-not-import-store`), so
+ * the caller — `useApply`, which already has the store — hands over what it
+ * knows.
  *
  * - apply: an action is run with `true`; anything else is written its
  *   recommendation.
@@ -50,14 +46,14 @@ export function verifiedState(event: Record<string, unknown>): SettingState | nu
  *   game's default, by domain). A row with no derivable default has `null`
  *   there, which the backend refuses rather than writes (C6).
  *
- * An id the store does not know is sent as `null`, so the stream reports it as
+ * An id the map does not know is sent as `null`, so the stream reports it as
  * failed rather than the run silently asking for less than it was given.
  */
 export function bulkTargets(
+  settings: ReadonlyMap<SettingId, Setting>,
   ids: string[],
   action: BulkAction,
 ): Record<string, unknown> {
-  const settings = useStore.getState().settings;
   const targets: Record<string, unknown> = {};
   for (const id of ids) {
     const setting = settings.get(id as SettingId);

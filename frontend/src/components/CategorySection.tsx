@@ -23,26 +23,30 @@ import { useT } from "../i18n";
 import { tweakCounts } from "../lib/tweakStatus";
 import { cn } from "../lib/utils";
 import type { Setting } from "../types/setting";
-import type { RowStatus } from "./TweakRow";
-import { TweakRowList } from "./TweakRowList";
+import { TweakRowList, type TweakRowListProps } from "./TweakRowList";
 
-export interface CategorySectionProps {
+/**
+ * A category heading over its rows. The row-list props are the child's own
+ * contract, extended rather than copied: a category forwards all of them to
+ * `TweakRowList`, and two hand-kept copies of the same eight fields is exactly
+ * how a wrapper silently stops forwarding one (jscpd's only clone in src/ was
+ * this duplication before it was shared).
+ */
+export interface CategorySectionProps extends TweakRowListProps {
+  /**
+   * The rows this heading counts and draws. Restated from the child's contract
+   * on purpose: `test/surfaces.ts` finds a setting-rendering component by its
+   * `types/setting` import, and a section that stops naming the type silently
+   * leaves the narrow-width gate — which is what happened the first time this
+   * prop bag was deduplicated.
+   */
+  settings: readonly Setting[];
   /** The category's name, already in the active language. */
   title: string;
-  settings: readonly Setting[];
-  onApply: (setting: Setting, value: unknown) => void;
-  onReset: (setting: Setting) => void;
   /** The header's bulk action. Sits beside the toggle, never inside it. */
   actions?: ReactNode;
   /** Closed unless the page has a reason to open it. */
   defaultOpen?: boolean;
-  selectedIds?: ReadonlySet<string>;
-  /** Omit and the rows have no checkbox. */
-  onSelect?: (setting: Setting) => void;
-  statuses?: Readonly<Record<string, RowStatus>>;
-  errors?: Readonly<Record<string, string>>;
-  /** Extra text a row carries on its line, from the page that owns what it means. */
-  rowNote?: (setting: Setting) => ReactNode;
   /** Heading level in the page's outline: 3 under a page section, 2 for the section itself. */
   level?: 2 | 3;
   /** Groups to draw in the body instead of `settings`' own rows. */

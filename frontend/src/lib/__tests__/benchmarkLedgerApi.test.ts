@@ -147,9 +147,9 @@ describe("an area is read without inventing a direction", () => {
   it("counts the step a human counts, and never past the end of the plan", () => {
     const job = {
       id: "j1",
-      trigger: "baseline",
+      trigger: "baseline" as const,
       label: "baseline",
-      status: "running",
+      status: "running" as const,
       plan: ["timing", "disk_io", "network"],
       step_index: 2,
       current_bench: "network",

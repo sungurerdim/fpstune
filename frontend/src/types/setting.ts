@@ -451,6 +451,37 @@ export function valuesEqual(a: unknown, b: unknown): boolean {
   return String(a).toLowerCase() === String(b).toLowerCase();
 }
 
+// =============================================================================
+// Boundary narrowing (P-PARSE)
+// =============================================================================
+
+const SETTING_VALUE_TYPES = ["bool", "int", "float", "string", "choice"] as const;
+const SETTING_SCOPES = ["essential", "recommended", "complete"] as const;
+const EVIDENCE_LEVELS = ["proven", "likely", "experimental"] as const;
+const RISK_LEVELS = ["safe", "low", "moderate", "advanced"] as const;
+const TWEAK_DOMAINS = ["hardware", "software", "game"] as const;
+
+/**
+ * Narrow one wire string to its union, or the documented fallback.
+ *
+ * The definitions endpoint is where a setting's enums enter the app. A value
+ * outside the contract is a backend/frontend disagreement; the honest response
+ * is a fallback every branch knows, not a cast that carries the stranger into
+ * the UI where nothing matches it (P-ILLEGAL, P-PARSE). The fallbacks are
+ * chosen so the row still renders: an unknown value type reads as text, an
+ * unknown scope as the default tier, an unknown risk/evidence level as the
+ * least alarming one. `definitionBoundary.test.ts` pins each.
+ */
+function oneOf<T extends string>(
+  allowed: readonly T[],
+  raw: unknown,
+  fallback: T,
+): T {
+  return typeof raw === "string" && (allowed as readonly string[]).includes(raw)
+    ? (raw as T)
+    : fallback;
+}
+
 /**
  * Convert API definition to Setting entity
  */
@@ -465,14 +496,14 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     displayName: def.display_name,
     description: def.description,
     category: def.category as SettingCategory,
-    valueType: def.value_type as SettingValueType,
+    valueType: oneOf(SETTING_VALUE_TYPES, def.value_type, "string"),
     choices: def.choices,
     writableChoices: def.writable_choices ?? def.choices,
     defaultValue: def.default_value,
     recommendedValue: def.recommended_value,
     requiresReboot: def.requires_reboot,
     isAction: def.is_action,
-    scope: (def.scope || "recommended") as SettingScope,
+    scope: oneOf(SETTING_SCOPES, def.scope, "recommended"),
     currentImpact: def.current_impact,
     recommendedImpact: def.recommended_impact,
     effect: def.effect,
@@ -485,7 +516,7 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     ),
     shortName: def.short_name,
     subject: def.subject || undefined,
-    domain: def.domain,
+    domain: oneOf(TWEAK_DOMAINS, def.domain, "software"),
     component: def.component ?? undefined,
     color: def.color,
     categoryOrder: def.category_order ?? 0,
@@ -493,18 +524,11 @@ export function definitionToSetting(def: SettingDefinition): Setting {
     maxValue: def.max_value,
     durationEstimate: def.duration_estimate,
     progressPattern: def.progress_pattern,
-    riskLevel: (def.risk_level || "low") as
-      | "safe"
-      | "low"
-      | "moderate"
-      | "advanced",
+    riskLevel: oneOf(RISK_LEVELS, def.risk_level, "low"),
     riskWarning: def.risk_warning,
     perceptibleCost: def.perceptible_cost ?? undefined,
     isDriftGuard: def.is_drift_guard ?? false,
-    evidenceLevel: (def.evidence_level || "likely") as
-      | "proven"
-      | "likely"
-      | "experimental",
+    evidenceLevel: oneOf(EVIDENCE_LEVELS, def.evidence_level, "likely"),
     sources: def.sources || [],
     applicableConditions: def.applicable_conditions || {},
     isReadonly: def.is_readonly ?? false,

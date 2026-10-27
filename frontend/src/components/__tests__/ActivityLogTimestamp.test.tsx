@@ -47,7 +47,8 @@ const mocked = vi.mocked(api);
 interface Entry {
   timestamp: string;
   message: string;
-  level: string;
+  /** The four levels `log_activity` writes; the panel types them as a union. */
+  level: "info" | "success" | "warning" | "error";
 }
 
 /** US Eastern standard time, as `getTimezoneOffset` reports it: UTC-5. */

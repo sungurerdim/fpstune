@@ -144,8 +144,10 @@ export function ActivityLog() {
                       <span className="text-muted-foreground/60 font-mono shrink-0">
                         {entry.timestamp}
                       </span>
-                      {levelIcons[entry.level as keyof typeof levelIcons] ||
-                        levelIcons.info}
+                      {/* `?? levelIcons.info` keeps a level a future backend
+                          adds from rendering no icon at all; the union above
+                          states today's contract. */}
+                      {levelIcons[entry.level] ?? levelIcons.info}
                       <span
                         className={cn(
                           entry.level === "error" && "text-destructive",

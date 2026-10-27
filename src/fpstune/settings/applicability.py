@@ -295,90 +295,121 @@ class ApplicabilityChecker:
         if not conditions:
             return True, ""
 
-        # CPU vendor check
-        if "cpu_vendor" in conditions:
-            required_vendor = conditions["cpu_vendor"].lower()
-            if self.context.cpu_vendor is None:
-                return False, f"Requires {required_vendor.upper()} CPU"
-            if self.context.cpu_vendor.lower() != required_vendor:
-                return False, f"Requires {required_vendor.upper()} CPU"
+        for reason in self._condition_reasons(conditions):
+            if reason:
+                return False, reason
+        return True, ""
 
-        # GPU vendor check
-        if "gpu_vendor" in conditions:
-            required_vendor = conditions["gpu_vendor"].lower()
-            if self.context.gpu_vendor is None:
-                return False, f"Requires {required_vendor.upper()} GPU"
-            if self.context.gpu_vendor.lower() != required_vendor:
-                return False, f"Requires {required_vendor.upper()} GPU"
+    def _condition_reasons(self, conditions: dict[str, Any]) -> tuple[str, ...]:
+        """One reason per condition that does not hold; "" for the ones that do.
 
-        # GPU vendors (any match)
-        if "gpu_vendors" in conditions:
-            required_vendors = [v.lower() for v in conditions["gpu_vendors"]]
-            if self.context.gpu_vendor is None:
-                return False, f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
-            if self.context.gpu_vendor.lower() not in required_vendors:
-                return False, f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
+        Every check is a pure reading of the context. They are evaluated in the
+        order the reasons should be read, and the first non-empty one wins.
+        """
+        return (
+            self._cpu_vendor_reason(conditions),
+            self._gpu_vendor_reason(conditions),
+            self._gpu_vendors_reason(conditions),
+            self._windows_11_reason(conditions),
+            self._admin_reason(conditions),
+            self._vrr_reason(conditions),
+            self._feature_reason(conditions),
+            self._feature_absent_reason(conditions),
+            self._features_any_reason(conditions),
+            self._features_all_reason(conditions),
+        )
 
-        # Windows 11 check
-        if (
-            "is_windows_11" in conditions
-            and conditions["is_windows_11"]
-            and not self.context.is_windows_11
-        ):
-            return False, "Requires Windows 11"
+    def _cpu_vendor_reason(self, conditions: dict[str, Any]) -> str:
+        if "cpu_vendor" not in conditions:
+            return ""
+        required_vendor = conditions["cpu_vendor"].lower()
+        if self.context.cpu_vendor is None:
+            return f"Requires {required_vendor.upper()} CPU"
+        if self.context.cpu_vendor.lower() != required_vendor:
+            return f"Requires {required_vendor.upper()} CPU"
+        return ""
 
-        # Admin check
-        if (
-            "requires_admin" in conditions
-            and conditions["requires_admin"]
-            and not self.context.is_admin
-        ):
-            return False, "Requires administrator privileges"
+    def _gpu_vendor_reason(self, conditions: dict[str, Any]) -> str:
+        if "gpu_vendor" not in conditions:
+            return ""
+        required_vendor = conditions["gpu_vendor"].lower()
+        if self.context.gpu_vendor is None:
+            return f"Requires {required_vendor.upper()} GPU"
+        if self.context.gpu_vendor.lower() != required_vendor:
+            return f"Requires {required_vendor.upper()} GPU"
+        return ""
 
-        # VRR/G-Sync monitor check. Unknown and absent are different answers:
-        # "could not read the panels" is a fact about detection, not hardware.
-        if "requires_vrr" in conditions and conditions["requires_vrr"]:
+    def _gpu_vendors_reason(self, conditions: dict[str, Any]) -> str:
+        if "gpu_vendors" not in conditions:
+            return ""
+        required_vendors = [v.lower() for v in conditions["gpu_vendors"]]
+        if self.context.gpu_vendor is None:
+            return f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
+        if self.context.gpu_vendor.lower() not in required_vendors:
+            return f"Requires GPU: {', '.join(v.upper() for v in required_vendors)}"
+        return ""
+
+    def _windows_11_reason(self, conditions: dict[str, Any]) -> str:
+        if conditions.get("is_windows_11") and not self.context.is_windows_11:
+            return "Requires Windows 11"
+        return ""
+
+    def _admin_reason(self, conditions: dict[str, Any]) -> str:
+        if conditions.get("requires_admin") and not self.context.is_admin:
+            return "Requires administrator privileges"
+        return ""
+
+    def _vrr_reason(self, conditions: dict[str, Any]) -> str:
+        # Unknown and absent are different answers: "could not read the panels"
+        # is a fact about detection, not hardware.
+        if conditions.get("requires_vrr"):
             if self.context.has_vrr_monitor is None:
-                return False, (
-                    "The panels could not be read, so G-Sync/FreeSync support is unknown"
-                )
+                return "The panels could not be read, so G-Sync/FreeSync support is unknown"
             if not self.context.has_vrr_monitor:
-                return False, "Requires G-Sync/FreeSync/VRR compatible monitor"
+                return "Requires G-Sync/FreeSync/VRR compatible monitor"
+            return ""
         # The mirror: a setting that would get in VRR's way. Only a panel known
         # to support VRR rules it out; an unread panel keeps it on offer.
         if conditions.get("requires_vrr") is False and self.context.has_vrr_monitor:
-            return False, "Not offered with a G-Sync/FreeSync/VRR monitor: it can stop VRR engaging"
+            return "Not offered with a G-Sync/FreeSync/VRR monitor: it can stop VRR engaging"
+        return ""
 
-        # Single feature check
-        if "feature" in conditions:
-            required_feature = conditions["feature"]
-            if required_feature not in self.context.features:
-                return False, f"Requires {required_feature} feature"
+    def _feature_reason(self, conditions: dict[str, Any]) -> str:
+        if "feature" not in conditions:
+            return ""
+        required_feature = conditions["feature"]
+        if required_feature not in self.context.features:
+            return f"Requires {required_feature} feature"
+        return ""
 
-        # Feature-absent check (feature must NOT be present)
-        if "feature_absent" in conditions:
-            absent_feature = conditions["feature_absent"]
-            if absent_feature in self.context.features:
-                # Name what would break, not the token that stands for it. The
-                # user's question here is "am I losing something I use?", and
-                # "virtualization_in_use is installed" cannot answer it.
-                what = self.context.feature_labels.get(absent_feature, absent_feature)
-                return False, f"Not recommended: would break {what}"
+    def _feature_absent_reason(self, conditions: dict[str, Any]) -> str:
+        if "feature_absent" not in conditions:
+            return ""
+        absent_feature = conditions["feature_absent"]
+        if absent_feature in self.context.features:
+            # Name what would break, not the token that stands for it. The
+            # user's question here is "am I losing something I use?", and
+            # "virtualization_in_use is installed" cannot answer it.
+            what = self.context.feature_labels.get(absent_feature, absent_feature)
+            return f"Not recommended: would break {what}"
+        return ""
 
-        # Any of features check
-        if "features_any" in conditions:
-            required_features = set(conditions["features_any"])
-            if not required_features.intersection(self.context.features):
-                return False, f"Requires one of: {', '.join(required_features)}"
+    def _features_any_reason(self, conditions: dict[str, Any]) -> str:
+        if "features_any" not in conditions:
+            return ""
+        required_features = set(conditions["features_any"])
+        if not required_features.intersection(self.context.features):
+            return f"Requires one of: {', '.join(required_features)}"
+        return ""
 
-        # All features check
-        if "features_all" in conditions:
-            required_features = set(conditions["features_all"])
-            missing = required_features - self.context.features
-            if missing:
-                return False, f"Requires: {', '.join(missing)}"
-
-        return True, ""
+    def _features_all_reason(self, conditions: dict[str, Any]) -> str:
+        if "features_all" not in conditions:
+            return ""
+        required_features = set(conditions["features_all"])
+        missing = required_features - self.context.features
+        if missing:
+            return f"Requires: {', '.join(missing)}"
+        return ""
 
 
 def _coerce_scalar(v: Any) -> Any:

@@ -23,16 +23,37 @@ import sys
 import tempfile
 import threading
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from fpstune.settings.applicability import NOT_INSTALLED
 
+# The two files a Steam setting can live in. A third spelling is a type error,
+# not a lookup that falls through to "the newest user's file".
+SteamConfigFile = Literal["config", "localconfig"]
+
 #: Which file a setting lives in, and the block a missing key is added under.
-_FILES = {"config": ("Steam", "config.vdf"), "localconfig": ("system", "localconfig.vdf")}
+_FILES: dict[SteamConfigFile, tuple[str, str]] = {
+    "config": ("Steam", "config.vdf"),
+    "localconfig": ("system", "localconfig.vdf"),
+}
 
 # Every Steam setting shares two files and bulk apply runs settings in
 # parallel, so the read-modify-write holds this for its whole length.
 _lock = threading.Lock()
+
+
+def _config_file(raw: object) -> SteamConfigFile:
+    """The file a setting's ``scope`` argument names, refused if it names neither.
+
+    This is the parse at the boundary: `scope` arrives as a plain string in
+    `apply_args`, and a typo used to read as "the newest user's file" instead of
+    failing.
+    """
+    if raw == "config":
+        return "config"
+    if raw == "localconfig":
+        return "localconfig"
+    raise ValueError(f"unknown Steam config file: {raw!r}")
 
 
 def steam_root() -> Path | None:
@@ -52,7 +73,7 @@ def steam_root() -> Path | None:
     return None
 
 
-def vdf_path(scope: str, root: Path | None = None) -> Path | None:
+def vdf_path(scope: SteamConfigFile, root: Path | None = None) -> Path | None:
     """The file `scope` names: config.vdf, or the newest user's localconfig.vdf."""
     root = root if root is not None else steam_root()
     if root is None:
@@ -68,7 +89,7 @@ def _pair(key: str) -> re.Pattern[str]:
     return re.compile(r'("' + re.escape(key) + r'"\s+)"([^"]*)"')
 
 
-def read_raw(scope: str, key: str, root: Path | None = None) -> str | None:
+def read_raw(scope: SteamConfigFile, key: str, root: Path | None = None) -> str | None:
     """The key's raw value, None when absent; raises FileNotFoundError when no file."""
     path = vdf_path(scope, root)
     if path is None:
@@ -77,7 +98,7 @@ def read_raw(scope: str, key: str, root: Path | None = None) -> str | None:
     return match.group(2) if match else None
 
 
-def write_raw(scope: str, key: str, value: str, root: Path | None = None) -> None:
+def write_raw(scope: SteamConfigFile, key: str, value: str, root: Path | None = None) -> None:
     """Set `key` to `value` in the file, keeping everything else byte for byte."""
     block, _ = _FILES[scope]
     if any(ch in value for ch in '"\r\n'):
@@ -112,7 +133,7 @@ def write_raw(scope: str, key: str, value: str, root: Path | None = None) -> Non
 def steam_vdf_read(args: dict[str, Any]) -> str:
     """PYTHON_DETECTORS entry: the display value from the setting's own map."""
     try:
-        raw = read_raw(str(args["scope"]), str(args["key"]))
+        raw = read_raw(_config_file(args["scope"]), str(args["key"]))
     except FileNotFoundError:
         return NOT_INSTALLED
     if raw is None:
@@ -126,7 +147,7 @@ def steam_vdf_write(args: dict[str, Any]) -> tuple[bool, str | None]:
     if sys.platform != "win32":
         return False, "Not available on this platform"
     try:
-        write_raw(str(args["scope"]), str(args["key"]), str(args["value"]))
+        write_raw(_config_file(args["scope"]), str(args["key"]), str(args["value"]))
     except FileNotFoundError:
         return False, "Steam is not installed for this user"
     except (OSError, ValueError, UnicodeDecodeError) as exc:

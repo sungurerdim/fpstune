@@ -133,6 +133,9 @@ class TestNothingWritesThemAgain:
         s.apply_type = MagicMock()
         s.apply_type.value = "registry"
         s.apply_args = {}
+        # A real setting always carries this dict; a MagicMock attribute would
+        # answer `.get()` with a truthy mock and read as an unmet condition.
+        s.applicable_conditions = {}
         return s
 
     @staticmethod

@@ -31,6 +31,10 @@ def _fake_setting(setting_id: str = "core:fake_reset"):
     s.default_value = "0"
     s.recommended_value = "1"
     s.choices = ("0", "1")
+    # An empty dict, not a MagicMock: applicability reads the declared
+    # conditions as a mapping (`.get`), and a double that answers every
+    # attribute would claim every condition holds.
+    s.applicable_conditions = {}
     s.requires_reboot = False
     s.is_action = False
     s.is_readonly = False

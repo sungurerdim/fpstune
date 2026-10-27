@@ -227,5 +227,3 @@ class TestDpcBench:
         assert result.exit_code == 0
         assert "'before'" in result.output
         db.compare.assert_not_called()
-
-

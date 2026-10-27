@@ -30,6 +30,11 @@ def run_api(*, host: str = "127.0.0.1", port: int = 8000, app: FastAPI | None = 
     ``SystemExit(3)`` when the server never started, as ``uvicorn.run`` does.
     ``app`` is fpstune's own unless a test serves a smaller one.
     """
+    # Refused here as well as in the CLI (P-FAILFAST): this function is also the
+    # `python -m fpstune.api.serving` entry point, and uvicorn's own answer to an
+    # out-of-range port is an OverflowError from the bind, not a sentence.
+    if not 1 <= port <= 65535:
+        raise ValueError(f"{port} is not a TCP port; choose a number from 1 to 65535.")
     import uvicorn
 
     if app is None:
@@ -46,10 +51,28 @@ def run_api(*, host: str = "127.0.0.1", port: int = 8000, app: FastAPI | None = 
         raise SystemExit(_STARTUP_FAILURE)
 
 
+def _port_argument(text: str) -> int:
+    """argparse type for ``--port``: a TCP port, or a refusal naming the range.
+
+    The same boundary rule as ``cli.serve`` (P-FAILFAST). Without it the child
+    the ``--dev`` path starts would fail inside uvicorn with an OverflowError
+    that names neither the flag nor the range.
+    """
+    try:
+        value = int(text)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"{text!r} is not a number") from None
+    if not 1 <= value <= 65535:
+        raise argparse.ArgumentTypeError(
+            f"{value} is not a TCP port; choose a number from 1 to 65535"
+        )
+    return value
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(prog="python -m fpstune.api.serving")
     parser.add_argument("--host", default="127.0.0.1")
-    parser.add_argument("--port", type=int, default=8000)
+    parser.add_argument("--port", type=_port_argument, default=8000)
     args = parser.parse_args()
     run_api(host=args.host, port=args.port)
 

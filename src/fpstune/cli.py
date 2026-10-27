@@ -43,6 +43,8 @@ from fpstune.utils.system_tools import pin_powershell_module_cache, system_tool
 
 _LOCK_PORT = 59471  # Fixed internal port used as single-instance mutex
 
+logger = logging.getLogger(__name__)
+
 # Held for the lifetime of `serve`. Module-level because the packaged path hands
 # control to uvicorn and the source path to a signal handler, and both have to
 # be able to release it — a local would have been closed by whichever returned
@@ -108,6 +110,24 @@ def _pid_file_port() -> int | None:
             return int(json.load(f)["port"])
     except (OSError, ValueError, KeyError, TypeError):
         return None
+
+
+def _validated_port(value: int, option: str) -> int:
+    """The port as a TCP port, or a refusal naming the range (P-FAILFAST).
+
+    Checked at the CLI boundary because nothing downstream does: ``socket.bind``
+    answers an out-of-range port with ``OverflowError``, which ``_find_free_port``
+    does not catch, so ``fpstune serve --port -1`` ended in a traceback instead of
+    a sentence. Port 0 is refused as well: it asks the OS to pick, after which the
+    PID file and the printed URL would name port 0 while uvicorn served somewhere
+    else entirely.
+    """
+    if not 1 <= value <= 65535:
+        raise click.BadParameter(
+            f"{value} is not a TCP port; choose a number from 1 to 65535.",
+            param_hint=option,
+        )
+    return value
 
 
 def _find_free_port(preferred: int, max_attempts: int = instances.SCAN_ATTEMPTS) -> int:
@@ -247,6 +267,27 @@ def bios(delay: int, cancel: bool) -> None:
 # ---------------------------------------------------------------------------
 
 
+def _serve_log(message: str) -> None:
+    """Append one line to ``~/.fpstune/logs/serve.log`` (never a value or a path).
+
+    The window a failed start opened closes with the process, so "it opened and
+    closed" used to leave nothing behind to read. This is the one durable trace:
+    which step ran, and how the process ended. It carries no setting value and no
+    user path, the same rule as the support log (C6).
+    """
+    import datetime
+
+    from fpstune.utils.config import get_config_dir
+
+    try:
+        folder = get_config_dir() / "logs"
+        folder.mkdir(parents=True, exist_ok=True)
+        with (folder / "serve.log").open("a", encoding="utf-8") as handle:
+            handle.write(f"{datetime.datetime.now():%Y-%m-%d %H:%M:%S} {message}\n")
+    except OSError:
+        pass
+
+
 @main.command()
 @click.option("--port", "-p", default=8000, help="API server port")
 @click.option("--no-browser", is_flag=True, help="Don't open browser automatically")
@@ -271,22 +312,42 @@ def serve(port: int, no_browser: bool, dev: bool, ui_port: int, api_only: bool) 
     """
     import os
 
+    # Before the banner and before anything binds: a bad port is configuration,
+    # and configuration is refused where it is read (P-FAILFAST), not after the
+    # user has watched the server print its own startup.
+    port = _validated_port(port, "--port")
+    ui_port = _validated_port(ui_port, "--ui-port")
+
+    _serve_log(f"serve start pid={os.getpid()} port={port} admin={is_admin()} frozen={is_frozen()}")
+
     ui.print_banner()
 
     _claim_single_instance(preferred_port=port)
+    _serve_log("instance lock held")
 
     port = _find_free_port(port)
     _write_pid_file(os.getpid(), port)
+    _serve_log(f"serving port {port}")
 
     if not _ensure_administrator():
+        _serve_log("elevation requested; this process exits and the elevated one continues")
         return
 
     if dev and not is_frozen():
+        _serve_log("dev mode: starting API and Vite as children")
         _serve_from_source(port=port, ui_port=ui_port, no_browser=no_browser, api_only=api_only)
+        _serve_log("dev mode ended")
         return
     if not is_frozen() and not _ensure_built_ui():
+        _serve_log("the UI could not be built; exiting")
         raise SystemExit(1)
-    _serve_in_process(port=port, no_browser=no_browser)
+    _serve_log(f"starting the API on 127.0.0.1:{port}")
+    try:
+        _serve_in_process(port=port, no_browser=no_browser)
+    except BaseException as exc:
+        _serve_log(f"serve stopped: {exc!r}")
+        raise
+    _serve_log("serve ended")
 
 
 _TAKEOVER_WAIT_SECONDS = 20.0
@@ -495,6 +556,44 @@ def _ensure_administrator() -> bool:
     raise SystemExit(1)
 
 
+def _open_web_ui_when_ready(landing: str, port: int, *, timeout: float = 30.0) -> None:
+    """Open the UI once the API answers, with `explorer.exe` as the fallback.
+
+    A fixed one-second delay opened the browser before uvicorn had bound — the
+    user got the browser's own error page and had to reload by hand — and an
+    elevated process can be refused the shell hand-off `webbrowser` uses, which
+    looked exactly like "the UI never opened". Poll the port, then try both
+    routes, and record what happened.
+    """
+    import subprocess
+    import webbrowser
+
+    deadline = time.monotonic() + timeout
+    ready = False
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+                ready = True
+                break
+        except OSError:
+            time.sleep(0.2)
+
+    opened = False
+    try:
+        opened = webbrowser.open(landing)
+    except Exception:  # noqa: BLE001 - a browser that cannot open must not kill the server
+        opened = False
+    if not opened:
+        # explorer.exe opens the URL with the logged-in user's shell; that still
+        # works when this process is elevated and the direct hand-off is not.
+        try:
+            subprocess.Popen(["explorer.exe", landing], close_fds=True)
+        except OSError as exc:
+            logger.warning("Could not open a browser (%s); open %s", exc, landing)
+            return
+    logger.info("Web UI at %s (server ready: %s)", landing, ready)
+
+
 def _serve_in_process(*, port: int, no_browser: bool) -> None:
     """Run the API in this process and serve the built UI.
 
@@ -505,7 +604,6 @@ def _serve_in_process(*, port: int, no_browser: bool) -> None:
     as long as the window stayed open.
     """
     import threading
-    import webbrowser
 
     from fpstune.api import shutdown
     from fpstune.api.serving import run_api
@@ -530,15 +628,25 @@ def _serve_in_process(*, port: int, no_browser: bool) -> None:
     ui.blank()
 
     if not no_browser:
-        # After the server is listening, not before: opening first shows the
-        # browser its own error page and the user reloads by hand.
-        threading.Timer(1.0, lambda: webbrowser.open(landing)).start()
+        # After the server answers, not after a fixed delay: opening first shows
+        # the browser its own error page and the user reloads by hand.
+        threading.Thread(
+            target=_open_web_ui_when_ready,
+            args=(landing, port),
+            daemon=True,
+            name="open-web-ui",
+        ).start()
 
+    _serve_log(f"API starting (uvicorn) on 127.0.0.1:{port}")
     try:
         run_api(host="127.0.0.1", port=port)
     except KeyboardInterrupt:
         pass
+    except BaseException as exc:
+        _serve_log(f"API failed: {exc!r}")
+        raise
     finally:
+        _serve_log("API stopped")
         _shutdown_cleanup()
         ui.blank()
         if shutdown.is_pending():
@@ -587,7 +695,6 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
     import signal
     import subprocess
     import threading
-    import webbrowser
 
     processes: list[tuple[str, subprocess.Popen[bytes]]] = []
     frontend_dir = frontend_source()
@@ -683,7 +790,12 @@ def _serve_from_source(*, port: int, ui_port: int, no_browser: bool, api_only: b
     ui.blank()
 
     if not no_browser:
-        webbrowser.open(landing)
+        threading.Thread(
+            target=_open_web_ui_when_ready,
+            args=(landing, port if api_only else ui_port),
+            daemon=True,
+            name="open-web-ui",
+        ).start()
 
     def shutdown(_signum: int | None = None, _frame: types.FrameType | None = None) -> None:
         ui.blank()
@@ -800,7 +912,7 @@ def run() -> None:
         main()
     except (SystemExit, KeyboardInterrupt):
         raise
-    except Exception:
+    except Exception:  # noqa: BLE001 - the crash handler must write its report for any exception, including argparse's
         path = _write_crash_report()
         ui.blank()
         ui.fail("fpstune stopped because of an unexpected error")

@@ -40,6 +40,8 @@ BeforeDiscovery {
         'gain-unknown-kind'          = 'gain only allows the known impact kinds'
         'gain-number-in-list'        = 'gain must not contain numbers'
         'gain-number-map'            = 'gain is a list, not a number map'
+        'compound-unknown-name'      = 'compound only allows the five C8 compound names'
+        'compound-array-form'        = 'compound is one name, not a list of rows'
         'unknown-top-level-id'       = 'id is derived from the path, not a field'
         'unknown-top-level-scope'    = 'unknown top-level property'
     }

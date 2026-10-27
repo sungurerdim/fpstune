@@ -22,7 +22,7 @@ BeforeAll {
     function script:Get-TestState([string]$Name) {
         $catalogue = Get-FpsCatalogue -Root $script:fixtureRoot
         $row = $catalogue | Where-Object { $_.Id -eq "test:$Name" }
-        @(Get-FpsRowState -Row $row)
+        , @(Get-FpsRowState -Row $row)
     }
 }
 
@@ -75,7 +75,7 @@ Describe 'Command invoker' {
     }
 
     It 'returns nothing for a command with no output' {
-        @(Invoke-FpsCommand -Command '$null').Count | Should -Be 0
+        @(Invoke-FpsCommand -Command '$unused = 1').Count | Should -Be 0
     }
 
     It 'turns a non-terminating error into a failure' {

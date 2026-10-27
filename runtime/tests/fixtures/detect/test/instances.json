@@ -19,7 +19,7 @@
   "gain": [
     "experience"
   ],
-  "detect": "(Get-ItemProperty -LiteralPath (Join-Path '$env:FPSTUNE_TEST_KEY\\Items' $Instance) -Name On -ErrorAction Stop).On",
+  "detect": "(Get-ItemProperty -LiteralPath (Join-Path \"$env:FPSTUNE_TEST_KEY\\Items\" $Instance) -Name On -ErrorAction Stop).On",
   "target": {
     "command": "if ($Instance -eq 'b') { 2 } else { 1 }"
   },

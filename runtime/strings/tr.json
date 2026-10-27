@@ -6,5 +6,12 @@
   "unreadableOne": "{0} satır okunamadı, dokunulmayacak: {1}",
   "unreadableMany": "{0} satır okunamadı, dokunulmayacak: {1}",
   "notApplicableOne": "{0} bu bilgisayara uygun değil.",
-  "notApplicableMany": "{0} bu bilgisayara uygun değil."
+  "notApplicableMany": "{0} bu bilgisayara uygun değil.",
+  "applyPrompt": "{0} değişiklik uygulansın mı? Hepsini uygulamak için Enter'a basın, iptal için başka bir şey yazıp Enter'a basın.",
+  "applyCancelled": "Hiçbir şey değiştirilmedi.",
+  "statusFixed": "düzeltildi",
+  "statusFailed": "başarısız",
+  "statusSkipped": "atlandı",
+  "applyStopped": "Durduruldu: {0}",
+  "applyReboot": "Bitirmek için bilgisayarı yeniden başlatın."
 }

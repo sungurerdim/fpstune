@@ -5,7 +5,9 @@
 # Format-FpsSummary is pure: it returns lines and prints nothing. It states
 # counts and steps only: no percentages and no numeric gain claims (C11).
 
-$script:FpsStringsRoot = Join-Path $PSScriptRoot 'strings'
+# A bundle has no folder ($PSScriptRoot is empty): build.ps1 fills FpsEmbeddedStrings.
+$script:FpsStringsRoot = if ($PSScriptRoot) { Join-Path $PSScriptRoot 'strings' } else { $null }
+$script:FpsEmbeddedStrings = $null
 
 function Get-FpsLanguage {
     <#
@@ -19,8 +21,10 @@ function Get-FpsStrings {
     <#
     .SYNOPSIS
       Reads strings/<language>.json as UTF-8 (5.1 would read a BOM-less file as ANSI).
+      In a bundle it returns the embedded strings instead and reads no file.
     #>
     param([ValidateSet('en', 'tr')][string]$Language = 'en')
+    if ($null -ne $script:FpsEmbeddedStrings) { return $script:FpsEmbeddedStrings[$Language] }
     $path = Join-Path $script:FpsStringsRoot "$Language.json"
     $utf8 = New-Object System.Text.UTF8Encoding($false)
     [IO.File]::ReadAllText($path, $utf8) | ConvertFrom-Json

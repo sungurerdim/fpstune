@@ -2,6 +2,8 @@
 # Dot-sourced by the runtime; Windows PowerShell 5.1 compatible. Defines
 # functions only, so loading it has no side effects.
 
+$script:FpsEmbeddedCatalogue = $null
+
 function Get-FpsCatalogue {
     <#
     .SYNOPSIS
@@ -11,10 +13,21 @@ function Get-FpsCatalogue {
       from the file. A file that is not valid JSON (or not a JSON object) makes
       the whole load fail with the file named, so a broken row can never be
       silently dropped. Rows come back in ordinal path order.
+      Without -Root it returns the rows embedded in the bundle (build.ps1 sets
+      $script:FpsEmbeddedCatalogue); outside a bundle that is an error.
     #>
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$Root)
+    param([string]$Root)
 
+    if (-not $Root) {
+        if ($null -eq $script:FpsEmbeddedCatalogue) {
+            throw 'Get-FpsCatalogue needs -Root: this is not a bundle with an embedded catalogue.'
+        }
+        foreach ($row in $script:FpsEmbeddedCatalogue) {
+            [pscustomobject]@{ Id = $row.Id; Category = $row.Category; Name = $row.Name; Path = $null; Data = $row.Data }
+        }
+        return
+    }
     if (-not (Test-Path -LiteralPath $Root -PathType Container)) {
         throw "Catalogue root not found: $Root"
     }

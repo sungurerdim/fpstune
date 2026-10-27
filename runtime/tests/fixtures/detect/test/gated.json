@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row gated",
+    "tr": "Test satırı gated"
+  },
+  "why": {
+    "en": "Fixture for the detect classification tests.",
+    "tr": "Algılama sınıflandırma testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test value is now right.",
+    "tr": "Test değeri artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level -ErrorAction Stop).Level",
+  "target": {
+    "value": 1
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level",
+  "applicable": "(Get-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Gate -ErrorAction Stop).Gate -eq 1"
+}

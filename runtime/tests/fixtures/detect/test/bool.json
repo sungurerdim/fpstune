@@ -1,0 +1,28 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row bool",
+    "tr": "Test satırı bool"
+  },
+  "why": {
+    "en": "Fixture for the detect classification tests.",
+    "tr": "Algılama sınıflandırma testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test value is now right.",
+    "tr": "Test değeri artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "$true",
+  "target": {
+    "value": true
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level"
+}

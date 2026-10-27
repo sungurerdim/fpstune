@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Test row instances",
+    "tr": "Test satırı instances"
+  },
+  "why": {
+    "en": "Fixture for the detect classification tests.",
+    "tr": "Algılama sınıflandırma testleri için örnek."
+  },
+  "fixed": {
+    "en": "The test value is now right.",
+    "tr": "Test değeri artık doğru."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "detect": "(Get-ItemProperty -LiteralPath (Join-Path '$env:FPSTUNE_TEST_KEY\\Items' $Instance) -Name On -ErrorAction Stop).On",
+  "target": {
+    "command": "if ($Instance -eq 'b') { 2 } else { 1 }"
+  },
+  "apply": "Set-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level -Value $Target",
+  "revert": "Remove-ItemProperty -LiteralPath $env:FPSTUNE_TEST_KEY -Name Level",
+  "instances": "Get-ChildItem -LiteralPath $env:FPSTUNE_TEST_KEY\\Items -ErrorAction Stop | ForEach-Object { [pscustomobject]@{ id = $_.PSChildName; label = 'Item ' + $_.PSChildName } }"
+}

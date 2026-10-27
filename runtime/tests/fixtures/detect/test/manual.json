@@ -1,0 +1,26 @@
+{
+  "kind": "manual",
+  "title": {
+    "en": "Test manual row",
+    "tr": "Test elle yapılan satır"
+  },
+  "why": {
+    "en": "Fixture for the manual class.",
+    "tr": "Elle yapılan sınıf için örnek."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/powershell/"
+  ],
+  "gain": [
+    "experience"
+  ],
+  "steps": {
+    "en": [
+      "Do the thing by hand."
+    ],
+    "tr": [
+      "Şeyi elle yapın."
+    ]
+  }
+}

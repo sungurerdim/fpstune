@@ -37,7 +37,7 @@ export function deviceCardId(key: string): string {
 type T = ReturnType<typeof useT>["t"];
 
 /** What a device card shows besides its tweaks — the device's own information. */
-export type DeviceBody =
+type DeviceBody =
   | { type: "cpu" }
   | { type: "memory" }
   | { type: "gpu"; gpu: GpuDeviceInfo }

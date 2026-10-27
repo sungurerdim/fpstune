@@ -9,7 +9,7 @@ import { cn } from "../../lib/utils";
 import { isDisplaySuboptimal } from "../../lib/displayStatus";
 import { ConfirmDialog } from "../ui/ConfirmDialog";
 import { errorMessage } from "../../lib/api";
-import { notifyError } from "../../lib/notify";
+import { notifyError } from "../../store/notify";
 
 const log = createLogger("MonitorCard");
 
@@ -95,25 +95,11 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
 
   return (
     <>
-      <button
-        onClick={() => mutation.mutate()}
-        disabled={mutation.isPending}
-        className={cn(
-          "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
-          mutation.isPending
-            ? "bg-muted text-muted-foreground cursor-wait"
-            : "bg-warning/15 text-warning hover:bg-warning/25",
-        )}
-      >
-        {mutation.isPending ? (
-          <RefreshCw className="w-3 h-3 animate-spin" />
-        ) : (
-          <Zap className="w-3 h-3" />
-        )}
-        {mutation.isPending
-          ? t("monitor.applying")
-          : t("monitor.useNativeAll", { count: targets.length })}
-      </button>
+      <ModeButton
+        pending={mutation.isPending}
+        onPress={() => mutation.mutate()}
+        label={t("monitor.useNativeAll", { count: targets.length })}
+      />
       <ConfirmDialog
         open={confirmOpen}
         title={t("monitor.keepAllTitle")}
@@ -127,6 +113,176 @@ export function DisplaysAutoAllButton({ monitors }: { monitors: MonitorInfo[] })
   );
 }
 
+/** One mode reading: the value this panel is on, and the one it can show. */
+function ModeValue({
+  known,
+  optimal,
+  current,
+  native,
+}: {
+  known: boolean;
+  optimal: boolean;
+  current: string;
+  native: string | null;
+}) {
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1">
+      <span
+        className={cn(
+          "font-medium",
+          !known
+            ? "text-muted-foreground"
+            : optimal
+              ? "text-success"
+              : "text-warning",
+        )}
+      >
+        {current}
+      </span>
+      {known ? (
+        optimal ? (
+          <CheckCircle2 className="w-3 h-3 text-success" />
+        ) : (
+          native && (
+            <>
+              <span className="text-muted-foreground">→</span>
+              <span className="text-success font-medium">{native}</span>
+            </>
+          )
+        )
+      ) : (
+        <span className="text-xs text-muted-foreground italic">(?)</span>
+      )}
+    </div>
+  );
+}
+
+/** The state chips above the mode rows. */
+function StatusBadges({
+  monitor,
+  isActive,
+}: {
+  monitor: MonitorInfo;
+  isActive: boolean;
+}) {
+  const { t } = useT();
+  return (
+    <div className="flex items-center gap-1.5">
+      {/* The name is the device card's heading; only the state badges live here. */}
+      {!isActive && (
+        <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium shrink-0">
+          {t("monitor.disconnected")}
+        </span>
+      )}
+      {monitor.is_primary && (
+        <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium shrink-0">
+          {t("monitor.primary")}
+        </span>
+      )}
+      {monitor.supports_vrr && (
+        <span className="text-xs px-1 py-0.5 rounded bg-success/20 text-success font-medium shrink-0">
+          VRR
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The device name and hardware id under the heading, when either was read. */
+function DeviceIdentity({ monitor }: { monitor: MonitorInfo }) {
+  if (!monitor.friendly_name && !monitor.hardware_id) return null;
+  return (
+    <div className="text-xs text-muted-foreground truncate pl-4">
+      {/* Without a friendly name the card heading already is the device name. */}
+      {monitor.friendly_name && formatMonitorDeviceName(monitor.name)}
+      {monitor.hardware_id && (
+        <span className="ml-1 text-muted-foreground/60">
+          ({monitor.hardware_id})
+        </span>
+      )}
+    </div>
+  );
+}
+
+/** The one "use the native mode" button, shared by a card and the all-displays action. */
+function ModeButton({
+  pending,
+  onPress,
+  label,
+}: {
+  pending: boolean;
+  onPress: () => void;
+  label: string;
+}) {
+  const { t } = useT();
+  return (
+    <button
+      onClick={onPress}
+      disabled={pending}
+      className={cn(
+        "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
+        pending
+          ? "bg-muted text-muted-foreground cursor-wait"
+          : "bg-warning/15 text-warning hover:bg-warning/25",
+      )}
+    >
+      {pending ? (
+        <RefreshCw className="w-3 h-3 animate-spin" />
+      ) : (
+        <Zap className="w-3 h-3" />
+      )}
+      {pending ? t("monitor.applying") : label}
+    </button>
+  );
+}
+
+/** What the card can say about the panel's current and native modes. */
+function readMonitorModes(monitor: MonitorInfo, isActive: boolean) {
+  const isResolutionKnown = monitor.is_resolution_known ?? false;
+  const isRefreshKnown = monitor.is_refresh_known ?? false;
+  const currentRes =
+    monitor.width > 0 && monitor.height > 0
+      ? `${monitor.width}x${monitor.height}`
+      : `${monitor.native_width || 0}x${monitor.native_height || 0}`;
+  const currentHz = monitor.refresh_rate_hz || 0;
+  // Native values - only use if detection succeeded.
+  const nativeRes =
+    isResolutionKnown && monitor.native_width && monitor.native_height
+      ? `${monitor.native_width}x${monitor.native_height}`
+      : null;
+  // The panel's ceiling: mode-list max first, EDID preferred rate as fallback —
+  // a high-refresh panel's EDID often prefers 60 Hz while its modes reach 300.
+  const nativeHz = isRefreshKnown
+    ? monitor.max_refresh_rate_hz || monitor.native_refresh_rate_hz || 0
+    : null;
+  // Optimal status - only trust if detection succeeded (disconnected displays can't be optimal).
+  return {
+    currentRes,
+    currentHz,
+    isResolutionKnown,
+    isRefreshKnown,
+    nativeRes,
+    nativeHz,
+    isResOptimal: isActive && isResolutionKnown && monitor.is_resolution_optimal,
+    isRefreshOptimal: isActive && isRefreshKnown && monitor.is_refresh_optimal,
+  };
+}
+
+/** The left border colour: disconnected, unknown, optimal or suboptimal. */
+function borderColorFor(
+  isActive: boolean,
+  isResolutionKnown: boolean,
+  isRefreshKnown: boolean,
+  isResOptimal: boolean,
+  isRefreshOptimal: boolean,
+): string {
+  if (!isActive) return "border-muted-foreground/20"; // Disconnected
+  if (!isResolutionKnown && !isRefreshKnown)
+    return "border-muted-foreground/30"; // Unknown
+  if (isResOptimal && isRefreshOptimal) return "border-primary/30"; // Optimal
+  return "border-warning/50"; // Suboptimal
+}
+
 export function MonitorCard({
   monitor,
   displayIndex,
@@ -137,32 +293,16 @@ export function MonitorCard({
   const { t } = useT();
   // Handle disconnected displays (width/height might be 0)
   const isActive = monitor.is_active ?? true;
-  const currentRes =
-    monitor.width > 0 && monitor.height > 0
-      ? `${monitor.width}x${monitor.height}`
-      : `${monitor.native_width || 0}x${monitor.native_height || 0}`;
-  const currentHz = monitor.refresh_rate_hz || 0;
-
-  // Use API-provided detection status (no fallbacks - trust only detected values)
-  const isResolutionKnown = monitor.is_resolution_known ?? false;
-  const isRefreshKnown = monitor.is_refresh_known ?? false;
-
-  // Native values - only use if detection succeeded
-  const nativeRes =
-    isResolutionKnown && monitor.native_width && monitor.native_height
-      ? `${monitor.native_width}x${monitor.native_height}`
-      : null;
-  // The panel's ceiling: mode-list max first, EDID preferred rate as fallback —
-  // a high-refresh panel's EDID often prefers 60 Hz while its modes reach 300.
-  const nativeHz = isRefreshKnown
-    ? monitor.max_refresh_rate_hz || monitor.native_refresh_rate_hz || 0
-    : null;
-
-  // Optimal status - only trust if detection succeeded (disconnected displays can't be optimal)
-  const isResOptimal =
-    isActive && isResolutionKnown && monitor.is_resolution_optimal;
-  const isRefreshOptimal =
-    isActive && isRefreshKnown && monitor.is_refresh_optimal;
+  const {
+    currentRes,
+    currentHz,
+    isResolutionKnown,
+    isRefreshKnown,
+    nativeRes,
+    nativeHz,
+    isResOptimal,
+    isRefreshOptimal,
+  } = readMonitorModes(monitor, isActive);
 
   // Applying the fix this card has always only *described*.
   //
@@ -224,13 +364,14 @@ export function MonitorCard({
   const canOptimize = isDisplaySuboptimal(monitor);
 
   // Determine border color based on status
-  const getBorderColor = () => {
-    if (!isActive) return "border-muted-foreground/20"; // Disconnected
-    if (!isResolutionKnown && !isRefreshKnown)
-      return "border-muted-foreground/30"; // Unknown
-    if (isResOptimal && isRefreshOptimal) return "border-primary/30"; // Optimal
-    return "border-warning/50"; // Suboptimal
-  };
+  const getBorderColor = () =>
+    borderColorFor(
+      isActive,
+      isResolutionKnown,
+      isRefreshKnown,
+      !!isResOptimal,
+      !!isRefreshOptimal,
+    );
 
   return (
     <div
@@ -240,38 +381,8 @@ export function MonitorCard({
         !isActive && "opacity-60",
       )}
     >
-      {/* Header: state badges */}
-      <div className="flex items-center gap-1.5">
-        {/* The name is the device card's heading; only the state badges live here. */}
-        {!isActive && (
-          <span className="text-xs px-1 py-0.5 rounded bg-muted text-muted-foreground font-medium shrink-0">
-            {t("monitor.disconnected")}
-          </span>
-        )}
-        {monitor.is_primary && (
-          <span className="text-xs px-1 py-0.5 rounded bg-primary/20 text-primary font-medium shrink-0">
-            {t("monitor.primary")}
-          </span>
-        )}
-        {monitor.supports_vrr && (
-          <span className="text-xs px-1 py-0.5 rounded bg-success/20 text-success font-medium shrink-0">
-            VRR
-          </span>
-        )}
-      </div>
-
-      {/* Device name and hardware ID (secondary) */}
-      {(monitor.friendly_name || monitor.hardware_id) && (
-        <div className="text-xs text-muted-foreground truncate pl-4">
-          {/* Without a friendly name the card heading already is the device name. */}
-          {monitor.friendly_name && formatMonitorDeviceName(monitor.name)}
-          {monitor.hardware_id && (
-            <span className="ml-1 text-muted-foreground/60">
-              ({monitor.hardware_id})
-            </span>
-          )}
-        </div>
-      )}
+      <StatusBadges monitor={monitor} isActive={isActive} />
+      <DeviceIdentity monitor={monitor} />
 
       {/* Resolution and refresh rate share one two-column grid: the label column
           is as wide as its longest label in the active language, so the values
@@ -282,85 +393,29 @@ export function MonitorCard({
         className="grid grid-cols-[max-content_minmax(0,1fr)] items-center gap-x-1 gap-y-1 text-xs pl-4"
       >
         <span className="text-muted-foreground">{t("monitor.resolution")}</span>
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <span
-            className={cn(
-              "font-medium",
-              !isResolutionKnown
-                ? "text-muted-foreground"
-                : isResOptimal
-                  ? "text-success"
-                  : "text-warning",
-            )}
-          >
-            {currentRes}
-          </span>
-          {isResolutionKnown ? (
-            isResOptimal ? (
-              <CheckCircle2 className="w-3 h-3 text-success" />
-            ) : (
-              nativeRes && (
-                <>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-success font-medium">{nativeRes}</span>
-                </>
-              )
-            )
-          ) : (
-            <span className="text-xs text-muted-foreground italic">(?)</span>
-          )}
-        </div>
+        <ModeValue
+          known={isResolutionKnown}
+          optimal={!!isResOptimal}
+          current={currentRes}
+          native={nativeRes}
+        />
 
         <span className="text-muted-foreground">{t("monitor.refresh")}</span>
-        <div className="flex min-w-0 flex-wrap items-center gap-1">
-          <span
-            className={cn(
-              "font-medium",
-              !isRefreshKnown
-                ? "text-muted-foreground"
-                : isRefreshOptimal
-                  ? "text-success"
-                  : "text-warning",
-            )}
-          >
-            {currentHz}Hz
-          </span>
-          {isRefreshKnown ? (
-            isRefreshOptimal ? (
-              <CheckCircle2 className="w-3 h-3 text-success" />
-            ) : (
-              nativeHz !== null && (
-                <>
-                  <span className="text-muted-foreground">→</span>
-                  <span className="text-success font-medium">{nativeHz}Hz</span>
-                </>
-              )
-            )
-          ) : (
-            <span className="text-xs text-muted-foreground italic">(?)</span>
-          )}
-        </div>
+        <ModeValue
+          known={isRefreshKnown}
+          optimal={!!isRefreshOptimal}
+          current={`${currentHz}Hz`}
+          native={nativeHz === null ? null : `${nativeHz}Hz`}
+        />
       </div>
 
       {canOptimize && (
         <div className="pl-4 pt-0.5">
-          <button
-            onClick={() => autoMutation.mutate()}
-            disabled={autoMutation.isPending}
-            className={cn(
-              "flex items-center gap-1.5 px-2 py-1 rounded text-xs font-medium transition-colors",
-              autoMutation.isPending
-                ? "bg-muted text-muted-foreground cursor-wait"
-                : "bg-warning/15 text-warning hover:bg-warning/25",
-            )}
-          >
-            {autoMutation.isPending ? (
-              <RefreshCw className="w-3 h-3 animate-spin" />
-            ) : (
-              <Zap className="w-3 h-3" />
-            )}
-            {autoMutation.isPending ? t("monitor.applying") : t("monitor.useNative")}
-          </button>
+          <ModeButton
+            pending={autoMutation.isPending}
+            onPress={() => autoMutation.mutate()}
+            label={t("monitor.useNative")}
+          />
         </div>
       )}
       <ConfirmDialog

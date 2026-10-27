@@ -18,6 +18,14 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# why: lint-imports prints rich markup (":brick: Building graph...", box
+# characters). On a Windows console in cp1254 rich's legacy renderer cannot
+# encode them and the tool dies with UnicodeEncodeError 'charmap' while
+# printing its own report, which reads as a failed import contract. UTF-8 for
+# every Python tool the gate starts fixes it at the source; Linux runners
+# already default to it.
+export PYTHONUTF8=1
+
 blocks=${QUALITY_BLOCKS:-2}
 cores=$(nproc 2>/dev/null || echo 2)
 workers=${QUALITY_WORKERS:-$((cores / blocks))}

@@ -3,6 +3,9 @@
 Contains settings for NVIDIA and AMD GPUs.
 NVIDIA settings are NVIDIA Control Panel's global settings, read and written
 through NVAPI's driver settings database (executors/nvprofile.py, core/nv_drs.py).
+The NVIDIA App's own three switches — its two frame caps and its game
+optimization — sit outside that database and are read and written through the
+App itself (executors/nvapp_mcp.py, executors/nvapp_config.py).
 """
 
 from __future__ import annotations
@@ -1125,41 +1128,127 @@ NVIDIA_BATTERY_BOOST = SettingExecutor(
     category=SettingCategory.GPU,
     display_name="Battery Boost Frame Cap",
     short_name="Battery frame cap",
-    description="Whether the NVIDIA App can hold your games near 30 FPS while the laptop runs "
-    "on battery. The cap is a feature, not a fault, but it is a ceiling nobody asked for in the "
-    "middle of a match.",
+    description="Lets the NVIDIA App hold a game's frame rate down while the laptop runs on "
+    "battery. The cap is a feature rather than a fault, but it is a ceiling nobody asked for in "
+    "the middle of a match.",
     value_type=SettingValueType.CHOICE,
-    # Reports a condition rather than offering a change, the same shape as the
-    # fan-curve advisory above.
-    choices=("no_cap_possible", "cap_possible"),
-    default_value="no_cap_possible",
-    recommended_value="no_cap_possible",
+    # The App's own state, read over its local MCP endpoint (executors/nvapp_mcp.py) and never
+    # inferred from the criteria file, which answers supportability only.
+    choices=("enabled", "disabled"),
+    # The App's shipped default for this toggle is not published in any machine-readable form:
+    # its MCP endpoint reports the state in force, never the stock. C6 forbids inventing a
+    # default, so the reset is not offered here and the way back is the App's own Graphics page.
+    default_source=DefaultSource.NONE,
+    default_value=None,
+    recommended_value="disabled",
     requires_reboot=False,
     evidence_level="proven",
-    risk_level="low",
-    current_impact="Cap possible: A match on battery can be held near 30 FPS without warning",
-    recommended_impact="No cap possible: Nothing here holds the frame rate down on battery",
+    sources=[
+        "NVIDIA App's local MCP server (McpServer/server.json): nvapp_client_get_laptop_features "
+        "reports batteryBoost.enabled and frameRate; read and written on 2026-10-22",
+    ],
+    current_impact="On: A match on battery is held at the App's cap, and the frame rate you were using is taken mid-fight",
+    recommended_impact="Off: Nothing lowers the frame rate when the charger comes out",
     scope=SettingScope.RECOMMENDED,
     category_order=21,
-    effect="Turn Battery Boost off under Graphics in the NVIDIA App if you would rather spend the "
-    "battery",
+    effect="Stops the NVIDIA App holding the frame rate down on battery",
     # A ceiling, not a gain — the same honest shape as MW3's unfocused cap, and
-    # the verification engine will report it unmeasurable for the same reason:
-    # a ceiling cannot move the right way.
+    # the verification engine reports it unmeasurable for the same reason: a
+    # ceiling cannot move the right way.
     impact_scores={"fps_battery_ceiling": 30, "stability": "high"},
     # Portable *and* NVIDIA. Either alone is the wrong audience: a desktop has no
     # battery state to boost, and an AMD laptop has no NVIDIA App to read.
     applicable_conditions={"gpu_vendor": "nvidia", "feature": "mobile"},
-    # fpstune cannot write this. The toggle lives in the NVIDIA App's own UI, and
-    # the whole NvBackend directory was searched on 2026-08-23 without finding
-    # anywhere it persists the on/off state — only the criteria that decide
-    # whether the feature can run at all. So this reports the exposure and names
-    # where to act, exactly like the BIOS advisories.
-    is_readonly=True,
     detect_type=DetectType.POWERSHELL,
-    detect_command="",
-    detect_args={"batch_config": "nvidia_app"},
+    detect_command="nvapp_laptop_feature_read",
+    detect_args={"feature": "battery_boost"},
     value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="nvapp_laptop_feature_write",
+    apply_args={"feature": "battery_boost", "allowed": "enabled,disabled"},
+    apply_value_map={},
+)
+
+NVIDIA_WHISPER_MODE = SettingExecutor(
+    id="gpu-nvidia:whisper_mode",
+    category=SettingCategory.GPU,
+    display_name="Whisper Mode Frame Cap",
+    short_name="Whisper Mode cap",
+    description="Lets the NVIDIA App trade frame rate for a quieter fan, on the plug as well as on "
+    "battery. It is a ceiling on frames the player is using, so it holds the match down to keep "
+    "the room quiet.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    # Same absence as Battery Boost: the App reports the state in force, never its stock.
+    default_source=DefaultSource.NONE,
+    default_value=None,
+    recommended_value="disabled",
+    requires_reboot=False,
+    evidence_level="proven",
+    sources=[
+        "NVIDIA App's local MCP server (McpServer/server.json): nvapp_client_get_laptop_features "
+        "reports whisperMode.enabled, fanVolume and frameRate; read and written on 2026-10-22",
+    ],
+    current_impact="On: The App trades frame rate for fan noise in every game you launch",
+    recommended_impact="Off: The frame rate is yours, and fan noise stays the card's own behaviour",
+    scope=SettingScope.RECOMMENDED,
+    category_order=22,
+    effect="Stops the NVIDIA App trading frame rate for a quieter fan",
+    # A range, because the acoustic level decides the cap (Balanced, Quiet, Quieter);
+    # NVIDIA publishes the band rather than one figure.
+    impact_scores={"fps_cap_removed": "40-60", "stability": "high"},
+    applicable_conditions={"gpu_vendor": "nvidia", "feature": "mobile"},
+    detect_type=DetectType.POWERSHELL,
+    detect_command="nvapp_laptop_feature_read",
+    detect_args={"feature": "whisper_mode"},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="nvapp_laptop_feature_write",
+    apply_args={"feature": "whisper_mode", "allowed": "enabled,disabled"},
+    apply_value_map={},
+)
+
+NVIDIA_NVAPP_AUTO_OPTIMIZE = SettingExecutor(
+    id="gpu-nvidia:nvapp_auto_optimize",
+    category=SettingCategory.GPU,
+    display_name="NVIDIA App Game Optimization",
+    short_name="App game optimization",
+    description="Lets the NVIDIA App apply its own optimization profile to a game without being "
+    "asked, which replaces the settings fpstune and the player chose. Off keeps each game's own "
+    "file as the only writer.",
+    value_type=SettingValueType.CHOICE,
+    choices=("enabled", "disabled"),
+    default_source=DefaultSource.NONE,
+    default_value=None,
+    recommended_value="disabled",
+    requires_reboot=False,
+    # The switch is the App's own (EnableAutomaticApplyOPS in NvBackend/config.xml). That the
+    # App honours a change made while it runs was not measured: the machine it was read on
+    # already carried the off state, and proving it would mean switching it on for a scan.
+    # "likely" says exactly that.
+    evidence_level="likely",
+    sources=[
+        "NVIDIA App's backend configuration (NvBackend/config.xml): EnableAutomaticApplyOPS, "
+        "read on 2026-10-22; the file is written by the App itself",
+    ],
+    current_impact="On: The App writes its optimization profile over a game's own settings",
+    recommended_impact="Off: A game's settings stay as fpstune and the player left them",
+    scope=SettingScope.RECOMMENDED,
+    category_order=23,
+    effect="Stops the NVIDIA App replacing a game's settings with its own profile",
+    # No frame claim of its own: what it protects is the value of the settings it
+    # keeps in place, which is theirs, not a figure this row measured. "100%"
+    # says the settings survive, which is what the off state buys.
+    impact_scores={"fps_retained": "100%", "stability": "high"},
+    applicable_conditions={"gpu_vendor": "nvidia"},
+    detect_type=DetectType.POWERSHELL,
+    detect_command="nvapp_auto_apply_read",
+    detect_args={},
+    value_map={},
+    apply_type=DetectType.POWERSHELL,
+    apply_command="nvapp_auto_apply_write",
+    apply_args={"allowed": "enabled,disabled"},
+    apply_value_map={},
 )
 
 NVIDIA_SETTINGS: list[SettingExecutor] = [
@@ -1179,6 +1268,8 @@ NVIDIA_SETTINGS: list[SettingExecutor] = [
     NVIDIA_VRR_APP_OVERRIDE,
     NVIDIA_FAN_CURVE,
     NVIDIA_BATTERY_BOOST,
+    NVIDIA_WHISPER_MODE,
+    NVIDIA_NVAPP_AUTO_OPTIMIZE,
 ]
 
 # =============================================================================

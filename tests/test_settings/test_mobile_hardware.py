@@ -23,7 +23,7 @@ import pytest
 
 from fpstune.settings.applicability import ABSENT_READINGS, NOT_AVAILABLE
 from fpstune.settings.base import SettingExecutor
-from fpstune.settings.executors import nvidia_app
+from fpstune.settings.executors import nvapp_mcp, nvidia_app
 
 # The file this machine actually holds, read on 2026-08-23 and reproduced in
 # shape. Messages are localised by the App — the real one is in Turkish on an
@@ -198,11 +198,15 @@ class TestTheAdvisorySettingSaysWhatItCanDo:
 
         return NVIDIA_BATTERY_BOOST
 
-    def test_it_never_claims_to_write_what_it_cannot(self) -> None:
-        # The toggle lives in the NVIDIA App's UI. Nothing under NvBackend
-        # persists it — the directory was searched — so an applyable setting here
-        # would be a button that reports success and changes nothing.
-        assert self._setting().is_readonly is True
+    def test_it_writes_the_state_the_app_reports(self) -> None:
+        # Until 2026-10-22 nothing could read the toggle: the whole NvBackend
+        # directory was searched and carried supportability only, so the row was
+        # a read-only advisory. The App's own MCP endpoint answers the state
+        # itself, so the row is a tweak that reads and writes it — and an
+        # advisory shape here would now be a button nobody presses for nothing.
+        assert self._setting().is_readonly is False
+        assert self._setting().apply_command == "nvapp_laptop_feature_write"
+        assert self._setting().detect_command == "nvapp_laptop_feature_read"
 
     def test_it_is_offered_only_where_both_halves_are_true(self) -> None:
         # A desktop has no battery state to boost and an AMD laptop has no
@@ -218,8 +222,13 @@ class TestTheAdvisorySettingSaysWhatItCanDo:
         assert not set(self._setting().choices) & ABSENT_READINGS
 
     def test_detection_can_only_answer_within_its_choices(self) -> None:
-        assert nvidia_app.CAP_POSSIBLE in self._setting().choices
-        assert nvidia_app.NO_CAP_POSSIBLE in self._setting().choices
+        # The detector answers the App's state, or the absent sentinel — never the
+        # supportability words it used to report, which were not a state at all.
+        assert nvapp_mcp.feature_state("battery_boost", "http://127.0.0.1:1/mcp") in {
+            *self._setting().choices,
+            NOT_AVAILABLE,
+        }
+        assert not {"cap_possible", "no_cap_possible"} & set(self._setting().choices)
 
     def test_the_ceiling_is_stated_rather_than_a_gain_invented(self) -> None:
         # 30 fps is a ceiling, and a ceiling cannot move the right way. The

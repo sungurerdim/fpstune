@@ -437,9 +437,17 @@ export const settingsTr: Record<
   "gpu-nvidia:battery_boost": {
     name: "Pilde kare sınırı",
     description:
-      "NVIDIA App'in dizüstü pildeyken oyunları 30 FPS civarında tutup tutamayacağı. Sınır bir hata değil bir özellik; ama maçın ortasında kimsenin istemediği bir tavandır.",
-    effect:
-      "Pili harcamayı yeğliyorsanız NVIDIA App'te Graphics altından Battery Boost'u kapatın",
+      "NVIDIA App'in dizüstü pilde çalışırken oyunun kare hızını düşürmesini sağlar. Sınır bir hata değil bir özellik; ama maçın ortasında kimsenin istemediği bir tavandır.",
+  },
+  "gpu-nvidia:whisper_mode": {
+    name: "Whisper Mode sınırı",
+    description:
+      "NVIDIA App'in daha sessiz bir fan karşılığında kare hızından çalmasını sağlar; prizde de pilde de geçerlidir. Oyuncunun kullandığı kareler üzerine kurulmuş bir tavandır.",
+  },
+  "gpu-nvidia:nvapp_auto_optimize": {
+    name: "App oyun optimizasyonu",
+    description:
+      "NVIDIA App'in, sorulmadan kendi optimizasyon profilini oyuna uygulamasını sağlar; bu, fpstune'un ve oyuncunun seçtiği ayarların üzerine yazar. Kapalıyken oyunun kendi dosyası tek yazar olarak kalır.",
   },
   "gpu-amd:anti_lag": {
     name: "Anti-Lag",

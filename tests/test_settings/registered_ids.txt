@@ -261,6 +261,7 @@ gpu-nvidia:cuda_force_p2
 gpu-nvidia:fan_curve
 gpu-nvidia:fps_limit
 gpu-nvidia:low_latency
+gpu-nvidia:nvapp_auto_optimize
 gpu-nvidia:power_mode
 gpu-nvidia:shader_cache
 gpu-nvidia:texture_lod_bias
@@ -270,6 +271,7 @@ gpu-nvidia:triple_buffer
 gpu-nvidia:vrr_app_override
 gpu-nvidia:vrr_mode
 gpu-nvidia:vsync
+gpu-nvidia:whisper_mode
 launcher:bnet:download_limit
 launcher:bnet:hardware_accel
 launcher:steam:broadcast

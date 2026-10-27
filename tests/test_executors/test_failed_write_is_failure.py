@@ -39,9 +39,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from fpstune.core import power_profile
 from fpstune.core.nvapi import NvapiError, NvapiUnavailable
-from fpstune.settings import display_mode
+from fpstune.settings import display_mode, power_profile
 from fpstune.settings.base import DetectType, SettingExecutor
 from fpstune.settings.executors import (
     CommandExecutor,
@@ -52,6 +51,8 @@ from fpstune.settings.executors import (
     msi_mode,
     mw3_profile,
     mw4_config,
+    nvapp_config,
+    nvapp_mcp,
     nvprofile,
     python_actions,
     steam_config,
@@ -263,6 +264,50 @@ def _ini(stack: ExitStack, tmp: Path, *, replace: Any = None, lock: Any = None) 
     _file_seams(stack, replace=replace, lock=lock)
 
 
+def _nvapp_mcp(
+    stack: ExitStack,
+    *,
+    endpoint: str | None = "http://127.0.0.1:1/mcp",
+    write_ok: bool = False,
+    state: str = "disabled",
+) -> None:
+    """The App's MCP seam: an endpoint (or none), and what a read-back reports."""
+    stack.enter_context(patch.object(nvapp_mcp, "endpoint", lambda _manifest=None: endpoint))
+    if endpoint is None:
+        return
+    stack.enter_context(
+        patch.object(
+            nvapp_mcp,
+            "_call",
+            lambda _url, _tool, _args: (
+                (None, None) if write_ok else (None, nvapp_mcp.NOT_AVAILABLE)
+            ),
+        )
+    )
+    stack.enter_context(patch.object(nvapp_mcp, "feature_state", lambda _f, _u=None: state))
+
+
+def _nvapp_config(
+    stack: ExitStack,
+    tmp: Path,
+    *,
+    present: bool = True,
+    switch: str = "EnableAutomaticApplyOPS",
+) -> None:
+    """The App's config.xml seam: the file, and which switch it carries."""
+    if not present:
+        stack.enter_context(patch.object(nvapp_config, "config_path", lambda: None))
+        return
+    path = _config_file(
+        tmp,
+        "config.xml",
+        "<BackendConfiguration version='1.0'>\n"
+        f"  <Setting name='{switch}' value='1' />\n"
+        "</BackendConfiguration>\n",
+    )
+    stack.enter_context(patch.object(nvapp_config, "config_path", lambda: path))
+
+
 def _msi(stack: ExitStack, *, write: Any = None) -> None:
     stack.enter_context(patch.object(msi_mode, "resolve_instance_id", lambda _a: r"PCI\VEN_1\1"))
     stack.enter_context(
@@ -467,6 +512,30 @@ CASES: dict[str, Case] = {
         control=lambda s, t: _ini(s, t),
     ),
     # -- registry and system calls made from Python -------------------------------
+    "nvapp_laptop_feature_write": Case(
+        pick=lambda r: _by_action(r, "nvapp_laptop_feature_write"),
+        value="disabled",
+        arguments={"feature": "battery_boost", "allowed": "enabled,disabled"},
+        refusals={
+            # The App is closed, so its MCP server advertises nothing to write to.
+            "no endpoint": lambda s, _t: _nvapp_mcp(s, endpoint=None),
+            # The App answers the call and then reports the old state back.
+            "app does not report the change": lambda s, _t: _nvapp_mcp(
+                s, write_ok=True, state="enabled"
+            ),
+        },
+        control=lambda s, _t: _nvapp_mcp(s, write_ok=True, state="disabled"),
+    ),
+    "nvapp_auto_apply_write": Case(
+        pick=lambda r: _by_action(r, "nvapp_auto_apply_write"),
+        value="disabled",
+        arguments={"allowed": "enabled,disabled"},
+        refusals={
+            "no configuration": lambda s, t: _nvapp_config(s, t, present=False),
+            "no such switch": lambda s, t: _nvapp_config(s, t, switch="OtherSetting"),
+        },
+        control=lambda s, t: _nvapp_config(s, t),
+    ),
     "msi_mode_write": Case(
         pick=lambda r: _by_action(r, "msi_mode_write"),
         value="enabled",
@@ -668,7 +737,7 @@ class TestNoRegisteredSettingCanSucceedWhenNothingCanBeWritten:
                 value = True if setting.is_action else setting.recommended_value
                 try:
                     ok, error = CommandExecutor.apply(setting, value)
-                except Exception as exc:
+                except Exception as exc:  # noqa: BLE001 - the sweep's contract is that apply never raises; a raise is the failure it records
                     wrong.append(f"{setting.id}: raised {type(exc).__name__}: {exc}")
                     continue
                 if ok:

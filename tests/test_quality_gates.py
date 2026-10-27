@@ -35,7 +35,7 @@ ROOT = Path(__file__).resolve().parents[1]
 # Where a path named in the document may live. The document writes paths the way
 # a reader wants them — `applicability.py`, `api/routes/settings.py` — rather
 # than repo-relative, so a reference matches any file whose path ends with it.
-_SEARCH_ROOTS = ("src", "frontend/src", "tests", "scripts", ".github")
+_SEARCH_ROOTS = ("src", "frontend/src", "tests", "scripts", ".github", "docs")
 
 _SKIP_DIRS = {"__pycache__", "node_modules", ".venv", "venv", "dist", ".ruff_cache"}
 
@@ -607,7 +607,16 @@ class TestC10VendorSymmetry:
     NVIDIA-only setting may not widen the gap silently.
     """
 
-    _VENDOR_CEILING = {"gpu-nvidia": 16}
+    # 18 since 2026-10-22: the NVIDIA App's own three switches joined the module —
+    # `battery_boost` (rewritten from a read-only advisory into a tweak), and the
+    # new `whisper_mode` and `nvapp_auto_optimize`. They are all NVIDIA-only in a
+    # way no sibling can close: Battery Boost and Whisper Mode are frame caps the
+    # NVIDIA App itself imposes (no AMD or Intel equivalent exists in their
+    # software), and `nvapp_auto_optimize` writes a switch in that App's own
+    # config.xml. The AMD/Intel story is unchanged and still a gap, not a choice:
+    # no Arc hardware has ever been available and AMD Software has no per-switch
+    # configuration file to write.
+    _VENDOR_CEILING = {"gpu-nvidia": 18}
     _VENDOR_FLOOR = {"gpu-amd": 7, "gpu-intel": 0}
 
     def _counts(self) -> dict[str, int]:

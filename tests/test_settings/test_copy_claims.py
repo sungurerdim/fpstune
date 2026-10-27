@@ -88,12 +88,6 @@ FACTS: dict[tuple[str, str], dict[str, str]] = {
     ("network:tcp_del_ack_ticks", "recommended_impact"): {
         "200ms": "the stock delayed-ACK timer (2 ticks of 100 ms)"
     },
-    ("gpu-nvidia:battery_boost", "description"): {
-        "30fps": "NVIDIA App's own Battery Boost cap value"
-    },
-    ("gpu-nvidia:battery_boost", "current_impact"): {
-        "30fps": "NVIDIA App's own Battery Boost cap value"
-    },
     ("gpu-hardware:resizable_bar", "current_impact"): {
         "256mb": "the PCI BAR window size without Resizable BAR (a PCIe fact)"
     },
@@ -180,9 +174,6 @@ I18N_FACTS: dict[tuple[str, str], dict[str, str]] = {
     ("tr.ts", "Test sahnesi Unigine"): {"1,3gb": "size of a one-time download"},
     ("tr.ts", "Sahneyi kur ("): {"1,3gb": "size of a one-time download"},
     ("settingsTr.ts", "%100, çekirdek park"): {"%100": "the value the row writes"},
-    ("settingsTr.ts", "oyunları 30 FPS civarında"): {
-        "30fps": "NVIDIA App's own Battery Boost cap value"
-    },
     ("settingsTr.ts", "16 GB altı RAM"): {"16gb": "the RAM size below which the purge is offered"},
     ("settingsTr.ts", "hattın %20'siyle"): {"%20": "the cap this row writes"},
     ("settingsTr.ts", "yükleme hızının %30'uyla"): {"%30": "the cap this row writes"},

@@ -1,6 +1,6 @@
 """The quality gates, run rather than read.
 
-`CLAUDE.md` is the contract every setting and every PR is judged against, and it
+`AGENTS.md` is the contract every setting and every PR is judged against, and it
 was judged by reading — which means a rule whose binding has been renamed away
 still reads as enforced. That is the worst failure mode a rules document has: it
 looks stricter than the repository actually is, and nobody finds out until
@@ -54,12 +54,12 @@ _PATH_REFERENCE = re.compile(
 
 @pytest.fixture(scope="module")
 def rules() -> str:
-    """`CLAUDE.md` with fenced blocks removed.
+    """`AGENTS.md` with fenced blocks removed.
 
     The project map is a fenced tree of bare filenames rendered for reading, not
     a list of assertions; only prose references are bindings.
     """
-    text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+    text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
     return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
 
 
@@ -94,7 +94,7 @@ class TestTheRulesPointAtCodeThatExists:
         missing = sorted(ref for ref in named - _NOT_IN_THE_TREE if not _resolves(ref, tree))
 
         assert not missing, (
-            f"CLAUDE.md cites files that do not exist: {missing}. Either the rule "
+            f"AGENTS.md cites files that do not exist: {missing}. Either the rule "
             "moved and the citation did not, or the rule is describing something "
             "that was never written."
         )
@@ -112,10 +112,10 @@ class TestTheRulesPointAtCodeThatExists:
             if suffix is None:
                 continue
             path, name = ROOT / match.group(1), suffix.lstrip(":")
-            assert path.exists(), f"CLAUDE.md cites {match.group(1)}, which is gone"
+            assert path.exists(), f"AGENTS.md cites {match.group(1)}, which is gone"
             source = path.read_text(encoding="utf-8")
             assert re.search(rf"^\s*(?:def|class) {re.escape(name)}\b", source, re.MULTILINE), (
-                f"CLAUDE.md names {name} in {match.group(1)} as the proof of a rule, "
+                f"AGENTS.md names {name} in {match.group(1)} as the proof of a rule, "
                 "and nothing by that name is defined there"
             )
 
@@ -248,7 +248,7 @@ class TestC9MachineNeutral:
 class TestC2NumericImpact:
     """Every setting claims at least one numeric or range impact metric.
 
-    CLAUDE.md has carried this gate as prose ("Gate: assert any(k != ...")
+    AGENTS.md has carried this gate as prose ("Gate: assert any(k != ...")
     since C2 was written, and nothing ran it — the C1 audit found zero
     violations, and this test is what keeps that zero.
     """

@@ -44,7 +44,7 @@ class TestTheRuleIsWrittenDown:
     """A rule that lives only in a commit message is a rule nobody applies next."""
 
     def test_claude_md_carries_the_fifth_consequence(self) -> None:
-        text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "Six consequences" in text, "the consequence list lost its own count"
         assert "information and decoration" in text
 
@@ -56,14 +56,14 @@ class TestTheRuleIsWrittenDown:
         2026-08-24, is the other way round and covers every tweak in the product:
         the minimum is the default answer and raising one is the exception.
         """
-        text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "Frame rate is priority one" in text
         assert "the minimum is the default answer" in text.lower()
 
     def test_it_names_the_upward_direction_too(self) -> None:
         # Without this the rule reads as "turn less off", which is not the point.
         # Raising a lowered functional setting is a tweak by the same rule.
-        text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "SoundSampleRate" in text
         assert "Minimum is not zero" in text
 
@@ -74,7 +74,7 @@ class TestTheRuleIsWrittenDown:
         frames on a machine measured at 19% of its target — which is what the
         shipped MW4 set did.
         """
-        text = (ROOT / "CLAUDE.md").read_text(encoding="utf-8")
+        text = (ROOT / "AGENTS.md").read_text(encoding="utf-8")
         assert "headroom you have measured" in text
 
 

@@ -50,9 +50,9 @@ Old tree:
 - `uv run --extra dev <command>` for every Python tool (`pytest --no-cov -q <paths>`, `ruff`, `mypy`).
 - `python scripts/affected_tests.py --base <ref> [--run]` selects the tests a change can break; run it after every unit.
 - `bash scripts/quality.sh` is the full gate; lefthook runs it on pre-push.
-- lefthook pre-commit checks lint and format on the whole tree and fails on a finding.
-  Auto-fixing the staged files and re-staging them is being changed (uncommitted edit
-  of `lefthook.yml`; no issue yet, plan owner #125). Until it lands, run `ruff` yourself.
+- lefthook pre-commit auto-fixes lint and format (ruff, eslint) on the staged files only
+  and re-stages them; only a finding with no automatic fix fails the commit. Pre-push and CI
+  stay check-only.
 
 Issues. Create and edit them only through the owner's tool:
 `python3 $HOME/.agents/araclar/issue.py ac|guncelle` (`denetle` audits open issues).

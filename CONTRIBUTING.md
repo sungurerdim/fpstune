@@ -61,7 +61,7 @@ Open http://localhost:5173. The frontend proxies API requests to port 8000.
    - `current_impact` and `recommended_impact` in `"State: Consequence"` format
 4. Run `pytest tests/ -x` to verify no regressions
 
-See `CLAUDE.md` for the 11 enforced quality gates (C1-C11); `docs/ARCHITECTURE.md` lists them in short form.
+See `AGENTS.md` for the 11 enforced quality gates (C1-C11); `docs/ARCHITECTURE.md` lists them in short form.
 
 ## Testing
 
@@ -112,8 +112,8 @@ reproduces that locally.
 - **Python**: ruff for linting + formatting, mypy for type checking (strict mode)
 - **Frontend**: ESLint with `no-console` rule (use `createLogger` from `lib/logger.ts`), TypeScript strict
 - **Commits**: Conventional commits required (`feat:`, `fix:`, `refactor:`, etc.); a lefthook `commit-msg` hook rejects anything else
-- **Pre-commit**: lefthook runs what answers in seconds — `ruff check src tests scripts` + `ruff format --check`, the tests selected by the staged files (`scripts/affected_tests.py`), the dependency-free secret scan, the diff budget and the control-registry check; staging anything under `frontend/` adds ESLint. Types and the full test suite run on `pre-push` (`scripts/quality.sh`), which is also the contract CI runs
-- **Every rule and its binding**: `CLAUDE.md` holds the product's quality gates; `docs/PRINCIPLES.md` applies the 56-principle catalogue and names, for each principle, what fails when it is broken. A new check is one entry in `scripts/controls.py`
+- **Pre-commit**: lefthook runs what answers in seconds — `ruff check --fix` then `ruff format` on the staged Python files (the fixes are re-staged; only a finding with no automatic fix fails), the tests selected by the staged files (`scripts/affected_tests.py`), the dependency-free secret scan, the diff budget and the control-registry check; staging anything under `frontend/` adds `eslint --fix` the same way. Types and the full test suite run on `pre-push` (`scripts/quality.sh`), which is also the contract CI runs
+- **Every rule and its binding**: `AGENTS.md` holds the product's quality gates; `docs/PRINCIPLES.md` applies the 56-principle catalogue and names, for each principle, what fails when it is broken. A new check is one entry in `scripts/controls.py`
 
 ## Repo Scripts
 

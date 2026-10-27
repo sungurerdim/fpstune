@@ -36,7 +36,7 @@ judgment rows with the reason written down.
 
 | ID | Name | Here | Bound by | Brake |
 |---|---|---|---|---|
-| **P-SSOT** | Single source of truth | One home per fact: `values_equal`, `ABSENT_READINGS`, `user_paths`, `hardware_manager`, the registry, the bulk planner, the console, the panel derivation, the i18n catalogues. Unavoidable copies have a drift test. | `tests/test_principles_single_source.py` (each concept defined once, home not stale, profile roots read only through the resolver); `.jscpd.json` duplication threshold wired in `scripts/quality.sh`; the existing invariants in `CLAUDE.md` are themselves bound by `tests/test_quality_gates.py`, `tests/test_settings/test_domain.py`, `tests/test_settings/test_groups.py` and the typed `frontend/src/i18n` catalogues | P-RULE3 |
+| **P-SSOT** | Single source of truth | One home per fact: `values_equal`, `ABSENT_READINGS`, `user_paths`, `hardware_manager`, the registry, the bulk planner, the console, the panel derivation, the i18n catalogues. Unavoidable copies have a drift test. | `tests/test_principles_single_source.py` (each concept defined once, home not stale, profile roots read only through the resolver); `.jscpd.json` duplication threshold wired in `scripts/quality.sh`; the existing invariants in `AGENTS.md` are themselves bound by `tests/test_quality_gates.py`, `tests/test_settings/test_domain.py`, `tests/test_settings/test_groups.py` and the typed `frontend/src/i18n` catalogues | P-RULE3 |
 | **P-DRY** | Don't repeat yourself | A second copy uses the first. Known duplicates are counted, not tolerated: Steam install-path spellings and the DEVMODE struct have ceilings. | `.jscpd.json` (clone threshold 0.5 %; baseline 3 clones / 0.06 %); `tests/test_quality_gates.py::TestDuplicationCeiling` for the named copies | P-RULE3 |
 | **P-RULE3** | Abstract at the third | No abstraction before the third real repetition. The catalogue makes this the brake on DRY, so it is judgment, not a gate: a factory/registry lands with the third caller, not the first. | Judgment — review question: "name the three call sites." The registry, `SOURCES`, `GAME_LABELS` and the discovery `DISCOVERERS` table are the cases where the third repetition did arrive | — (brake) |
 | **P-SRP** | Single responsibility | A module changes for one reason. Route modules do not build the registry or create restore points; long functions and route modules have ceilings that only shrink. | `.importlinter` contracts; `tests/test_quality_gates.py::TestRouteLayering`, `::TestFunctionLengthCeiling`, `::TestRouteModuleCeiling`; `frontend/.dependency-cruiser.cjs` | P-KISS |
@@ -115,11 +115,11 @@ bindings live in the work queue and the review template rather than in a test.
 
 | ID | Name | Here | Bound by |
 |---|---|---|---|
-| **P-TIMEBOX** | Timebox | Work has a timebox before it starts; when it overruns, scope shrinks — the time does not grow. | `tasks.md` carries `timebox:` per open item; the audit epic (#108) and its sub-issues are the queue |
-| **P-PARETO** | Pareto and diminishing returns | The few items carrying most of the value go first; the audit's first ten findings are the format, not all two hundred. | `tasks.md` priority order (P0/P1); the catalogue's own measure (probability × impact vs. effort) is stated in this document's introduction |
+| **P-TIMEBOX** | Timebox | Work has a timebox before it starts; when it overruns, scope shrinks — the time does not grow. | the issue tracker: the plan is #125, the audit epic (#108) and its sub-issues are the queue |
+| **P-PARETO** | Pareto and diminishing returns | The few items carrying most of the value go first; the audit's first ten findings are the format, not all two hundred. | the issue priority prefix (P0/P1 in the title, e.g. #111, #113); the catalogue's own measure (probability × impact vs. effort) is stated in this document's introduction |
 | **P-BIKESHED** | Bikeshedding | Disproportionate time on a trivial topic is refused: a naming debate that costs an hour is one line in review. | Judgment — review question: "does this change a failure mode?" |
-| **P-PARALYSIS** | Analysis paralysis | When there is enough information to decide, decide; a spike's done-criterion is a recorded decision, not a new research list. | `tasks.md` decisions (e.g. #113 deferred by the owner; the log retention decision); owner decisions are recorded in `CLAUDE.md`/`tasks.md` |
-| **P-LRM** | Last responsible moment | An irreversible decision waits for the information it needs — and no longer. Deferral carries a condition (`defer.after`) or a date. | `tasks.md` `defer.after:` field; the owner-deferred items name their condition |
+| **P-PARALYSIS** | Analysis paralysis | When there is enough information to decide, decide; a spike's done-criterion is a recorded decision, not a new research list. | issue decisions (e.g. #113 deferred by the owner; the log retention decision); owner decisions are recorded in the issue bodies (#125) and `AGENTS.md` |
+| **P-LRM** | Last responsible moment | An irreversible decision waits for the information it needs — and no longer. Deferral carries a condition (`defer.after`) or a date. | the `defer.after` condition written in the issue; the owner-deferred items name their condition |
 
 ---
 
@@ -130,7 +130,7 @@ bindings live in the work queue and the review template rather than in a test.
 | P-DRY ↔ P-RULE3 | A copy is accepted until the third real repetition | `tests/test_principles_single_source.py` lists only concepts the project has already declared single-homed; `.jscpd.json` measures the rest without forcing an abstraction |
 | P-POSTEL ↔ P-FAILFAST | FAILFAST at the inner boundary; POSTEL at the outer protocol | FastAPI/Pydantic validates every request (fail fast); `utils/updates.py` tolerates unknown/missing fields from GitHub (Postel) and classifies failures rather than raising into the UI |
 | P-DELETE ↔ P-CHESTERTON | Write the reason before deleting | `settings/retired.py` + `tests/test_settings/test_retired.py`: every removed id has an entry saying what became of it (guard, replacement, no-op by limit, mitigation) |
-| P-LRM ↔ P-PARALYSIS | Deferral has a condition | `tasks.md` records the condition (`defer.after`) next to each deferred item |
+| P-LRM ↔ P-PARALYSIS | Deferral has a condition | the issue records the condition (`defer.after`) next to each deferred item |
 | P-DEPTH ↔ P-SHIFTLEFT | Depth wins for personal data and payment; elsewhere one control | There is no personal-data or payment surface, so one control per failure is the rule; the destructive write path still has lock + restore + verify because C6 makes it irreversible |
 
 ## H. Definitions without a primary source

@@ -83,9 +83,7 @@ debug.CSV
 # dev-skills transient state
 ds/audit/
 
-# Plan artifacts and one-off probe scripts. These are the progress ledger for
-# work in flight, not part of the product: they are deleted when the work lands.
-tasks.md
+# One-off probe scripts. Not part of the product: deleted when the work lands.
 _*_probe.py
 
 # One-off elevated sweep runner, generated per session

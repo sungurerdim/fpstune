@@ -224,7 +224,7 @@ claims only, and claims never add up to a headline (C11 rule 1).
 - WMI / CIM — hardware queries
 - PresentMon (bundled or downloaded) — FPS captures
 
-## Quality gates (enforced — see CLAUDE.md)
+## Quality gates (enforced — see AGENTS.md)
 
 1. Zero-risk tweaks
 2. Numeric impact scores per setting

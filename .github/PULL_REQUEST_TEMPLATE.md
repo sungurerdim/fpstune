@@ -24,7 +24,7 @@ CI cannot cover.
 - [ ] `pytest tests/ -q` — 0 failed
 - [ ] `cd frontend && npm run test:run` — 0 failed
 - [ ] `ruff check src tests` and `mypy src` — clean
-- [ ] Behaviour or interface changed → README / CLAUDE.md / docs updated to match
+- [ ] Behaviour or interface changed → README / AGENTS.md / docs updated to match
 - [ ] Bug fix → a regression test that fails without the fix
 - [ ] Removing a guard or an existing behaviour → the commit body says why it was
       there (P-CHESTERTON), and `settings/retired.py` has the entry if it was a setting

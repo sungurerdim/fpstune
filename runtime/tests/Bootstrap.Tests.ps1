@@ -1,7 +1,7 @@
 # Bundle and bootstrap contract (decision D3, unit U7 of #127). ASCII only.
 #
-# build.ps1
-#   build.ps1 -Out <path> [-TweaksRoot <dir>] [-RunOut <path> -Tag <tag> -BundleUrl <url>]
+# tools/build.ps1 (dev tool, not shipped; writes its outputs normally)
+#   tools/build.ps1 -Out <path> [-TweaksRoot <dir>] [-RunOut <path> -Tag <tag> -BundleUrl <url>]
 #   - Writes ONE .ps1: Catalogue, Detect, Summary, Journal, Apply (this fixed
 #     order), the strings (en, tr) and the tweak catalogue embedded as data.
 #   - LF line endings only, UTF-8 without BOM, parses without errors.
@@ -29,7 +29,7 @@
 
 BeforeAll {
     $script:runtimeRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).ProviderPath
-    $script:buildPath = Join-Path $script:runtimeRoot 'build.ps1'
+    $script:buildPath = Join-Path (Join-Path $script:runtimeRoot 'tools') 'build.ps1'
     $script:runPath = Join-Path $script:runtimeRoot 'run.ps1'
     $script:tweaksRoot = Join-Path $PSScriptRoot 'fixtures/bootstrap/tweaks'
     $script:utf8 = New-Object System.Text.UTF8Encoding($false)
@@ -37,6 +37,8 @@ BeforeAll {
     $script:testUrl = 'https://example.invalid/fpstune-bundle.ps1'
     $script:testTag = 'v0.0.0-test'
 
+    # Mock bodies run in the caller's scope (run.ps1 has its own script scope),
+    # so served bytes reach them through a closure, never through `$script:.
     # Stand-ins so Pester can mock the commands run.ps1 defines for itself.
     # A mock is an alias, and an alias wins over the function run.ps1 defines.
     function script:Get-FpsBundleBytes { param([string]$Url) throw 'stub: network must be mocked' }
@@ -49,7 +51,7 @@ BeforeAll {
     }
 
     function script:Invoke-FpsBuild([string]$Out, [string[]]$Extra = @()) {
-        if (-not (Test-Path -LiteralPath $script:buildPath)) { throw "runtime/build.ps1 not found: $script:buildPath" }
+        if (-not (Test-Path -LiteralPath $script:buildPath)) { throw "runtime/tools/build.ps1 not found: $script:buildPath" }
         $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:buildPath -Out $Out -TweaksRoot $script:tweaksRoot @Extra 2>&1
         [pscustomobject]@{ Output = @($output | ForEach-Object { "$_" }); ExitCode = $LASTEXITCODE }
     }
@@ -91,7 +93,7 @@ BeforeAll {
         [char]0x015F + [char]0x011F + [char]0x0130 + [char]0x0131 + [char]0x00F6 + [char]0x00C7
 }
 
-Describe 'build.ps1 bundle' {
+Describe 'tools/build.ps1 bundle' {
     It 'two builds of the same tree have the same SHA-256 and the build prints it' {
         $a = Join-Path $TestDrive 'det-a.ps1'
         $b = Join-Path $TestDrive 'det-b.ps1'
@@ -201,7 +203,7 @@ Describe 'run.ps1 bootstrap' {
     It 'is a template with the three placeholders, parses and writes no file' {
         $text = Get-RunTemplate
         foreach ($p in '__FPS_RELEASE_TAG__', '__FPS_BUNDLE_URL__', '__FPS_BUNDLE_SHA256__') {
-            $text.Contains($p) | Should -BeTrue -Because "$p is filled by build.ps1"
+            $text.Contains($p) | Should -BeTrue -Because "$p is filled by tools/build.ps1"
         }
         $errors = $null
         $ast = [Management.Automation.Language.Parser]::ParseInput($text, [ref]$null, [ref]$errors)
@@ -248,10 +250,10 @@ Describe 'run.ps1 bootstrap' {
         $marker = Join-Path $TestDrive ('marker-' + [guid]::NewGuid().ToString('N') + '.txt')
         $good = "Set-Content -LiteralPath '$marker' -Value 'ran'`n"
         $bad = "Set-Content -LiteralPath '$marker' -Value 'tampered'`n"
-        $script:served = $script:utf8.GetBytes($bad)
+        $served = $script:utf8.GetBytes($bad)
         Mock Test-FpsElevated { $true }
         Mock Start-Process { }
-        Mock Get-FpsBundleBytes { , [byte[]]$script:served }
+        Mock Get-FpsBundleBytes ({ , [byte[]]$served }.GetNewClosure())
         $run = New-FilledRun (Get-Sha256Hex $script:utf8.GetBytes($good))
         $r = Invoke-FilledRun $run
         Should -Invoke Get-FpsBundleBytes -Times 1 -Exactly -ParameterFilter { $Url -ceq $script:testUrl }
@@ -264,12 +266,12 @@ Describe 'run.ps1 bootstrap' {
     It 'runs matching bytes as a scriptblock after enabling TLS 1.2 and writes no file' {
         $marker = Join-Path $TestDrive ('marker-' + [guid]::NewGuid().ToString('N') + '.txt')
         $payload = "Set-Content -LiteralPath '$marker' -Value 'ran'`n"
-        $script:served = $script:utf8.GetBytes($payload)
+        $served = $script:utf8.GetBytes($payload)
         Mock Test-FpsElevated { $true }
-        Mock Get-FpsBundleBytes { , [byte[]]$script:served }
+        Mock Get-FpsBundleBytes ({ , [byte[]]$served }.GetNewClosure())
         [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls11
         $tempBefore = @(Get-ChildItem -LiteralPath $env:TEMP -File -Filter '*.ps1' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
-        $run = New-FilledRun (Get-Sha256Hex $script:served)
+        $run = New-FilledRun (Get-Sha256Hex $served)
         $r = Invoke-FilledRun $run
         $tls12 = [Net.SecurityProtocolType]::Tls12
         ([Net.ServicePointManager]::SecurityProtocol -band $tls12) | Should -Be $tls12
@@ -282,10 +284,10 @@ Describe 'run.ps1 bootstrap' {
     It 'decodes the bundle as UTF-8 so Turkish text survives download and decode' {
         $global:FpsTestTurkish = $null
         $payload = "`$global:FpsTestTurkish = '" + $script:turkish + "'`n"
-        $script:served = $script:utf8.GetBytes($payload)
+        $served = $script:utf8.GetBytes($payload)
         Mock Test-FpsElevated { $true }
-        Mock Get-FpsBundleBytes { , [byte[]]$script:served }
-        $run = New-FilledRun (Get-Sha256Hex $script:served)
+        Mock Get-FpsBundleBytes ({ , [byte[]]$served }.GetNewClosure())
+        $run = New-FilledRun (Get-Sha256Hex $served)
         try {
             $r = Invoke-FilledRun $run
             $global:FpsTestTurkish | Should -BeExactly $script:turkish -Because ($r.Output -join "`n")

@@ -1,0 +1,30 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Turn off power throttling"
+  },
+  "why": {
+    "en": "Windows can slow background work to save power, which can delay a game's helper threads.",
+    "tr": "Windows güç tasarrufu için arka plan işlerini yavaşlatabilir, bu da oyunun yardımcı iş parçacıklarını geciktirebilir."
+  },
+  "fixed": {
+    "en": "Power throttling is now turned off.",
+    "tr": "Güç kısıtlaması artık kapalı."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/windows/win32/procthread/quality-of-service"
+  ],
+  "gain": [
+    "fps",
+    "latency"
+  ],
+  "restart": "none",
+  "applicable": "$true",
+  "detect": "(Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -Name PowerThrottlingOff -ErrorAction Stop).PowerThrottlingOff",
+  "target": {
+    "value": 1
+  },
+  "apply": "New-Item -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -Name PowerThrottlingOff -Value $Target -Type DWord",
+  "revert": "Remove-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -Name PowerThrottlingOff -ErrorAction SilentlyContinue"
+}

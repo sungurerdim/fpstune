@@ -30,10 +30,10 @@ for the current number, never copy it.
 4. Open issues: `gh issue list --state open`, then `gh issue view <n>` for the ones you touch.
 5. DECISIONS.md (why things are as they are).
 
-TODO.md, STATUS.md, DECISIONS.md and ARCHIVE.md are not generated yet: the machine
-generator is being updated. Until they exist, the plan and every owner decision live in
-the body of #125, and the F1 units (each with its verify line) live in the body of #127.
-Read those two first.
+TODO.md and ARCHIVE.md are generated from `gh issue list` (open and closed issues);
+regenerate them, never edit by hand. STATUS.md and DECISIONS.md are hand-written;
+DECISIONS.md only gains lines. The plan lives in the body of #125, and the F1 units
+(each with its verify line) live in the body of #127.
 
 ### Tools and exact commands
 

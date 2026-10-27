@@ -23,6 +23,18 @@
 # that are cheapest here (secret scan, diff budget, control registry). Types and
 # the full test run ran here too and made every commit wait ~45 s for checks
 # pre-push runs anyway; one place for the slow half is enough.
+#
+# Lint and format run in fix mode here, on the staged files only. A finding the
+# tool can repair itself should never reach anyone as a failure, so the hook
+# repairs it and `stage_fixed: true` re-stages the repaired files; only a
+# finding with no automatic fix fails the commit. Staged files only is not a
+# nicety: several agents commit in parallel in one tree, and a whole-tree fix
+# would rewrite and stage files that belong to someone else's commit. Lefthook
+# also sets aside the unstaged hunks of a partially staged file while the job
+# runs and restores them afterwards, so `git add` after the fix stages the
+# fixed staged content and not the hunks the author left out on purpose.
+# pre-push (scripts/quality.sh) and CI stay check-only: nothing there may modify
+# files, and they still scan the whole tree in case this hook was bypassed.
 pre-commit:
   parallel: true
   jobs:
@@ -49,10 +61,21 @@ pre-commit:
       group:
         piped: true
         jobs:
+          # Lint-fix first, then format, the order Ruff documents ("call the Ruff
+          # linter and then the formatter", docs/formatter.md, "Sorting imports"):
+          # a lint fix (a removed import, a re-sorted block) can leave code the
+          # formatter would still change, while the formatter never introduces a
+          # lint finding. `--force-exclude` applies the project's exclude list
+          # to files named on the command line, which ruff otherwise ignores.
+          # The globs keep the scope of the old `src tests scripts` arguments.
           - name: py-lint
-            run: uv run --extra dev ruff check src tests scripts
+            glob: ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
+            run: uv run --extra dev ruff check --fix --force-exclude {staged_files}
+            stage_fixed: true
           - name: py-format
-            run: uv run --extra dev ruff format --check src tests scripts
+            glob: ["src/**/*.py", "tests/**/*.py", "scripts/**/*.py"]
+            run: uv run --extra dev ruff format --force-exclude {staged_files}
+            stage_fixed: true
           # The tests that import or name a staged file, so a red the change
           # causes is seen by that change and not first by the full gate on push
           # (#104: eleven contract tests over definitions/network.py). Python
@@ -66,8 +89,18 @@ pre-commit:
       group:
         piped: true
         jobs:
+          # ESLint is the only frontend formatter or fixer configured (no
+          # prettier, biome or dprint in package.json), so there is one job.
+          # `npm run lint` is `eslint .`, which would lint the whole tree and
+          # cannot take a file list, so the same flags are spelled out here
+          # against the staged TypeScript files; the whole-tree run stays in
+          # pre-push and CI. `--no-warn-ignored` keeps a staged file under an
+          # ignored path from turning into a warning that `--max-warnings 0`
+          # would fail on.
           - name: fe-lint
-            run: npm run lint
+            glob: "*.{ts,tsx}"
+            run: npx eslint --fix --no-warn-ignored --report-unused-disable-directives --max-warnings 0 {staged_files}
+            stage_fixed: true
 
 commit-msg:
   commands:

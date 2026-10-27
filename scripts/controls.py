@@ -109,16 +109,31 @@ class Control:
 
 
 CONTROLS: tuple[Control, ...] = (
+    # pre-commit runs the fixing form on the staged files, so a fixable finding is
+    # repaired and re-staged instead of failing; pre-push and CI run the
+    # check-only form over the whole tree, so a bypassed hook is still caught.
+    Control(
+        id="py-lint-fix",
+        command="ruff check --fix",
+        stages=("pre-commit",),
+        prevents="a fixable lint finding reaching a reviewer as a failure instead of a fix",
+    ),
+    Control(
+        id="py-format-fix",
+        command="ruff format --force-exclude",
+        stages=("pre-commit",),
+        prevents="a formatting diff unrelated to the change landing in the next commit",
+    ),
     Control(
         id="py-lint",
         command="ruff check src tests scripts",
-        stages=("pre-commit", "pre-push", "ci"),
+        stages=("pre-push", "ci"),
         prevents="an undefined name, unused import or bugbear violation reaching a reviewer",
     ),
     Control(
         id="py-format",
         command="ruff format --check src tests scripts",
-        stages=("pre-commit", "pre-push", "ci"),
+        stages=("pre-push", "ci"),
         prevents="a formatting diff unrelated to the change landing in the next commit",
     ),
     Control(
@@ -152,9 +167,15 @@ CONTROLS: tuple[Control, ...] = (
         prevents="the gate falling through to a global pytest from PATH (46 collection errors once)",
     ),
     Control(
+        id="fe-lint-fix",
+        command="eslint --fix",
+        stages=("pre-commit",),
+        prevents="a fixable ESLint finding reaching a reviewer as a failure instead of a fix",
+    ),
+    Control(
         id="fe-lint",
         command="npm run lint",
-        stages=("pre-commit", "pre-push", "ci"),
+        stages=("pre-push", "ci"),
         prevents="an ESLint violation, including a stale disable directive, reaching a reviewer",
     ),
     Control(

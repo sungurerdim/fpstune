@@ -1,0 +1,24 @@
+# Gitleaks configuration for fpstune (P-SECRETS).
+#
+# The default rule set is the whole rule set: provider tokens (GitHub, AWS,
+# Slack, Google, Stripe), private key blocks, credentials in connection strings
+# and high-entropy assignments. No custom rules are added here — a rule written
+# for one incident is usually the rule that misses the next one, and the
+# defaults are maintained upstream.
+#
+# There is no allowlist, and that is deliberate. A scan of the tracked tree
+# (714 files) found no secret and no fixture needs a fake one: the values in
+# tests/test_principles_security.py that look like credentials are assembled
+# from fragments at runtime, so neither that file nor the workflows need an
+# exemption. If a future fixture genuinely needs a literal the scanner flags,
+# add it under [allowlist] with a one-line description naming the fixture and
+# why the value is not a secret — tests/test_principles_security.py fails an
+# allowlist entry that carries no reason.
+#
+# Where it runs:
+#   local pre-commit: tests/test_principles_security.py, the dependency-free scan
+#                     (gitleaks is not a project dependency, so a contributor
+#                     never needs the binary to commit)
+#   CI:               gitleaks git --redact --config .gitleaks.toml  (v8.30.1, full history)
+[extend]
+useDefault = true

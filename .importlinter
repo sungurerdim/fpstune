@@ -1,0 +1,84 @@
+# The intended dependency direction of the backend, enforced rather than drawn.
+#
+# The tree says which modules exist; it does not say which may import which, and
+# a new import is one line that looks exactly like every other. This file is the
+# line: imports may only point down the layers below, plus the named exceptions
+# in the contract, each carrying the reason it cannot point down. The exception
+# list is parsed by `tests/test_principles_architecture.py`, which fails on an
+# exception that no longer matches a real import (a stale reason) and on a new
+# one that has not been written here — so it can only shrink.
+#
+# Layer order, highest first:
+#   commands  the CLI commands: presentation and orchestration over everything
+#   api       HTTP routes and the schemas they answer with
+#   safety    restore points: a write-time service, not a setting
+#   health    the read-only diagnosis layer, which composes instruments
+#   benchmark instruments: they measure and report, they do not change settings
+#   settings  the setting registry, definitions, executors and their detection
+#   core      OS integrations: DISM, NVAPI sessions, the DRS key table
+#   utils     infrastructure: winapi, logger, paths, process watching
+#
+# Run: uv run --extra dev lint-imports
+
+[importlinter]
+root_packages =
+    fpstune
+include_external_packages = True
+
+[importlinter:contract:layering]
+name = Layering: HTTP and CLI above instruments, above settings, above OS integrations
+type = layers
+layers =
+    fpstune.commands
+    fpstune.api
+    fpstune.safety
+    fpstune.health
+    fpstune.benchmark
+    fpstune.settings
+    fpstune.core
+    fpstune.utils
+ignore_imports =
+    # measure_now() is the one place the settings layer drives an instrument: it
+    # is the UI's "measure this machine now" button, which runs the scene and
+    # records its band. It lives in performance_headroom because that module owns
+    # the band and the refusal reasons a user reads; a callback would hide which
+    # bench runs and let a second caller run a different one behind the lock.
+    fpstune.settings.performance_headroom -> fpstune.benchmark.gpu_scene
+    fpstune.settings.performance_headroom -> fpstune.benchmark.operation_lock
+    # Type annotation only (`BenchResult`), erased at runtime: the band is
+    # recorded from a result and this layer does not construct one.
+    fpstune.settings.performance_headroom -> fpstune.benchmark.suite
+    # Type annotation only (`SettingExecutor`), erased at runtime: the operation
+    # log names the setting it is logging, it never applies one.
+    fpstune.utils.operation_log -> fpstune.settings.base
+unmatched_ignore_imports_alerting = error
+
+[importlinter:contract:http-framework]
+name = The HTTP framework stays in the api layer
+type = forbidden
+source_modules =
+    fpstune.commands
+    fpstune.safety
+    fpstune.health
+    fpstune.benchmark
+    fpstune.settings
+    fpstune.core
+    fpstune.utils
+forbidden_modules =
+    fastapi
+    uvicorn
+    starlette
+
+[importlinter:contract:cli-framework]
+name = The CLI framework stays in commands and the top-level cli module
+type = forbidden
+source_modules =
+    fpstune.api
+    fpstune.safety
+    fpstune.health
+    fpstune.benchmark
+    fpstune.settings
+    fpstune.core
+    fpstune.utils
+forbidden_modules =
+    click

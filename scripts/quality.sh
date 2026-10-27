@@ -10,12 +10,17 @@
 # divided by the number of blocks, measured here, never `-n auto` — two layers
 # each assuming the whole machine oversubscribe it. Run one after the other and
 # single-process, the gate took 14-19 minutes, almost all of it pytest.
+#
+# The machine may be shared with other work, so both knobs are overridable:
+#   QUALITY_BLOCKS=1 QUALITY_WORKERS=2 bash scripts/quality.sh
+# runs backend and frontend one after the other with a two-worker pytest, which
+# is slower but leaves the rest of the machine alone.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-blocks=2
+blocks=${QUALITY_BLOCKS:-2}
 cores=$(nproc 2>/dev/null || echo 2)
-workers=$((cores / blocks))
+workers=${QUALITY_WORKERS:-$((cores / blocks))}
 ((workers < 1)) && workers=1
 echo "quality: $cores cores, $blocks blocks side by side, pytest -n $workers"
 
@@ -26,11 +31,27 @@ echo "quality: $cores cores, $blocks blocks side by side, pytest -n $workers"
 backend() {
   uv run --extra dev python -c \
     "import sys, pytest; print(f'quality: {sys.executable} | pytest {pytest.__version__}')"
-  uv run --extra dev ruff check src tests
-  uv run --extra dev ruff format --check src tests
+  uv run --extra dev ruff check src tests scripts
+  uv run --extra dev ruff format --check src tests scripts
   uv run --extra dev mypy src
+  # P-DIP/P-SOC/P-SRP: the dependency direction `.importlinter` declares.
+  uv run --extra dev lint-imports
+  # P-YAGNI/P-DELETE/P-SPECGEN: dead code and unused flags.
+  uv run --extra dev vulture src/fpstune vulture_whitelist.py --min-confidence 80
+  # P-LEASTPRIV: unpinned actions and over-broad workflow tokens.
+  uv run --extra dev zizmor .github/workflows
+  # P-SSOT/P-SHIFTLEFT: this file, lefthook.yml and ci.yml agree with the registry.
+  uv run --extra dev python scripts/controls.py --check
+  # The coverage JSON feeds the per-module floors below; the terminal report is
+  # what a human reads when one fails.
+  coverage_json="${TMPDIR:-${TEMP:-/tmp}}/fpstune-coverage.json"
   uv run --extra dev pytest -q -n "$workers" -m "not timing" \
-    --cov=src/fpstune --cov-report=term-missing
+    --cov=src/fpstune --cov-report=term-missing --cov-report=json:"$coverage_json"
+  # P-RISKTEST: the critical modules' measured floors, from the run just made.
+  uv run --extra dev python scripts/risk_coverage.py --json "$coverage_json"
+  # The wall-clock contract tests read late beside eight workers, so they run
+  # alone once the parallel block is done (the `timing` marker's whole purpose).
+  uv run --extra dev pytest -q -m timing --no-cov
 }
 
 frontend() {
@@ -45,6 +66,13 @@ frontend() {
   fi
   npm run lint --silent
   npx tsc --noEmit
+  # P-YAGNI/P-DELETE/P-SPECGEN: unused exports, files and dependencies.
+  npm run knip --silent
+  # P-DIP/P-SOC/P-COHESION: the UI's layer rules.
+  npm run deps:check --silent
+  # P-DRY over both trees: the UI's zero-clone baseline plus the Python side,
+  # with the threshold in the root .jscpd.json (P-DRY's general detector).
+  node_modules/.bin/jscpd --config ../.jscpd.json ../src/fpstune src
   npm run test:run --silent
 }
 

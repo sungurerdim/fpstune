@@ -18,22 +18,41 @@
 # because they contend for different tools, and within each group the steps run
 # one after another. The wall clock is set by the Python group, which ends in
 # the full pytest run either way.
-# pre-commit keeps what answers in seconds (lint and format) plus the tests
-# selected by what changed (scripts/affected_tests.py). Types and the full
-# test run ran here too and made every commit wait ~45 s for checks pre-push runs
-# anyway; one place for the slow half is enough.
+# pre-commit keeps what answers in seconds (lint and format), the tests selected
+# by what changed (scripts/affected_tests.py), and the three whole-tree checks
+# that are cheapest here (secret scan, diff budget, control registry). Types and
+# the full test run ran here too and made every commit wait ~45 s for checks
+# pre-push runs anyway; one place for the slow half is enough.
 pre-commit:
   parallel: true
   jobs:
+    # Every commit, whatever it touches: a secret, an unbounded diff and a
+    # control registry that has drifted from the stage files are all cheapest to
+    # catch here (P-SECRETS, P-SMALLBATCH/P-BOYSCOUT, P-SHIFTLEFT/P-SSOT). No
+    # glob on purpose: a doc-only commit can add a credential too.
+    - name: change-size
+      group:
+        piped: true
+        jobs:
+          # The dependency-free scan is the local gate; CI runs the real
+          # gitleaks binary (not a project dependency, so it cannot be required
+          # of every contributor's machine).
+          - name: py-secret-scan
+            run: uv run --extra dev pytest -q --no-cov tests/test_principles_security.py
+          - name: py-diff-budget
+            run: uv run --extra dev python scripts/diff_budget.py --staged
+          - name: py-control-registry
+            run: uv run --extra dev python scripts/controls.py --check
+
     - name: python
       glob: "*.py"
       group:
         piped: true
         jobs:
           - name: py-lint
-            run: uv run --extra dev ruff check src tests
+            run: uv run --extra dev ruff check src tests scripts
           - name: py-format
-            run: uv run --extra dev ruff format --check src tests
+            run: uv run --extra dev ruff format --check src tests scripts
           # The tests that import or name a staged file, so a red the change
           # causes is seen by that change and not first by the full gate on push
           # (#104: eleven contract tests over definitions/network.py). Python

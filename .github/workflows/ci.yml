@@ -15,6 +15,10 @@ concurrency:
 permissions:
   contents: read
 
+# Every `uses:` is pinned to a full commit SHA (P-LEASTPRIV, zizmor
+# unpinned-uses): a tag is mutable, so `@v7` lets the tag's owner change what
+# this repository runs with the token it hands it. The trailing comment names
+# the tag the SHA came from, so a bump is a readable diff.
 jobs:
   backend:
     # Windows, because most of what is tested here only exists there (winreg,
@@ -27,10 +31,17 @@ jobs:
     timeout-minutes: 25
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # The secret scan reads history, not just the tree: a credential that
+          # was committed and then deleted is still in the clone.
+          fetch-depth: 0
+          # artipacked: nothing in this workflow pushes with git, so the job
+          # token is not left on disk for a later step (or an artifact) to pick up.
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
 
@@ -44,16 +55,48 @@ jobs:
           uv run --extra dev python -c "import sys, pytest; print(f'ci: {sys.executable} | pytest {pytest.__version__}')"
 
       - name: Ruff lint
-        run: uv run --extra dev ruff check src tests
+        run: uv run --extra dev ruff check src tests scripts
 
       - name: Ruff format check
-        run: uv run --extra dev ruff format --check src tests
+        run: uv run --extra dev ruff format --check src tests scripts
 
       - name: Mypy
         run: uv run --extra dev mypy src
 
+      # P-DIP/P-SOC/P-SRP: the layer contract, as a check rather than a drawing.
+      - name: Import layering
+        run: uv run --extra dev lint-imports
+
+      # P-YAGNI/P-DELETE/P-SPECGEN: dead code and unused flags.
+      - name: Dead code
+        run: uv run --extra dev vulture src/fpstune vulture_whitelist.py --min-confidence 80
+
+      # P-LEASTPRIV: every action pinned to a SHA, every token least-privilege.
+      - name: Workflow security (zizmor)
+        run: uv run --extra dev zizmor .github/workflows
+
+      # P-SSOT/P-SHIFTLEFT: this workflow, quality.sh and lefthook.yml agree
+      # with the one control registry.
+      - name: Control registry
+        run: uv run --extra dev python scripts/controls.py --check
+
+      # P-SECRETS: the real scanner is the CI gate of record. Locally the
+      # dependency-free test is the gate because gitleaks is not a project
+      # dependency (a contributor must not need it to commit).
+      - name: Secret scan (gitleaks)
+        shell: pwsh
+        run: |
+          $url = "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_windows_x64.zip"
+          Invoke-WebRequest $url -OutFile gitleaks.zip
+          Expand-Archive gitleaks.zip -DestinationPath .
+          .\gitleaks.exe git --redact --config .gitleaks.toml
+
       - name: Pytest (coverage gate)
-        run: uv run --extra dev pytest --cov=src/fpstune --cov-report=term-missing
+        run: uv run --extra dev pytest --cov=src/fpstune --cov-report=term-missing --cov-report=json:coverage.json
+
+      # P-RISKTEST: the critical modules' measured floors, from the run above.
+      - name: Critical-module coverage floors
+        run: uv run --extra dev python scripts/risk_coverage.py --json coverage.json
 
   frontend:
     # Nothing in the UI build or its tests depends on the host OS, and a Linux
@@ -67,10 +110,14 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # artipacked: nothing in this workflow pushes with git, so the job
+          # token is not left on disk for a later step (or an artifact) to pick up.
+          persist-credentials: false
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -84,6 +131,19 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # P-YAGNI/P-DELETE/P-SPECGEN: unused exports, files and dependencies.
+      - name: Unused code (knip)
+        run: npm run knip
+
+      # P-DIP/P-SOC/P-COHESION: the UI's layer rules.
+      - name: Dependency direction (dependency-cruiser)
+        run: npm run deps:check
+
+      # P-DRY over both trees: the UI's zero-clone baseline plus the Python
+      # side, with the threshold in the root .jscpd.json.
+      - name: Duplication (jscpd)
+        run: node_modules/.bin/jscpd --config ../.jscpd.json ../src/fpstune src
 
       - name: Test
         run: npm run test:run
@@ -112,15 +172,19 @@ jobs:
       # has pulled in something it should not.
       MAX_SIZE_MB: 60
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # artipacked: nothing in this workflow pushes with git, so the job
+          # token is not left on disk for a later step (or an artifact) to pick up.
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
         with:
           enable-cache: true
 
       - name: Set up Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: npm
@@ -198,7 +262,7 @@ jobs:
           Write-Host "sha256 $hash"
 
       - name: Keep the build
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: fpstune-exe
           path: |

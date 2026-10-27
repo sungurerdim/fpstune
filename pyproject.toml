@@ -54,6 +54,10 @@ dev = [
     "httpx2>=2.4.0",
     "pyinstaller>=6.0",
     "pytest-xdist>=3.8.0",
+    "import-linter>=2.15",
+    "vulture>=2.16",
+    "zizmor>=1.31.1",
+    "mutmut==2.4.4",
 ]
 
 [project.scripts]
@@ -84,11 +88,23 @@ select = [
     "UP",     # pyupgrade
     "ARG",    # flake8-unused-arguments
     "SIM",    # flake8-simplify
+    # P-EXPLICIT (docs/PRINCIPLES.md): a broad `except` and a silent
+    # `try/except/pass` are the two shapes a swallowed failure takes. Both are
+    # allowed only with a written reason on the line (`# noqa: BLE001 - why`).
+    "BLE",    # flake8-blind-except
+    "S110",   # try-except-pass
+    "S112",   # try-except-continue
+    # P-KISS: the catalogue's complexity ceiling of 20. Three functions were
+    # extracted when this landed; there is no C901 noqa.
+    "C901",   # mccabe complexity
 ]
 ignore = [
     "E501",   # line too long (handled by formatter)
     "B008",   # do not perform function calls in argument defaults
 ]
+
+[tool.ruff.lint.mccabe]
+max-complexity = 20
 
 [tool.ruff.lint.isort]
 known-first-party = ["fpstune"]
@@ -116,10 +132,10 @@ addopts = "-v --tb=short"
 # runner (where a cancelled run's log is lost) names itself.
 faulthandler_timeout = 300
 pythonpath = ["src"]
-# A test whose verdict is a wall-clock reading. Beside eight workers and the
-# frontend block the scheduler takes the core away mid-measurement (measured:
-# a 20 ms wait landing 60 ms late), so scripts/quality.sh runs these on their
-# own once the parallel blocks are done, instead of loosening their bounds.
+# A test whose verdict is a wall-clock reading. Beside eight workers the
+# scheduler takes the core away mid-measurement (measured: the PowerShell stall
+# contract reads late enough to fail), so scripts/quality.sh runs these on their
+# own once the parallel block is done, instead of loosening their bounds.
 markers = [
     "timing: asserts on wall-clock behaviour; run on a quiet machine, not beside parallel load",
 ]
@@ -160,3 +176,21 @@ fail_under = 80
 
 [tool.coverage.html]
 directory = "htmlcov"
+
+[tool.mutmut]
+# P-MUTATION (docs/PRINCIPLES.md): the two critical pure modules. Mutation
+# testing is a manual gate (scripts/mutation.sh) because it re-runs pytest per
+# mutant and mutates the tree in place; the floor is measured, never aspirational.
+# The runner is scoped to these modules' own tests on purpose: the whole suite per
+# mutant would cost the full quality gate hundreds of times.
+#
+# Windows-native by construction: mutmut 2.4.4 is the last release that runs on
+# Windows (3.x refuses with "please use the WSL", boxed/mutmut#397) and this
+# project ships to Windows 11 only, so the gate must not require WSL. The version
+# is pinned in the dev extra and scripts/mutation.sh refuses anything else.
+paths_to_mutate = [
+    "src/fpstune/settings/applicability.py",
+    "src/fpstune/settings/bulk_plan.py",
+]
+runner = "python -m pytest -x -q --no-cov tests/test_settings/test_applicability.py tests/test_settings/test_bulk_plan.py"
+test_time_multiplier = 4.0

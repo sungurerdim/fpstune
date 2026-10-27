@@ -14,18 +14,26 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write
-  # Both are required by attest-build-provenance: the OIDC token identifies the
-  # workflow, the attestations scope lets it record the result.
-  id-token: write
-  attestations: write
+  # Least privilege at the workflow level (zizmor excessive-permissions): every
+  # job starts from read, and the one job that needs more asks for it itself.
+  contents: read
 
+# Every `uses:` is pinned to a full commit SHA (P-LEASTPRIV, zizmor
+# unpinned-uses): a tag is mutable, so `@v7` lets the tag's owner change what
+# this repository runs with the token it hands it. The trailing comment names
+# the tag the SHA came from, so a bump is a readable diff.
 jobs:
   version:
     name: Tag matches the project version
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # artipacked: the version job only reads pyproject.toml, so the job
+          # token is not left on disk for a later step to pick up.
+          persist-credentials: false
       - name: Compare
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -38,23 +46,46 @@ jobs:
 
   ci:
     needs: version
-    uses: ./.github/workflows/ci.yml
+    # `$/` is GitHub's self-repository syntax (July 2026): unlike `./`, the
+    # workflow it names cannot be swapped for one cloned at runtime, and a
+    # fully-pinned policy can see it as pinned (zizmor self-repository).
+    uses: $/.github/workflows/ci.yml
+    permissions:
+      contents: read
 
   publish:
     name: Publish
     needs: ci
     runs-on: ubuntu-latest
+    # Asked for here, not at the workflow level: only this job creates the
+    # release and records its provenance.
+    permissions:
+      contents: write
+      # Both are required by attest-build-provenance: the OIDC token identifies
+      # the workflow, the attestations scope lets it record the result.
+      id-token: write
+      attestations: write
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          # artipacked: the release job reads the scripts and winget manifests,
+          # and publishes with the explicit token below — never with a git
+          # credential left in .git/config.
+          persist-credentials: false
 
       - name: The executable CI built and started
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: fpstune-exe
           path: dist
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          # cache-poisoning: this job publishes the artifact users download, so
+          # it must not consume a cache anyone else could have written. A tag
+          # build is rare; the cache buys nothing worth that risk.
+          enable-cache: false
 
       # THIS WORKFLOW PUSHES TO NO REPOSITORY OTHER THAN THIS ONE. It opens no
       # pull request against microsoft/winget-pkgs and holds no token that
@@ -63,8 +94,12 @@ jobs:
       # place in a project whose threat model is "this binary asks for
       # Administrator". What is automated is the part a person gets wrong — the
       # version, URL, date and above all the checksum, computed from these bytes.
+      # `--with pyyaml` without a version installed whatever PyPI served that
+      # day, so the manifest this job wrote was not a function of the commit
+      # alone (P-REPRO). The pin tracks the version uv.lock already resolves;
+      # `tests/test_principles_ops.py` fails if the two drift apart.
       - name: Winget manifest, pointed at this binary
-        run: uv run --no-project --with pyyaml python scripts/update_winget_manifest.py --exe dist/fpstune.exe
+        run: uv run --no-project --with pyyaml==6.0.3 python scripts/update_winget_manifest.py --exe dist/fpstune.exe
 
       - name: The manifest describes this binary and parses as YAML
         run: |
@@ -72,7 +107,7 @@ jobs:
           dir="winget/manifests/s/sungurerdim/fpstune/$version"
           installer="$dir/sungurerdim.fpstune.installer.yaml"
           test -f "$installer" || { echo "::error::no installer manifest at $installer"; exit 1; }
-          uv run --no-project --with pyyaml python -c "import pathlib,sys,yaml; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in pathlib.Path(sys.argv[1]).glob('*.yaml')]" "$dir"
+          uv run --no-project --with pyyaml==6.0.3 python -c "import pathlib,sys,yaml; [yaml.safe_load(p.read_text(encoding='utf-8')) for p in pathlib.Path(sys.argv[1]).glob('*.yaml')]" "$dir"
           expected=$(sha256sum dist/fpstune.exe | cut -d' ' -f1)
           grep -qi "InstallerSha256: *$expected" "$installer" || { echo "::error::manifest checksum is not this build's ($expected)"; exit 1; }
           grep -qE "ReleaseDate: *[0-9]{4}-[0-9]{2}-[0-9]{2}" "$installer" || { echo "::error::the manifest carries no ReleaseDate"; exit 1; }
@@ -80,7 +115,7 @@ jobs:
       # Downloaded by the maintainer, checked with `winget validate`, committed
       # back here, then submitted to winget-pkgs by hand.
       - name: Keep the winget manifest
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: winget-manifest
           path: winget/manifests/s/sungurerdim/fpstune/
@@ -88,12 +123,17 @@ jobs:
       # Stronger than the checksum: it ties the binary to this commit and this
       # workflow, not just to the file published beside it.
       - name: Build provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: dist/fpstune.exe
 
+      # `gh release create` refuses a tag whose release already exists, where
+      # this action updates it — so a re-run of a failed release would fail
+      # instead of finishing the job. Swapping the publish step is a release-path
+      # change, not a security fix, so the SHA-pinned action stays (zizmor's
+      # own audit notes this finding is not itself a security concern).
       - name: Publish
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3 # zizmor: ignore[superfluous-actions]
         with:
           files: |
             dist/fpstune.exe

@@ -1,6 +1,6 @@
 """C1: an unproven benefit must state what applying it costs.
 
-The rule in CLAUDE.md is `evidence_level="experimental"` implies
+The rule in AGENTS.md is `evidence_level="experimental"` implies
 `risk_level="advanced"` plus a non-None `risk_warning`.
 
 This file exists because the first audit of the rule counted only the static

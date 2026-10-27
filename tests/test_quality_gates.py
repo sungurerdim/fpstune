@@ -40,12 +40,10 @@ _SEARCH_ROOTS = ("src", "frontend/src", "tests", "scripts", ".github", "docs")
 _SKIP_DIRS = {"__pycache__", "node_modules", ".venv", "venv", "dist", ".ruff_cache"}
 
 # Named in the rules, absent from the tree on purpose. Not exceptions to the
-# guard so much as the guard knowing what these three are:
-#   tasks.md          the in-flight plan artifact — gitignored, deleted when the
-#                     work lands, so a clean checkout has never had one
-#   ds/audit/*        dev-skill scratch output, gitignored for the same reason
+# guard so much as the guard knowing what these two are:
+#   ds/audit/*        dev-skill scratch output, gitignored
 #   headroom.json     written at runtime under ~/.fpstune, not shipped
-_NOT_IN_THE_TREE = {"tasks.md", "ds/audit/findings.md", "headroom.json"}
+_NOT_IN_THE_TREE = {"ds/audit/findings.md", "headroom.json"}
 
 _PATH_REFERENCE = re.compile(
     r"`([A-Za-z0-9_./-]+\.(?:py|ts|tsx|md|json|yml|yaml))(::[A-Za-z0-9_]+)?`"

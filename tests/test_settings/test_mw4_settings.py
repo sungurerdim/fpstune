@@ -249,7 +249,7 @@ class TestTheJudgementsThatAreEasyToInvert:
         "screen_space_shadows": "held at its lowest drawn tier rather than off, because MW3 "
         "and MW4 disagree in writing about whether this key carries a silhouette and "
         "nobody has measured which is right — 3% is the price of not guessing",
-        "fov": "the owner's decision (tasks.md decision 3): not seeing an enemy beside you "
+        "fov": "the owner's decision (owner decision 3): not seeing an enemy beside you "
         "costs more than a missed shot, so the file's own maximum is recommended in COMPLETE "
         "with the cost — a smaller apparent target and a small render cost — written into the copy",
     }
@@ -313,7 +313,7 @@ class TestTheJudgementsThatAreEasyToInvert:
 
     @pytest.mark.parametrize("name", ["render_resolution", "dlss_perf_mode", "texture_quality"])
     def test_settings_that_change_the_image_are_offered_not_assumed(self, name: str) -> None:
-        """CLAUDE.md consequence 5: a setting that changes what the screen shows
+        """AGENTS.md consequence 5: a setting that changes what the screen shows
         belongs in COMPLETE, with its cost written in the copy."""
         setting = self._by_name(name)
         assert setting.scope.name == "COMPLETE"
@@ -619,7 +619,7 @@ class TestAudioSplitsInformationFromDecoration:
         assert self._by_name("mono_sound").recommended_value == "false"
 
     def test_silencing_what_the_player_hears_is_offered_not_assumed(self) -> None:
-        """CLAUDE.md is explicit that a setting changing what the player can hear
+        """AGENTS.md is explicit that a setting changing what the player can hear
         belongs in COMPLETE with the cost written."""
         for name in ("music_volume", "wartracks_volume", "mute_licensed_music"):
             assert self._by_name(name).scope.name == "COMPLETE", name
@@ -686,7 +686,7 @@ class TestInputGuardsProtectMuscleMemory:
         )
 
     def test_field_of_view_recommends_the_files_maximum(self) -> None:
-        """Owner decision (tasks.md decision 3, 2026-09-09): not seeing an enemy
+        """Owner decision (owner decision 3, 2026-09-09): not seeing an enemy
         beside you costs more than a missed shot, so the recommendation moved
         from the 90 guard to the file's own maximum of 120, in COMPLETE where
         the cost — a smaller apparent target and a small render cost — is
@@ -744,7 +744,7 @@ class TestAdsSensitivityFamily:
         assert setting.recommended_value == setting.default_value == "1.000000"
 
     def test_monitor_distance_coefficient_guards_at_the_files_own_value(self) -> None:
-        """tasks.md decision 2: a drift guard fpstune must never move."""
+        """Owner decision 2: a drift guard fpstune must never move."""
         setting = self._by_name("mouse_monitor_distance_coeff")
         assert setting.recommended_value == setting.default_value == "1.333333"
 
@@ -873,7 +873,7 @@ class TestDerivedDisplaySettings:
 
 
 class TestHeatIsTreatedAsPerformance:
-    """CLAUDE.md consequence 4: none of these buys a frame, and all of them stop
+    """AGENTS.md consequence 4: none of these buys a frame, and all of them stop
     the machine reaching the match already at its limit."""
 
     def _by_name(self, name: str):

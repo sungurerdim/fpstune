@@ -1,6 +1,6 @@
 """Setting values are compared with `values_equal`, never with `==`.
 
-CLAUDE.md states this as an invariant, and it is not a style preference. The same
+AGENTS.md states this as an invariant, and it is not a style preference. The same
 setting's value arrives as `int` from a REG_DWORD, `str` from a REG_SZ, text with
 a trailing CRLF from PowerShell, and hex from powercfg. `==` says those differ.
 Everything downstream — "is this optimized", "did the write land", "do these

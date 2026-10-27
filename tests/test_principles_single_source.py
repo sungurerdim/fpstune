@@ -1,6 +1,6 @@
 """P-SSOT and P-DRY, run rather than promised.
 
-CLAUDE.md's key invariants name a set of concepts that must have exactly one
+AGENTS.md's key invariants name a set of concepts that must have exactly one
 home: one comparison truth, one absence sentinel set, one user-path resolver,
 one registry, one console, one scheduling planner. Those sentences are worth
 nothing the first time a second copy lands somewhere else, because the copy
@@ -29,7 +29,7 @@ SRC = ROOT / "src" / "fpstune"
 
 # concept -> (owning module relative to src/fpstune, definition pattern)
 #
-# Only concepts the project has already declared single-homed in CLAUDE.md's key
+# Only concepts the project has already declared single-homed in AGENTS.md's key
 # invariants are listed. Adding a row here is a decision that a second copy is a
 # bug, not a style preference (P-RULE3: three real repetitions earn an
 # abstraction; this table is for the ones the project has already made).
@@ -94,7 +94,7 @@ def test_each_named_concept_has_exactly_one_home() -> None:
     }
 
     assert not duplicated, (
-        "these concepts are declared single-homed in CLAUDE.md but have more than "
+        "these concepts are declared single-homed in AGENTS.md but have more than "
         f"one definition: {duplicated}"
     )
 

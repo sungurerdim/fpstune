@@ -44,7 +44,7 @@ def test_the_call_site_names_no_interval_of_its_own() -> None:
     """An explicit interval at the call site is how the 60 s disagreement got in.
 
     The poller's default is the named constant; passing anything here re-opens
-    the gap between what CLAUDE.md documents and what runs.
+    the gap between what AGENTS.md documents and what runs.
     """
     import inspect
 

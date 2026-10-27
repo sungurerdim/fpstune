@@ -1,6 +1,6 @@
 """Catalogue section A applied to the backend: dependency direction and tree shape.
 
-`CLAUDE.md` says what the product is; the catalogue says how the code should be
+`AGENTS.md` says what the product is; the catalogue says how the code should be
 built. This file is the part of the catalogue that can be checked by reading the
 tree, so it is checked by reading the tree — no subprocess, no import of the app.
 

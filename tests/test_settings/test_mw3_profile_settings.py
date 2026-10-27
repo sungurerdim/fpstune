@@ -169,7 +169,7 @@ class TestTheThreeTweaks:
     def test_the_timing_enum_is_spelled_out_for_the_reader(self) -> None:
         """MW3 stores 0..2 where MW4 stores words, so a row would otherwise show
         a bare number. The mapping is measured, not assumed: the Touch sibling
-        reads 1 in MW3 and `interpolated` in MW4 (tasks.md, "Measured facts").
+        reads 1 in MW3 and `interpolated` in MW4 (measured on the dev machine).
         """
         hints = _by_name("ads_timing_sensitivity").value_hints
         assert set(hints) == {"0", "1", "2"}
@@ -212,7 +212,7 @@ class TestTheGuardsHoldTheirDefault:
         assert "puts" in text or "leaves" in text, text
 
     def test_the_monitor_distance_coefficient_is_never_moved(self) -> None:
-        """tasks.md decision 2, owner-confirmed: every other sensitivity here is
+        """Owner decision 2, confirmed: every other sensitivity here is
         a multiplier layered on this coefficient, so moving it would rescale all
         of them at once."""
         setting = _by_name("mouse_monitor_distance_coeff")
@@ -220,7 +220,7 @@ class TestTheGuardsHoldTheirDefault:
         assert "never" in setting.description.lower()
 
     def test_ads_sensitivity_guards_the_neutral_multiplier(self) -> None:
-        """tasks.md decision 1: 1.0 is the neutral point in both games, and the
+        """Owner decision 1: 1.0 is the neutral point in both games, and the
         0.850000 the profiles held is drift rather than a second right answer."""
         setting = _by_name("ads_sensitivity")
         assert setting.recommended_value == setting.default_value == "1.000000"

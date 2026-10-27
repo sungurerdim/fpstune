@@ -134,7 +134,7 @@ class HardwareManager:
 
             try:
                 self._cache.cpu = get_cpu_detailed_info()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - a failed refresh keeps the previous reading; the API must stay up
                 logger.debug(f"Failed to detect CPU: {e}")
 
             return self._cache.cpu
@@ -149,7 +149,7 @@ class HardwareManager:
             try:
                 self._cache.monitors = get_monitors()
                 self._cache.monitors_detected_at = time.monotonic()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - a failed refresh keeps the previous reading; the API must stay up
                 logger.debug(f"Failed to detect monitors: {e}")
 
             return self._cache.monitors
@@ -162,7 +162,7 @@ class HardwareManager:
 
             try:
                 self._cache.os_info = get_os_info()
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 - a failed refresh keeps the previous reading; the API must stay up
                 logger.debug(f"Failed to detect OS: {e}")
 
             return self._cache.os_info
@@ -235,7 +235,7 @@ class HardwareManager:
                         sorted(old_names),
                         sorted(new_names),
                     )
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 - a failed refresh keeps the previous reading; the API must stay up
                 logger.debug("Hotplug polling error: %s", exc)
 
     def invalidate_cache(self, component: str | None = None) -> None:

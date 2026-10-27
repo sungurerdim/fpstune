@@ -309,5 +309,5 @@ class NetshExecutor(BaseExecutor):
             return False, output or f"exit code {result.returncode}, no output"
         except subprocess.TimeoutExpired as e:
             return False, describe_refusal(e)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - an executor failure is the (success, error) answer this path returns
             return False, describe_refusal(e)

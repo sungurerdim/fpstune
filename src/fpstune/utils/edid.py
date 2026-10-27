@@ -125,5 +125,5 @@ def parse_edid(raw: bytes) -> EdidInfo | None:
             vrr_min_hz=v_min if supports_vrr else None,
             vrr_max_hz=v_max if supports_vrr else None,
         )
-    except Exception:
+    except Exception:  # noqa: BLE001 - an unparseable EDID is no EDID, not a crash
         return None

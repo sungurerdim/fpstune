@@ -90,7 +90,7 @@ def has_battery() -> bool:
         if not ctypes.windll.kernel32.GetSystemPowerStatus(ctypes.byref(status)):
             return False
         return is_portable_flag(status.BatteryFlag)
-    except Exception as exc:  # pragma: no cover - a failed probe is not a battery
+    except Exception as exc:  # pragma: no cover - a failed probe is not a battery  # noqa: BLE001 - a fact that cannot be read is None; applicability treats unknown as held back (C10)
         logger.debug("Battery probe failed; treating the machine as desktop: %s", exc)
         return False
 
@@ -164,7 +164,7 @@ def build_hardware_context() -> HardwareContext:
             has_vrr = True
         elif active and all(m.supports_vrr is False for m in active):
             has_vrr = False
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a fact that cannot be read is None; applicability treats unknown as held back (C10)
         logger.warning("Monitor probe failed; VRR support is unknown: %s", exc)
 
     return HardwareContext(

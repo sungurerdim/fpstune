@@ -233,7 +233,7 @@ class _ConsoleHandler(logging.Handler):
     def emit(self, record: logging.LogRecord) -> None:
         try:
             console.print(Text.from_ansi(self.format(record)), highlight=False, soft_wrap=True)
-        except Exception:  # pragma: no cover - logging must never raise
+        except Exception:  # pragma: no cover - logging must never raise  # noqa: BLE001 - logging must never fail the operation it logs
             self.handleError(record)
 
 

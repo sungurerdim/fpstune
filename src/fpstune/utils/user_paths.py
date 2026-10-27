@@ -108,7 +108,7 @@ def _shell_folders_value(value_name: str) -> str | None:
         root, key_path = registry_root("HKCU", _SHELL_FOLDERS_KEY)
         with winreg.OpenKey(root, key_path) as key:
             value, _ = winreg.QueryValueEx(key, value_name)
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an unresolvable shell folder falls back to its documented default
         logger.debug("%s folder lookup failed: %s", value_name, exc)
         return None
     return str(value) or None
@@ -147,7 +147,7 @@ def _known_folder(folder_id: str) -> Path | None:
             return Path(ctypes.wstring_at(answer.value))
         finally:
             ole32.CoTaskMemFree(answer)
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - an unresolvable shell folder falls back to its documented default
         logger.debug("known folder %s lookup failed: %s", folder_id, exc)
         return None
 

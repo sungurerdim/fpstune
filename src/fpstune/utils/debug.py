@@ -263,7 +263,10 @@ def _write_to_file(component: str, message: str, data: dict[str, Any] | None = N
                 json.dumps(entry, ensure_ascii=False, default=str)
             )
 
-    except Exception:
+    # A logger that raises on its own failure is worse than one that loses a
+    # line: the caller is mid-operation, and losing the log is not losing the
+    # operation. Logging here would just fail the same way.
+    except Exception:  # noqa: BLE001, S110 - logging must never fail its caller
         pass  # Never fail on logging
 
 

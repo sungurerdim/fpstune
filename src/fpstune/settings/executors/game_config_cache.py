@@ -110,7 +110,7 @@ def _steam_library_paths() -> list[Path]:
                     break
             except FileNotFoundError:
                 continue
-    except Exception as exc:  # pragma: no cover - environment dependent
+    except Exception as exc:  # pragma: no cover - environment dependent  # noqa: BLE001 - a cache that cannot read the file is a miss; the caller re-reads it
         logger.debug("Steam install path lookup failed: %s", exc)
 
     if not install:

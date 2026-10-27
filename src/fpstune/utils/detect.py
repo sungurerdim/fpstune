@@ -529,7 +529,7 @@ def _detect_gpu_sync() -> GpuInfo | None:
         else:
             logger.debug(f"nvidia-smi returned: {result.returncode}, stderr: {result.stderr}")
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - hardware detection degrades to unknown rather than failing the scan (C10)
         logger.debug(f"nvidia-smi failed: {e}")
 
     # Try PowerShell Get-CimInstance if nvidia-smi didn't work
@@ -556,7 +556,7 @@ def _detect_gpu_sync() -> GpuInfo | None:
                 elif line.startswith("PNP="):
                     pnp_raw = line.split("=", 1)[1].strip()
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - hardware detection degrades to unknown rather than failing the scan (C10)
             logger.warning(f"PowerShell GPU detection failed: {e}")
 
     if not name:
@@ -765,7 +765,7 @@ def get_cpu_detailed_info() -> CpuDetailedInfo | None:
                     except (ValueError, TypeError):
                         pass
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - hardware detection degrades to unknown rather than failing the scan (C10)
             logger.debug("Failed to get detailed CPU info: %s", e)
             return None
 
@@ -851,7 +851,7 @@ def _monitor_from_row(row: MonitorRow) -> MonitorInfo | None:
     if row.edid_b64:
         try:
             edid_info = parse_edid(base64.b64decode(row.edid_b64))
-        except Exception:
+        except Exception:  # noqa: BLE001 - hardware detection degrades to unknown rather than failing the scan (C10)
             edid_info = None
     native_refresh = (edid_info.native_refresh_hz or 0) if edid_info else 0
     supports_vrr = edid_info.supports_vrr if edid_info else None
@@ -934,7 +934,7 @@ def get_monitors() -> list[MonitorInfo]:
             if info is not None:
                 monitors.append(info)
 
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001 - hardware detection degrades to unknown rather than failing the scan (C10)
         logger.warning("Failed to get monitor info: %s", e)
         debug_log("hardware", f"EXCEPTION in get_monitors: {type(e).__name__}: {e}")
 

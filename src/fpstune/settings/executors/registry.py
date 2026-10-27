@@ -88,7 +88,7 @@ class RegistryExecutor(BaseExecutor):
         except PermissionError:
             debug_log("registry", f"DETECT {setting.id}: Permission denied")
             return None, registry_denied("reading", f"{hive}\\{path}\\{name}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a registry write that fails is returned as (False, error), never raised
             debug_log("registry", f"DETECT {setting.id}: Error: {e}")
             return None, f"Registry read error: {e}"
 
@@ -161,7 +161,7 @@ class RegistryExecutor(BaseExecutor):
         except PermissionError:
             debug_log("registry", f"APPLY {setting.id}: Permission denied")
             return False, registry_denied("writing", f"{hive}\\{path}\\{name}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a registry write that fails is returned as (False, error), never raised
             debug_log("registry", f"APPLY {setting.id}: Error: {e}")
             return False, f"Registry write error: {describe_refusal(e)}"
 
@@ -182,5 +182,5 @@ class RegistryExecutor(BaseExecutor):
             return True, None
         except PermissionError:
             return False, registry_denied("deleting", f"{hive}\\{path}\\{name}")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - a registry write that fails is returned as (False, error), never raised
             return False, f"Registry delete error: {describe_refusal(e)}"

@@ -13,13 +13,13 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from fpstune.utils import os_build
-from fpstune.utils.os_build import check_build_change
+from fpstune.utils.os_build import compare_and_record_build
 
 
 def test_the_first_run_records_the_build_and_reports_no_change(tmp_path: Path) -> None:
     state = tmp_path / "os_build.json"
 
-    answer = check_build_change(state, "26100.4061")
+    answer = compare_and_record_build(state, "26100.4061")
 
     assert answer.changed is False
     assert answer.previous is None
@@ -30,24 +30,24 @@ def test_a_new_cumulative_update_is_a_change_and_becomes_the_record(tmp_path: Pa
     state = tmp_path / "os_build.json"
     state.write_text(json.dumps({"build": "26100.4061"}), encoding="utf-8")
 
-    answer = check_build_change(state, "26100.4202")
+    answer = compare_and_record_build(state, "26100.4202")
 
     assert (answer.previous, answer.current, answer.changed) == ("26100.4061", "26100.4202", True)
-    assert check_build_change(state, "26100.4202").changed is False
+    assert compare_and_record_build(state, "26100.4202").changed is False
 
 
 def test_the_same_build_is_no_change(tmp_path: Path) -> None:
     state = tmp_path / "os_build.json"
     state.write_text(json.dumps({"build": "22631.5039"}), encoding="utf-8")
 
-    assert check_build_change(state, "22631.5039").changed is False
+    assert compare_and_record_build(state, "22631.5039").changed is False
 
 
 def test_an_unreadable_build_neither_alarms_nor_overwrites_the_record(tmp_path: Path) -> None:
     state = tmp_path / "os_build.json"
     state.write_text(json.dumps({"build": "26100.4061"}), encoding="utf-8")
 
-    answer = check_build_change(state, None)
+    answer = compare_and_record_build(state, None)
 
     assert answer.changed is False
     assert json.loads(state.read_text(encoding="utf-8")) == {"build": "26100.4061"}
@@ -57,7 +57,7 @@ def test_a_corrupt_record_is_a_first_run_and_is_rewritten(tmp_path: Path) -> Non
     state = tmp_path / "os_build.json"
     state.write_text("{not json", encoding="utf-8")
 
-    answer = check_build_change(state, "26100.4061")
+    answer = compare_and_record_build(state, "26100.4061")
 
     assert answer.changed is False
     assert json.loads(state.read_text(encoding="utf-8")) == {"build": "26100.4061"}

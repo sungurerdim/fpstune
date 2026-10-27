@@ -21,7 +21,7 @@ import json
 import logging
 import os
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from fpstune.utils import process_watch
 from fpstune.utils.config import get_config_dir
@@ -34,12 +34,16 @@ logger = logging.getLogger(__name__)
 
 _REPORT_FILENAME = "selfcheck.json"
 
+# What a cross-check covers. Three spellings, so a fourth is a type error rather
+# than a finding the UI has no section for.
+SelfCheckArea = Literal["monitors", "gpu", "cpu"]
+
 
 @dataclass(frozen=True)
 class Finding:
     """One cross-check: which sources were compared and whether they agree."""
 
-    area: str  # "monitors" | "gpu" | "cpu"
+    area: SelfCheckArea
     name: str  # stable check identifier
     agrees: bool
     detail: str  # what each source said, readable by a user
@@ -281,17 +285,17 @@ def run_self_check() -> SelfCheckReport:
         monitors = get_monitors()
         wmi_ids, records = _raw_monitor_sources()
         report.findings.extend(check_monitor_sources(monitors, wmi_ids, records))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a check that cannot run is a finding, not a crash
         report.findings.append(
             Finding("monitors", "monitor_check_ran", agrees=False, detail=str(exc))
         )
     try:
         report.findings.extend(check_gpu_sources(get_gpu_info(), _registry_vram_mb()))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a check that cannot run is a finding, not a crash
         report.findings.append(Finding("gpu", "gpu_check_ran", agrees=False, detail=str(exc)))
     try:
         report.findings.extend(check_cpu_sources(get_cpu_detailed_info(), os.cpu_count() or 0))
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001 - a check that cannot run is a finding, not a crash
         report.findings.append(Finding("cpu", "cpu_check_ran", agrees=False, detail=str(exc)))
 
     for finding in report.disagreements:
@@ -336,5 +340,5 @@ def ensure_checked_before_first_apply() -> None:
             return
         logger.info("First apply on this machine — running the detection self-check")
         run_self_check()
-    except Exception as exc:  # pragma: no cover - defensive
+    except Exception as exc:  # pragma: no cover - defensive  # noqa: BLE001 - a check that cannot run is a finding, not a crash
         logger.warning("Detection self-check could not run: %s", exc)

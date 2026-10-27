@@ -71,7 +71,7 @@ def _read_previous(path: Path) -> str | None:
     return build if isinstance(build, str) and build else None
 
 
-def check_build_change(state_path: Path, current: str | None) -> BuildChange:
+def compare_and_record_build(state_path: Path, current: str | None) -> BuildChange:
     """Compare ``current`` with the build recorded at ``state_path``, then record it.
 
     ``changed`` is true only when both are known and differ: a first run, or a
@@ -112,7 +112,7 @@ def build_change_since_last_run() -> dict[str, object]:
         if _answer is None:
             from fpstune.utils.config import get_config_dir
 
-            _answer = check_build_change(get_config_dir() / _STATE_FILE, current_build())
+            _answer = compare_and_record_build(get_config_dir() / _STATE_FILE, current_build())
             if _answer.changed:
                 logger.info("Windows was updated: %s -> %s", _answer.previous, _answer.current)
         return asdict(_answer)

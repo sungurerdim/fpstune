@@ -98,10 +98,15 @@ JSON response -> React Query refetch -> UI refresh
   against what the panel can show, and what that band and bottleneck are
   allowed to change.
 - `impact_categories.py` — metric key to kind of gain.
+- `power_profile.py` — the FPS Balanced plan: duplicates Balanced, writes the
+  registry's powercfg recommendations onto it, and backs the
+  `power:fps_balanced_plan` row. It lives here rather than in `core/` because it
+  composes the settings registry, its executors and the hardware context.
+- `apply_state.py` — the in-flight apply counter the bench scheduler asks, so the
+  benchmark layer never imports a FastAPI route module to answer it.
 
 ### `core/` — System integrations
 
-- `power_profile.py` — powercfg wrapper, named-plan management
 - `dism.py` — DISM component cleanup, AnalyzeComponentStore
 - `nvapi.py` — NVIDIA driver settings (DRS) sessions through `nvapi64.dll`: read,
   write, restore the driver default, dump
@@ -178,20 +183,24 @@ stays on the API path so every write is verified.
 - `hooks/` — `useActionStream`, `useApplySingle`, `useBulkApply`,
   `useCleanupRunner`, `useImpactSummary`
 - `lib/`
-  - `api.ts` — typed client over the FastAPI surface (single file)
-  - `bulkStream.ts`, `actionRun.ts` — SSE bulk and one-action state
-  - `detection-manager.ts` — Coordinates detection requests, dedupes
-    in-flight queries
+  - `api.ts` — typed client over the FastAPI surface (single file, the one fetch)
+  - `bulkStream.ts` — SSE bulk apply/reset
+  - `actionReading.ts`, `finding.ts`, `formatAge.ts`, `displayStatus.ts`,
+    `cleanupSize.ts`, `ledger.ts`, `utils.ts` — pure formatting and reading
   - `hardware-manager.ts` — Mirrors backend `HardwareManager`
   - `tweakDomain.ts` — predicates over the backend's `domain` / `component`
     fields (`SettingExecutor.component`: the physical component a tweak acts
     on, never how it is set); never over `module` or the id
   - `tweakStatus.ts` — the one row-status derivation
-  - `impact.ts` — per-row benefit text from `impact_scores`; claims only, and
-    claims never add up to a headline
   - `logger.ts` — Structured logging
-- `store/` — Zustand stores (settings, UI state)
-- `types/` — Shared TypeScript types
+- `store/` — Zustand stores (settings, UI state) and the store-aware services:
+  `actionRun.ts` (one-action state), `detection-manager.ts` (coordinates
+  detection requests, dedupes in-flight queries), `notify.ts` (notifications)
+- `types/` — Shared TypeScript types (`setting.ts`: the wire shape, narrowed once
+  at the boundary)
+
+Per-row benefit text is rendered by `TweakDetail.tsx` from `impact_scores` —
+claims only, and claims never add up to a headline (C11 rule 1).
 
 ## Process model
 
@@ -228,6 +237,31 @@ stays on the API path so every write is verified.
 9. Machine-neutral: nothing about the developer's machine or account
 10. Vendor and platform complete: NVIDIA, AMD and Intel, or a named gap
 11. Measured, or not claimed
+
+## Principle gates (see docs/PRINCIPLES.md)
+
+The 56-principle catalogue is applied in `docs/PRINCIPLES.md`; every principle
+that can be checked is checked by one of these, and each is registered in
+`scripts/controls.py` with the stage it runs at and the failure it prevents:
+
+| Check | Command | Principle |
+|---|---|---|
+| Dependency direction | `uv run --extra dev lint-imports` | P-DIP, P-SOC, P-SRP, P-COHESION |
+| Dead code | `uv run --extra dev vulture src/fpstune vulture_whitelist.py --min-confidence 80` | P-YAGNI, P-DELETE, P-SPECGEN |
+| Duplication | `jscpd --config .jscpd.json src/fpstune frontend/src` | P-SSOT, P-DRY |
+| Explicit failures | `ruff check` with `BLE`, `S110`, `S112` | P-EXPLICIT |
+| Complexity | `ruff check` with `C901` (max 20), ESLint `complexity: 20` | P-KISS |
+| Workflow security | `uv run --extra dev zizmor .github/workflows` | P-LEASTPRIV |
+| Secrets | `tests/test_principles_security.py` locally, gitleaks in CI | P-SECRETS |
+| Tree shape / AST rules | `tests/test_principles_architecture.py`, `tests/test_principles_code.py`, `tests/test_principles_single_source.py` | section A |
+| Failure and protocol | `tests/test_principles_ops.py`, `tests/test_principles_security.py` | section C |
+| Test shape | `tests/test_principles_testing.py` | section D |
+| Critical-module floors | `python scripts/risk_coverage.py --json coverage.json` | P-RISKTEST |
+| Diff budget | `python scripts/diff_budget.py --staged` | P-SMALLBATCH, P-BOYSCOUT |
+| Control registry | `python scripts/controls.py --check` | P-SSOT, P-SHIFTLEFT |
+| Mutation | `bash scripts/mutation.sh` (manual; Windows-native mutmut 2.4.4) | P-MUTATION |
+| Accessibility | Playwright axe in CI, `vitest-axe` in the unit suite | P-WCAG |
+| Frontend layers / dead code | `npm run deps:check`, `npm run knip` | P-DIP, P-YAGNI |
 
 ## Toolchain
 

@@ -35,14 +35,14 @@ this rule raises a setting as readily as it lowers one.
 
 ## Tweaks Overview
 
-**420 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
+**422 settings across 13 categories**, plus per-adapter network settings discovered from your own hardware at runtime. Every setting carries a `risk_level` (`safe` / `low` / `moderate` / `advanced`). Advanced tweaks are shown alongside the rest and surface an inline `risk_warning`.
 
 | Category | Count | Highlights |
 |----------|------:|------------|
 | Game Configs | 200 | Per-game config file optimization (MW3, MW4, CS2, Heroes of the Storm, Fortnite, Apex Legends, Overwatch 2, Rainbow Six Siege) |
 | System | 65 | Services, privacy, telemetry, scheduler, memory compression, startup apps |
 | Maintenance | 39 | SFC, DISM, SSD retrim, temp/cache cleanup |
-| GPU | 28 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
+| GPU | 30 | NVIDIA driver settings (through NVAPI, nothing downloaded) and AMD profile optimizations |
 | Network | 26 | TCP/IP, DNS, QoS — plus per-adapter driver keywords |
 | Power | 30 | CPU clock behaviour under load and at idle, core parking, ceiling guards (max frequency, throttle states), USB suspend, disk timeout |
 | Launchers | 9 | Steam, Battle.net overlay/GPU/shader settings |
@@ -119,6 +119,12 @@ start.bat                       # or: uv run fpstune serve
 The first start builds the UI once; after that `serve` behaves exactly like the
 executable — one process, the UI served from `frontend/dist`, elevation requested
 by fpstune itself. `uv run fpstune serve --dev` runs Vite with live reload instead.
+
+If a double-clicked `start.bat` window closes without the UI opening, the launcher
+writes the reason to `%TEMP%\fpstune-start.log` and fpstune writes each start step
+to `%USERPROFILE%\.fpstune\logs\serve.log` (the failure message prints the first
+path too). Elevation has one owner — fpstune itself — so Windows asks once and the
+launcher window closes while the elevated one stays open.
 
 Starting fpstune while another copy is running closes the running one — a graceful
 stop, asked for over loopback HTTP, that waits for an apply or measurement in progress —
@@ -351,7 +357,7 @@ src/fpstune/
     routes/         settings.py + settings_stream.py (detect, apply, SSE bulk apply),
                     system*.py, display.py, benchmark*.py, safety.py, updates.py
   settings/         Settings engine
-    definitions/    16 category files producing the 420 settings in 13 categories —
+    definitions/    16 category files producing the 422 settings in 13 categories —
                     the file count and category count differ because the game-config
                     files generate most of their settings from per-game tables
                     rather than writing each out as a literal
@@ -359,7 +365,7 @@ src/fpstune/
     detection.py    Parallel detection (ThreadPoolExecutor)
     applicability.py  HardwareContext filtering + values_equal()
     base.py         SettingExecutor schema (risk_level, evidence_level, impact_scores)
-  core/             DISM, NVIDIA driver settings (NVAPI), power profiles
+  core/             DISM, NVIDIA driver settings (NVAPI)
   safety/           System Restore points; deletes the files earlier releases kept
   benchmark/        PresentMon, DPC latency, the suite, claim verification
   commands/         the CLI surface (status, gpu, fps, cleanup, ...)
@@ -371,9 +377,15 @@ frontend/src/       React + Vite + TypeScript + Tailwind
                     TweakRow/TweakRowList/TweakDetail, SelectionToolbar (SSE bulk),
                     hardware/ device cards, SuitePanel, VerifyPanel, HeadroomPanel,
                     MeasuredLedger, ActivityLog
-  store/            Zustand (settings state + selection)
-  lib/              API client, detection manager, tweakDomain predicates
+  store/            Zustand (settings state + selection) and store-aware services
+                    (detection manager, action runner, notifications)
+  lib/              API client, tweakDomain predicates, pure formatting helpers
 ```
+
+The 56-principle catalogue this repository is built against is applied in
+[`docs/PRINCIPLES.md`](docs/PRINCIPLES.md): for every principle, what it means
+here, whether the catalogue's profile applies to a local Windows 11 desktop tool,
+and what fails when it is broken.
 
 **Data flow:** React UI → `POST /api/settings/{id}/apply` → `CommandExecutor.apply()` → PowerShell/registry → `_finalize_apply_response()` → detect+verify → Zustand update → UI refresh.
 

@@ -68,7 +68,8 @@ The bypass is scoped to the child process and disappears when it exits.
 ```powershell
 uv sync --locked --extra dev --python 3.12
 uv run --extra dev pytest --no-cov -q -n 8 -m "not timing"
-uv run --extra dev ruff check src tests
+uv run --extra dev pytest --no-cov -q -m timing   # wall-clock contracts, alone
+uv run --extra dev ruff check src tests scripts
 ```
 
 `tests/test_quality_gate_env.py` keeps the `--extra dev` spelling honest.

@@ -310,6 +310,33 @@ Describe 'Invoke-FpsApply' {
             $row.Reason | Should -Be 'native-exit'
         }
 
+        # U6b: the reason comes from a typed error of the Catalogue invoker
+        # (error id FpsNativeExit), never from the wording of its message, which
+        # is free text and may be localised or imitated by a command.
+        It 'raises a typed FpsNativeExit error with the exit code when a native command exits non-zero' {
+            $caught = $null
+            try { $null = Invoke-FpsCommand -Command 'cmd.exe /c exit 5' } catch { $caught = $_ }
+            $caught | Should -Not -BeNullOrEmpty
+            $caught.FullyQualifiedErrorId | Should -BeExactly 'FpsNativeExit'
+            $caught.Exception.Data['ExitCode'] | Should -Be 5
+        }
+
+        It 'is native-exit for the typed error whatever its message says' {
+            $typed = New-Object Management.Automation.ErrorRecord (
+                (New-Object InvalidOperationException 'Anderer Wortlaut, Code 7.'), 'FpsNativeExit', [Management.Automation.ErrorCategory]::NotSpecified, $null)
+            Mock Invoke-FpsCommand { throw $typed } -ParameterFilter { $Command -clike '*missing-item*' }
+            $row = Get-ResultRow (Invoke-TestApply throws) 'test:throws'
+            $row.Status | Should -Be 'failed'
+            $row.Reason | Should -Be 'native-exit'
+        }
+
+        It 'is apply-error, not native-exit, for an untyped error that imitates the exit message' {
+            Mock Invoke-FpsCommand { throw 'A native command exited with code 9.' } -ParameterFilter { $Command -clike '*missing-item*' }
+            $row = Get-ResultRow (Invoke-TestApply throws) 'test:throws'
+            $row.Status | Should -Be 'failed'
+            $row.Reason | Should -Be 'apply-error'
+        }
+
         It 'keeps applying the other rows after a failure' {
             $r = Invoke-TestApply throws, exitcode, noverify, ok, reboot
             (Get-ResultRow $r 'test:throws').Status | Should -Be 'failed'

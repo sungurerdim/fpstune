@@ -1,0 +1,26 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Stop Edge from running in the background",
+    "tr": "Edge'in arka planda çalışmasını durdur"
+  },
+  "why": {
+    "en": "Edge keeps running after its last window closes, which holds memory and processor time while you play. Turning this off by policy makes Edge show \"managed by your organization\", which is harmless.",
+    "tr": "Edge son penceresi kapandıktan sonra da çalışmaya devam eder ve siz oynarken bellek ile işlemci zamanı tutar. Bunu ilke ile kapatmak Edge'in \"kuruluşunuz tarafından yönetiliyor\" yazmasına yol açar, bu zararsızdır."
+  },
+  "fixed": {
+    "en": "Edge now ends with its last window instead of running in the background.",
+    "tr": "Edge artık arka planda çalışmak yerine son penceresiyle birlikte sona eriyor."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/en-us/deployedge/microsoft-edge-browser-policies/backgroundmodeenabled"
+  ],
+  "gain": ["ram"],
+  "restart": "none",
+  "applicable": "[bool](Test-Path -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\msedge.exe')",
+  "detect": "$p = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge' -ErrorAction SilentlyContinue; if ($null -eq $p -or $null -eq $p.BackgroundModeEnabled) { 1 } else { [int]$p.BackgroundModeEnabled }",
+  "target": { "value": 0 },
+  "apply": "$k = 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge'; if (-not (Test-Path -LiteralPath $k)) { New-Item -Path $k -Force | Out-Null }; Set-ItemProperty -LiteralPath $k -Name BackgroundModeEnabled -Value ([int]$Target) -Type DWord -ErrorAction Stop",
+  "revert": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Microsoft\\Edge' -Name BackgroundModeEnabled -ErrorAction SilentlyContinue"
+}

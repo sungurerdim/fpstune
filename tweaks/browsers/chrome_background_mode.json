@@ -1,0 +1,26 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Stop Chrome from running in the background",
+    "tr": "Chrome'un arka planda çalışmasını durdur"
+  },
+  "why": {
+    "en": "Chrome keeps running after its last window closes, which holds memory and processor time while you play. Turning this off by policy makes Chrome show \"managed by your organization\", which is harmless.",
+    "tr": "Chrome son penceresi kapandıktan sonra da çalışmaya devam eder ve siz oynarken bellek ile işlemci zamanı tutar. Bunu ilke ile kapatmak Chrome'un \"kuruluşunuz tarafından yönetiliyor\" yazmasına yol açar, bu zararsızdır."
+  },
+  "fixed": {
+    "en": "Chrome now ends with its last window instead of running in the background.",
+    "tr": "Chrome artık arka planda çalışmak yerine son penceresiyle birlikte sona eriyor."
+  },
+  "risk": "low",
+  "sources": [
+    "https://chromeenterprise.google/policies/#BackgroundModeEnabled"
+  ],
+  "gain": ["ram"],
+  "restart": "none",
+  "applicable": "[bool]((Test-Path -LiteralPath 'HKLM:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe') -or (Test-Path -LiteralPath 'HKCU:\\SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\App Paths\\chrome.exe'))",
+  "detect": "$p = Get-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome' -ErrorAction SilentlyContinue; if ($null -eq $p -or $null -eq $p.BackgroundModeEnabled) { 1 } else { [int]$p.BackgroundModeEnabled }",
+  "target": { "value": 0 },
+  "apply": "$k = 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome'; if (-not (Test-Path -LiteralPath $k)) { New-Item -Path $k -Force | Out-Null }; Set-ItemProperty -LiteralPath $k -Name BackgroundModeEnabled -Value ([int]$Target) -Type DWord -ErrorAction Stop",
+  "revert": "Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome' -Name BackgroundModeEnabled -ErrorAction SilentlyContinue"
+}

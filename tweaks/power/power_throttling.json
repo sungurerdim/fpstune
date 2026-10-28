@@ -1,0 +1,30 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Turn off power throttling",
+    "tr": "Güç kısıtlamasını kapat"
+  },
+  "why": {
+    "en": "Windows slows processes it treats as background work to save power, which can delay a game's audio, shader compilation and anti-cheat threads.",
+    "tr": "Windows, arka plan işi saydığı işlemleri güç tasarrufu için yavaşlatır; bu da oyunun ses, gölgelendirici derleme ve hile koruma iş parçacıklarını geciktirebilir."
+  },
+  "fixed": {
+    "en": "Power throttling is now off, so a game's background threads keep their full clock speed.",
+    "tr": "Güç kısıtlaması artık kapalı, bu yüzden oyunun arka plan iş parçacıkları tam saat hızında çalışır."
+  },
+  "risk": "moderate",
+  "riskNote": {
+    "en": "Windows stops clocking background threads down, so power draw and heat rise; on a laptop this shortens battery life, so keep it for mains power.",
+    "tr": "Windows arka plan iş parçacıklarının saat hızını düşürmeyi bıraktığı için güç tüketimi ve ısı artar; dizüstü bilgisayarda pil ömrü kısalır, bu yüzden şebeke gücünde kullanın."
+  },
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/procthread/quality-of-service",
+    "https://devblogs.microsoft.com/performance-diagnostics/introducing-ecoqos/"
+  ],
+  "gain": ["fps", "latency"],
+  "restart": "reboot",
+  "detect": "$p = Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -ErrorAction SilentlyContinue; if ($null -eq $p -or $null -eq $p.PowerThrottlingOff) { 0 } else { [int]$p.PowerThrottlingOff }",
+  "target": { "value": 1 },
+  "apply": "$k = 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling'; if (-not (Test-Path -LiteralPath $k)) { New-Item -Path $k -Force | Out-Null }; Set-ItemProperty -LiteralPath $k -Name PowerThrottlingOff -Value ([int]$Target) -Type DWord -ErrorAction Stop",
+  "revert": "Remove-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerThrottling' -Name PowerThrottlingOff -ErrorAction SilentlyContinue"
+}

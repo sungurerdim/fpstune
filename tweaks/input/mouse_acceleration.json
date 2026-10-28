@@ -1,0 +1,26 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Turn off mouse acceleration",
+    "tr": "Fare ivmelenmesini kapat"
+  },
+  "why": {
+    "en": "With pointer acceleration on, the same hand movement moves the cursor a different distance depending on its speed, which makes aim inconsistent.",
+    "tr": "İşaretçi ivmelenmesi açıkken aynı el hareketi, hızına göre imleci farklı mesafe taşır; bu da nişan almayı tutarsız yapar."
+  },
+  "fixed": {
+    "en": "Mouse acceleration is now off, so the cursor follows the hand one to one.",
+    "tr": "Fare ivmelenmesi artık kapalı, bu yüzden imleç ele birebir uyuyor."
+  },
+  "risk": "safe",
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-systemparametersinfoa"
+  ],
+  "gain": ["experience"],
+  "restart": "none",
+  "compound": "mouse_acceleration",
+  "detect": "$p = Get-ItemProperty -Path 'HKCU:\\Control Panel\\Mouse' -ErrorAction SilentlyContinue; '{0},{1},{2}' -f $p.MouseSpeed, $p.MouseThreshold1, $p.MouseThreshold2",
+  "target": { "value": "0,0,0" },
+  "apply": "$v = ([string]$Target).Split(','); $k = 'HKCU:\\Control Panel\\Mouse'; Set-ItemProperty -LiteralPath $k -Name MouseSpeed -Value $v[0] -Type String -ErrorAction Stop; Set-ItemProperty -LiteralPath $k -Name MouseThreshold1 -Value $v[1] -Type String -ErrorAction Stop; Set-ItemProperty -LiteralPath $k -Name MouseThreshold2 -Value $v[2] -Type String -ErrorAction Stop; rundll32.exe user32.dll,UpdatePerUserSystemParameters",
+  "revert": "$k = 'HKCU:\\Control Panel\\Mouse'; Set-ItemProperty -LiteralPath $k -Name MouseSpeed -Value '1' -Type String -ErrorAction Stop; Set-ItemProperty -LiteralPath $k -Name MouseThreshold1 -Value '6' -Type String -ErrorAction Stop; Set-ItemProperty -LiteralPath $k -Name MouseThreshold2 -Value '10' -Type String -ErrorAction Stop; rundll32.exe user32.dll,UpdatePerUserSystemParameters"
+}

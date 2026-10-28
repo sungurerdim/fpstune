@@ -1,0 +1,31 @@
+{
+  "kind": "manual",
+  "title": {
+    "en": "Enable the memory profile in the firmware setup",
+    "tr": "Bellek profilini aygıt yazılımı ayarlarında etkinleştir"
+  },
+  "why": {
+    "en": "Memory runs at a slower standard speed until its rated profile (XMP on Intel boards, EXPO on AMD boards) is enabled in the firmware setup, and a firmware update can silently reset it.",
+    "tr": "Bellek, beyan edilen profili (Intel kartlarda XMP, AMD kartlarda EXPO) aygıt yazılımı ayarlarında etkinleştirilene kadar daha yavaş standart hızda çalışır ve bir aygıt yazılımı güncellemesi bunu sessizce sıfırlayabilir."
+  },
+  "risk": "low",
+  "sources": [
+    "https://www.amd.com/en/products/processors/technologies/expo.html",
+    "https://www.intel.com/content/www/us/en/support/articles/000005657/memory-and-storage.html"
+  ],
+  "gain": ["fps", "latency"],
+  "steps": {
+    "en": [
+      "Restart the PC and open the firmware setup (usually the Delete or F2 key while the PC starts).",
+      "Find the memory profile option; it is often under the overclocking or DRAM settings and is called XMP or EXPO.",
+      "Select the first profile, or the highest one the memory offers.",
+      "Save and exit, then let the PC start; if it does not start, most boards fall back to the standard speed on their own."
+    ],
+    "tr": [
+      "Bilgisayarı yeniden başlatın ve aygıt yazılımı ayarlarını açın (genellikle bilgisayar açılırken Delete ya da F2 tuşu).",
+      "Bellek profili seçeneğini bulun; çoğunlukla aşırı hızlandırma ya da DRAM ayarlarının altındadır ve XMP veya EXPO adını taşır.",
+      "İlk profili ya da belleğin sunduğu en yüksek profili seçin.",
+      "Kaydedip çıkın ve bilgisayarın açılmasını bekleyin; açılmazsa çoğu kart kendiliğinden standart hıza döner."
+    ]
+  }
+}

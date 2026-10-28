@@ -1,0 +1,26 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Let Windows manage the pagefile",
+    "tr": "Sayfa dosyasını Windows yönetsin"
+  },
+  "why": {
+    "en": "A disabled or too small pagefile can make a game crash when memory runs short, and Windows sizes it to the system's needs better than a fixed guess.",
+    "tr": "Kapatılmış ya da çok küçük bir sayfa dosyası bellek yetmediğinde oyunun çökmesine yol açabilir; Windows boyutu sistemin ihtiyacına sabit bir tahminden daha iyi ayarlar."
+  },
+  "fixed": {
+    "en": "Windows now manages the pagefile, so it is sized to what the system needs.",
+    "tr": "Sayfa dosyasını artık Windows yönetiyor, bu yüzden boyutu sistemin ihtiyacına göre ayarlanıyor."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/en-us/troubleshoot/windows-client/performance/introduction-to-the-page-file",
+    "https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-computersystem"
+  ],
+  "gain": ["experience"],
+  "restart": "reboot",
+  "detect": "[bool](Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop).AutomaticManagedPagefile",
+  "target": { "value": true },
+  "apply": "$cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop",
+  "revert": "$cs = Get-CimInstance -ClassName Win32_ComputerSystem -ErrorAction Stop; Set-CimInstance -InputObject $cs -Property @{ AutomaticManagedPagefile = $true } -ErrorAction Stop"
+}

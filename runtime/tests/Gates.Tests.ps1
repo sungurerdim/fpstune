@@ -275,6 +275,14 @@ Describe 'LN4 no case-insensitive pattern with an ASCII letter range or an i' {
         @{ Line = '$Name -imatch ''min''' }
         @{ Line = '$Name | Select-String -Pattern ''id'' -Quiet' }
         @{ Line = 'sls -InputObject $Name -Pattern ''[A-F]'' -Quiet' }
+        @{ Line = '$Name -cmatch ''(?i)^abc''' }
+        @{ Line = '$Name -cnotmatch ''(?i:abc)''' }
+        @{ Line = '$Name -creplace ''(?mi)a'', ''''' }
+        @{ Line = '$Name -csplit ''(?i)x''' }
+        @{ Line = 'switch -Regex ($Name) { ''^[A-Z]'' { 1 } }' }
+        @{ Line = 'switch -Wildcard ($Name) { ''id_*'' { 1 } }' }
+        @{ Line = 'switch -Regex -File $Name { ''^[a-f]'' { 1 } }' }
+        @{ Line = 'switch -Regex -CaseSensitive ($Name) { ''(?i)^abc'' { 1 } }' }
     ) {
         $root = New-GateRoot -Files @{ 'runtime/Matcher.ps1' = (New-Ln4Runtime $Line) }
         Assert-Finding (Invoke-Gate -Root $root) 'LN4' 'Matcher.ps1'
@@ -303,6 +311,12 @@ Describe 'LN4 no case-insensitive pattern with an ASCII letter range or an i' {
         @{ Line = '$Name | Select-String -Pattern ''id'' -CaseSensitive -Quiet' }
         @{ Line = '$Name -split ''[\\/]''' }
         @{ Line = '$Name -replace ''\s+'', '' ''' }
+        @{ Line = '$Name -cmatch ''(?-i)^abc''' }
+        @{ Line = '$Name -cmatch ''^[A-Z]+$''' }
+        @{ Line = 'switch -Regex -CaseSensitive ($Name) { ''^[A-Z]'' { 1 } }' }
+        @{ Line = 'switch -Wildcard -CaseSensitive ($Name) { ''id_*'' { 1 } }' }
+        @{ Line = 'switch -Regex ($Name) { ''^\d+$'' { 1 } }' }
+        @{ Line = 'switch ($Name) { ''abc'' { 1 } }' }
     ) {
         $root = New-GateRoot -Files @{ 'runtime/Matcher.ps1' = (New-Ln4Runtime $Line) }
         Assert-Clean (Invoke-Gate -Root $root)

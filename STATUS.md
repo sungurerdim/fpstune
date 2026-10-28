@@ -20,8 +20,9 @@ Hand-written. Last update: 2026-10-28. Plan: #125, phases F1-F7 as sub-issues
 - Open F1 units: U4b, U5b, U6c, U11, U12 and A1 (verify lines in #127).
 - No live round-trip has run: Windows Sandbox is enabled but waits for a reboot
   (package state 96 = install pending, measured 2026-10-28; D-19).
-- Rows that need a native API (NVIDIA DRS, DisplayConfig, wlanapi) have no method yet:
-  `Add-Type` is barred; research is running (F3 U1 records the decision).
+- Rows that need a native API (NVIDIA DRS, DisplayConfig, wlanapi) go through an
+  in-memory Emit invoker (D-24); not built yet (#129 U1), and not yet proven under
+  `irm | iex` with Defender on.
 - Commit 3e5e2cd carries Apply/Journal files under a test-author's message (a parallel
   commit swept them in); the content is correct, the message is not.
 - The record generator (`~/.agents/araclar/kayit-uret.py`) does not support this repo

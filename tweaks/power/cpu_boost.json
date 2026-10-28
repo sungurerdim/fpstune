@@ -1,0 +1,29 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Restore Windows' own CPU boost mode",
+    "tr": "İşlemci hız artırma kipini Windows'un kendi değerine döndür"
+  },
+  "why": {
+    "en": "Another tool can move the boost mode away from the one Windows ships, which puts an efficiency policy between the game and the highest clock speed.",
+    "tr": "Başka bir araç hız artırma kipini Windows'un getirdiği değerden uzaklaştırabilir; bu da oyun ile en yüksek saat hızı arasına bir verimlilik ilkesi koyar."
+  },
+  "fixed": {
+    "en": "The CPU boost mode is back to Windows' own value, so the highest clock speed is requested whenever conditions allow.",
+    "tr": "İşlemci hız artırma kipi Windows'un kendi değerine döndü, bu yüzden koşullar elverdiğinde en yüksek saat hızı isteniyor."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows-hardware/customize/power-settings/options-for-perf-state-engine-perfboostmode",
+    "https://learn.microsoft.com/en-us/windows-server/administration/performance-tuning/hardware/power/processor-power-management-tuning"
+  ],
+  "gain": ["fps"],
+  "restart": "none",
+  "applicable": "$s = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes' -Name ActivePowerScheme -ErrorAction Stop).ActivePowerScheme; [bool](Get-ItemProperty -Path ('HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\' + $s + '\\54533251-82be-4824-96c1-47b60b740d00\\be337238-0d82-4146-a960-4f3749d470c7') -Name ACSettingIndex -ErrorAction SilentlyContinue)",
+  "detect": "$s = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes' -Name ActivePowerScheme -ErrorAction Stop).ActivePowerScheme; [int](Get-ItemProperty -Path ('HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes\\' + $s + '\\54533251-82be-4824-96c1-47b60b740d00\\be337238-0d82-4146-a960-4f3749d470c7') -Name ACSettingIndex -ErrorAction Stop).ACSettingIndex",
+  "target": {
+    "command": "[int](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\be337238-0d82-4146-a960-4f3749d470c7\\DefaultPowerSchemeValues\\381b4222-f694-41f0-9685-ff5bb260df2e' -Name ACSettingIndex -ErrorAction Stop).ACSettingIndex"
+  },
+  "apply": "$s = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes' -Name ActivePowerScheme -ErrorAction Stop).ActivePowerScheme; powercfg.exe /setacvalueindex $s 54533251-82be-4824-96c1-47b60b740d00 be337238-0d82-4146-a960-4f3749d470c7 $Target | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'powercfg could not set the value.' }; powercfg.exe /setactive $s | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'powercfg could not re-activate the plan.' }",
+  "revert": "$s = (Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\User\\PowerSchemes' -Name ActivePowerScheme -ErrorAction Stop).ActivePowerScheme; $d = [int](Get-ItemProperty -Path 'HKLM:\\SYSTEM\\CurrentControlSet\\Control\\Power\\PowerSettings\\54533251-82be-4824-96c1-47b60b740d00\\be337238-0d82-4146-a960-4f3749d470c7\\DefaultPowerSchemeValues\\381b4222-f694-41f0-9685-ff5bb260df2e' -Name ACSettingIndex -ErrorAction Stop).ACSettingIndex; powercfg.exe /setacvalueindex $s 54533251-82be-4824-96c1-47b60b740d00 be337238-0d82-4146-a960-4f3749d470c7 $d | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'powercfg could not set the value.' }; powercfg.exe /setactive $s | Out-Null; if ($LASTEXITCODE -ne 0) { throw 'powercfg could not re-activate the plan.' }"
+}

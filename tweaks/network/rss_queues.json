@@ -1,0 +1,33 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Limit network receive queues",
+    "tr": "Ağ alma kuyruklarını sınırla"
+  },
+  "why": {
+    "en": "A network adapter spreads incoming packets over several queues, each served by its own processor core; fewer queues leave more cores to the game, but a burst needs a couple of them to be absorbed.",
+    "tr": "Bir ağ bağdaştırıcısı gelen paketleri, her biri kendi işlemci çekirdeği tarafından işlenen birkaç kuyruğa yayar; daha az kuyruk oyuna daha çok çekirdek bırakır, ancak ani yoğunluğu karşılamak için birkaç kuyruk gerekir."
+  },
+  "fixed": {
+    "en": "This adapter now uses a small number of receive queues, which leaves more cores to the game.",
+    "tr": "Bu bağdaştırıcı artık az sayıda alma kuyruğu kullanıyor, bu da oyuna daha çok çekirdek bırakıyor."
+  },
+  "risk": "advanced",
+  "riskNote": {
+    "en": "A game's traffic is one flow and lands on one queue regardless, so the gain depends on what else runs on those cores; the effect is unmeasured, and the adapter restarts briefly when the value changes.",
+    "tr": "Bir oyunun trafiği tek akıştır ve zaten tek kuyruğa düşer; kazanç bu çekirdeklerde başka neyin çalıştığına bağlıdır, etki ölçülmemiştir ve değer değişirken bağdaştırıcı kısa süre yeniden başlar."
+  },
+  "sources": [
+    "https://learn.microsoft.com/en-us/windows-server/networking/technologies/network-subsystem/net-sub-performance-tuning-nics",
+    "https://learn.microsoft.com/en-us/windows-hardware/drivers/network/standardized-inf-keywords-for-rss"
+  ],
+  "gain": ["network", "latency"],
+  "restart": "none",
+  "instances": "Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { Get-NetAdapterAdvancedProperty -Name $_.Name -RegistryKeyword '*NumRssQueues' -ErrorAction SilentlyContinue } | ForEach-Object { [pscustomobject]@{ id = $_.InterfaceGuid; label = $_.Name } }",
+  "detect": "$a = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.InterfaceGuid -ceq $Instance }; $p = Get-NetAdapterAdvancedProperty -Name $a.Name -RegistryKeyword '*NumRssQueues' -ErrorAction Stop; [int]@($p.RegistryValue)[0]",
+  "target": {
+    "command": "$a = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.InterfaceGuid -ceq $Instance }; $p = Get-NetAdapterAdvancedProperty -Name $a.Name -RegistryKeyword '*NumRssQueues' -ErrorAction Stop; $n = @($p.ValidRegistryValues | Where-Object { $null -ne $_ -and [string]$_ -ne '' } | ForEach-Object { [int]$_ }); if ($n.Count -eq 0) { $n = @(1, 2, 4, 8, 16, 32, 64, 128) | Where-Object { $_ -ge [int]$p.NumericParameterMinValue -and $_ -le [int]$p.NumericParameterMaxValue } }; $n = @($n | Sort-Object); $two = @($n | Where-Object { $_ -ge 2 }); if ($two.Count -gt 0) { $two[0] } else { $n[-1] }"
+  },
+  "apply": "$a = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.InterfaceGuid -ceq $Instance }; Set-NetAdapterAdvancedProperty -Name $a.Name -RegistryKeyword '*NumRssQueues' -RegistryValue ([string]$Target) -ErrorAction Stop",
+  "revert": "$a = Get-NetAdapter -Physical -ErrorAction Stop | Where-Object { $_.InterfaceGuid -ceq $Instance }; Reset-NetAdapterAdvancedProperty -Name $a.Name -RegistryKeyword '*NumRssQueues' -ErrorAction Stop"
+}

@@ -1,0 +1,27 @@
+{
+  "kind": "tweak",
+  "title": {
+    "en": "Keep Teredo at Windows' own setting",
+    "tr": "Teredo'yu Windows'un kendi ayarında tut"
+  },
+  "why": {
+    "en": "Some optimizers turn Teredo off, which breaks Xbox network features and some peer-to-peer games, although it carries no traffic while native IPv6 or plain IPv4 works.",
+    "tr": "Bazı iyileştiriciler Teredo'yu kapatır; bu, yerel IPv6 ya da düz IPv4 çalışırken trafik taşımadığı hâlde Xbox ağ özelliklerini ve bazı eşler arası oyunları bozar."
+  },
+  "fixed": {
+    "en": "Teredo is back to Windows' own setting, so Xbox network features and peer-to-peer games can connect again.",
+    "tr": "Teredo Windows'un kendi ayarına döndü, bu yüzden Xbox ağ özellikleri ve eşler arası oyunlar yeniden bağlanabilir."
+  },
+  "risk": "low",
+  "sources": [
+    "https://learn.microsoft.com/en-us/powershell/module/networktransition/set-netteredoconfiguration",
+    "https://learn.microsoft.com/en-us/powershell/module/networktransition/get-netteredostate"
+  ],
+  "gain": ["network", "experience"],
+  "restart": "none",
+  "applicable": "[bool](Get-NetTeredoConfiguration -ErrorAction SilentlyContinue)",
+  "detect": "[string](Get-NetTeredoConfiguration -ErrorAction Stop).Type -cne 'Disabled'",
+  "target": { "value": true },
+  "apply": "Set-NetTeredoConfiguration -Type Default -ErrorAction Stop",
+  "revert": "Set-NetTeredoConfiguration -Type Default -ErrorAction Stop"
+}

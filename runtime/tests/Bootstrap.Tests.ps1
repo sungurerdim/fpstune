@@ -52,6 +52,7 @@ BeforeAll {
 
     function script:Invoke-FpsBuild([string]$Out, [string[]]$Extra = @()) {
         if (-not (Test-Path -LiteralPath $script:buildPath)) { throw "runtime/tools/build.ps1 not found: $script:buildPath" }
+        $ErrorActionPreference = 'Continue'   # a refused build writes to stderr; the exit code is the result
         $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:buildPath -Out $Out -TweaksRoot $script:tweaksRoot @Extra 2>&1
         [pscustomobject]@{ Output = @($output | ForEach-Object { "$_" }); ExitCode = $LASTEXITCODE }
     }
@@ -195,6 +196,7 @@ Describe 'tools/build.ps1 security (U7b)' {
             $root
         }
         function script:Invoke-FpsBuildAt([string]$Root, [string]$Out, [string[]]$Extra = @()) {
+            $ErrorActionPreference = 'Continue'   # a refused build writes to stderr; the exit code is the result
             $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:buildPath -Out $Out -TweaksRoot $Root @Extra 2>&1
             [pscustomobject]@{ Output = @($output | ForEach-Object { "$_" }); ExitCode = $LASTEXITCODE }
         }
@@ -431,7 +433,8 @@ function Bytes-Stub { , [byte[]][Convert]::FromBase64String($env:FPSTUNE_TEST_BY
 Set-Alias -Name Test-FpsElevated -Value Test-Stub
 Set-Alias -Name Get-FpsBundleBytes -Value Bytes-Stub
 $global:LASTEXITCODE = 0
-Invoke-Expression ([IO.File]::ReadAllText($env:FPSTUNE_TEST_RUN))
+$captured = @(Invoke-Expression ([IO.File]::ReadAllText($env:FPSTUNE_TEST_RUN)) *>&1)
+$captured | ForEach-Object { 'CAPTURED: ' + $_ }
 'AFTER-IEX CODE=' + $global:LASTEXITCODE
 '@
         $env:FPSTUNE_TEST_BYTES = [Convert]::ToBase64String($served)

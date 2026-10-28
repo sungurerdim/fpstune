@@ -6,6 +6,11 @@
 # A dev/release tool, not shipped and not part of the runtime: it writes its
 # -Out and -RunOut files normally.
 #
+# Fail-closed inputs: every row id must match <category>:<name> in lower case
+# letters, digits and underscore, and the tweak files must all be tracked and
+# committed in git with a clean tree under -TweaksRoot (so the same commit
+# always gives the same bundle). Anything else stops the build, naming the file.
+#
 # The bundle is ONE script: Catalogue, Detect, Summary, Journal, Apply (this
 # fixed order), then the strings (en, tr) and the tweak catalogue embedded as
 # JSON text that the bundle parses when it loads, then the main flow. It is
@@ -27,8 +32,8 @@ $runtime = Split-Path -Parent $PSScriptRoot
 if (-not $TweaksRoot) { $TweaksRoot = Join-Path (Split-Path -Parent $runtime) 'tweaks' }
 if ($RunOut) {
     if (-not $Tag -or -not $BundleUrl) { throw '-RunOut needs -Tag and -BundleUrl.' }
-    if ($Tag -cnotmatch '^[A-Za-z0-9._-]+$') { throw "-Tag may hold only letters, digits, dot, underscore and hyphen: $Tag" }
-    if ($BundleUrl -cnotmatch '^https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+$') { throw "-BundleUrl must be an https URL without quotes or spaces: $BundleUrl" }
+    if ($Tag -cnotmatch '^[A-Za-z0-9._-]+\z') { throw "-Tag may hold only letters, digits, dot, underscore and hyphen: $Tag" }
+    if ($BundleUrl -cnotmatch '^https://[A-Za-z0-9._~:/?#@!$&()*+,;=%-]+\z') { throw "-BundleUrl must be an https URL without quotes or spaces: $BundleUrl" }
 }
 
 . (Join-Path $runtime 'Catalogue.ps1')
@@ -47,6 +52,45 @@ function Get-HereString([string]$Text, [string]$What) {
     # A single-quoted here-string ends at a line that starts with '@ : refuse text that has one.
     if (("`n" + $Text) -clike "*`n'@*") { throw "$What holds a line that starts with '@ and cannot be embedded." }
     "@'" + $lf + $Text + "'@"
+}
+
+function ConvertTo-SingleQuoted([string]$Value) {
+    # A value placed inside '...' in generated code: a quote is doubled.
+    $Value.Replace("'", "''")
+}
+
+function Assert-RowName($Row) {
+    # Id, category and name come from file paths and are written into code: allow only the safe form.
+    if ($Row.Id -cnotmatch '^[a-z0-9_]+:[a-z0-9_]+\z' -or
+        $Row.Category -cnotmatch '^[a-z0-9_]+\z' -or
+        $Row.Name -cnotmatch '^[a-z0-9_]+\z') {
+        throw "Refusing tweak file '$($Row.Path)': its id '$($Row.Id)' is not <category>:<name> in lower case letters, digits and underscore."
+    }
+}
+
+function Assert-TweaksCommitted([string]$Root, $Rows) {
+    # Only committed files may enter the bundle: the tree must be clean and every row tracked.
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { throw 'git was not found; the tweak files cannot be checked as committed.' }
+    $rootFull = (Resolve-Path -LiteralPath $Root).ProviderPath.TrimEnd([char]92, [char]47)
+    $previous = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'   # git writes errors to stderr; the exit code decides
+    try {
+        $status = @(& git -C $rootFull status --porcelain --untracked-files=all -- . 2>$null | ForEach-Object { "$_" })
+        $statusCode = $LASTEXITCODE
+        $tracked = @(& git -C $rootFull ls-files -z -- . 2>$null | ForEach-Object { "$_" })
+        $trackedCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previous }
+    if ($statusCode -ne 0) { throw "Tweak root is not inside a git work tree (git status failed): $rootFull" }
+    $dirty = @($status | Where-Object { $_ -ne '' })
+    if ($dirty.Count -gt 0) { throw ("Refusing to build: the tweak tree has untracked, modified or uncommitted files:`n" + ($dirty -join "`n")) }
+    if ($trackedCode -ne 0) { throw "git ls-files failed for the tweak root: $rootFull" }
+    $set = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($entry in ($tracked -join '').Split([char]0)) { if ($entry -ne '') { [void]$set.Add($entry) } }
+    foreach ($row in $Rows) {
+        $relative = $row.Path.Substring($rootFull.Length + 1).Replace([string][char]92, '/')
+        if (-not $set.Contains($relative)) { throw "Refusing to build: tweak file is not tracked by git (untracked or ignored): $($row.Path)" }
+    }
 }
 
 $sb = New-Object Text.StringBuilder
@@ -68,12 +112,15 @@ foreach ($language in 'en', 'tr') {
 
 [void]$sb.Append('$script:FpsEmbeddedCatalogue = @()' + $lf)
 $rowCount = 0
-foreach ($row in @(Get-FpsCatalogue -Root $TweaksRoot)) {
+$rows = @(Get-FpsCatalogue -Root $TweaksRoot)
+foreach ($row in $rows) { Assert-RowName $row }
+Assert-TweaksCommitted $TweaksRoot $rows
+foreach ($row in $rows) {
     $text = Read-Text $row.Path
     $null = $text | ConvertFrom-Json
     $rowCount++
     [void]$sb.Append('$script:FpsEmbeddedCatalogue += [pscustomobject]@{ ' +
-        "Id = '$($row.Id)'; Category = '$($row.Category)'; Name = '$($row.Name)'; Data = (" +
+        "Id = '$(ConvertTo-SingleQuoted $row.Id)'; Category = '$(ConvertTo-SingleQuoted $row.Category)'; Name = '$(ConvertTo-SingleQuoted $row.Name)'; Data = (" +
         (Get-HereString $text "tweak $($row.Id)") + ') | ConvertFrom-Json }' + $lf)
 }
 [void]$sb.Append($lf)

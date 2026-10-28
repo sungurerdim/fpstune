@@ -8,10 +8,11 @@
 #
 # Rules: LN1 native exe output never feeds applicable/detect/target/instances,
 # LN2 human-text properties are never compared or parsed, LN3 every command
-# parses, C4 Turkish letters only in tr fields, C8 one registry write per tweak
+# parses, LN4 a pattern holding the letter i or an ASCII letter range is matched
+# case-sensitively, C4 Turkish letters only in tr fields, C8 one registry write per tweak
 # unless a compound is named, C9 no machine literal, C11 no number with %, ms or
 # fps in why/fixed, ID1 the path forms a valid id, FS1 the runtime writes no
-# file, AS1 runtime/run.ps1 is plain ASCII, LD1 the catalogue does not load.
+# file (cmdlet, .NET method by type or by name, writer, redirection), AS1 runtime/run.ps1 is plain ASCII, LD1 the catalogue does not load.
 param([string]$Root)
 
 $ErrorActionPreference = 'Stop'
@@ -47,11 +48,22 @@ $humanProps = 'InterfaceDescription', 'Description', 'FriendlyName', 'DisplayNam
 $compareRe = '^[ic]?(eq|ne|gt|ge|lt|le|like|notlike|match|notmatch|replace|split|contains|notcontains|in|notin)$'
 $keepTextMethods = 'ToLower', 'ToUpper', 'ToLowerInvariant', 'ToUpperInvariant', 'Trim', 'TrimStart', 'TrimEnd', 'ToString'
 $parseTextMethods = 'Contains', 'StartsWith', 'EndsWith', 'Split', 'Replace', 'IndexOf', 'LastIndexOf', 'Match', 'Matches', 'IsMatch', 'Substring', 'Remove', 'Insert'
-$fileWriteCmdRe = '^(?i)(Set-Content|Add-Content|Out-File|New-Item|Copy-Item|Move-Item|Rename-Item|Export-Csv|Export-Clixml|Tee-Object|Start-Transcript|Save-Help|sc|ac|ni|cpi|copy|cp|mi|move|mv|rni|ren|tee|epcsv)$'
+# File-writing cmdlets and aliases, matched against the lower-cased command name.
+$fileWriteCmdRe = '^(set-content|add-content|out-file|new-item|copy-item|move-item|rename-item|export-csv|export-clixml|tee-object|start-transcript|save-help|sc|ac|ni|cpi|copy|cp|mi|move|mv|rni|ren|tee|epcsv)$'
+# .NET types that write, and the static methods and instance methods that do so by name.
+$fileTypeRe = '^(system\.)?io\.(file|directory|streamwriter|binarywriter|filestream)$'
+$fileStaticWriteRe = '^(write|append|create|copy|move|replace|delete|openwrite|encrypt|decrypt|set)'
+$instanceWriteRe = '^(save|saveas|writealltext|writeallbytes|writealllines|appendalltext|appendalllines|createtext|appendtext|moveto)$'
 
 function Add-Finding([string]$Rule, [string]$File, [string]$Reason) {
     $oneLine = ($Reason -replace '\s+', ' ').Trim()
     $findings.Add("$Rule ${File}: $oneLine")
+}
+
+# The lower-cased command name, or '' when the command has no static name.
+function Get-LowerName($Command) {
+    $name = $Command.GetCommandName()
+    if ($name) { $name.ToLowerInvariant() } else { '' }
 }
 
 function Get-Rel([string]$Path) {
@@ -106,12 +118,12 @@ function Get-CommandFields($Data) {
 function Test-Native([string]$Name) {
     if ($nativeCache.ContainsKey($Name)) { return $nativeCache[$Name] }
     $native = $false
-    if ($Name -match '(?i)\.(exe|com)$') { $native = $true }
+    if ($Name.ToLowerInvariant() -cmatch '\.(exe|com)$') { $native = $true }
     else {
         $found = $null
         try { $found = Get-Command -Name $Name -ErrorAction SilentlyContinue | Select-Object -First 1 } catch { $found = $null }
         if ($found) { $native = ($found.CommandType -eq 'Application') }
-        else { $native = ($Name -notmatch '^[A-Za-z]+-[A-Za-z0-9]+$') }
+        else { $native = ($Name -cnotmatch '^[A-Za-z]+-[A-Za-z0-9]+$') }
     }
     $nativeCache[$Name] = $native
     $native
@@ -129,7 +141,7 @@ function Test-OutputUsed($Node) {
             $index = [array]::IndexOf($elements, $current)
             if ($index -ge 0 -and $index -lt $elements.Count - 1) {
                 $next = $elements[$index + 1]
-                if ($next -is [Management.Automation.Language.CommandAst] -and $next.GetCommandName() -match '^(?i)Out-Null$') { return $false }
+                if ($next -is [Management.Automation.Language.CommandAst] -and (Get-LowerName $next) -ceq 'out-null') { return $false }
                 return $true
             }
             $current = $parent
@@ -160,7 +172,7 @@ function Test-TextUse($Member) {
             return ($parent.Operator.ToString().ToLowerInvariant() -match $compareRe)
         }
         if ($parent -is [Management.Automation.Language.UnaryExpressionAst]) {
-            return ($parent.TokenKind.ToString() -match '^(?i)[ic]split$')
+            return ($parent.TokenKind.ToString().ToLowerInvariant() -cmatch '^[ic]split$')
         }
         if ($parent -is [Management.Automation.Language.ParenExpressionAst] -or
             $parent -is [Management.Automation.Language.CommandExpressionAst] -or
@@ -175,7 +187,7 @@ function Test-TextUse($Member) {
             $index = [array]::IndexOf($elements, $current)
             if ($index -ge 0 -and $index -lt $elements.Count - 1) {
                 $next = $elements[$index + 1]
-                return ($next -is [Management.Automation.Language.CommandAst] -and $next.GetCommandName() -match '^(?i)(Select-String|sls)$')
+                return ($next -is [Management.Automation.Language.CommandAst] -and (Get-LowerName $next) -cmatch '^(select-string|sls)$')
             }
             return $false
         }
@@ -185,17 +197,17 @@ function Test-TextUse($Member) {
                 if ($keepTextMethods -contains $method) { $current = $parent; continue }
                 return ($parseTextMethods -contains $method)
             }
-            return ($parent.Static -and $parent.Expression -is [Management.Automation.Language.TypeExpressionAst] -and $parent.Expression.TypeName.Name -match '^(?i)(System\.Text\.RegularExpressions\.)?regex$')
+            return ($parent.Static -and $parent.Expression -is [Management.Automation.Language.TypeExpressionAst] -and $parent.Expression.TypeName.Name.ToLowerInvariant() -cmatch '^(system\.text\.regularexpressions\.)?regex$')
         }
         if ($parent -is [Management.Automation.Language.CommandAst]) {
-            return ($parent.GetCommandName() -match '^(?i)(Select-String|sls)$')
+            return ((Get-LowerName $parent) -cmatch '^(select-string|sls)$')
         }
         return $false
     }
 }
 
 function Test-TextWhereObject($Command) {
-    if ($Command.GetCommandName() -notmatch '^(?i)(Where-Object|where|\?)$') { return $false }
+    if ((Get-LowerName $Command) -cnotmatch '^(where-object|where|\?)$') { return $false }
     $compares = $false
     $named = $false
     foreach ($element in $Command.CommandElements) {
@@ -210,13 +222,209 @@ function Get-RegistryWriteCount($Ast) {
     foreach ($command in (Find-Ast $Ast ([Management.Automation.Language.CommandAst]))) {
         $name = $command.GetCommandName()
         if (-not $name) { continue }
-        if ($name -match '^(?i)(Set-ItemProperty|New-ItemProperty|sp)$') { $count++ }
-        elseif ($name -match '^(?i)reg(\.exe)?$' -and $command.CommandElements.Count -gt 1) {
+        if ($name.ToLowerInvariant() -cmatch '^(set-itemproperty|new-itemproperty|sp)$') { $count++ }
+        elseif ($name.ToLowerInvariant() -cmatch '^reg(\.exe)?$' -and $command.CommandElements.Count -gt 1) {
             $verb = $command.CommandElements[1]
-            if ($verb -is [Management.Automation.Language.StringConstantExpressionAst] -and $verb.Value -match '^(?i)(add|import)$') { $count++ }
+            if ($verb -is [Management.Automation.Language.StringConstantExpressionAst] -and $verb.Value.ToLowerInvariant() -cmatch '^(add|import)$') { $count++ }
         }
     }
     $count
+}
+
+# ---- LN4: case-folding patterns ----------------------------------------------
+# The literal text of a pattern operand, or $null when it is not a literal.
+# A replace/split operand may be a list: its first element is the pattern.
+function Get-PatternLiteral($Node) {
+    if ($Node -is [Management.Automation.Language.ArrayLiteralAst]) { $Node = $Node.Elements[0] }
+    while ($Node -is [Management.Automation.Language.ParenExpressionAst]) {
+        $inner = @($Node.Pipeline.PipelineElements)
+        if ($inner.Count -ne 1 -or $inner[0] -isnot [Management.Automation.Language.CommandExpressionAst]) { return $null }
+        $Node = $inner[0].Expression
+    }
+    if ($Node -is [Management.Automation.Language.StringConstantExpressionAst]) { return $Node.Value }
+    if ($Node -is [Management.Automation.Language.ExpandableStringExpressionAst]) {
+        return ($Node.Value -creplace '\$\{[^}]*\}|\$\([^)]*\)|\$[A-Za-z_][\w:]*', '')
+    }
+    $null
+}
+
+# An ASCII letter range inside brackets, or the letter i/I (the Turkish pair).
+function Test-FoldingPattern([string]$Pattern) {
+    ($Pattern -cmatch '[iI]') -or ($Pattern -cmatch '\[[^\]]*[A-Za-z]-[A-Za-z][^\]]*\]')
+}
+
+# An inline option that turns case-insensitivity on: (?i) (?mi) (?i:...) (?i-s).
+function Test-InlineIgnoreCase([string]$Pattern) {
+    $Pattern -cmatch '\(\?[imnsx]*i[imnsx]*(-[imnsx]+)?[:)]'
+}
+
+# The pattern argument of a Select-String call: -Pattern, else the first positional.
+function Get-SelectStringPattern($Command) {
+    $switches = 'AllMatches', 'CaseSensitive', 'List', 'NotMatch', 'Quiet', 'SimpleMatch', 'Raw'
+    $elements = @($Command.CommandElements)
+    $positional = 0
+    for ($i = 1; $i -lt $elements.Count; $i++) {
+        $element = $elements[$i]
+        if ($element -is [Management.Automation.Language.CommandParameterAst]) {
+            $name = $element.ParameterName
+            if ($name.Length -ge 4 -and 'Pattern'.StartsWith($name, [StringComparison]::OrdinalIgnoreCase)) {
+                if ($element.Argument) { return $element.Argument }
+                if ($i + 1 -lt $elements.Count) { return $elements[$i + 1] }
+                return $null
+            }
+            if ($element.Argument) { continue }
+            $isSwitch = $false
+            foreach ($candidate in $switches) { if ($candidate.StartsWith($name, [StringComparison]::OrdinalIgnoreCase)) { $isSwitch = $true } }
+            if (-not $isSwitch) { $i++ }
+            continue
+        }
+        if ($positional -eq 0) { return $element }
+        $positional++
+    }
+    $null
+}
+
+function Test-SelectStringCaseSensitive($Command) {
+    foreach ($element in $Command.CommandElements) {
+        if ($element -is [Management.Automation.Language.CommandParameterAst] -and
+            $element.ParameterName.Length -ge 2 -and
+            'CaseSensitive'.StartsWith($element.ParameterName, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+    }
+    $false
+}
+
+# One reason per case-folding or ignore-case pattern found in the script.
+function Get-CaseFoldFindings($Ast) {
+    $reasons = New-Object Collections.Generic.List[string]
+    foreach ($binary in (Find-Ast $Ast ([Management.Automation.Language.BinaryExpressionAst]))) {
+        $kind = $binary.Operator.ToString()
+        if ($kind -cnotmatch '^[IC](match|notmatch|like|notlike|replace|split)$') { continue }
+        $pattern = Get-PatternLiteral $binary.Right
+        if ($null -eq $pattern) { continue }
+        $base = $kind.Substring(1).ToLowerInvariant()
+        if ($kind[0] -ceq 'I') {
+            if (Test-FoldingPattern $pattern) { $reasons.Add("-$base folds case by the thread culture on the pattern '$pattern'; use -c$base") }
+        }
+        elseif ($base -cnotmatch '^(like|notlike)$' -and (Test-InlineIgnoreCase $pattern)) {
+            $reasons.Add("-c$base pattern '$pattern' turns case-insensitivity back on with an inline option")
+        }
+    }
+    foreach ($command in (Find-Ast $Ast ([Management.Automation.Language.CommandAst]))) {
+        $name = $command.GetCommandName()
+        if (-not $name -or $name.ToLowerInvariant() -cnotmatch '^(select-string|sls)$') { continue }
+        $patternNode = Get-SelectStringPattern $command
+        if ($null -eq $patternNode) { continue }
+        $pattern = Get-PatternLiteral $patternNode
+        if ($null -eq $pattern) { continue }
+        if (Test-SelectStringCaseSensitive $command) {
+            if (Test-InlineIgnoreCase $pattern) { $reasons.Add("Select-String -CaseSensitive pattern '$pattern' turns case-insensitivity back on with an inline option") }
+        }
+        elseif (Test-FoldingPattern $pattern) { $reasons.Add("Select-String without -CaseSensitive folds case by the thread culture on the pattern '$pattern'") }
+    }
+    foreach ($switch in (Find-Ast $Ast ([Management.Automation.Language.SwitchStatementAst]))) {
+        $flags = $switch.Flags
+        $regex = (($flags -band [Management.Automation.Language.SwitchFlags]::Regex) -ne 0)
+        $wildcard = (($flags -band [Management.Automation.Language.SwitchFlags]::Wildcard) -ne 0)
+        if (-not ($regex -or $wildcard)) { continue }
+        $sensitive = (($flags -band [Management.Automation.Language.SwitchFlags]::CaseSensitive) -ne 0)
+        $label = if ($regex) { '-Regex' } else { '-Wildcard' }
+        foreach ($clause in @($switch.Clauses)) {
+            $pattern = Get-PatternLiteral $clause.Item1
+            if ($null -eq $pattern) { continue }
+            if ($sensitive) {
+                if ($regex -and (Test-InlineIgnoreCase $pattern)) { $reasons.Add("switch $label -CaseSensitive pattern '$pattern' turns case-insensitivity back on with an inline option") }
+            }
+            elseif (Test-FoldingPattern $pattern) {
+                $reasons.Add("switch $label without -CaseSensitive folds case by the thread culture on the pattern '$pattern'")
+            }
+        }
+    }
+    @($reasons | Select-Object -Unique)
+}
+
+# ---- FS1: file writes --------------------------------------------------------
+# The type names an expression stands for: [T], ([T]), [type]'T', or a variable
+# assigned one of those.
+function Get-ReceiverTypeNames($Expression, $VariableTypes) {
+    $node = $Expression
+    while ($node -is [Management.Automation.Language.ParenExpressionAst]) {
+        $inner = @($node.Pipeline.PipelineElements)
+        if ($inner.Count -ne 1 -or $inner[0] -isnot [Management.Automation.Language.CommandExpressionAst]) { return @() }
+        $node = $inner[0].Expression
+    }
+    if ($node -is [Management.Automation.Language.TypeExpressionAst]) { return @($node.TypeName.Name) }
+    if ($node -is [Management.Automation.Language.ConvertExpressionAst] -and
+        $node.Type.TypeName.Name.ToLowerInvariant() -ceq 'type' -and
+        $node.Child -is [Management.Automation.Language.StringConstantExpressionAst]) { return @($node.Child.Value) }
+    if ($node -is [Management.Automation.Language.VariableExpressionAst]) {
+        $key = $node.VariablePath.UserPath.ToLowerInvariant()
+        if ($VariableTypes.ContainsKey($key)) { return @($VariableTypes[$key]) }
+    }
+    @()
+}
+
+# A stream argument list that only reads: a Read access and no write marker.
+function Test-ReadOnlyStreamText([string]$Text) {
+    ($Text -cmatch '\b[Rr]ead\b') -and ($Text -cnotmatch '[Ww]rite|[Aa]ppend|[Cc]reate|[Tt]runcate')
+}
+
+# Names of the file-writing calls in the script: cmdlets, .NET methods (by type
+# and by method name, also through a variable holding the type), writers,
+# FileStream opened for writing, instance Save/WriteAll*/CreateText, redirection.
+function Get-FileWrites($Ast) {
+    $writes = New-Object Collections.Generic.List[string]
+
+    $variableTypes = @{}
+    foreach ($assign in (Find-Ast $Ast ([Management.Automation.Language.AssignmentStatementAst]))) {
+        if ($assign.Left -isnot [Management.Automation.Language.VariableExpressionAst]) { continue }
+        if ($assign.Right -isnot [Management.Automation.Language.CommandExpressionAst]) { continue }
+        $names = @(Get-ReceiverTypeNames $assign.Right.Expression @{})
+        if ($names.Count -eq 0) { continue }
+        $key = $assign.Left.VariablePath.UserPath.ToLowerInvariant()
+        $known = @()
+        if ($variableTypes.ContainsKey($key)) { $known = @($variableTypes[$key]) }
+        $variableTypes[$key] = $known + $names
+    }
+
+    foreach ($command in (Find-Ast $Ast ([Management.Automation.Language.CommandAst]))) {
+        $name = $command.GetCommandName()
+        if (-not $name) { continue }
+        $lower = $name.ToLowerInvariant()
+        if ($lower -cmatch $fileWriteCmdRe) { $writes.Add($name) }
+        elseif ($lower -ceq 'new-object') {
+            $text = $command.Extent.Text
+            if ($text -cmatch '(Stream|Binary)Writer') { $writes.Add('New-Object file writer') }
+            elseif ($text -cmatch 'FileStream' -and -not (Test-ReadOnlyStreamText $text)) { $writes.Add('New-Object file stream') }
+        }
+    }
+
+    foreach ($call in (Find-Ast $Ast ([Management.Automation.Language.InvokeMemberExpressionAst]))) {
+        if ($call.Member -isnot [Management.Automation.Language.StringConstantExpressionAst]) { continue }
+        $method = $call.Member.Value
+        $methodLower = $method.ToLowerInvariant()
+        if (-not $call.Static) {
+            if ($methodLower -cmatch $instanceWriteRe) { $writes.Add(".$method") }
+            continue
+        }
+        foreach ($typeName in @(Get-ReceiverTypeNames $call.Expression $variableTypes)) {
+            $typeLower = $typeName.ToLowerInvariant()
+            if ($typeLower -cnotmatch $fileTypeRe) { continue }
+            $kind = $typeLower -creplace '^(system\.)?io\.', ''
+            $isWrite = $false
+            if ($kind -ceq 'file') {
+                $isWrite = ($methodLower -cmatch $fileStaticWriteRe) -or ($methodLower -ceq 'open' -and -not (Test-ReadOnlyStreamText $call.Extent.Text))
+            }
+            elseif ($kind -ceq 'directory') { $isWrite = ($methodLower -cmatch '^(create|move|delete|set)') }
+            elseif ($kind -ceq 'filestream') { $isWrite = ($methodLower -ceq 'new' -and -not (Test-ReadOnlyStreamText $call.Extent.Text)) }
+            else { $isWrite = ($methodLower -ceq 'new' -or $methodLower -cmatch '^create') }
+            if ($isWrite) { $writes.Add("${typeName}::$method") }
+        }
+    }
+
+    foreach ($redirect in (Find-Ast $Ast ([Management.Automation.Language.FileRedirectionAst]))) {
+        if ($redirect.Location.Extent.Text -cne '$null') { $writes.Add('redirection') }
+    }
+    @($writes | Select-Object -Unique)
 }
 
 # ---- tweaks -----------------------------------------------------------------
@@ -245,7 +453,7 @@ if (Test-Path -LiteralPath $tweaksRoot -PathType Container) {
             $property = $data.PSObject.Properties[$name]
             if (-not $property) { continue }
             foreach ($text in @(Get-JsonStrings $property.Value $false)) {
-                if ($text -match '(?i)(\d\s*(%|ms\b|fps\b))|(%\s*\d)') { Add-Finding 'C11' $file "$name claims a measured number: '$text'"; break }
+                if ($text.ToLowerInvariant() -cmatch '(\d\s*(%|ms\b|fps\b))|(%\s*\d)') { Add-Finding 'C11' $file "$name claims a measured number: '$text'"; break }
             }
         }
 
@@ -287,6 +495,8 @@ if (Test-Path -LiteralPath $tweaksRoot -PathType Container) {
             }
             if ($textUse) { Add-Finding 'LN2' $file "$field compares or parses a human-text property" }
 
+            foreach ($reason in @(Get-CaseFoldFindings $ast)) { Add-Finding 'LN4' $file "$field $reason" }
+
             if ($field -eq 'apply') { $registryWrites = Get-RegistryWriteCount $ast }
         }
 
@@ -318,25 +528,13 @@ if (Test-Path -LiteralPath $runtimeRoot -PathType Container) {
         }
         $ast = $parsed.Ast
 
-        $writes = New-Object Collections.Generic.List[string]
-        foreach ($command in (Find-Ast $ast ([Management.Automation.Language.CommandAst]))) {
-            $name = $command.GetCommandName()
-            if ($name -and $name -match $fileWriteCmdRe) { $writes.Add($name) }
-            elseif ($name -match '^(?i)New-Object$' -and $command.Extent.Text -match '(?i)StreamWriter|FileStream') { $writes.Add('New-Object file stream') }
-        }
-        foreach ($call in (Find-Ast $ast ([Management.Automation.Language.InvokeMemberExpressionAst]))) {
-            if ($call.Static -and $call.Expression -is [Management.Automation.Language.TypeExpressionAst] -and
-                $call.Expression.TypeName.Name -match '^(?i)(System\.)?IO\.(File|Directory|StreamWriter|FileStream)$' -and
-                $call.Member -is [Management.Automation.Language.StringConstantExpressionAst] -and
-                $call.Member.Value -match '^(?i)(Write|Append|Create|Copy|Move|Replace|Delete|new)') {
-                $writes.Add("$($call.Expression.TypeName.Name)::$($call.Member.Value)")
-            }
-        }
-        foreach ($redirect in (Find-Ast $ast ([Management.Automation.Language.FileRedirectionAst]))) {
-            if ($redirect.Location.Extent.Text -ne '$null') { $writes.Add('redirection') }
-        }
+        foreach ($reason in @(Get-CaseFoldFindings $ast)) { Add-Finding 'LN4' $file $reason }
+
+        # runtime/gate.ps1 and runtime/test.ps1 are dev files: exempt from FS1 by name.
+        $writes = @()
+        if ($item.Name -cne 'gate.ps1' -and $item.Name -cne 'test.ps1') { $writes = @(Get-FileWrites $ast) }
         if ($writes.Count -gt 0) {
-            Add-Finding 'FS1' $file "the runtime writes a file ($((@($writes | Select-Object -Unique)) -join ', '))"
+            Add-Finding 'FS1' $file "the runtime writes a file ($($writes -join ', '))"
         }
 
         if ($item.Name -ceq 'run.ps1') {

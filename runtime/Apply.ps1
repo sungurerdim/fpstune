@@ -154,7 +154,7 @@ function Invoke-FpsApplyRow {
     }
     catch {
         $message = $_.Exception.Message
-        $reason = if ($message -like 'A native command exited with code*') { 'native-exit' } else { 'apply-error' }
+        $reason = if ($message -clike 'A native command exited with code*') { 'native-exit' } else { 'apply-error' }
     }
     $clock.Stop()
     if ($reason) {

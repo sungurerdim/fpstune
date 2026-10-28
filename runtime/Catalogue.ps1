@@ -73,8 +73,11 @@ function Invoke-FpsCommand {
     .DESCRIPTION
       The string becomes a scriptblock with param($Instance, $Target) in front
       and runs with ErrorActionPreference=Stop, so any error is a failure. A
-      native executable that exits non-zero is a failure too. A command that
-      does not parse throws before anything runs.
+      native executable that exits non-zero is a failure too: it throws an
+      ErrorRecord with the error id FpsNativeExit and the exit code in
+      Exception.Data['ExitCode'], so callers tell it from any other error by
+      that id and never by the message text. A command that does not parse
+      throws before anything runs.
     #>
     [CmdletBinding()]
     param(
@@ -94,7 +97,10 @@ function Invoke-FpsCommand {
         $ErrorActionPreference = $previous
     }
     if ($global:LASTEXITCODE -ne 0) {
-        throw "A native command exited with code $($global:LASTEXITCODE)."
+        $exitCode = [int]$global:LASTEXITCODE
+        $exception = New-Object InvalidOperationException "A native command exited with code $exitCode."
+        $exception.Data['ExitCode'] = $exitCode
+        throw (New-Object Management.Automation.ErrorRecord $exception, 'FpsNativeExit', ([Management.Automation.ErrorCategory]::NotSpecified), $null)
     }
     $output
 }

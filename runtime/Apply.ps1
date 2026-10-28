@@ -154,7 +154,8 @@ function Invoke-FpsApplyRow {
     }
     catch {
         $message = $_.Exception.Message
-        $reason = if ($message -clike 'A native command exited with code*') { 'native-exit' } else { 'apply-error' }
+        # A native exit is the typed FpsNativeExit error of Invoke-FpsCommand, never its message text.
+        $reason = if ($_.FullyQualifiedErrorId -ceq 'FpsNativeExit') { 'native-exit' } else { 'apply-error' }
     }
     $clock.Stop()
     if ($reason) {

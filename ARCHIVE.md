@@ -1,8 +1,25 @@
-<!-- GENERATED: 2026-10-27 14:20 · source: gh issue list --state closed · do not edit by hand -->
+<!-- GENERATED: 2026-10-28 20:21 · source: gh issue list --state closed · do not edit by hand -->
 # ARCHIVE
 
 One line per closed issue: closed date · issue · title. Closing commit and measured effect: git log --grep "#<n>".
 
+- 2026-10-28 · #113 · [A5] P1: Preflight game/launcher blockers and derive process names
+- 2026-10-28 · #111 · [A3] P0: Defender quarantines the PyInstaller exe (Bearfoos false positive)
+- 2026-10-28 · #108 · [A0] FPSTune 1.0 readiness: audit 2026-10-20 — safety, truth, evidence, diagnostics
+- 2026-10-28 · #107 · refactor: simplification programme - 3 tabs, detect+apply contract, one component set, claim-driven benchmarks
+- 2026-10-28 · #103 · One way back: Reset to default, no undo, nothing stored
+- 2026-10-28 · #102 · Windows verification, default-value audit and 0.3.0 (handoff 2026-10-05)
+- 2026-10-28 · #96 · Full audit 2026-10: NPI-free NVIDIA, correct reset/undo, portable exe, tweak correctness, cleanup
+- 2026-10-28 · #85 · Tech stack on latest stable: Python minors plus eleven frontend majors
+- 2026-10-28 · #80 · [J8] Background presence at near-zero cost: game-session state, hot-plug integrity guards, conditions surface
+- 2026-10-28 · #79 · [J7] Display: bit depth vs refresh rule, HDR via DisplayConfig, EDID/link-bandwidth and VRR-range advisories
+- 2026-10-28 · #78 · [J6] GPU vendor parity: new NVIDIA DRS keys, AMD parity keys, Radeon Boost to COMPLETE
+- 2026-10-28 · #77 · [J5] Network: ECS-aware DNS chosen by measurement, Wi-Fi link quality, loss-gated TCP, bloat services
+- 2026-10-28 · #76 · [J4] Hardware-derived power and storage settings: hetero policy, NVMe/AHCI link power, APO/X3D advisories, laptop caps
+- 2026-10-28 · #75 · [J3] Thermal limiter instruments, driver-free: MhzLimit via ctypes, localized PDH counters, GPU V2 counters
+- 2026-10-28 · #73 · [J1] Optimizer residue guards: detect drift from other tools and restore Windows stock
+- 2026-10-28 · #64 · [H9] C10 gap: 18 NVIDIA settings, 7 AMD, 0 Intel
+- 2026-10-28 · #9 · [V] Verification contract — how every issue in this programme closes
 - 2026-10-21 · #114 · [A6] P1: Run the apply sweep; add a non-mutating dry-run
 - 2026-10-21 · #119 · [A11] P2: Finish #107 Phase 4 benchmark pruning
 - 2026-10-20 · #121 · [A13] P2: Quality gate environment, coverage and FastAPI floor
@@ -29,56 +46,56 @@ One line per closed issue: closed date · issue · title. Closing commit and mea
 - 2026-08-26 · #60 · [H4] Coverage: CLI benchmark tree (842 lines, ~30 flags), 16 endpoints, 26 components
 - 2026-08-26 · #57 · [H1] SoC / SOLID: settings route module size, registry singleton and restore orchestration out of routes, status_cache duplication
 - 2026-08-26 · #51 · [F3] Turkish for every user-facing string
-- 2026-08-26 · #50 · [F2] Rewrite all 447 settings in the plain-language register â€” default-visible first
+- 2026-08-26 · #50 · [F2] Rewrite all 447 settings in the plain-language register — default-visible first
 - 2026-08-26 · #67 · [I3] Second-machine validation: A12 self-check + full apply/verify/undo cycle on foreign hardware
 - 2026-08-26 · #54 · [G3] Frontend render and paint: cold-start first paint and the 400-row list
-- 2026-08-26 · #53 · [G2] Optimise against what G1 shows â€” no speculative optimisation
-- 2026-08-26 · #55 · [G4] Verify optimisations are live, not merely present â€” process counts and on/off equivalence
-- 2026-08-26 · #52 · [G1] Instrument detect / apply / verify / reset end to end â€” repeatable baseline first
-- 2026-08-26 · #59 · [H3] KISS: 12 functions over 140 lines â€” split the tested ones first
+- 2026-08-26 · #53 · [G2] Optimise against what G1 shows — no speculative optimisation
+- 2026-08-26 · #55 · [G4] Verify optimisations are live, not merely present — process counts and on/off equivalence
+- 2026-08-26 · #52 · [G1] Instrument detect / apply / verify / reset end to end — repeatable baseline first
+- 2026-08-26 · #59 · [H3] KISS: 12 functions over 140 lines — split the tested ones first
 - 2026-08-26 · #58 · [H2] DRY: Steam/CS2 path block x7, three CS2 cvar toggles duplicating the generic one, DEVMODE struct x2
 - 2026-08-26 · #65 · [I1] Track MW3-Crash-Recovery.bat, delete superseded MW3-FPS-Fix.bat, document both in CONTRIBUTING
-- 2026-08-26 · #63 · [H8] Anti-cheat warnings cannot reach a user â€” wire check_anticheat_compatibility or delete it
+- 2026-08-26 · #63 · [H8] Anti-cheat warnings cannot reach a user — wire check_anticheat_compatibility or delete it
 - 2026-08-26 · #61 · [H5] SSOT: the sixth panel derivation, three monitor serializers, scope read by nobody
 - 2026-08-26 · #62 · [H7] YAGNI: the D4 deletions
-- 2026-08-26 · #56 · [H6] GATE: idempotency â€” apply twice equals apply once, and verify agrees
-- 2026-08-26 · #48 · [F4] GATE: copy register â€” every user-facing string has a plain-language form and a Turkish form
-- 2026-08-26 · #49 · [F1] i18n infrastructure (EN + TR) â€” deliberately amending gate C4 in the same change
-- 2026-08-26 · #47 · [E8] One pattern each for loading, empty, error, success â€” apply must confirm visibly
+- 2026-08-26 · #56 · [H6] GATE: idempotency — apply twice equals apply once, and verify agrees
+- 2026-08-26 · #48 · [F4] GATE: copy register — every user-facing string has a plain-language form and a Turkish form
+- 2026-08-26 · #49 · [F1] i18n infrastructure (EN + TR) — deliberately amending gate C4 in the same change
+- 2026-08-26 · #47 · [E8] One pattern each for loading, empty, error, success — apply must confirm visibly
 - 2026-08-26 · #46 · [E7] prefers-reduced-motion, one focus-ring convention, and a browser-level contrast check
 - 2026-08-26 · #45 · [E6] First run: what this is, what will happen, nothing changed yet, what Administrator means
 - 2026-08-26 · #44 · [E5] Visual vocabulary where a number does a picture's job: headroom gauge, delta bars, noise-floor, scan progress
-- 2026-08-26 · #43 · [E4] Real responsiveness: 1024 to 3440 â€” information, not whitespace
-- 2026-08-26 · #42 · [E3] Typography floor â€” delete all 32 sub-12px sizes
-- 2026-08-26 · #41 · [E2] Primitives: Button, Card, Badge, EmptyState, Skeleton, Progress, Meter, Alert â€” retire the copy-pasted strings
+- 2026-08-26 · #43 · [E4] Real responsiveness: 1024 to 3440 — information, not whitespace
+- 2026-08-26 · #42 · [E3] Typography floor — delete all 32 sub-12px sizes
+- 2026-08-26 · #41 · [E2] Primitives: Button, Card, Badge, EmptyState, Skeleton, Progress, Meter, Alert — retire the copy-pasted strings
 - 2026-08-26 · #40 · [E1] Colours to CSS custom properties; typography, spacing, elevation, motion, z-index scales
-- 2026-08-26 · #39 · [E9] GATE: token discipline â€” no raw palette colour, no sub-floor font size, no copy-pasted primitive string
+- 2026-08-26 · #39 · [E9] GATE: token discipline — no raw palette colour, no sub-floor font size, no copy-pasted primitive string
 - 2026-08-26 · #38 · [D5] Information architecture for 447 rows: progressive disclosure, grouped by user benefit
 - 2026-08-26 · #37 · [D4] Resolve the 38 unreferenced routes: wire what belongs, delete the rest (with ActionConsole/useActionStream)
-- 2026-08-26 · #36 · [D3] The eleven device mutations get Home surfaces â€” including the first storage action in the UI
-- 2026-08-26 · #34 · [D1] Home becomes the superset â€” every tweak, device mutation, advisory, maintenance action and cleanup
-- 2026-08-26 · #32 · [D6] GATE: Home completeness â€” every applicable setting and device mutation reachable from Home
+- 2026-08-26 · #36 · [D3] The eleven device mutations get Home surfaces — including the first storage action in the UI
+- 2026-08-26 · #34 · [D1] Home becomes the superset — every tweak, device mutation, advisory, maintenance action and cleanup
+- 2026-08-26 · #32 · [D6] GATE: Home completeness — every applicable setting and device mutation reachable from Home
 - 2026-08-26 · #35 · [D2] The two buttons: Competitive Max and Absolute Max, meanings on screen
-- 2026-08-26 · #33 · [D7] GATE: route reachability â€” a registered route is called by the UI or deleted
-- 2026-08-26 · #29 · [C1] Audit all 447 settings: scope, risk, evidence, information-vs-decoration â€” recorded reasons
-- 2026-08-26 · #31 · [C3] Count the 163 drift guards separately â€” Home must not promise changes that will not happen
-- 2026-08-26 · #30 · [C2] Resolve the 9 advanced-risk settings sitting in recommended scope â€” a safe button applies them today
-- 2026-08-26 · #28 · [C4] GATE: scope/impact coherence â€” a perceptible cost cannot sit outside complete
+- 2026-08-26 · #33 · [D7] GATE: route reachability — a registered route is called by the UI or deleted
+- 2026-08-26 · #29 · [C1] Audit all 447 settings: scope, risk, evidence, information-vs-decoration — recorded reasons
+- 2026-08-26 · #31 · [C3] Count the 163 drift guards separately — Home must not promise changes that will not happen
+- 2026-08-26 · #30 · [C2] Resolve the 9 advanced-risk settings sitting in recommended scope — a safe button applies them today
+- 2026-08-26 · #28 · [C4] GATE: scope/impact coherence — a perceptible cost cannot sit outside complete
 - 2026-08-26 · #25 · [B3] Discover advanced-keyword spelling via -AllProperties for flow_control, interrupt_moderation, Realtek keywords
-- 2026-08-26 · #24 · [B2] rss_base_processor from driver-published min/max/default â€” never onto an E-core (needs A8)
-- 2026-08-26 · #23 · [B1] Buffer defaults from DefaultRegistryValue, not 256 â€” reset must write the driver's stock value
-- 2026-08-26 · #26 · [B4] Delete the stale 'Maximum (1024)' copy â€” a number no instrument produced
-- 2026-08-26 · #27 · [B5] core/nvprofile.py uses settings/panel.py â€” delete the sixth panel derivation and its (60, False) fallback
+- 2026-08-26 · #24 · [B2] rss_base_processor from driver-published min/max/default — never onto an E-core (needs A8)
+- 2026-08-26 · #23 · [B1] Buffer defaults from DefaultRegistryValue, not 256 — reset must write the driver's stock value
+- 2026-08-26 · #26 · [B4] Delete the stale 'Maximum (1024)' copy — a number no instrument produced
+- 2026-08-26 · #27 · [B5] core/nvprofile.py uses settings/panel.py — delete the sixth panel derivation and its (60, False) fallback
 - 2026-08-26 · #21 · [A12] Detection self-check: every detector cross-checked against an independent source
-- 2026-08-26 · #15 · [A6] VRR path for AMD and Intel â€” close the C10 symmetry failure
-- 2026-08-26 · #20 · [A11] 'Could not read' must never look like 'not present' â€” surface applicableReason and detector errors
+- 2026-08-26 · #15 · [A6] VRR path for AMD and Intel — close the C10 symmetry failure
+- 2026-08-26 · #20 · [A11] 'Could not read' must never look like 'not present' — surface applicableReason and detector errors
 - 2026-08-26 · #19 · [A10] Display mode writes: CDS_TEST pass + revert timer before CDS_UPDATEREGISTRY
-- 2026-08-26 · #18 · [A9] Parse localised command output via numeric/stable tokens â€” netsh wlan breaks silently on non-English Windows
+- 2026-08-26 · #18 · [A9] Parse localised command output via numeric/stable tokens — netsh wlan breaks silently on non-English Windows
 - 2026-08-26 · #17 · [A8] CPU: stop assigning MaxClockSpeed to both clock fields; add P/E-core topology; support dual-socket
-- 2026-08-26 · #16 · [A7] VRAM from qwMemorySize/DXGI â€” never AdapterRAM; fix the Sort-Object AdapterRAM GPU pick
+- 2026-08-26 · #16 · [A7] VRAM from qwMemorySize/DXGI — never AdapterRAM; fix the Sort-Object AdapterRAM GPU pick
 - 2026-08-26 · #14 · [A5] supports_vrr from EDID range limits + CTA-861 Adaptive-Sync (tri-state), not maxHz > 60
-- 2026-08-26 · #13 · [A4] native_refresh_rate_hz from the EDID preferred DTD; None when EDID is unreadable â€” never a copy of max
+- 2026-08-26 · #13 · [A4] native_refresh_rate_hz from the EDID preferred DTD; None when EDID is unreadable — never a copy of max
 - 2026-08-26 · #12 · [A3] is_active from StateFlags, not the hardcoded literal True
-- 2026-08-26 · #11 · [A2] Filter monitors to desktop-attached via StateFlags & 0x1 â€” WMI Active is not attachment
+- 2026-08-26 · #11 · [A2] Filter monitors to desktop-attached via StateFlags & 0x1 — WMI Active is not attachment
 - 2026-08-26 · #10 · [A1] Monitor correlation: run the EnumDisplayDevices loop inside the C# class; delete the index-zip fallback
-- 2026-08-26 · #22 · [B6] GATE: no assumed device capability â€” no constant where the device publishes the value
+- 2026-08-26 · #22 · [B6] GATE: no assumed device capability — no constant where the device publishes the value

@@ -183,6 +183,122 @@ $json = [pscustomobject]@{ NoSteps = $s.manualNoSteps; Ids = @($rows | ForEach-O
     }
 }
 
+Describe 'tools/build.ps1 security (U7b)' {
+    BeforeAll {
+        function script:New-TweakRoot([string]$Name, [string[]]$Relative) {
+            $root = Join-Path (Join-Path $TestDrive $Name) 'tweaks'
+            foreach ($rel in $Relative) {
+                $file = Join-Path $root $rel
+                New-Item -ItemType Directory -Path (Split-Path -Parent $file) -Force | Out-Null
+                [IO.File]::WriteAllText($file, "{}`n", $script:utf8)
+            }
+            $root
+        }
+        function script:Invoke-FpsBuildAt([string]$Root, [string]$Out, [string[]]$Extra = @()) {
+            $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $script:buildPath -Out $Out -TweaksRoot $Root @Extra 2>&1
+            [pscustomobject]@{ Output = @($output | ForEach-Object { "$_" }); ExitCode = $LASTEXITCODE }
+        }
+        function script:Invoke-Git([string]$Dir, [string[]]$GitArgs) {
+            $null = & git -C $Dir -c user.name=t -c user.email=t@example.invalid -c commit.gpgsign=false -c core.autocrlf=false @GitArgs 2>&1
+            if ($LASTEXITCODE -ne 0) { throw "git failed: $($GitArgs -join ' ')" }
+        }
+        function script:New-CommittedRoot([string]$Name, [string[]]$Relative) {
+            $root = New-TweakRoot $Name $Relative
+            $repo = Split-Path -Parent $root
+            Invoke-Git $repo @('init', '-q')
+            Invoke-Git $repo @('add', '-A')
+            Invoke-Git $repo @('commit', '-q', '-m', 'fixture')
+            $root
+        }
+    }
+
+    It 'B1: refuses a tweak file whose name would inject code into the bundle and names the file' {
+        $evil = "x'+`$(Write-Host PWNED-FROM-FILENAME)+'.json"
+        $root = New-TweakRoot 'b1' @('net/ok.json', "net/$evil")
+        $out = Join-Path $TestDrive 'b1-bundle.ps1'
+        $r = Invoke-FpsBuildAt $root $out
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('PWNED-FROM-FILENAME') | Should -BeTrue -Because 'the message names the file'
+        Test-Path -LiteralPath $out | Should -BeFalse -Because 'no bundle is written when a row is refused'
+    }
+
+    It 'B1: refuses ids that are not lower case letters, digits and underscore (<_>)' -ForEach @('Upper', 'with-dash', 'sp ace', 'dot.name') {
+        $root = New-TweakRoot ('id-' + [guid]::NewGuid().ToString('N')) @("net/$_.json")
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive ('id-' + [guid]::NewGuid().ToString('N') + '.ps1'))
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains($_) | Should -BeTrue -Because 'the message names the file'
+    }
+
+    It 'B1: refuses a category folder that would inject code' {
+        $root = New-TweakRoot 'b1cat' @('Net-Evil/ok.json')
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'b1cat.ps1')
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('Net-Evil') | Should -BeTrue
+    }
+
+    It 'N3: -Tag and -BundleUrl with a trailing newline are refused' -ForEach @(
+        @{ Tag = "v1.0`n"; Url = 'https://example.invalid/b.ps1' },
+        @{ Tag = 'v1.0'; Url = "https://example.invalid/b.ps1`n" }
+    ) {
+        $dir = Join-Path $TestDrive ('n3-' + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path $dir | Out-Null
+        $r = Invoke-FpsBuild -Out (Join-Path $dir 'b.ps1') -Extra @('-RunOut', (Join-Path $dir 'run.ps1'), '-Tag', $Tag, '-BundleUrl', $Url)
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        Test-Path -LiteralPath (Join-Path $dir 'run.ps1') | Should -BeFalse
+    }
+
+    It 'N4: builds a committed clean tweak tree' {
+        $root = New-CommittedRoot 'n4ok' @('net/a.json', 'net/b.json')
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'n4ok.ps1')
+        $r.ExitCode | Should -Be 0 -Because ($r.Output -join "`n")
+    }
+
+    It 'N4: an untracked tweak file fails the build and the message names it' {
+        $root = New-CommittedRoot 'n4un' @('net/a.json')
+        [IO.File]::WriteAllText((Join-Path $root 'net/untracked_row.json'), "{}`n", $script:utf8)
+        $out = Join-Path $TestDrive 'n4un.ps1'
+        $r = Invoke-FpsBuildAt $root $out
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('untracked_row.json') | Should -BeTrue
+        Test-Path -LiteralPath $out | Should -BeFalse
+    }
+
+    It 'N4: a modified tweak file fails the build and the message names it' {
+        $root = New-CommittedRoot 'n4mod' @('net/a.json', 'net/changed_row.json')
+        [IO.File]::WriteAllText((Join-Path $root 'net/changed_row.json'), "{ }`n", $script:utf8)
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'n4mod.ps1')
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('changed_row.json') | Should -BeTrue
+    }
+
+    It 'N4: a staged but uncommitted tweak file fails the build and the message names it' {
+        $root = New-CommittedRoot 'n4st' @('net/a.json')
+        [IO.File]::WriteAllText((Join-Path $root 'net/staged_row.json'), "{}`n", $script:utf8)
+        Invoke-Git (Split-Path -Parent $root) @('add', '-A')
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'n4st.ps1')
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('staged_row.json') | Should -BeTrue
+    }
+
+    It 'N4: a tweak file ignored by git fails the build and the message names it' {
+        $root = New-CommittedRoot 'n4ig' @('net/a.json')
+        $repo = Split-Path -Parent $root
+        [IO.File]::WriteAllText((Join-Path $repo '.gitignore'), "ignored_row.json`n", $script:utf8)
+        [IO.File]::WriteAllText((Join-Path $root 'net/ignored_row.json'), "{}`n", $script:utf8)
+        Invoke-Git $repo @('add', '-A')
+        Invoke-Git $repo @('commit', '-q', '-m', 'ignore')
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'n4ig.ps1')
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+        ($r.Output -join "`n").Contains('ignored_row.json') | Should -BeTrue
+    }
+
+    It 'N4: a tweak root outside any git work tree fails the build' {
+        $root = New-TweakRoot 'n4nogit' @('net/a.json')
+        $r = Invoke-FpsBuildAt $root (Join-Path $TestDrive 'n4nogit.ps1')
+        $r.ExitCode | Should -Not -Be 0 -Because ($r.Output -join "`n")
+    }
+}
+
 Describe 'run.ps1 bootstrap' {
     BeforeEach {
         Mock Invoke-RestMethod { throw 'network is mocked' }
@@ -293,5 +409,58 @@ Describe 'run.ps1 bootstrap' {
             $global:FpsTestTurkish | Should -BeExactly $script:turkish -Because ($r.Output -join "`n")
         }
         finally { Remove-Variable -Name FpsTestTurkish -Scope Global -ErrorAction SilentlyContinue }
+    }
+
+    It 'N1: sends no default Windows credentials to a proxy' {
+        $text = Get-RunTemplate
+        $text -cmatch 'DefaultCredentials|DefaultNetworkCredentials' | Should -BeFalse
+        $text -cmatch '(?i)\.Proxy\b' | Should -BeFalse -Because 'the session-global proxy object is left alone'
+    }
+
+    It 'N2: has no exit statement, so a refusal cannot close the host that ran it through iex' {
+        $ast = [Management.Automation.Language.Parser]::ParseInput((Get-RunTemplate), [ref]$null, [ref]$null)
+        @($ast.FindAll({ param($n) $n -is [Management.Automation.Language.ExitStatementAst] }, $true)) | Should -BeNullOrEmpty
+    }
+
+    It 'N2: under iex a tamper refusal leaves the host alive with a non-zero result and the message' {
+        $served = $script:utf8.GetBytes("'tampered'`n")
+        $run = New-FilledRun (Get-Sha256Hex $script:utf8.GetBytes("'good'`n"))
+        $child = @'
+function Test-Stub { $true }
+function Bytes-Stub { , [byte[]][Convert]::FromBase64String($env:FPSTUNE_TEST_BYTES) }
+Set-Alias -Name Test-FpsElevated -Value Test-Stub
+Set-Alias -Name Get-FpsBundleBytes -Value Bytes-Stub
+$global:LASTEXITCODE = 0
+Invoke-Expression ([IO.File]::ReadAllText($env:FPSTUNE_TEST_RUN))
+'AFTER-IEX CODE=' + $global:LASTEXITCODE
+'@
+        $env:FPSTUNE_TEST_BYTES = [Convert]::ToBase64String($served)
+        $env:FPSTUNE_TEST_RUN = $run
+        try {
+            $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+            $out = @(& powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc 2>&1 | ForEach-Object { "$_" })
+        }
+        finally { Remove-Item Env:\FPSTUNE_TEST_BYTES, Env:\FPSTUNE_TEST_RUN -ErrorAction SilentlyContinue }
+        $joined = $out -join "`n"
+        $joined | Should -Match 'SHA-256'
+        $joined | Should -Match 'AFTER-IEX CODE=[1-9]'
+    }
+
+    It 'N2: under iex the not-elevated path returns without closing the host' {
+        $run = New-FilledRun ('0' * 64)
+        $child = @'
+function Test-Stub { $false }
+function Start-Process { 'STARTED' }
+Set-Alias -Name Test-FpsElevated -Value Test-Stub
+Invoke-Expression ([IO.File]::ReadAllText($env:FPSTUNE_TEST_RUN))
+'AFTER-IEX'
+'@
+        $env:FPSTUNE_TEST_RUN = $run
+        try {
+            $enc = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($child))
+            $out = @(& powershell -NoProfile -ExecutionPolicy Bypass -EncodedCommand $enc 2>&1 | ForEach-Object { "$_" })
+        }
+        finally { Remove-Item Env:\FPSTUNE_TEST_RUN -ErrorAction SilentlyContinue }
+        ($out -join "`n") | Should -Match 'AFTER-IEX'
     }
 }
